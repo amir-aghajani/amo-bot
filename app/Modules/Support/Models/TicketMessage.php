@@ -24,7 +24,7 @@ use Illuminate\Support\Carbon;
  * @property string|null $attachment_name Its picture's name, as its sender's device gave it or one made up; null without a picture
  * @property TicketChannel $channel
  * @property string|null $request_key The Idempotency-Key of support's answer that wrote it; null for every other message
- * @property Carbon $created_at
+ * @property Carbon|null $created_at
  */
 class TicketMessage extends Model
 {

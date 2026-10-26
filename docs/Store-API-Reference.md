@@ -1208,7 +1208,7 @@ A service's renewal: the payment method, the plan (or a package built) for a ser
 
 ### GET /subscriptions/{id}/renewal-plans
 
-The plans a service can be renewed on now, each at the customer's renewal price today. For a service without a plan (added by its link, `claimed_at`, or built) that is no test account: the plans on sale that are sold on its server and give a renewal something, in the catalogue's order, for the customer to pick one (`plan_id` of `…/renewal`); the renewal makes it the service's plan. For any other service: its own plan. Empty — and `custom_services` false — while the service cannot be renewed now: not at all, not yet (its `renewal_window` closed), or a renewal of it under way (as `…/renewal` would refuse it). `custom_services` says whether a service without a plan may be renewed with a package the customer builds instead (`gb` and `days` of `…/renewal`).
+The plans a service can be renewed on now, each at the customer's renewal price today. For a service without a plan (added by its link, `claimed_at`, or built) that is no test account: the plans on sale that are sold on its server and give a renewal something, in the catalogue's order (`GET /plans`: by category, `category_id`, as the bot files them), for the customer to pick one (`plan_id` of `…/renewal`); the renewal makes it the service's plan. For any other service: its own plan. Empty — and `custom_services` false — while the service cannot be renewed now: not at all, not yet (its `renewal_window` closed), or a renewal of it under way (as `…/renewal` would refuse it). `custom_services` says whether a service without a plan may be renewed with a package the customer builds instead (`gb` and `days` of `…/renewal`).
 
 - **Who:** the signed-in customer ([the customer scheme](#the-customer-scheme)).
 
@@ -1989,6 +1989,7 @@ The outcome of a checkout (a purchase, renewal, extra traffic, time or devices, 
 | `transfer` | object or null | yes | For `transfer`: where to send the money, and the payment the receipt is for. Null otherwise. A payment taken in support's private chat (made while the bot setting «هدایت پرداخت کارت به کارت به پیوی پشتیبانی» is on) is shown no card: `card`, `holder` and `bank` are null and `contact` says where to go — tell the customer to send the order's number there, get the card from support, and send the receipt to support too; support approves the payment in its panel. |
 | `transfer.payment_id` | integer | yes | The payment to upload the receipt for. |
 | `transfer.amount` | string | yes | The amount to transfer, in Toman: the payment's own. A wallet top-up's may be a few Toman more than the order's (the bot setting of a random sum added to card-to-card top-ups), so its receipt is told apart; the whole of it is credited. |
+| `transfer.amount_rial` | string | yes | `amount` in Rial — ten to the Toman, as Iran's banks count —: whole, in Latin digits, no separators (`1200000` for 120000 Toman). What a banking app takes: copy these digits. |
 | `transfer.card` | string or null | yes | The card number: 16 digits, no separators. Each payment is shown one of its method's cards, picked at random, and always that one after — the same card on a request made again. Null while the card is given in support's private chat (`contact`). |
 | `transfer.holder` | string or null | yes | The card holder's name. Null while the card is given in support's private chat (`contact`). |
 | `transfer.bank` | string or null | yes | The shop's word for the card, such as its bank; null for none, and while the card is given in support's private chat. |
@@ -2079,7 +2080,7 @@ The signed-in customer's account.
 | `two_factor` | boolean | yes | Password sign-in also asks for their authenticator app's code (or a recovery code). |
 | `phone` | string or null | yes | The number they shared with the bot, in E.164 form (+98912…). |
 | `balance` | string | yes | Their wallet balance in Toman, as a decimal string ('120000.00'). Below zero is an agent's debt. |
-| `created_at` | string (date-time) | yes | When they became a customer of the shop. |
+| `created_at` | string (date-time) or null | yes | When they became a customer of the shop. |
 
 ### StoreDiscountQuoteResponse
 
@@ -2148,7 +2149,7 @@ The way in being added belongs to another account of the shop. Shows that accoun
 | `merge.expires_in` | integer | yes | Seconds until it expires. |
 | `merge.account` | object | yes | The other account. |
 | `merge.account.name` | string or null | yes | "first last"; null if none. |
-| `merge.account.created_at` | string (date-time) | yes | When it became a customer of the shop. |
+| `merge.account.created_at` | string (date-time) or null | yes | When it became a customer of the shop. |
 | `merge.account.services` | integer | yes | Its active services. |
 | `merge.account.orders` | integer | yes |  |
 | `merge.account.balance` | string | yes | Its wallet balance, in Toman. |
@@ -2199,7 +2200,7 @@ A notification the bot sent the customer, with the same text as the Telegram mes
 | `subject.type` | string: `order`, `subscription`, `ticket` | yes |  |
 | `subject.id` | integer | yes |  |
 | `read` | boolean | yes | Marked as read (`POST /notifications/read`). |
-| `created_at` | string (date-time) | yes |  |
+| `created_at` | string (date-time) or null | yes |  |
 
 ### StoreNotificationsResponse
 
@@ -2228,7 +2229,7 @@ One of the customer's orders: what it was for, its status, and its payments (new
 | `discount_amount` | string | yes | The total its discounts took off (the automatic one and the code's), in Toman; 0 for none. `amount` is after discounts. |
 | `discounts` | list of [DiscountLine](API-Schemas.md#discountline) | yes | The discounts applied, the automatic one first. |
 | `discount_code` | [OrderDiscountCode](API-Schemas.md#orderdiscountcode) or null | yes | The discount code used; null for none. |
-| `created_at` | string (date-time) | yes |  |
+| `created_at` | string (date-time) or null | yes |  |
 | `fulfilled_at` | string (date-time) or null | yes |  |
 | `plan` | [NamedRef](API-Schemas.md#namedref) or null | yes | The plan of a purchase or renewal (for extras, the service's plan); null for a wallet top-up or a service the customer built. The shop never deletes a plan an order names. |
 | `package_name` | [OrderPackageName](API-Schemas.md#orderpackagename) | yes |  |
@@ -2262,6 +2263,7 @@ An online gateway's page to pay a payment on: the customer pays there, and the g
 | `url` | string | yes | The gateway's page: open it (a link or a redirect) for the customer to pay there. For AqayePardakht, a page on the shop's own address that leads on to the bank's (the bank opens its page only for a visitor coming from the gateway's verified address). |
 | `expires_at` | string (date-time) or null | yes | Until when the page takes money: the gateway's own end, or the time the shop keeps its page when the gateway gives none. A request made again with its `Idempotency-Key` answers the same page while it has more than 3 minutes left, else a new one. |
 | `amount` | string | yes | The sum to pay, in Toman: the payment's own, or more when the gateway adds a few Toman to tell transfers apart (CubePay, AbanGateway) or the customer pays the gateway's fee (`fee`). Show this one as what to pay. A page may still ask it otherwise: Variza's asks a few Toman more of its own, and Plisio's the same in a coin the customer picks there (at the shop's dollar rate). |
+| `amount_rial` | string | yes | `amount` in Rial — ten to the Toman, as Iran's banks count —: whole, in Latin digits, no separators. What a banking app takes: the digits to copy for a transfer to `card`. |
 | `fee` | string or null | yes | Of `amount`, the gateway's fee the customer pays: the one the shop passes on (CubePay), Zarinpal's when its merchant set the payer to pay it, or what AtlasPay puts on the order's amount; null for none. The order is still paid, delivered and credited at its own amount. |
 | `card` | object or null | yes | The card that sum goes to, when the gateway gave one to show (CubePay's «🤖 نمایش کارت در ربات», AtlasPay's «نمایش مستقیم اطلاعات پرداخت», AbanGateway's «نمایش کارت در ربات و سایت» in the shop): the customer may transfer the exact `amount` to it rather than open the page. Null otherwise. |
 | `card.number` | string | yes | The card number: 16 digits, no separators. |
@@ -2278,7 +2280,7 @@ A payment attempt for an order.
 | `method` | [StorePaymentMethod](#storepaymentmethod) | yes | The payment method. |
 | `status` | [PaymentStatus](API-Schemas.md#paymentstatus) | yes |  |
 | `amount` | string | yes | Toman. |
-| `created_at` | string (date-time) | yes |  |
+| `created_at` | string (date-time) or null | yes |  |
 | `paid_at` | string (date-time) or null | yes |  |
 | `receipt` | object or null | yes | The receipt the customer sent for it, in the bot or on the website; null if none was sent. |
 | `receipt.sent_at` | string (date-time) | yes |  |
@@ -2430,7 +2432,7 @@ A preview of a service's renewal: on its own plan (or, for a service without one
 |---|---|---|---|
 | `method` | [RenewalMethod](API-Schemas.md#renewalmethod) | yes | The method this preview — and `after` — is by: the one asked for (`method`), else the first the shop offers. |
 | `methods` | list of [RenewalMethod](API-Schemas.md#renewalmethod) | yes | The methods the shop offers, in this order; the price is the same by each. With more than one, let the customer pick and send it as `method` to the preview and the renewal; with one, there is nothing to pick. |
-| `plan` | object or null | yes | The service's own plan, or the one picked (`plan_id`) for a service without one, which the renewal uses: what a renewal gives, as the catalogue says it (`StoreRenewalPlan` without the prices). Null for a package built (`custom`). |
+| `plan` | object or null | yes | The service's own plan, or the one picked (`plan_id`) for a service without one, which the renewal uses: what a renewal gives, as the catalogue says it (`StoreRenewalPlan` without the prices and the category). Null for a package built (`custom`). |
 | `plan.id` | integer | yes |  |
 | `plan.name` | string | yes |  |
 | `plan.description` | string or null | yes |  |
@@ -2471,12 +2473,13 @@ A plan a service can be renewed on: what a renewal on it gives, its price, and w
 | `duration_days` | integer | yes | Whole days, rounded up; 0 never ends. `duration_hours` is exact. |
 | `duration_hours` | integer | yes | Hours; 0 never ends. |
 | `devices` | integer | yes | Devices at once once renewed on it; 0 for no limit. |
+| `category_id` | integer or null | yes | The category it is listed under, as `GET /plans` groups the catalogue; null for the group without a category (no category, or a switched-off one). The bot asks for the category first when the plans to pick are in more than one. |
 
 ### StoreRenewalPlansResponse
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `plans` | list of [StoreRenewalPlan](#storerenewalplan) | yes | In the catalogue's order; empty while the service cannot be renewed now: not at all, not yet (its renewal window), or a renewal of it under way. |
+| `plans` | list of [StoreRenewalPlan](#storerenewalplan) | yes | In the catalogue's order: by category (`category_id`), as `GET /plans` groups them; empty while the service cannot be renewed now: not at all, not yet (its renewal window), or a renewal of it under way. |
 | `custom_services` | boolean | yes | Whether the service may be renewed instead with a package the customer builds («🛠 تمدید با سرویس دلخواه»): it has no plan, is no test account, may be renewed now (as `plans`), and the shop's builder is offered (`shop.custom_services` of `GET /`). Then send `gb` and `days` — within the bounds and tiers of `GET /custom-services` — to `…/renewal` in place of `plan_id`. |
 
 ### StoreRenewalResponse
@@ -2531,7 +2534,7 @@ An approved review, as the website shows it: the writer's text and choices as pl
 | `body` | string | yes | Its text, with line breaks as written. |
 | `context` | string or null | yes | A line on where the service is used («ایرانسل · اندروید · Happ»); null for none. |
 | `avatar` | string or null | yes | The key of the avatar they picked from the website's own set; null for none (the website shows its default). |
-| `created_at` | string (date-time) | yes | When it was written. |
+| `created_at` | string (date-time) or null | yes | When it was written. |
 
 ### StoreReviewWrittenResponse
 
@@ -2586,7 +2589,7 @@ A device the customer is signed in on.
 | `id` | integer | yes |  |
 | `device` | string or null | yes | The device as its browser describes it, in words: «Chrome در Windows». |
 | `ip` | string or null | yes | The IP address it signed in from. |
-| `created_at` | string (date-time) | yes | When it signed in. |
+| `created_at` | string (date-time) or null | yes | When it signed in. |
 | `last_used_at` | string (date-time) or null | yes | Its last request (updated every few minutes, not on every request). |
 | `current` | boolean | yes | The session this request was made with. |
 
@@ -2666,7 +2669,7 @@ One of the customer's services, as last read from its panel (`synced_at`), with 
 | `presence.online` | boolean or null | yes | Connected right now; null when the panel cannot tell. |
 | `presence.last_online_at` | string (date-time) or null | yes | Its last connection; null if never, or when the panel cannot tell. |
 | `synced_at` | string (date-time) or null | yes | When the panel was last read for it; the numbers are from then. |
-| `created_at` | string (date-time) | yes |  |
+| `created_at` | string (date-time) or null | yes |  |
 
 ### StoreSubscriptionResponse
 
@@ -2691,10 +2694,10 @@ One of the customer's support tickets.
 | `subject` | string | yes |  |
 | `status` | [TicketStatus](API-Schemas.md#ticketstatus) | yes |  |
 | `subscription` | [NamedRef](API-Schemas.md#namedref) or null | yes | Their service it is about, by its name; null for none, or when the service was deleted. |
-| `last_message_at` | string (date-time) | yes | When its latest message was written; the list is sorted by it. |
+| `last_message_at` | string (date-time) or null | yes | When its latest message was written; the list is sorted by it. |
 | `unread` | boolean | yes | Support wrote since they last read it (`POST /tickets/{id}/read` marks it read, as does viewing it in the bot). |
 | `rating` | integer or null | yes | Their rating after it closed, 1 to 5; null for none, and after it is reopened. |
-| `created_at` | string (date-time) | yes |  |
+| `created_at` | string (date-time) or null | yes |  |
 | `closed_at` | string (date-time) or null | yes | When it was closed; null unless it is closed (reopening clears it). |
 
 ### StoreTicketDetail
@@ -2707,10 +2710,10 @@ One of the customer's support tickets, with its whole conversation, oldest messa
 | `subject` | string | yes |  |
 | `status` | [TicketStatus](API-Schemas.md#ticketstatus) | yes |  |
 | `subscription` | [NamedRef](API-Schemas.md#namedref) or null | yes | Their service it is about, by its name; null for none, or when the service was deleted. |
-| `last_message_at` | string (date-time) | yes | When its latest message was written; the list is sorted by it. |
+| `last_message_at` | string (date-time) or null | yes | When its latest message was written; the list is sorted by it. |
 | `unread` | boolean | yes | Support wrote since they last read it (`POST /tickets/{id}/read` marks it read, as does viewing it in the bot). |
 | `rating` | integer or null | yes | Their rating after it closed, 1 to 5; null for none, and after it is reopened. |
-| `created_at` | string (date-time) | yes |  |
+| `created_at` | string (date-time) or null | yes |  |
 | `closed_at` | string (date-time) or null | yes | When it was closed; null unless it is closed (reopening clears it). |
 | `rating_note` | string or null | yes | The note they left with their rating. |
 | `messages` | list of [StoreTicketMessage](#storeticketmessage) | yes |  |
@@ -2725,7 +2728,7 @@ A message in their ticket, from them or from support (the support person is neve
 | `author` | [TicketAuthor](API-Schemas.md#ticketauthor) | yes |  |
 | `body` | string | yes | Its text as plain text, with line breaks kept. |
 | `attachment` | [TicketAttachment](API-Schemas.md#ticketattachment) or null | yes | Its picture (`GET /tickets/{id}/messages/{message}/attachment`); null for none. |
-| `created_at` | string (date-time) | yes |  |
+| `created_at` | string (date-time) or null | yes |  |
 
 ### StoreTicketResponse
 
@@ -2810,7 +2813,7 @@ A line of the customer's wallet ledger.
 | `amount` | string | yes | Toman. |
 | `balance_after` | string | yes | The balance after this line. |
 | `description` | string or null | yes | What it was for («شارژ کیف پول (سفارش #12)»). |
-| `created_at` | string (date-time) | yes |  |
+| `created_at` | string (date-time) or null | yes |  |
 
 ### StoreWalletTransactionsResponse
 
@@ -2827,5 +2830,5 @@ A line of the customer's wallet ledger.
 | `transfer.id` | integer | yes |  |
 | `transfer.amount` | string | yes | Toman. |
 | `transfer.recipient` | [StoreRecipient](#storerecipient) | yes |  |
-| `transfer.created_at` | string (date-time) | yes |  |
+| `transfer.created_at` | string (date-time) or null | yes |  |
 | `wallet` | [StoreWalletResponse](#storewalletresponse) | yes |  |

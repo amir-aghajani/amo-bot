@@ -24,7 +24,7 @@ use Illuminate\Support\Carbon;
  * @property int|null $subscription_id the service it was, while it lasts
  * @property string $remote_name the client's name on that panel
  * @property string|null $last_error
- * @property Carbon $created_at
+ * @property Carbon|null $created_at
  * @property Carbon|null $removed_at
  * @property-read Subscription|null $subscription
  */

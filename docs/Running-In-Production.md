@@ -73,6 +73,8 @@ dashboard's «وضعیت سیستم» card says when the scheduler last ran. Wha
 - **The time zone**: times are kept in UTC; «منطقه زمانی» («تنظیمات پنل › برنامه») only sets how they read, and may
   change at any time.
 - **The scheduler runs every minute and the bot gets its updates**: the dashboard's «وضعیت سیستم» card says both.
+- **PHP is current**: the newest release of its branch. While the host runs one with known security holes, a strip over
+  every page of the owner's panel says so ([what you need](Installation.md#what-you-need)).
 - **PHP takes the pictures customers send**: `upload_max_filesize` `10M` and `post_max_size` `12M`
   ([what you need](Installation.md#what-you-need)).
 
@@ -123,6 +125,11 @@ too — a shop's hour and day, and the whole installation's ([limits](Store-API-
 - **`GET /health`** answers `200` with `{"status": "ok", "version": …, "installed": …, "database": "ok"}` while the
   database answers, and `503` with `"status": "degraded"` and `"database": "unavailable"` while it does not — point an
   uptime monitor at it. It names nothing about the server; why the database did not answer is in the log.
+- **A database the shop cannot reach** — stopped, out of reach, refusing the user, password or database `config.php`
+  names, or out of connections (the host's limit on them reached) — makes every page of the panels say «دیتابیس فروشگاه
+  در دسترس نیست…» (a `503`), not a bare server error. Check in the host's panel that the database is running and that
+  `config.php`'s `DB_*` settings are its own; a limit on connections the host sets is theirs to raise. Each such request
+  writes one line to the log, with the database's own words.
 - **The logs** are in `storage/logs/`: `app-YYYY-MM-DD.log`, the app's own (kept `LOG_MAX_FILES` days, at `LOG_LEVEL`),
   and `php-errors.log`, PHP's own warnings and errors, which never go into an answer. The app takes secrets out of every
   line it writes: bot tokens, the secret part of the webhooks', the cron's and the payment callbacks' addresses, a login

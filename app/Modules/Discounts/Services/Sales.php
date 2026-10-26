@@ -91,7 +91,7 @@ final class Sales
             'ends_at' => DiscountForm::moment($sale->ends_at),
             'enabled' => $sale->enabled,
             'state' => $sale->windowState()->value,
-            'created_at' => $sale->created_at->toIso8601String(),
+            'created_at' => $sale->created_at?->toIso8601String(),
         ])->all());
     }
 

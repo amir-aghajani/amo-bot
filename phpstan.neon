@@ -41,6 +41,9 @@ parameters:
         -
             identifier: shipmonk.deadMethod
             message: '#^Unused App\\Modules\\Providers\\ProviderRegistry::(unregister|flush) #'
+        -
+            identifier: shipmonk.deadMethod
+            message: '#^Unused App\\Support\\PhpVersion::setTestHost #'
 
 services:
     # Keeps model types through Eloquent's forwarded query-builder methods (see phpstan/src).

@@ -16,6 +16,7 @@ use App\Core\Support\FileLock;
 use App\Core\Support\Files;
 use App\Core\Support\Sleeper;
 use App\Modules\Updates\Exceptions\UpdateRefusedException;
+use App\Support\PhpVersion;
 use Illuminate\Database\Connection;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Database\Schema\BlueprintState;
@@ -358,8 +359,13 @@ final class Updater
         if ($blocker !== null) {
             throw UpdateRefusedException::refused($blocker);
         }
-        if (version_compare(PHP_VERSION, $manifest->php, '<')) {
-            throw UpdateRefusedException::refused(sprintf('نسخه %s دست‌کم PHP %s می‌خواهد و PHP این هاست %s است؛ نسخه PHP را از تنظیمات هاست بالا ببرید.', $run->version, $manifest->php, PHP_VERSION));
+        $php = PhpVersion::host();
+        if (version_compare($php, $manifest->php, '<')) {
+            throw UpdateRefusedException::refused(sprintf('نسخه %s دست‌کم PHP %s می‌خواهد و PHP این هاست %s است؛ نسخه PHP را از تنظیمات هاست بالا ببرید.', $run->version, $manifest->php, $php));
+        }
+        // A release of the host's PHP branch with security holes the release names closed (PhpVersion): never installed on.
+        if (!PhpVersion::isSafe($php, $manifest->phpMinimums)) {
+            throw UpdateRefusedException::refused(sprintf('PHP این هاست (%s) حفره امنیتی دارد و نسخه %s روی آن نصب نمی‌شود؛ از تنظیمات هاست PHP را به %s یا بالاتر ببرید.', $php, $run->version, PhpVersion::required($php, $manifest->phpMinimums)));
         }
         $missing = array_values(array_filter($manifest->extensions, static fn(string $extension): bool => !extension_loaded($extension)));
         if ($missing !== []) {

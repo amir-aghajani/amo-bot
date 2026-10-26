@@ -81,8 +81,9 @@ panel; the right customer then sends the link again. The list of services finds 
 
 A service added by its link has no plan. Its first renewal — «تمدید» on its screen, or «♻️ تمدید سرویس» in the menu —
 asks the customer to pick one among the plans on sale on its server — whether or not the server takes new sales now:
-a renewal makes no new client —, each at their renewal price; the renewal then goes as any other, and **the plan they
-paid for becomes the service's plan**: its next renewal is on it, and «تمدید خودکار» may renew it. While the builder
+a renewal makes no new client —, each at their renewal price, their category asked first when they are in more than
+one ([Bot guide](Bot-Guide.md#renewing)). The renewal then goes as any other, and **the plan they paid for becomes the
+service's plan**: its next renewal is on it, and «تمدید خودکار» may renew it. While the builder
 is on, the customer may renew it with a package they build instead, and it keeps having no plan
 ([Custom services](Custom-Services.md#renewing-a-built-service)). With neither a plan on sale on its server nor the
 builder, it cannot be renewed («فعلا پلنی برای تمدید این سرویس فروخته نمی‌شود …»). A refund of that

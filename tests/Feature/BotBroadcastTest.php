@@ -735,6 +735,27 @@ final class BotBroadcastTest extends BotTestCase
         self::assertSame(0, Broadcast::sending()->count(), 'nothing left for the next tick to fail on');
     }
 
+    /** A row edited by hand to name no audience, or no message, ends too — its progress message showing «—» for whom. */
+    public function testARunEditedToNameNoAudienceOrNoMessageEndsInsteadOfFailingEveryTick(): void
+    {
+        $service = $this->service(BroadcastService::class);
+        $nobody = $service->start($this->boss, $this->draft(5), 77);
+        $nothing = $service->start($this->boss, $this->draft(6), 78);
+        Broadcast::query()->whereKey($nobody->id)->update(['audience' => null]);
+        Broadcast::query()->whereKey($nothing->id)->update(['message_id' => null]);
+        $logs = $this->logs();
+
+        $this->service(SendBroadcastsTask::class)->run();
+
+        self::assertSame([BroadcastStatus::Cancelled, BroadcastStatus::Cancelled], [$nobody->refresh()->status, $nothing->refresh()->status]);
+        self::assertSame([], $this->paramsOf('copyMessage'), 'nobody reached');
+        self::assertTrue($logs->hasWarningThatContains('it names no message or no audience'));
+        self::assertSame(0, Broadcast::sending()->count(), 'nothing left for the next tick to fail on');
+        $shown = array_column(array_filter($this->paramsOf('editMessageText'), static fn(array $params): bool => $params['message_id'] === '77'), 'text');
+        self::assertNotSame([], $shown, 'its admin sees it ended');
+        self::assertStringContainsString('—', (string) end($shown));
+    }
+
     /** @return array{message_id: int, mode: BroadcastMode, audience: string, pin: bool} A copy of message `$messageId` to everyone, unpinned. */
     private function draft(int $messageId): array
     {

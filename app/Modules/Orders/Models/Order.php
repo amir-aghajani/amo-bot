@@ -88,8 +88,8 @@ use Illuminate\Support\Carbon;
  * @property string|null $support_note The note support wrote on an order it made
  * @property Carbon|null $fulfilled_at
  * @property Carbon|null $taken_back_at When a refund took back what the renewal or extra gave its service — once
- * @property Carbon $created_at
- * @property Carbon $updated_at
+ * @property Carbon|null $created_at
+ * @property Carbon|null $updated_at
  * @property-read User $user
  * @property-read Plan|null $plan
  * @property-read Server|null $server

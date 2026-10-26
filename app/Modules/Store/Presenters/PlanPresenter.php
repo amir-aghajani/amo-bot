@@ -61,13 +61,14 @@ final class PlanPresenter
 
     /**
      * A plan a service may be renewed on: what a renewal on it gives, its price, and `$quote` — what the renewal costs the
-     * customer today (Pricing::renewal()), its automatic discount a line.
+     * customer today (Pricing::renewal()), its automatic discount a line. `$category` is the one it is listed under (null
+     * for «سایر پلن‌ها»), as present() says it.
      *
      * @return array<string, mixed>
      */
-    public static function renewal(Plan $plan, Quote $quote): array
+    public static function renewal(Plan $plan, Quote $quote, ?PlanCategory $category): array
     {
-        return self::terms($plan, ['renewal_price' => $quote->amount(), 'discounts' => DiscountLine::presentAll($quote->lines())]);
+        return self::terms($plan, ['renewal_price' => $quote->amount(), 'discounts' => DiscountLine::presentAll($quote->lines())]) + ['category_id' => $category?->id];
     }
 
     /**

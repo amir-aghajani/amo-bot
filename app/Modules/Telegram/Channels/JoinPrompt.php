@@ -27,7 +27,10 @@ final class JoinPrompt
     {
         $keyboard = InlineKeyboard::make();
         foreach ($missing as $channel) {
-            $keyboard->row(InlineKeyboard::url($this->texts->render(BotText::JoinChannel, ['title' => $channel->title]), $channel->link()));
+            $link = $channel->link();
+            if ($link !== null) {
+                $keyboard->row(InlineKeyboard::url($this->texts->render(BotText::JoinChannel, ['title' => $channel->title]), $link));
+            }
         }
         $keyboard->row(InlineKeyboard::callback($this->texts->get(BotText::JoinButton), self::CHECK, 'success'));
 

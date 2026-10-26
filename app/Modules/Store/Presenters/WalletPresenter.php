@@ -25,7 +25,7 @@ final class WalletPresenter
         ];
     }
 
-    /** @return array{id: int, type: string, amount: string, balance_after: string, description: string|null, created_at: string} */
+    /** @return array{id: int, type: string, amount: string, balance_after: string, description: string|null, created_at: string|null} */
     public static function transaction(WalletTransaction $transaction): array
     {
         return [
@@ -34,7 +34,7 @@ final class WalletPresenter
             'amount' => $transaction->amount,
             'balance_after' => $transaction->balance_after,
             'description' => $transaction->description,
-            'created_at' => $transaction->created_at->toIso8601String(),
+            'created_at' => $transaction->created_at?->toIso8601String(),
         ];
     }
 }

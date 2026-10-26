@@ -14,7 +14,7 @@ final class AccountPresenter
      * password sign them in; whether two-factor sign-in is on), their phone, their balance and since when they are a
      * customer.
      *
-     * @return array{id: int, first_name: string|null, last_name: string|null, telegram: array{id: int, username: string|null}|null, email: string|null, google: bool, has_password: bool, two_factor: bool, phone: string|null, balance: string, created_at: string}
+     * @return array{id: int, first_name: string|null, last_name: string|null, telegram: array{id: int, username: string|null}|null, email: string|null, google: bool, has_password: bool, two_factor: bool, phone: string|null, balance: string, created_at: string|null}
      */
     public static function present(User $user): array
     {
@@ -29,7 +29,7 @@ final class AccountPresenter
             'two_factor' => $user->hasTwoFactor(),
             'phone' => $user->phone,
             'balance' => $user->balance(),
-            'created_at' => $user->created_at->toIso8601String(),
+            'created_at' => $user->created_at?->toIso8601String(),
         ];
     }
 }

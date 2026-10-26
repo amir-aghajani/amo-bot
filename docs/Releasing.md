@@ -14,6 +14,18 @@ the shops' updater installs a release only when the key built into them signed i
 moves it: the database's upgrades start from there. A release that changes `database/schema.php` ships the same change
 as `database/upgrades/<its version>.php` ([Database](Database.md)).
 
+## PHP security releases
+
+When PHP announces a security release (php.net's news, the php-src security advisories), the next release raises
+`App\Support\PhpVersion::MINIMUMS` to each branch's fixed release, names the holes in its comment, and writes the same
+into `composer.json`: `php` is `PhpVersion::composer()` (`~8.3.36 || ~8.4.27 || >=8.5.12`) and `config.platform.php`
+the oldest branch's release, so the packages are chosen for it. `PhpVersionTest` holds them together, and
+`scripts/release.php` refuses a `composer.json` that names another PHP. A branch PHP no longer supports leaves the list.
+CI's PHP versions (`.github/workflows/ci.yml`) must be branches of the list.
+
+`scripts/release.php` writes the list into `release.json` as `php_minimums`, beside `php` — the oldest release, the
+one thing an updater before 0.7.1 reads: such a shop refuses a PHP older than it alone.
+
 ## The signing key
 
 Releases are signed with an Ed25519 key. Its public half is `resources/release-key.pub`, which every release carries and
@@ -71,9 +83,9 @@ that writes zips (Windows 10+, macOS) or `zip` (Linux), and, to sign, PHP's sodi
 
 `.github/workflows/release.yml` checks that the tag names `Application::VERSION`, that `docs/Releases.md` has the version's
 section and that the signing secret is set — no unsigned release is ever published —, runs `composer check` (on PHP
-8.2) and `pnpm check` again, builds and signs the release with `scripts/release.php` (the key the shops trust now taken
+8.3) and `pnpm check` again, builds and signs the release with `scripts/release.php` (the key the shops trust now taken
 from the last release's tag), and publishes the GitHub release: the zip, `release.json` and `release.json.sig`, its
 notes that section of [Releases](Releases.md). The shops' daily check sees it within a day; «بررسی دوباره» at once.
 
-Every push to `main` and every pull request runs the checks on PHP 8.2–8.4 and builds the panels
+Every push to `main` and every pull request runs the checks on PHP 8.3–8.5 and builds the panels
 (`.github/workflows/ci.yml`, [Testing](Testing.md#ci)).

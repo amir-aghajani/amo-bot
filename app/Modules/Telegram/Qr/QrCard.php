@@ -65,41 +65,37 @@ final class QrCard
             return null;
         }
 
-        try {
-            $width = imagesx($image);
-            $height = imagesy($image);
-            $module = intdiv((int) round(min($width, $height) * self::PLATE), $side);
-            $plate = $module * $side;
-            $left = intdiv($width - $plate, 2);
-            $top = intdiv($height - $plate, 2);
+        $width = imagesx($image);
+        $height = imagesy($image);
+        $module = intdiv((int) round(min($width, $height) * self::PLATE), $side);
+        $plate = $module * $side;
+        $left = intdiv($width - $plate, 2);
+        $top = intdiv($height - $plate, 2);
 
-            $this->roundedSquare($image, $left, $top, $plate, (int) round($plate * self::CORNER), (int) imagecolorallocate($image, 255, 255, 255));
+        $this->roundedSquare($image, $left, $top, $plate, (int) round($plate * self::CORNER), (int) imagecolorallocate($image, 255, 255, 255));
 
-            $dark = (int) imagecolorallocate($image, 0, 0, 0);
-            $origin = self::QUIET * $module;
-            foreach ($modules as $y => $row) {
-                foreach ($row as $x => $isDark) {
-                    if ($isDark) {
-                        $px = $left + $origin + $x * $module;
-                        $py = $top + $origin + $y * $module;
-                        imagefilledrectangle($image, $px, $py, $px + $module - 1, $py + $module - 1, $dark);
-                    }
+        $dark = (int) imagecolorallocate($image, 0, 0, 0);
+        $origin = self::QUIET * $module;
+        foreach ($modules as $y => $row) {
+            foreach ($row as $x => $isDark) {
+                if ($isDark) {
+                    $px = $left + $origin + $x * $module;
+                    $py = $top + $origin + $y * $module;
+                    imagefilledrectangle($image, $px, $py, $px + $module - 1, $py + $module - 1, $dark);
                 }
             }
-
-            ob_start();
-            imagejpeg($image, null, self::JPEG_QUALITY);
-            $jpeg = (string) ob_get_clean();
-            if (strlen($jpeg) > Limits::PHOTO_BYTES) {
-                $this->logger->warning('QR code skipped: the card is {bytes} bytes, more than Telegram takes as a photo.', ['bytes' => strlen($jpeg)]);
-
-                return null;
-            }
-
-            return $jpeg;
-        } finally {
-            imagedestroy($image);
         }
+
+        ob_start();
+        imagejpeg($image, null, self::JPEG_QUALITY);
+        $jpeg = (string) ob_get_clean();
+        if (strlen($jpeg) > Limits::PHOTO_BYTES) {
+            $this->logger->warning('QR code skipped: the card is {bytes} bytes, more than Telegram takes as a photo.', ['bytes' => strlen($jpeg)]);
+
+            return null;
+        }
+
+        return $jpeg;
     }
 
     /**
@@ -144,7 +140,6 @@ final class QrCard
         $scale = max(1, ceil($side * self::MIN_MODULE / self::PLATE) / min($width, $height));
         [$cardWidth, $cardHeight] = [(int) ceil($width * $scale), (int) ceil($height * $scale)];
         if (!Limits::isPhoto($cardWidth, $cardHeight) || $cardWidth * $cardHeight > QrBackground::MAX_PIXELS) {
-            imagedestroy($image);
             $this->logger->warning('QR code skipped: the background ({width}x{height}) cannot make a card Telegram takes as a photo.', ['width' => $width, 'height' => $height]);
 
             return null;

@@ -87,8 +87,8 @@ final class Picture
 
     /**
      * The image no larger than `$side` on its longest side, proportions and transparency kept; the same image when it
-     * fits. The one given is destroyed when scaled; null when GD failed. Uses imagecopyresampled(), never imagescale():
-     * libgd 2.3.3's bicubic scaler (Linux PHP packages) reads past the image and kills the process (2050 × 2 is enough).
+     * fits; null when GD failed. Uses imagecopyresampled(), never imagescale(): libgd 2.3.3's bicubic scaler (Linux PHP
+     * packages) reads past the image and kills the process (2050 × 2 is enough).
      */
     public static function fitted(\GdImage $image, int $side): ?\GdImage
     {
@@ -98,8 +98,8 @@ final class Picture
     }
 
     /**
-     * The image drawn anew at `$toWidth` × `$toHeight`, larger or smaller, its transparency kept; the one given is
-     * destroyed. Null when GD failed. By imagecopyresampled(), as fitted() says.
+     * The image drawn anew at `$toWidth` × `$toHeight`, larger or smaller, its transparency kept; null when GD failed.
+     * By imagecopyresampled(), as fitted() says.
      */
     public static function resized(\GdImage $image, int $toWidth, int $toHeight): ?\GdImage
     {
@@ -110,26 +110,14 @@ final class Picture
             && imagealphablending($scaled, false)
             && imagesavealpha($scaled, true)
             && imagecopyresampled($scaled, $image, 0, 0, 0, 0, $toWidth, $toHeight, $width, $height);
-        imagedestroy($image);
 
         return $drawn ? $scaled : null;
     }
 
-    /**
-     * A JPEG's image turned as its EXIF Orientation says (read from the bytes, no exif extension). The image given is
-     * destroyed when turned.
-     */
+    /** A JPEG's image turned as its EXIF Orientation says (read from the bytes, no exif extension). */
     public static function upright(\GdImage $image, string $jpeg): \GdImage
     {
-        $turn = static function (\GdImage $image, int $angle): \GdImage {
-            $turned = imagerotate($image, $angle, 0);
-            if ($turned === false) {
-                return $image;
-            }
-            imagedestroy($image);
-
-            return $turned;
-        };
+        $turn = static fn(\GdImage $image, int $angle): \GdImage => imagerotate($image, $angle, 0) ?: $image;
         $flip = static function (\GdImage $image, int $mode): \GdImage {
             imageflip($image, $mode);
 

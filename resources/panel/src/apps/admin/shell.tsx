@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { ADMIN_NAV } from '@/apps/admin/nav'
+import { PhpBanner } from '@/apps/admin/php-banner'
 import { ShopSwitcher } from '@/apps/admin/shop-switcher'
 import { agencySummaryQuery } from '@/components/agency/queries'
 import type { PanelShell } from '@/components/shell/shell-context'
@@ -14,10 +15,14 @@ function PendingRequests({ area, section }: { area: string; section: string }) {
   return pending > 0 && <CountBadge count={pending} tone="warning" label="در انتظار" />
 }
 
-/** The owner's panel in the shared shell: their navigation, the shop picker under the brand, the agency's pending requests beside their section. */
+/**
+ * The owner's panel in the shared shell: their navigation, the shop picker under the brand, the agency's pending
+ * requests beside their section, and over every page the strip of a host whose PHP has security holes open.
+ */
 export const ADMIN_SHELL: PanelShell = {
   nav: ADMIN_NAV,
   role: 'مالک فروشگاه',
   picker: ShopSwitcher,
   sectionBadge: PendingRequests,
+  banner: PhpBanner,
 }

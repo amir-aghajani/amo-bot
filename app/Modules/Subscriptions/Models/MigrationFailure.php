@@ -18,7 +18,7 @@ use Illuminate\Support\Carbon;
  * @property int|null $subscription_id
  * @property string $remote_name
  * @property string $reason
- * @property Carbon $created_at
+ * @property Carbon|null $created_at
  * @property-read Subscription|null $subscription
  */
 class MigrationFailure extends Model

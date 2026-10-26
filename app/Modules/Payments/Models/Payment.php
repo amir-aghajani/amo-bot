@@ -42,8 +42,8 @@ use Illuminate\Support\Carbon;
  * @property string|null $note The word on its latest verdict: the reason of a rejection, a cancellation's or a refund's note, the gateway's refusal
  * @property Carbon|null $paid_at
  * @property string|null $reviewer Who decided it last: the panel login, or a bot admin's @username / tg:<id>; null when nobody did by hand (an instant gateway, the review window)
- * @property Carbon $created_at
- * @property Carbon $updated_at
+ * @property Carbon|null $created_at
+ * @property Carbon|null $updated_at
  * @property-read Order $order
  * @property-read PaymentMethod $method
  * @property-read PaymentCard|null $card

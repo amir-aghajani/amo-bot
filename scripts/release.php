@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Core\Support\Files;
+use App\Support\PhpVersion;
 
 /*
  * Builds a release: the one zip a shop owner uploads to their host — the app, its PHP packages (vendor/, without the
@@ -109,8 +110,9 @@ if (is_string($secret) && trim($secret) !== '') {
 
 /**
  * The manifest the shops' updater reads (Modules\Updates\Manifest): the version, the zip's name, size and sha256, the
- * oldest PHP and the extensions composer.json asks for, and the app's top-level paths the release replaces — all but
- * storage/, which holds the shop's data.
+ * oldest PHP and the extensions composer.json asks for, the oldest release of each PHP branch it runs on
+ * (Support\PhpVersion), and the app's top-level paths the release replaces — all but storage/, which holds the shop's
+ * data.
  */
 function manifest(string $root, string $stage, string $zip, string $version): string
 {
@@ -118,6 +120,9 @@ function manifest(string $root, string $stage, string $zip, string $version): st
     $require = is_array($composer) && is_array($composer['require'] ?? null) ? $composer['require'] : [];
     if (preg_match('/\d+\.\d+(\.\d+)?/', is_string($require['php'] ?? null) ? $require['php'] : '', $php) !== 1) {
         fail('composer.json names no PHP version.');
+    }
+    if ($require['php'] !== PhpVersion::composer()) {
+        fail('composer.json names another PHP than Support\PhpVersion lists: ' . PhpVersion::composer());
     }
     $extensions = array_values(array_map(static fn(string $package): string => substr($package, 4), array_filter(array_keys($require), static fn(string $package): bool => str_starts_with($package, 'ext-'))));
 
@@ -128,6 +133,7 @@ function manifest(string $root, string $stage, string $zip, string $version): st
         'sha256' => hash_file('sha256', $zip),
         'php' => $php[0],
         'extensions' => $extensions,
+        'php_minimums' => PhpVersion::MINIMUMS,
         'paths' => array_values(array_diff(scandir($stage) ?: [], ['.', '..', 'storage'])),
     ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR) . "\n";
 }

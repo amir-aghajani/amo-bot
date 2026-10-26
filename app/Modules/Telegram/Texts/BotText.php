@@ -233,6 +233,7 @@ enum BotText: string
     case RenewChoose = 'renew_choose';
     case RenewNothing = 'renew_nothing';
     case RenewPickPlan = 'renew_pick_plan';
+    case RenewCategoryPlans = 'renew_category_plans';
     case RenewNoPlans = 'renew_no_plans';
     case RenewCheckout = 'renew_checkout';
     case RenewMethodButton = 'renew_method_button';

@@ -30,7 +30,10 @@ final class ServiceCleanup
         private readonly TestAccountSettings $tests,
     ) {}
 
-    /** When the shop removes the service by itself, by its rules now; null when it does not (it runs, or no rule applies). */
+    /**
+     * When the shop removes the service by itself, by its rules now; null when it does not (it runs, no rule applies, or
+     * its row has no time to count from: written outside AmoBot).
+     */
     public function removesAt(Subscription $subscription): ?Carbon
     {
         $now = Carbon::now();
@@ -44,7 +47,7 @@ final class ServiceCleanup
             }
             $days = $this->tests->unusedDays();
 
-            return $days > 0 && $subscription->isActive() && $subscription->awaitsFirstUse() ? $subscription->created_at->copy()->addDays($days) : null;
+            return $days > 0 && $subscription->isActive() && $subscription->awaitsFirstUse() ? $subscription->created_at?->copy()->addDays($days) : null;
         }
 
         return $this->expired->enabled() ? self::endedAt($subscription, $now)?->copy()->addHours($this->expired->hours()) : null;
@@ -113,7 +116,7 @@ final class ServiceCleanup
 
     /**
      * When it ended for the count (ended() asks the database the same): `ended_at`, else a deadline passed that no sync
-     * has caught up with yet, else its row's last change; null while it is not over.
+     * has caught up with yet, else its row's last change; null while it is not over, or when it has none of the three.
      */
     private static function endedAt(Subscription $subscription, Carbon $now): ?Carbon
     {

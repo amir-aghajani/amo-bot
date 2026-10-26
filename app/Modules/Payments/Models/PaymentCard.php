@@ -25,8 +25,8 @@ use Illuminate\Support\Carbon;
  * @property bool $enabled
  * @property int $sort
  * @property string|null $daily_cap
- * @property Carbon $created_at
- * @property Carbon $updated_at
+ * @property Carbon|null $created_at
+ * @property Carbon|null $updated_at
  * @property-read PaymentMethod $method
  */
 class PaymentCard extends Model

@@ -21,7 +21,11 @@ const RUNNING: BotRuntime = { configured: true, enabled: true, username: 'amo_bo
 const UP_TO_DATE: UpdateStatus = { current: '1.0.0', latest: null, checked_at: '2026-10-08T06:00:00+00:00', available: false, blocker: null, run: null }
 
 function open(bot: SystemResponse['system']['bot'], update: UpdateStatus = UP_TO_DATE) {
-  server().on('GET', '/api/admin/system', json({ system: { version: '1.0.0', php: '8.2.12', bot, main_bot: RUNNING, cron: { last_run_at: null, tasks: 9 } } } satisfies SystemResponse))
+  server().on(
+    'GET',
+    '/api/admin/system',
+    json({ system: { version: '1.0.0', php: '8.3.36', php_safe: true, php_required: '8.3.36', bot, main_bot: RUNNING, cron: { last_run_at: null, tasks: 9 } } } satisfies SystemResponse),
+  )
   server().on('GET', '/api/admin/system/update', json({ update } satisfies UpdateResponse))
   render(<SystemCard />, { wrapper: providers().wrapper })
 }

@@ -147,7 +147,7 @@ final class PaymentDirectory
             'checked_at' => $payment->checked_at?->toIso8601String(),
             'to_wallet' => $payment->wentToWallet(),
             'held' => OnlinePayments::isHeld($payment),
-            'created_at' => $payment->created_at->toIso8601String(),
+            'created_at' => $payment->created_at?->toIso8601String(),
             'actions' => $this->actions->allowed($payment),
         ];
     }

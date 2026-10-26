@@ -22,8 +22,8 @@ use Illuminate\Support\Carbon;
  * @property int $rate The commission percent then in force
  * @property string $commission What the referrer's wallet got
  * @property Carbon|null $notified_at When the referrer was told (claimed by the one message)
- * @property Carbon $created_at
- * @property Carbon $updated_at
+ * @property Carbon|null $created_at
+ * @property Carbon|null $updated_at
  * @property-read Payment $payment
  * @property-read User $referrer
  */

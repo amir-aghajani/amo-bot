@@ -113,6 +113,6 @@ the API description does not take. `src/test/render` renders a screen with the a
 ## CI
 
 Every push to `main` and every pull request to it runs on GitHub Actions (`.github/workflows/ci.yml`): `composer check`
-and the documentation's check on PHP 8.2, 8.3 and 8.4 — every version a shop may run, each held to the whole suite —,
+and the documentation's check on PHP 8.3, 8.4 and 8.5 — every version a shop may run, each held to the whole suite —,
 and the panels' `pnpm check` and a production build. The update tests need the `sodium` and `zip` extensions, which CI
 has; locally, `php -d extension=sodium -d extension=zip vendor/bin/phpunit` runs them.

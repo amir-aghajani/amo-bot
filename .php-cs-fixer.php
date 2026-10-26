@@ -10,7 +10,7 @@ return (new PhpCsFixer\Config())
     ->setRiskyAllowed(true)
     ->setRules([
         '@PER-CS2x0' => true,
-        '@PHP8x2Migration' => true,
+        '@PHP8x3Migration' => true,
         'declare_strict_types' => true,
         'ordered_imports' => ['sort_algorithm' => 'alpha', 'imports_order' => ['class', 'function', 'const']],
         'no_unused_imports' => true,

@@ -16,7 +16,7 @@ use Illuminate\Support\Carbon;
  * @property int $referrer_id
  * @property int $milestone The referrals who bought, a multiple of the admin's number
  * @property int|null $order_id The gift's order; null for a milestone withheld
- * @property Carbon $created_at
+ * @property Carbon|null $created_at
  */
 class ReferralReward extends Model
 {

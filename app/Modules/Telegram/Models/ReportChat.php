@@ -24,8 +24,8 @@ use Illuminate\Support\Carbon;
  * @property string|null $attempt_title The last group offered with that code that could not become the report group…
  * @property GroupProblem|null $attempt_problem …and why not
  * @property Carbon|null $attempted_at
- * @property Carbon $created_at
- * @property Carbon $updated_at
+ * @property Carbon|null $created_at
+ * @property Carbon|null $updated_at
  */
 class ReportChat extends Model
 {

@@ -23,8 +23,9 @@ rules are on its Internals page and in its classes' docblocks.
 
 ## What you need
 
-- PHP 8.2 or newer with the extensions of [Installation](Installation.md#what-you-need) (XAMPP ships GD: uncomment
-  `extension=gd` in its `php.ini`), and `pdo_sqlite` for the test suite; Composer.
+- PHP 8.3.36, 8.4.27 or 8.5.12, or later on the same branch, with the extensions of
+  [Installation](Installation.md#what-you-need) (XAMPP ships GD: uncomment `extension=gd` in its `php.ini`), and
+  `pdo_sqlite` for the test suite; Composer.
 - MySQL or MariaDB for a local shop (XAMPP will do). The tests need none: they run on SQLite in memory.
 - Node 22.12 or newer and pnpm 12 (`package.json` names its version: with Corepack switched on, `corepack enable`, the
   right one runs) — only to work on the panels. A release ships them built.

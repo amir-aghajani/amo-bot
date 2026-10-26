@@ -15,10 +15,10 @@ use Illuminate\Support\Carbon;
  * @property int $id
  * @property int $user_id The account that stayed
  * @property int $merged_user_id The merged account's number, gone since
- * @property array{telegram_id: int|null, username: string|null, email: string|null, google: bool, first_name: string|null, last_name: string|null, created_at: string} $merged
+ * @property array{telegram_id: int|null, username: string|null, email: string|null, google: bool, first_name: string|null, last_name: string|null, created_at: string|null} $merged
  * @property array<string, int> $moved How many of each thing it owned moved (AccountMerger::REFERENCES' names)
  * @property string $actor Who merged them: AccountMerger::BY_CUSTOMER, or a panel's principal
- * @property Carbon $created_at
+ * @property Carbon|null $created_at
  */
 class AccountMerge extends Model
 {

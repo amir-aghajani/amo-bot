@@ -46,7 +46,7 @@ final class CustomerProfile
      * The customer's website account as support reads it: its ways in, two-factor sign-in, the devices signed in, and the
      * accounts merged into it, newest first.
      *
-     * @return array{email: string|null, google: bool, has_password: bool, two_factor: bool, sessions: int, merges: list<array{merged_user_id: int, merged: array{telegram_id: int|null, username: string|null, email: string|null, google: bool, name: string|null}, created_at: string}>}
+     * @return array{email: string|null, google: bool, has_password: bool, two_factor: bool, sessions: int, merges: list<array{merged_user_id: int, merged: array{telegram_id: int|null, username: string|null, email: string|null, google: bool, name: string|null}, created_at: string|null}>}
      */
     public function account(User $user): array
     {
@@ -59,7 +59,7 @@ final class CustomerProfile
                 'google' => (bool) ($merge->merged['google'] ?? false),
                 'name' => trim(($merge->merged['first_name'] ?? '') . ' ' . ($merge->merged['last_name'] ?? '')) ?: null,
             ],
-            'created_at' => $merge->created_at->toIso8601String(),
+            'created_at' => $merge->created_at?->toIso8601String(),
         ]);
 
         return [

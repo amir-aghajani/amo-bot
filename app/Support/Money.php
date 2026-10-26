@@ -102,14 +102,23 @@ final class Money
     }
 
     /**
-     * The amount as a banking app takes it typed: whole Toman in Latin digits, no separators — "120000" —, rounded as
-     * format() rounds it, so the digits copied are the amount the customer reads.
+     * The amount as whole Toman in Latin digits, no separators — "120000" —, rounded as format() rounds it: what a
+     * gateway's API takes, and the Toman a text may show in digits.
      */
     public static function digits(string|float|int $amount): string
     {
         $amount = self::normalize($amount);
 
         return bcadd($amount, str_starts_with($amount, '-') ? '-0.5' : '0.5', 0);
+    }
+
+    /**
+     * The amount as a banking app takes it typed — Iran's banks count in Rial, ten to the Toman: the whole Toman of
+     * digits() times ten, "1200000" —, so the digits a customer copies to transfer are the amount they read.
+     */
+    public static function rials(string|float|int $amount): string
+    {
+        return bcmul(self::digits($amount), '10', 0);
     }
 
     /** Persian display form: "۱۲۰٬۰۰۰ تومان". Toman has no fraction, so none is shown. */

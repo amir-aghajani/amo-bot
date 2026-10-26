@@ -20,6 +20,11 @@ interface ModalProps {
    * phone's dialog opens with the focus on itself, its keyboard down (useNativeDialog).
    */
   typing?: boolean
+  /**
+   * As tall as the screen gives whatever it shows, its content filling it: a form in tabs, each tab as long as its own,
+   * the tabs and the actions where they stand whichever is shown.
+   */
+  tall?: boolean
 }
 
 /** The widest each size grows from `md` up; below it (a phone) the dialog is a full-width sheet (.app-modal). */
@@ -36,7 +41,7 @@ const EXIT_MS = 200
  * changes of a form inside, and wait while a request inside runs (`useHoldOpen`). While it fades out it keeps showing
  * what it showed, so its owner may let go of the row at once.
  */
-export function Modal({ open, onClose, title, description, children, size = 'md', typing = false }: ModalProps) {
+export function Modal({ open, onClose, title, description, children, size = 'md', typing = false, tall = false }: ModalProps) {
   const ref = useRef<HTMLDialogElement>(null)
   const [container, setContainer] = useState<HTMLDialogElement | null>(null)
   const { scope, confirmDiscard } = useUnsavedScope()
@@ -72,7 +77,8 @@ export function Modal({ open, onClose, title, description, children, size = 'md'
       aria-labelledby={titleId}
       aria-describedby={shown?.description ? descriptionId : undefined}
       {...handlers}
-      className={cn('app-modal text-popover-foreground outline-none', SIZES[size])}
+      // Tall: the screen's height, down to the dialog's max-height (.app-modal).
+      className={cn('app-modal text-popover-foreground outline-none', SIZES[size], tall && 'h-full')}
     >
       <PortalContainerContext.Provider value={container}>
         <HoldsContext.Provider value={holds}>
@@ -91,7 +97,8 @@ export function Modal({ open, onClose, title, description, children, size = 'md'
                 </IconButton>
               </div>
 
-              <div className="min-h-0 flex-1 scrollbar-thin overflow-y-auto px-5 pb-5">
+              {/* Tall, a column: the content (a form's `grow`) fills what the description leaves. */}
+              <div className={cn('min-h-0 flex-1 scrollbar-thin overflow-y-auto px-5 pb-5', tall && 'flex flex-col')}>
                 {phone && described}
                 {shown?.children}
               </div>

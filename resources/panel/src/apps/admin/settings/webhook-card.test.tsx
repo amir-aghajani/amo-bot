@@ -23,7 +23,9 @@ function system(mode: BotMode) {
   return json({
     system: {
       version: '1.0.0',
-      php: '8.2.12',
+      php: '8.3.36',
+      php_safe: true,
+      php_required: '8.3.36',
       bot: { id: 7, configured: false, enabled: true, username: null, mode: 'offline', last_update_at: null },
       main_bot: { configured: true, enabled: true, username: 'amo_bot', mode, last_update_at: null },
       cron: { last_run_at: null, tasks: 9 },

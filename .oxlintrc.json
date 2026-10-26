@@ -30,5 +30,13 @@
       }
     ]
   },
+  "overrides": [
+    {
+      "files": ["**/*.test.ts", "**/*.test.tsx"],
+      "rules": {
+        "unicorn/consistent-function-scoping": "off"
+      }
+    }
+  ],
   "ignorePatterns": ["public/**", "vendor/**", "node_modules/**", "storage/**", "graphify-out/**", "resources/panel/src/components/ui/**"]
 }

@@ -27,7 +27,7 @@ use Illuminate\Support\Carbon;
  * @property string|null $outcome Why the prize was not given; null — given
  * @property int|null $order_id A plan's order
  * @property int|null $subscription_id The service traffic or days went to, or a plan's service
- * @property Carbon $created_at
+ * @property Carbon|null $created_at
  * @property-read User $user
  * @property-read Order|null $order
  * @property-read Subscription|null $subscription

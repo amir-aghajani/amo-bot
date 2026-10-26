@@ -15,6 +15,7 @@ use App\Modules\Catalog\Enums\CustomQuantity;
 use App\Modules\Catalog\Exceptions\NoServerAvailableException;
 use App\Modules\Catalog\Models\Plan;
 use App\Modules\Catalog\Services\CustomServices;
+use App\Modules\Catalog\Services\PlanCategoryService;
 use App\Modules\Catalog\Services\ServerSelector;
 use App\Modules\Discounts\Exceptions\DiscountCodeRefusedException;
 use App\Modules\Discounts\Services\DiscountCodes;
@@ -53,6 +54,7 @@ use App\Support\Input;
 use App\Support\Money;
 use App\Support\Unit;
 use App\Support\Validation;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 
 /**
@@ -122,6 +124,7 @@ final class CustomerCheckout
         private readonly ServerSelector $selector,
         private readonly CustomServices $custom,
         private readonly CustomerRenewal $renewals,
+        private readonly PlanCategoryService $categories,
         private readonly CustomerExtras $extras,
         private readonly ClientNaming $naming,
         private readonly CustomerOrders $customerOrders,
@@ -329,10 +332,11 @@ final class CustomerCheckout
     }
 
     /**
-     * What the customer's service may be renewed on now (CustomerRenewal::picks()): the plans, each at their renewal
-     * price today (Pricing::renewalOffers(), the customer read once) — a service without a plan, its choices; any other,
-     * its own plan —, and whether a package they build may renew it instead. Nothing while it may not be renewed now:
-     * not at all, not yet (its window), or a renewal of it under way.
+     * What the customer's service may be renewed on now (CustomerRenewal::picks()): the plans — a service without a plan,
+     * its choices; any other, its own plan —, each at their renewal price today (Pricing::renewalOffers(), the customer
+     * read once) with the category it is listed under, in the catalogue's order (PlanCategoryService::group()); and
+     * whether a package they build may renew it instead. Nothing while it may not be renewed now: not at all, not yet
+     * (its window), or a renewal of it under way.
      *
      * @return array{plans: list<array<string, mixed>>, custom_services: bool}
      */
@@ -341,10 +345,14 @@ final class CustomerCheckout
         ['plans' => $plans, 'builds' => $builds] = $this->renewals->picks($subscription);
         $quotes = $this->pricing->renewalOffers($customer, ...$plans);
 
-        return [
-            'plans' => array_map(static fn(Plan $plan): array => PlanPresenter::renewal($plan, $quotes[$plan->id]), $plans),
-            'custom_services' => $builds,
-        ];
+        $presented = [];
+        foreach ($this->categories->group(new Collection($plans)) as $group) {
+            foreach ($group['plans'] as $plan) {
+                $presented[] = PlanPresenter::renewal($plan, $quotes[$plan->id], $group['category']);
+            }
+        }
+
+        return ['plans' => $presented, 'custom_services' => $builds];
     }
 
     /**
@@ -518,11 +526,12 @@ final class CustomerCheckout
     }
 
     /**
-     * A card transfer's details, as the bot shows them (CheckoutScreen): the payment the receipt is for, the amount, the
-     * card and the method's note — or, for a payment shown no card, taken in support's private chat (PaymentCards::
-     * toSupport()), the way to support instead (`contact`: as written in the bot's settings, and as a link when it is one).
+     * A card transfer's details, as the bot shows them (CheckoutScreen): the payment the receipt is for, the amount (and,
+     * in Rial, the digits a banking app takes: Money::rials()), the card and the method's note — or, for a payment shown
+     * no card, taken in support's private chat (PaymentCards::toSupport()), the way to support instead (`contact`: as
+     * written in the bot's settings, and as a link when it is one).
      *
-     * @return array{payment_id: int, amount: string, card: string|null, holder: string|null, bank: string|null, instructions: string|null, contact: array{text: string, url: string|null}|null}
+     * @return array{payment_id: int, amount: string, amount_rial: string, card: string|null, holder: string|null, bank: string|null, instructions: string|null, contact: array{text: string, url: string|null}|null}
      */
     private function transfer(CheckoutResult $result): array
     {
@@ -531,6 +540,7 @@ final class CustomerCheckout
         return [
             'payment_id' => $result->payment()->id,
             'amount' => $result->payment()->amount,
+            'amount_rial' => Money::rials($result->payment()->amount),
             'card' => $card->card,
             'holder' => $card->holder,
             // The owner's word for the card (its bank), when they gave one.

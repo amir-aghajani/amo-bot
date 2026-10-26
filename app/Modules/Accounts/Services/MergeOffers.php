@@ -59,7 +59,7 @@ final class MergeOffers
 
         return new MergeOffer($token, self::TICKET_SECONDS, [
             'name' => $other->name(),
-            'created_at' => $other->created_at->toIso8601String(),
+            'created_at' => $other->created_at?->toIso8601String(),
             'services' => (int) $other->getAttribute('running_count'),
             'orders' => (int) $other->getAttribute('orders_count'),
             'balance' => $other->balance(),

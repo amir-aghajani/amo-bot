@@ -4,7 +4,7 @@
  * it again. The PHP tests check every request and every response against the same file, and so do the panels' tests.
  */
 
-/** The shape of every refusal and failure, whatever produced it. A 429 also sends the wait in seconds in `Retry-After`. */
+/** The shape of every refusal and failure, whatever produced it. A 429 also sends the wait in seconds in `Retry-After`. A request that needs the shop's database is a 503 while it cannot be reached (down, out of reach, or refusing config.php's credentials), its `message` saying so. */
 export interface ErrorResponse {
   /** A message for the reader: the admin on the panels, the customer on the Store API. */
   message: string
@@ -12,7 +12,7 @@ export interface ErrorResponse {
   errors?: Record<string, string[]>
   /** The request's id, the same as the `X-Request-Id` header and the id on every log line of the request. The panel shows it on a server failure («کد پیگیری») so the request can be found in the log. */
   request_id: string
-  /** Debug details. Only on a server failure (a 500, never a refusal), with APP_DEBUG on, and only for a request made directly from the server's own machine (never one forwarded by a proxy or tunnel). Paths are relative to the app's folder; call arguments are never included. */
+  /** Debug details. Only on a server failure (a 500, or the 503 of a database out of reach; never a refusal), with APP_DEBUG on, and only for a request made directly from the server's own machine (never one forwarded by a proxy or tunnel). Paths are relative to the app's folder; call arguments are never included. */
   debug?: {
     exception: string
     detail: string
@@ -419,7 +419,7 @@ export interface UserRow {
   }
   /** The customer groups they are in, in the groups' order. */
   groups: NamedRef[]
-  created_at: string
+  created_at: string | null
   last_seen_at: string | null
 }
 
@@ -483,7 +483,7 @@ export interface CustomerMerge {
     /** Its "first last" name; null without one. */
     name: string | null
   }
-  created_at: string
+  created_at: string | null
 }
 
 export interface CustomerAccountResponse {
@@ -532,7 +532,7 @@ export interface CustomerGroupRow {
   counts: {
     users: number
   }
-  created_at: string
+  created_at: string | null
 }
 
 export interface CustomerGroupsResponse {
@@ -566,7 +566,7 @@ export interface WalletTransactionRow {
   reviewer: string | null
   /** The name of the bot admin `reviewer` is, as their account has it (their first and last name), to show beside it. Null for the owner, an agent, an admin whose account is gone or shows no name, a handle no admin of the shop has now, and while `reviewer` is null. */
   reviewer_name: string | null
-  created_at: string
+  created_at: string | null
 }
 
 export interface UserWalletResponse {
@@ -668,7 +668,7 @@ export interface RecentOrder {
   /** What it buys in words, as `OrderPackageName`: its plan's name (an extra's: its service's plan's), or a service the customer built as «سرویس دلخواه · ۵۰ گیگ · ۳۰ روز»; null for any other order. */
   plan: string | null
   user: UserRef
-  created_at: string
+  created_at: string | null
 }
 
 export interface RecentUser {
@@ -682,7 +682,7 @@ export interface RecentUser {
   /** Their verified email, in lower case; null when they have none. */
   email: string | null
   balance: string
-  created_at: string
+  created_at: string | null
 }
 
 /** How a bot runs. The main bot's mode applies to the whole installation: every bot gets updates the same way (all on webhooks, or all polling), and the main bot's token is in config.php. */
@@ -704,6 +704,10 @@ export type BotMode = 'webhook' | 'polling' | 'offline'
 export interface SystemStatus {
   version: string
   php: string
+  /** Whether this PHP release is free of the security holes PHP has closed in its branch (false for a release older than its branch's first without them, or a branch past PHP's support). While false the panel says so over every page, and an update is not installed. */
+  php_safe: boolean
+  /** The release of this PHP branch the shop asks for at least ("8.3.36"); for a branch past PHP's support, the oldest supported branch's. */
+  php_required: string
   /** The bot of the shop the request names (the dashboard's shop): the main bot or an agent's. */
   bot: {
     /** The bot's id; 1 is the main bot. */
@@ -874,7 +878,7 @@ export interface PaymentRow {
   to_wallet: boolean
   /** An online payment held for support: its gateway took money on it that does not fit — for another order or amount, or less than asked that the customer accepted (AtlasPay) —, kept money on it unsettled for two days after its page closed, or closed it after saying money had come in on it (held at once). `description` says why. It is never asked about again, and only «لغو پرداخت» is offered here, once support has settled it with the customer at the gateway; while it is still waiting (pending, or failed with its page), its order never expires and nothing of it is paid any other way — cancelled, it holds nothing. */
   held: boolean
-  created_at: string
+  created_at: string | null
   /** Which operations its current state allows (the server decides). */
   actions: {
     approve: boolean
@@ -994,7 +998,7 @@ export interface OrderRow {
   payments: OrderPayment[]
   paid_at: string | null
   fulfilled_at: string | null
-  created_at: string
+  created_at: string | null
   actions: {
     retry: boolean
     cancel: boolean
@@ -1020,7 +1024,7 @@ export interface OrderPayment {
   to_wallet: boolean
   /** An online payment held for support: its gateway took money on it that does not fit, kept it unsettled, or closed it after saying money had come in (`PaymentRow.held`). */
   held: boolean
-  created_at: string
+  created_at: string | null
 }
 
 /** The orders list's sort keys: creation time (the default) or amount. */
@@ -1140,7 +1144,7 @@ export interface SubscriptionRow {
   ended_at: string | null
   /** When the shop removes it from its panel and the shop by itself, by its rules now: `expired_cleanup_hours` after it ended while `expired_cleanup` is on; a test, while `test_cleanup` is on, `test_cleanup_hours` after it ended — or, never connected, `test_unused_days` after it was made. Null when no rule removes it: it runs (a test never connected aside), it is switched off, or the rule is off. A moment already past: it goes at the next check (every 15 minutes), unless an order of it is still open. */
   removes_at: string | null
-  created_at: string
+  created_at: string | null
   /** Which operations its current state allows (the server decides). */
   actions: {
     sync: boolean
@@ -1240,11 +1244,11 @@ export interface TicketRow {
   /** The customer's service it is about, by its panel name; null for none, or when the service was deleted. */
   subscription: NamedRef | null
   /** When its latest message was written; the list is sorted by it. */
-  last_message_at: string
+  last_message_at: string | null
   messages_count: number
   /** The customer's rating after it closed, 1 to 5; null for none. */
   rating: number | null
-  created_at: string
+  created_at: string | null
   /** When it was closed; null while open (reopening clears it). */
   closed_at: string | null
 }
@@ -1261,7 +1265,7 @@ export interface TicketMessageRow {
   /** Its picture; null for none. */
   attachment: TicketAttachment | null
   channel: TicketChannel
-  created_at: string
+  created_at: string | null
 }
 
 /** A support ticket with its whole conversation, oldest message first. */
@@ -1273,11 +1277,11 @@ export interface TicketDetail {
   /** The customer's service it is about, by its panel name; null for none, or when the service was deleted. */
   subscription: NamedRef | null
   /** When its latest message was written; the list is sorted by it. */
-  last_message_at: string
+  last_message_at: string | null
   messages_count: number
   /** The customer's rating after it closed, 1 to 5; null for none. */
   rating: number | null
-  created_at: string
+  created_at: string | null
   /** When it was closed; null while open (reopening clears it). */
   closed_at: string | null
   /** The note the customer left with their rating. */
@@ -1338,7 +1342,7 @@ export interface ReviewRow {
   reviewer_name: string | null
   /** When it was last approved or rejected; null while pending. */
   decided_at: string | null
-  created_at: string
+  created_at: string | null
   /** Which decisions its status allows (deleting is always allowed). */
   actions: {
     approve: boolean
@@ -1396,8 +1400,8 @@ export interface ServerRow {
     /** Of those, the ones in the shop the panel has open: what its subscriptions screen lists with `?server=`. */
     shop_active_subscriptions: number
   }
-  created_at: string
-  updated_at: string
+  created_at: string | null
+  updated_at: string | null
 }
 
 /** An inbound as the panel reports it, from a probe or from the stored copy. */
@@ -1774,7 +1778,7 @@ export interface ServerGrantRow {
   reviewer: string | null
   /** The name of the bot admin `reviewer` is, as their account has it (their first and last name), to show beside it. Null for the owner, an agent, an admin whose account is gone or shows no name, a handle no admin of the shop has now, and while `reviewer` is null. */
   reviewer_name: string | null
-  created_at: string
+  created_at: string | null
   finished_at: string | null
 }
 
@@ -1841,7 +1845,7 @@ export interface ServerMigrationRow {
   reviewer: string | null
   /** The name of the bot admin `reviewer` is, as their account has it (their first and last name), to show beside it. Null for the owner, an agent, an admin whose account is gone or shows no name, a handle no admin of the shop has now, and while `reviewer` is null. */
   reviewer_name: string | null
-  created_at: string
+  created_at: string | null
   /** When its first turn began. */
   started_at: string | null
   finished_at: string | null
@@ -1874,7 +1878,7 @@ export interface ServerMigrationFailure {
   /** Its shop; null once it is deleted. */
   shop: ShopRef | null
   reason: string
-  created_at: string
+  created_at: string | null
 }
 
 export interface ServerMigrationDetailResponse {
@@ -1982,7 +1986,7 @@ export interface MassGrantRow {
   reviewer: string | null
   /** The name of the bot admin `reviewer` is, as their account has it (their first and last name), to show beside it. Null for the owner, an agent, an admin whose account is gone or shows no name, a handle no admin of the shop has now, and while `reviewer` is null. */
   reviewer_name: string | null
-  created_at: string
+  created_at: string | null
   finished_at: string | null
 }
 
@@ -2043,16 +2047,17 @@ export interface BroadcastButton {
 export interface BroadcastRow {
   id: number
   kind: 'message' | 'unpin'
-  /** For an unpin run: the broadcast whose pins it removes. */
+  /** For an unpin run: the broadcast whose pins it removes — null only for a row edited outside AmoBot to have none. Null for a message run. */
   source_id: number | null
-  /** Copied by the bot (with the link buttons), or forwarded from its original sender. */
-  mode: 'copy' | 'forward'
+  /** Copied by the bot (with the link buttons), or forwarded from its original sender — an unpin run's, its source's. Null when that is unknown: a row edited outside AmoBot to have no mode, or no source. */
+  mode: 'copy' | 'forward' | null
+  /** Who it went to — an unpin run's, its source's. Null when that is unknown: a row edited outside AmoBot to have no audience, or no source. */
   audience: {
     key: BroadcastAudience
     /** The group or server the audience names. */
     id: number | null
     label: string
-  }
+  } | null
   /** Each message is pinned in its chat. */
   pin: boolean
   /** Chats where its message is still pinned (what unpin, «لغو پین», would remove). */
@@ -2076,7 +2081,7 @@ export interface BroadcastRow {
   reviewer: string | null
   /** The name of the bot admin `reviewer` is, as their account has it (their first and last name), to show beside it. Null for the owner, an agent, an admin whose account is gone or shows no name, a handle no admin of the shop has now, and while `reviewer` is null. */
   reviewer_name: string | null
-  created_at: string
+  created_at: string | null
   finished_at: string | null
   actions: {
     pause: boolean
@@ -2353,8 +2358,8 @@ export interface PlanCategoryRow {
   counts: {
     plans: number
   }
-  created_at: string
-  updated_at: string
+  created_at: string | null
+  updated_at: string | null
 }
 
 /** A plan, as the list shows it. */
@@ -2402,8 +2407,8 @@ export interface PlanRow {
     /** All services sold on it, ended ones included. */
     subscriptions: number
   }
-  created_at: string
-  updated_at: string
+  created_at: string | null
+  updated_at: string | null
 }
 
 export interface PlanOptionServer {
@@ -2557,8 +2562,8 @@ export interface WalletMethodRow {
     /** The number of payments made with it. A method with payments cannot be deleted. */
     payments: number
   }
-  created_at: string
-  updated_at: string
+  created_at: string | null
+  updated_at: string | null
 }
 
 /** A card-to-card method, with its cards: each payment is shown one of them at random, among those switched on whose daily cap leaves room for its amount, and always that one after — none while `to_support`. */
@@ -2583,8 +2588,8 @@ export interface ManualMethodRow {
     /** The number of payments made with it. A method with payments cannot be deleted. */
     payments: number
   }
-  created_at: string
-  updated_at: string
+  created_at: string | null
+  updated_at: string | null
   /** In their order. None switched on with room left: the method is not offered — unless `to_support`. */
   cards: PaymentCardRow[]
   /** The shop takes card payments in support's private chat now (`BotSettingsData.card_to_support`, with a support contact): no card is shown nor picked, so the cards' switches and daily caps do not hold the method back. */
@@ -2613,8 +2618,8 @@ export interface CubePayMethodRow {
     /** The number of payments made with it. A method with payments cannot be deleted. */
     payments: number
   }
-  created_at: string
-  updated_at: string
+  created_at: string | null
+  updated_at: string | null
 }
 
 /** A Zarinpal method (zarinpal.com), an online gateway: the customer pays with any bank card on Zarinpal's page and is sent back to the shop; Zarinpal confirms it, with no receipt and no review. */
@@ -2639,8 +2644,8 @@ export interface ZarinpalMethodRow {
     /** The number of payments made with it. A method with payments cannot be deleted. */
     payments: number
   }
-  created_at: string
-  updated_at: string
+  created_at: string | null
+  updated_at: string | null
 }
 
 /** An AtlasPay method (atlaspay.space), an online gateway: the customer pays by card transfer in AtlasPay's mini app in Telegram, and AtlasPay confirms it from the bank's text message, with no receipt and no review — one paid short, the customer having accepted paying less, is held for support. */
@@ -2665,8 +2670,8 @@ export interface AtlasPayMethodRow {
     /** The number of payments made with it. A method with payments cannot be deleted. */
     payments: number
   }
-  created_at: string
-  updated_at: string
+  created_at: string | null
+  updated_at: string | null
 }
 
 /** An AbanGateway method (abangateway.ir), an online gateway: the customer transfers the exact sum its page asks to the merchant's own card, and AbanGateway confirms it from the bank's text message, with no receipt and no review. */
@@ -2691,8 +2696,8 @@ export interface AbanMethodRow {
     /** The number of payments made with it. A method with payments cannot be deleted. */
     payments: number
   }
-  created_at: string
-  updated_at: string
+  created_at: string | null
+  updated_at: string | null
 }
 
 /** A Plisio method (plisio.net), an online gateway for crypto: the customer pays a coin of their choice on Plisio's page and Plisio confirms it on its chain, with no receipt and no review. An order is asked of Plisio in US dollars, at the owner's rate. */
@@ -2717,8 +2722,8 @@ export interface PlisioMethodRow {
     /** The number of payments made with it. A method with payments cannot be deleted. */
     payments: number
   }
-  created_at: string
-  updated_at: string
+  created_at: string | null
+  updated_at: string | null
 }
 
 /** An AqayePardakht method (aqayepardakht.ir), an online gateway: the customer pays with any bank card on the bank's page through Shaparak — reached from a page on the shop's own address — and is sent back to the shop; AqayePardakht confirms it, with no receipt and no review. */
@@ -2743,8 +2748,8 @@ export interface AqayePardakhtMethodRow {
     /** The number of payments made with it. A method with payments cannot be deleted. */
     payments: number
   }
-  created_at: string
-  updated_at: string
+  created_at: string | null
+  updated_at: string | null
 }
 
 /** A Variza method (variza.ir), an online gateway: the customer transfers the exact sum its page asks to the merchant's card (or Variza's), and Variza confirms it from the bank's text message — its word a webhook it signs, to the shop's address for it —, with no receipt and no review. */
@@ -2769,8 +2774,8 @@ export interface VarizaMethodRow {
     /** The number of payments made with it. A method with payments cannot be deleted. */
     payments: number
   }
-  created_at: string
-  updated_at: string
+  created_at: string | null
+  updated_at: string | null
 }
 
 /** A method whose driver is no longer installed. No checkout offers it, even when switched on; it can only be switched off or deleted. */
@@ -2797,8 +2802,8 @@ export interface UnregisteredMethodRow {
     /** The number of payments made with it. A method with payments cannot be deleted. */
     payments: number
   }
-  created_at: string
-  updated_at: string
+  created_at: string | null
+  updated_at: string | null
 }
 
 /** A card-to-card method's settings (`ManualMethodRow.config`): the manual driver's form values as stored. A field added after the method was saved shows its default. Its cards are rows of their own (`ManualMethodRow.cards`). */
@@ -3383,7 +3388,7 @@ export interface CustomEmojiRow {
   format: 'static' | 'animated' | 'video' | null
   /** Telegram paints it in the colour of the surrounding text (`needs_repainting`). */
   repaint: boolean
-  updated_at: string
+  updated_at: string | null
 }
 
 export interface CustomEmojisResponse {
@@ -3422,7 +3427,7 @@ export interface GiftCodeRow {
   redeemed_at: string | null
   /** For a redeemed plan code: the order that delivered its service. */
   order: RewardOrderRef | null
-  created_at: string
+  created_at: string | null
 }
 
 export interface RewardOrderRef {
@@ -3467,7 +3472,7 @@ export interface GiftCodeBatch {
   /** Not yet redeemed. */
   unused: number
   /** When its newest codes were created. */
-  created_at: string
+  created_at: string | null
 }
 
 export interface GiftCodeBatchesResponse {
@@ -3548,7 +3553,7 @@ export interface WheelSpinRow {
   order: RewardOrderRef | null
   /** The service that got the traffic or days, or the plan's new service, by its client's name on the panel. */
   subscription: NamedRef | null
-  created_at: string
+  created_at: string | null
 }
 
 export interface WheelSpinsResponse {
@@ -3588,7 +3593,7 @@ export interface TestAccountRow {
   } | null
   /** The customer bought a service with a price after taking it. */
   bought_after: boolean
-  created_at: string
+  created_at: string | null
   /** When its service was made; null while it is being made. */
   issued_at: string | null
   /** When it ended — its deadline, or when the shop found its traffic used up or its client gone (its removal is counted from then); null while it runs (and past its deadline until the shop next reads its panel), and once it is removed. */
@@ -3741,7 +3746,7 @@ export interface LotteryDrawRow {
     words: string
   }
   winners: LotteryWinnerRow[]
-  created_at: string
+  created_at: string | null
 }
 
 export interface LotteryWinnerRow {
@@ -3823,7 +3828,7 @@ export interface DiscountCodeRow {
   /** Whether `DELETE /discount-codes/{id}` would delete it: false while any order but a cancelled one names it — refunded ones too, which count no use — and it is kept for their history (switch it off instead). The delete is a 409 then. */
   deletable: boolean
   state: DiscountState
-  created_at: string
+  created_at: string | null
 }
 
 export interface DiscountCodesResponse {
@@ -3885,7 +3890,7 @@ export interface SaleRow {
   ends_at: string | null
   enabled: boolean
   state: DiscountState
-  created_at: string
+  created_at: string | null
 }
 
 export interface SalesResponse {
@@ -4564,8 +4569,8 @@ export interface BotChannelRow {
   title: string
   /** Public handle without "@"; null for a private chat. */
   username: string | null
-  /** The link customers follow to join. */
-  link: string
+  /** The link customers follow to join. Null when it has neither a public handle nor an invite link — only ever a row edited outside AmoBot: the bot then asks no one to join it, and «بررسی دوباره» gets its handle, or a private one's invite link, again once the bot is an admin there. */
+  link: string | null
   /** Whether the bot was an admin at the last check; it needs admin rights to see the members. */
   bot_is_admin: boolean
   checked_at: string | null
@@ -4686,7 +4691,7 @@ export interface InviteeRow {
   referrer: UserRef | null
   /** What this customer's payments earned their current referrer (the commissions credited to that referrer). */
   earned: string
-  joined_at: string
+  joined_at: string | null
 }
 
 /** A referral commission paid out. */
@@ -4706,7 +4711,7 @@ export interface ReferralCommissionRow {
   /** The percent in force at the time. */
   rate: number
   commission: string
-  created_at: string
+  created_at: string | null
 }
 
 /** The referrers list's sort keys: number of referrals (the default), amount earned, or time of the latest referral. */
@@ -4766,7 +4771,7 @@ export interface ReferralAlertRow {
   reason: ReferralAlertReason
   /** The number of referrals when it was raised: those in the window, or those who never bought. */
   count: number
-  created_at: string
+  created_at: string | null
 }
 
 export interface ReferralAlertsResponse {
@@ -4845,8 +4850,8 @@ export interface AgencyLevelRow {
   counts: {
     agents: number
   }
-  created_at: string
-  updated_at: string
+  created_at: string | null
+  updated_at: string | null
 }
 
 export interface AgencyLevelsResponse {
@@ -4886,7 +4891,7 @@ export interface AgencyRequestRow {
   /** The name of the bot admin `reviewer` is, as their account has it (their first and last name), to show beside it. Null for the owner, an agent, an admin whose account is gone or shows no name, a handle no admin of the shop has now, and while `reviewer` is null. */
   reviewer_name: string | null
   decided_at: string | null
-  created_at: string
+  created_at: string | null
   actions: {
     approve: boolean
     reject: boolean
@@ -5458,7 +5463,7 @@ export interface StoreCustomer {
   /** Their wallet balance in Toman, as a decimal string ('120000.00'). Below zero is an agent's debt. */
   balance: string
   /** When they became a customer of the shop. */
-  created_at: string
+  created_at: string | null
 }
 
 export interface StoreMeResponse {
@@ -5498,7 +5503,7 @@ export interface StoreSession {
   /** The IP address it signed in from. */
   ip: string | null
   /** When it signed in. */
-  created_at: string
+  created_at: string | null
   /** Its last request (updated every few minutes, not on every request). */
   last_used_at: string | null
   /** The session this request was made with. */
@@ -5622,7 +5627,7 @@ export interface StoreMergeOfferResponse {
       /** "first last"; null if none. */
       name: string | null
       /** When it became a customer of the shop. */
-      created_at: string
+      created_at: string | null
       /** Its active services. */
       services: number
       orders: number
@@ -5820,7 +5825,7 @@ export interface StoreSubscription {
   } | null
   /** When the panel was last read for it; the numbers are from then. */
   synced_at: string | null
-  created_at: string
+  created_at: string | null
 }
 
 /** A service's quota, and how much is used and left, in bytes. */
@@ -5900,7 +5905,7 @@ export interface StorePayment {
   status: PaymentStatus
   /** Toman. */
   amount: string
-  created_at: string
+  created_at: string | null
   paid_at: string | null
   /** The receipt the customer sent for it, in the bot or on the website; null if none was sent. */
   receipt: {
@@ -5922,6 +5927,8 @@ export interface StorePayLink {
   expires_at: string | null
   /** The sum to pay, in Toman: the payment's own, or more when the gateway adds a few Toman to tell transfers apart (CubePay, AbanGateway) or the customer pays the gateway's fee (`fee`). Show this one as what to pay. A page may still ask it otherwise: Variza's asks a few Toman more of its own, and Plisio's the same in a coin the customer picks there (at the shop's dollar rate). */
   amount: string
+  /** `amount` in Rial — ten to the Toman, as Iran's banks count —: whole, in Latin digits, no separators. What a banking app takes: the digits to copy for a transfer to `card`. */
+  amount_rial: string
   /** Of `amount`, the gateway's fee the customer pays: the one the shop passes on (CubePay), Zarinpal's when its merchant set the payer to pay it, or what AtlasPay puts on the order's amount; null for none. The order is still paid, delivered and credited at its own amount. */
   fee: string | null
   /** The card that sum goes to, when the gateway gave one to show (CubePay's «🤖 نمایش کارت در ربات», AtlasPay's «نمایش مستقیم اطلاعات پرداخت», AbanGateway's «نمایش کارت در ربات و سایت» in the shop): the customer may transfer the exact `amount` to it rather than open the page. Null otherwise. */
@@ -5951,7 +5958,7 @@ export interface StoreOrder {
   discounts: DiscountLine[]
   /** The discount code used; null for none. */
   discount_code: OrderDiscountCode | null
-  created_at: string
+  created_at: string | null
   fulfilled_at: string | null
   /** The plan of a purchase or renewal (for extras, the service's plan); null for a wallet top-up or a service the customer built. The shop never deletes a plan an order names. */
   plan: NamedRef | null
@@ -6251,6 +6258,8 @@ export interface StoreCheckout {
     payment_id: number
     /** The amount to transfer, in Toman: the payment's own. A wallet top-up's may be a few Toman more than the order's (the bot setting of a random sum added to card-to-card top-ups), so its receipt is told apart; the whole of it is credited. */
     amount: string
+    /** `amount` in Rial — ten to the Toman, as Iran's banks count —: whole, in Latin digits, no separators (`1200000` for 120000 Toman). What a banking app takes: copy these digits. */
+    amount_rial: string
     /** The card number: 16 digits, no separators. Each payment is shown one of its method's cards, picked at random, and always that one after — the same card on a request made again. Null while the card is given in support's private chat (`contact`). */
     card: string | null
     /** The card holder's name. Null while the card is given in support's private chat (`contact`). */
@@ -6296,7 +6305,7 @@ export interface StoreRenewal {
   method: RenewalMethod
   /** The methods the shop offers, in this order; the price is the same by each. With more than one, let the customer pick and send it as `method` to the preview and the renewal; with one, there is nothing to pick. */
   methods: RenewalMethod[]
-  /** The service's own plan, or the one picked (`plan_id`) for a service without one, which the renewal uses: what a renewal gives, as the catalogue says it (`StoreRenewalPlan` without the prices). Null for a package built (`custom`). */
+  /** The service's own plan, or the one picked (`plan_id`) for a service without one, which the renewal uses: what a renewal gives, as the catalogue says it (`StoreRenewalPlan` without the prices and the category). Null for a package built (`custom`). */
   plan: {
     id: number
     name: string
@@ -6366,10 +6375,12 @@ export interface StoreRenewalPlan {
   duration_hours: number
   /** Devices at once once renewed on it; 0 for no limit. */
   devices: number
+  /** The category it is listed under, as `GET /plans` groups the catalogue; null for the group without a category (no category, or a switched-off one). The bot asks for the category first when the plans to pick are in more than one. */
+  category_id: number | null
 }
 
 export interface StoreRenewalPlansResponse {
-  /** In the catalogue's order; empty while the service cannot be renewed now: not at all, not yet (its renewal window), or a renewal of it under way. */
+  /** In the catalogue's order: by category (`category_id`), as `GET /plans` groups them; empty while the service cannot be renewed now: not at all, not yet (its renewal window), or a renewal of it under way. */
   plans: StoreRenewalPlan[]
   /** Whether the service may be renewed instead with a package the customer builds («🛠 تمدید با سرویس دلخواه»): it has no plan, is no test account, may be renewed now (as `plans`), and the shop's builder is offered (`shop.custom_services` of `GET /`). Then send `gb` and `days` — within the bounds and tiers of `GET /custom-services` — to `…/renewal` in place of `plan_id`. */
   custom_services: boolean
@@ -6424,7 +6435,7 @@ export interface StoreWalletTransferResponse {
     /** Toman. */
     amount: string
     recipient: StoreRecipient
-    created_at: string
+    created_at: string | null
   }
   wallet: StoreWalletResponse
 }
@@ -6439,7 +6450,7 @@ export interface StoreWalletTransaction {
   balance_after: string
   /** What it was for («شارژ کیف پول (سفارش #12)»). */
   description: string | null
-  created_at: string
+  created_at: string | null
 }
 
 export interface StoreWalletTransactionsResponse {
@@ -6568,7 +6579,7 @@ export interface StoreNotification {
   } | null
   /** Marked as read (`POST /notifications/read`). */
   read: boolean
-  created_at: string
+  created_at: string | null
 }
 
 export interface StoreNotificationsResponse {
@@ -6601,12 +6612,12 @@ export interface StoreTicket {
   /** Their service it is about, by its name; null for none, or when the service was deleted. */
   subscription: NamedRef | null
   /** When its latest message was written; the list is sorted by it. */
-  last_message_at: string
+  last_message_at: string | null
   /** Support wrote since they last read it (`POST /tickets/{id}/read` marks it read, as does viewing it in the bot). */
   unread: boolean
   /** Their rating after it closed, 1 to 5; null for none, and after it is reopened. */
   rating: number | null
-  created_at: string
+  created_at: string | null
   /** When it was closed; null unless it is closed (reopening clears it). */
   closed_at: string | null
 }
@@ -6619,7 +6630,7 @@ export interface StoreTicketMessage {
   body: string
   /** Its picture (`GET /tickets/{id}/messages/{message}/attachment`); null for none. */
   attachment: TicketAttachment | null
-  created_at: string
+  created_at: string | null
 }
 
 /** One of the customer's support tickets, with its whole conversation, oldest message first. */
@@ -6630,12 +6641,12 @@ export interface StoreTicketDetail {
   /** Their service it is about, by its name; null for none, or when the service was deleted. */
   subscription: NamedRef | null
   /** When its latest message was written; the list is sorted by it. */
-  last_message_at: string
+  last_message_at: string | null
   /** Support wrote since they last read it (`POST /tickets/{id}/read` marks it read, as does viewing it in the bot). */
   unread: boolean
   /** Their rating after it closed, 1 to 5; null for none, and after it is reopened. */
   rating: number | null
-  created_at: string
+  created_at: string | null
   /** When it was closed; null unless it is closed (reopening clears it). */
   closed_at: string | null
   /** The note they left with their rating. */
@@ -6703,7 +6714,7 @@ export interface StoreReview {
   /** The key of the avatar they picked from the website's own set; null for none (the website shows its default). */
   avatar: string | null
   /** When it was written. */
-  created_at: string
+  created_at: string | null
 }
 
 export interface StoreReviewsResponse {

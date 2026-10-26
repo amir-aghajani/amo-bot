@@ -31,8 +31,8 @@ use Illuminate\Support\Carbon;
  * @property int|null $redeemed_by Who took it; null once their account is gone
  * @property Carbon|null $redeemed_at When it was taken — what "taken" is
  * @property int|null $order_id The order a plan's service was given by
- * @property Carbon $created_at
- * @property Carbon $updated_at
+ * @property Carbon|null $created_at
+ * @property Carbon|null $updated_at
  * @property-read Plan|null $plan
  * @property-read User|null $redeemer
  * @property-read Order|null $order

@@ -117,6 +117,11 @@ measured on MySQL and MariaDB:
   `Encrypted` and `EncryptedArray` casts under `APP_KEY`; a value that no longer decrypts reads as empty and is logged.
 - **Settings** a panel changes live in the `settings` table, a JSON value per key and bot (`Settings\Services\Settings`);
   the installation's own configuration is `config.php`, never the database ([Configuration](Configuration.md)).
+- **Rows written outside AmoBot** — imported, or added by hand in phpMyAdmin — may lack what AmoBot always writes: a
+  row's `created_at` and `updated_at` (the columns allow null), a required channel's handle and invite link. The shop
+  shows such a row all the same: its times null in the API — «—» in the panels and the bot —, and a channel with no way
+  in asked of no one. `tests/Feature/RowsWithoutTimesTest` calls every GET operation of the owner's panel and the
+  website with every row's times taken away.
 
 ### Time and the 2038 bound
 

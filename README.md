@@ -132,7 +132,7 @@ To run a shop — [Installation](docs/Installation.md#what-you-need) has the det
 | What | Needed |
 |---|---|
 | Hosting | Shared hosting with cPanel, DirectAdmin or the like — the one supported way to run a shop |
-| PHP | 8.2, 8.3 or 8.4, with `pdo_mysql`, `curl`, `mbstring`, `openssl`, `bcmath` and `fileinfo`, and a `memory_limit` of 64M or more |
+| PHP | 8.3.36, 8.4.27 or 8.5.12, or a later release of the same branch, with `pdo_mysql`, `curl`, `mbstring`, `openssl`, `bcmath` and `fileinfo`, and a `memory_limit` of 64M or more |
 | Optional PHP extensions | `gd` for the QR card (without it, the bot sends the link as text); `zip` and `sodium` to update from the panel (without them, you update by hand) |
 | Database | MySQL 5.7.8+ or MariaDB 10.3+: an empty database, and a user with every privilege on it |
 | Domain | HTTPS — Telegram sends its webhooks only to `https://` addresses |
@@ -151,7 +151,9 @@ No step needs a console: each is done in the browser or in your host's control p
 
 1. Download `amobot-<version>.zip` from the [releases](https://github.com/amir-aghajani/amo-bot/releases). Never upload
    a copy of the repository: only a release carries the PHP packages and the built panels.
-2. In cPanel, create a database and its user (*MySQL Databases*), and pick PHP 8.2 or newer for the domain.
+2. In cPanel, create a database and its user (*MySQL Databases*), and pick the newest PHP the host offers for the
+   domain: at least 8.3.36, 8.4.27 or 8.5.12 on its branch, the releases that closed PHP's latest known security holes
+   ([what you need](docs/Installation.md#what-you-need)).
 3. Upload the zip and extract it. Best: point the domain's document root at the release's `public/` folder
    ([Installation](docs/Installation.md#shared-hosting)).
 4. Open `https://your-domain/` and follow the web installer: the install key (in `storage/install-key.txt`, which you
@@ -242,7 +244,7 @@ A release zip carries no `docs/`: read them there.
 Issues and pull requests are welcome. Open an issue first for anything larger than a fix — a feature, a new driver, a
 change to an API — so its shape is agreed before the work. [Contributing](docs/Contributing.md) has the rules a change
 keeps, the checks to run, and how the documentation works. CI runs the checks on every push to `main` and every pull
-request, on PHP 8.2, 8.3 and 8.4 ([Testing](docs/Testing.md#ci)).
+request, on PHP 8.3, 8.4 and 8.5 ([Testing](docs/Testing.md#ci)).
 
 ## Versions and releases
 

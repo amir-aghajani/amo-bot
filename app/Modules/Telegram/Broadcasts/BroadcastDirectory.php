@@ -89,17 +89,19 @@ final class BroadcastDirectory
      */
     private function row(Broadcast $broadcast, array &$labels, ?string $reviewerName): array
     {
-        ['key' => $audience, 'id' => $audienceId] = $broadcast->audienceRef();
+        // The message run it is about, its mode and audience — unknown (null) for a row edited by hand to have none.
+        $message = $broadcast->messageRun();
+        $audience = $message?->audience;
 
         return [
             'id' => $broadcast->id,
             'kind' => $broadcast->kind->value,
             'source_id' => $broadcast->source_id,
-            'mode' => $broadcast->message()->mode?->value,
-            'audience' => [
+            'mode' => $message?->mode?->value,
+            'audience' => $audience === null ? null : [
                 'key' => $audience,
-                'id' => $audienceId,
-                'label' => Audience::labelOf($audience, $audienceId, $labels),
+                'id' => $message->audience_id,
+                'label' => Audience::labelOf($audience, $message->audience_id, $labels),
             ],
             'pin' => $broadcast->pin,
             'pinned' => $broadcast->isUnpin() ? 0 : $broadcast->pinnedCount(),
@@ -114,7 +116,7 @@ final class BroadcastDirectory
             'admin' => $broadcast->user !== null ? UserDirectory::presentRef($broadcast->user) : null,
             'reviewer' => $this->reviewers->present($broadcast->reviewer),
             'reviewer_name' => $reviewerName,
-            'created_at' => $broadcast->created_at->toIso8601String(),
+            'created_at' => $broadcast->created_at?->toIso8601String(),
             'finished_at' => $broadcast->finished_at?->toIso8601String(),
             'actions' => [
                 'pause' => $broadcast->status === BroadcastStatus::Sending,

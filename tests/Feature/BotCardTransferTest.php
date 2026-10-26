@@ -60,10 +60,11 @@ final class BotCardTransferTest extends BotTestCase
         self::assertSame(['deleteMessage', 'sendMessage'], array_slice($this->calls(), 0, 2), 'a protected message is sent, never edited in');
         self::assertSame('true', $this->params(1)['protect_content'] ?? null);
         self::assertSame([$this->cardInstructions('120000')], $this->said());
-        self::assertStringContainsString('<code>120000</code>', $this->said()[0], 'the amount copied by a tap on it too');
+        self::assertStringContainsString('<code>1200000</code> ریال', $this->said()[0], 'the amount copied by a tap on it too: in Rial, as the banks take it');
+        self::assertStringContainsString('۱۲۰٬۰۰۰ تومان', $this->said()[0], 'the price read in Toman');
         self::assertSame([
             [
-                ['text' => self::text(BotText::CardCopyAmount), 'copy_text' => ['text' => '120000']],
+                ['text' => self::text(BotText::CardCopyAmount), 'copy_text' => ['text' => '1200000']],
                 ['text' => self::text(BotText::CardCopyNumber), 'copy_text' => ['text' => '6037997700001119']],
             ],
             [['text' => self::text(BotText::Back), 'callback_data' => $this->checkoutOf($this->plan, $this->server)]],
@@ -82,9 +83,10 @@ final class BotCardTransferTest extends BotTestCase
 
         $asked = Payment::query()->sole()->amount;
         self::assertSame(1, Money::compare($asked, '100000'), 'a few Toman more than the top-up');
-        $digits = Money::digits($asked);
-        self::assertSame($digits, $this->inlineKeyboard(1)[0][0]['copy_text']['text']);
-        self::assertStringContainsString("<code>{$digits}</code> تومان", $this->said()[0]);
+        $rials = Money::rials($asked);
+        self::assertSame(bcmul(Money::digits($asked), '10', 0), $rials, 'ten Rial to the Toman');
+        self::assertSame($rials, $this->inlineKeyboard(1)[0][0]['copy_text']['text']);
+        self::assertStringContainsString("<code>{$rials}</code> ریال", $this->said()[0]);
         self::assertStringContainsString(Money::format($asked), $this->said()[0]);
     }
 
@@ -94,7 +96,7 @@ final class BotCardTransferTest extends BotTestCase
 
         $this->send($this->tap($this->payButton($this->plan, $this->server, $this->card)));
 
-        self::assertStringContainsString("👤 به نام <b>AmoBot</b>\n🏦 بانک: ملت\n💰 مبلغ: <code>120000</code> تومان", $this->said()[0]);
+        self::assertStringContainsString("👤 به نام <b>AmoBot</b>\n🏦 بانک: ملت\n💰 مبلغ: <code>1200000</code> ریال", $this->said()[0]);
     }
 
     public function testACheckoutPastTelegramsTimeForDeletingLosesItsButtonsAndTheCardStillComesProtected(): void
@@ -117,7 +119,7 @@ final class BotCardTransferTest extends BotTestCase
 
         self::assertSame('editMessageText', $this->calls()[0]);
         self::assertArrayNotHasKey('protect_content', $this->params(0));
-        self::assertSame(['120000', '6037997700001119'], array_map(static fn(array $button): string => $button['copy_text']['text'], $this->inlineKeyboard(0)[0]), 'the copy buttons all the same');
+        self::assertSame(['1200000', '6037997700001119'], array_map(static fn(array $button): string => $button['copy_text']['text'], $this->inlineKeyboard(0)[0]), 'the copy buttons all the same');
     }
 
     public function testInSupportsPrivateChatNoCardIsShownButTheOrderAndTheWayToSupportAndNoReceiptIsAwaited(): void

@@ -42,7 +42,7 @@ use Illuminate\Support\Carbon;
  * @property string|null $reviewer who started it
  * @property string|null $lease_token
  * @property Carbon|null $leased_until
- * @property Carbon $created_at
+ * @property Carbon|null $created_at
  * @property Carbon|null $started_at when its first turn began
  * @property Carbon|null $finished_at
  * @property-read Server|null $source

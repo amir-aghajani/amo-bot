@@ -25,8 +25,8 @@ use Illuminate\Support\Carbon;
  * @property int $duration_hours
  * @property bool $on_hold whether its term counted from the first connection
  * @property Carbon|null $issued_at null while its panel is being asked
- * @property Carbon $created_at
- * @property Carbon $updated_at
+ * @property Carbon|null $created_at
+ * @property Carbon|null $updated_at
  * @property-read User $user
  * @property-read Server|null $server
  * @property-read Subscription|null $subscription

@@ -5776,8 +5776,8 @@ An AbanGateway method (abangateway.ir), an online gateway: the customer transfer
 | `sort` | integer | yes |  |
 | `counts` | object | yes |  |
 | `counts.payments` | integer | yes | The number of payments made with it. A method with payments cannot be deleted. |
-| `created_at` | string (date-time) | yes |  |
-| `updated_at` | string (date-time) | yes |  |
+| `created_at` | string (date-time) or null | yes |  |
+| `updated_at` | string (date-time) or null | yes |  |
 
 ### AccountResponse
 
@@ -5810,8 +5810,8 @@ An agency level.
 | `sort` | integer | yes |  |
 | `counts` | object | yes |  |
 | `counts.agents` | integer | yes |  |
-| `created_at` | string (date-time) | yes |  |
-| `updated_at` | string (date-time) | yes |  |
+| `created_at` | string (date-time) or null | yes |  |
+| `updated_at` | string (date-time) or null | yes |  |
 
 ### AgencyLevelsResponse
 
@@ -5842,7 +5842,7 @@ A customer's request to become an agent.
 | `reviewer` | string or null | yes | Who decided it: the panel login, or a bot admin (@username or tg:&lt;id&gt;). |
 | `reviewer_name` | string or null | yes | The name of the bot admin `reviewer` is, as their account has it (their first and last name), to show beside it. Null for the owner, an agent, an admin whose account is gone or shows no name, a handle no admin of the shop has now, and while `reviewer` is null. |
 | `decided_at` | string (date-time) or null | yes |  |
-| `created_at` | string (date-time) | yes |  |
+| `created_at` | string (date-time) or null | yes |  |
 | `actions` | object | yes |  |
 | `actions.approve` | boolean | yes |  |
 | `actions.reject` | boolean | yes |  |
@@ -6010,8 +6010,8 @@ An AqayePardakht method (aqayepardakht.ir), an online gateway: the customer pays
 | `sort` | integer | yes |  |
 | `counts` | object | yes |  |
 | `counts.payments` | integer | yes | The number of payments made with it. A method with payments cannot be deleted. |
-| `created_at` | string (date-time) | yes |  |
-| `updated_at` | string (date-time) | yes |  |
+| `created_at` | string (date-time) or null | yes |  |
+| `updated_at` | string (date-time) or null | yes |  |
 
 ### AtlasPayGatewayConfig
 
@@ -6041,8 +6041,8 @@ An AtlasPay method (atlaspay.space), an online gateway: the customer pays by car
 | `sort` | integer | yes |  |
 | `counts` | object | yes |  |
 | `counts.payments` | integer | yes | The number of payments made with it. A method with payments cannot be deleted. |
-| `created_at` | string (date-time) | yes |  |
-| `updated_at` | string (date-time) | yes |  |
+| `created_at` | string (date-time) or null | yes |  |
+| `updated_at` | string (date-time) or null | yes |  |
 
 ### BotChannelResponse
 
@@ -6061,7 +6061,7 @@ A channel or group customers must join before using the bot.
 | `type` | string: `channel`, `supergroup` | yes |  |
 | `title` | string | yes |  |
 | `username` | string or null | yes | Public handle without "@"; null for a private chat. |
-| `link` | string | yes | The link customers follow to join. |
+| `link` | string or null | yes | The link customers follow to join. Null when it has neither a public handle nor an invite link — only ever a row edited outside AmoBot: the bot then asks no one to join it, and «بررسی دوباره» gets its handle, or a private one's invite link, again once the bot is an admin there. |
 | `bot_is_admin` | boolean | yes | Whether the bot was an admin at the last check; it needs admin rights to see the members. |
 | `checked_at` | string (date-time) or null | yes |  |
 | `sort` | integer | yes |  |
@@ -6428,8 +6428,8 @@ A CubePay method (cubevps.ir), an online gateway: the customer pays on CubePay's
 | `sort` | integer | yes |  |
 | `counts` | object | yes |  |
 | `counts.payments` | integer | yes | The number of payments made with it. A method with payments cannot be deleted. |
-| `created_at` | string (date-time) | yes |  |
-| `updated_at` | string (date-time) | yes |  |
+| `created_at` | string (date-time) or null | yes |  |
+| `updated_at` | string (date-time) or null | yes |  |
 
 ### CustomEmojiRow
 
@@ -6441,7 +6441,7 @@ A premium emoji an admin sent the bot with /emoji, offered by the bot texts and 
 | `emoji` | string | yes | The plain emoji it stands for, which goes inside its &lt;tg-emoji&gt; tag. |
 | `format` | string: `static`, `animated`, `video` or null | yes | How Telegram draws it: a still picture, a Lottie animation or a WebM video (see `…/animation`); null while unknown. |
 | `repaint` | boolean | yes | Telegram paints it in the colour of the surrounding text (`needs_repainting`). |
-| `updated_at` | string (date-time) | yes |  |
+| `updated_at` | string (date-time) or null | yes |  |
 
 ### CustomEmojisResponse
 
@@ -6508,7 +6508,7 @@ A discount code («کد تخفیف») a customer types at checkout, in the bot o
 | `uses` | integer | yes | Orders made with it that are neither cancelled nor refunded. An unpaid order frees its use when it is cancelled or expires (see the `hold_minutes` bot setting); a refunded one gives it back. |
 | `deletable` | boolean | yes | Whether `DELETE /discount-codes/{id}` would delete it: false while any order but a cancelled one names it — refunded ones too, which count no use — and it is kept for their history (switch it off instead). The delete is a 409 then. |
 | `state` | [DiscountState](#discountstate) | yes |  |
-| `created_at` | string (date-time) | yes |  |
+| `created_at` | string (date-time) or null | yes |  |
 
 ### DiscountCodesResponse
 
@@ -6589,7 +6589,7 @@ String: `text`, `number`, `amount`, `list`, `toggle`, `choice`, `secret`, `email
 | `redeemed` | integer | yes |  |
 | `expired` | integer | yes | Expired without being redeemed. |
 | `unused` | integer | yes | Not yet redeemed. |
-| `created_at` | string (date-time) | yes | When its newest codes were created. |
+| `created_at` | string (date-time) or null | yes | When its newest codes were created. |
 
 ### GiftCodeBatchResponse
 
@@ -6621,7 +6621,7 @@ A gift code («کد هدیه»), redeemable once by one customer of the shop.
 | `redeemed_by` | [UserRef](API-Schemas.md#userref) or null | yes | Who redeemed it; null while unredeemed, or once their account is gone. |
 | `redeemed_at` | string (date-time) or null | yes |  |
 | `order` | [RewardOrderRef](#rewardorderref) or null | yes | For a redeemed plan code: the order that delivered its service. |
-| `created_at` | string (date-time) | yes |  |
+| `created_at` | string (date-time) or null | yes |  |
 
 ### GiftCodeStatus
 
@@ -6787,7 +6787,7 @@ One nightly draw among buyers («قرعه‌کشی شبانه»): its day, its e
 | `prize.plan` | [NamedRef](API-Schemas.md#namedref) or null | yes | For a plan prize: the plan; null once it is deleted. |
 | `prize.words` | string | yes | What it gives, as the customer reads it. |
 | `winners` | list of [LotteryWinnerRow](#lotterywinnerrow) | yes |  |
-| `created_at` | string (date-time) | yes |  |
+| `created_at` | string (date-time) or null | yes |  |
 
 ### LotteryDrawsResponse
 
@@ -6884,8 +6884,8 @@ A card-to-card method, with its cards: each payment is shown one of them at rand
 | `sort` | integer | yes |  |
 | `counts` | object | yes |  |
 | `counts.payments` | integer | yes | The number of payments made with it. A method with payments cannot be deleted. |
-| `created_at` | string (date-time) | yes |  |
-| `updated_at` | string (date-time) | yes |  |
+| `created_at` | string (date-time) or null | yes |  |
+| `updated_at` | string (date-time) or null | yes |  |
 | `cards` | list of [PaymentCardRow](#paymentcardrow) | yes | In their order. None switched on with room left: the method is not offered — unless `to_support`. |
 | `to_support` | boolean | yes | The shop takes card payments in support's private chat now (`BotSettingsData.card_to_support`, with a support contact): no card is shown nor picked, so the cards' switches and daily caps do not hold the method back. |
 
@@ -6940,7 +6940,7 @@ A grant: days and traffic for the running services on every server, or only the 
 | `parts` | list of [MassGrantPart](#massgrantpart) | yes |  |
 | `reviewer` | string or null | yes |  |
 | `reviewer_name` | string or null | yes | The name of the bot admin `reviewer` is, as their account has it (their first and last name), to show beside it. Null for the owner, an agent, an admin whose account is gone or shows no name, a handle no admin of the shop has now, and while `reviewer` is null. |
-| `created_at` | string (date-time) | yes |  |
+| `created_at` | string (date-time) or null | yes |  |
 | `finished_at` | string (date-time) or null | yes |  |
 
 ### MassGrantsResponse
@@ -7083,8 +7083,8 @@ A Plisio method (plisio.net), an online gateway for crypto: the customer pays a 
 | `sort` | integer | yes |  |
 | `counts` | object | yes |  |
 | `counts.payments` | integer | yes | The number of payments made with it. A method with payments cannot be deleted. |
-| `created_at` | string (date-time) | yes |  |
-| `updated_at` | string (date-time) | yes |  |
+| `created_at` | string (date-time) or null | yes |  |
+| `updated_at` | string (date-time) or null | yes |  |
 
 ### PriceTierInput
 
@@ -7251,7 +7251,7 @@ A timed sale («فروش ویژه»): a percent off the listed plans, for the li
 | `ends_at` | string (date-time) or null | yes |  |
 | `enabled` | boolean | yes |  |
 | `state` | [DiscountState](#discountstate) | yes |  |
-| `created_at` | string (date-time) | yes |  |
+| `created_at` | string (date-time) or null | yes |  |
 
 ### SalesResponse
 
@@ -7327,7 +7327,7 @@ A grant's part on one server («افزودن زمان و حجم»): the grant's 
 | `last_failure` | string or null | yes | The last service the panel refused, and why. |
 | `reviewer` | string or null | yes |  |
 | `reviewer_name` | string or null | yes | The name of the bot admin `reviewer` is, as their account has it (their first and last name), to show beside it. Null for the owner, an agent, an admin whose account is gone or shows no name, a handle no admin of the shop has now, and while `reviewer` is null. |
-| `created_at` | string (date-time) | yes |  |
+| `created_at` | string (date-time) or null | yes |  |
 | `finished_at` | string (date-time) or null | yes |  |
 
 ### ServerGrantStatus
@@ -7378,7 +7378,7 @@ A service a move could not carry, and why.
 | `client` | string | yes | Its client's name when it failed. |
 | `shop` | [ShopRef](#shopref) or null | yes | Its shop; null once it is deleted. |
 | `reason` | string | yes |  |
-| `created_at` | string (date-time) | yes |  |
+| `created_at` | string (date-time) or null | yes |  |
 
 ### ServerMigrationLeftovers
 
@@ -7452,7 +7452,7 @@ A move of a server's services, every shop's, to another server («انتقال �
 | `last_failure` | string or null | yes | The latest service it could not move, and why. |
 | `reviewer` | string or null | yes | Who started it. |
 | `reviewer_name` | string or null | yes | The name of the bot admin `reviewer` is, as their account has it (their first and last name), to show beside it. Null for the owner, an agent, an admin whose account is gone or shows no name, a handle no admin of the shop has now, and while `reviewer` is null. |
-| `created_at` | string (date-time) | yes |  |
+| `created_at` | string (date-time) or null | yes |  |
 | `started_at` | string (date-time) or null | yes | When its first turn began. |
 | `finished_at` | string (date-time) or null | yes |  |
 
@@ -7501,8 +7501,8 @@ A server's «انتقال سرویس‌ها» card: its latest moves (from it), 
 | `counts.selectable_inbounds` | integer | yes |  |
 | `counts.active_subscriptions` | integer | yes | Its active services across all shops (the main bot's and the agents'); this is what its capacity counts. |
 | `counts.shop_active_subscriptions` | integer | yes | Of those, the ones in the shop the panel has open: what its subscriptions screen lists with `?server=`. |
-| `created_at` | string (date-time) | yes |  |
-| `updated_at` | string (date-time) | yes |  |
+| `created_at` | string (date-time) or null | yes |  |
+| `updated_at` | string (date-time) or null | yes |  |
 
 ### ServerTestAccount
 
@@ -7574,6 +7574,8 @@ The system's health: the version, PHP, the bots and the scheduler. Owner only.
 |---|---|---|---|
 | `version` | string | yes |  |
 | `php` | string | yes |  |
+| `php_safe` | boolean | yes | Whether this PHP release is free of the security holes PHP has closed in its branch (false for a release older than its branch's first without them, or a branch past PHP's support). While false the panel says so over every page, and an update is not installed. |
+| `php_required` | string | yes | The release of this PHP branch the shop asks for at least ("8.3.36"); for a branch past PHP's support, the oldest supported branch's. |
 | `bot` | object | yes | The bot of the shop the request names (the dashboard's shop): the main bot or an agent's. |
 | `bot.id` | integer | yes | The bot's id; 1 is the main bot. |
 | `bot.configured` | boolean | yes | It has a token. |
@@ -7609,7 +7611,7 @@ A free test account («اکانت تست») the shop gave, with the terms it got
 | `subscription.starts_at` | string (date-time) or null | yes | When the first connection started its hours; null until then. |
 | `subscription.expires_at` | string (date-time) or null | yes | Null while it waits for the first connection. |
 | `bought_after` | boolean | yes | The customer bought a service with a price after taking it. |
-| `created_at` | string (date-time) | yes |  |
+| `created_at` | string (date-time) or null | yes |  |
 | `issued_at` | string (date-time) or null | yes | When its service was made; null while it is being made. |
 | `ended_at` | string (date-time) or null | yes | When it ended — its deadline, or when the shop found its traffic used up or its client gone (its removal is counted from then); null while it runs (and past its deadline until the shop next reads its panel), and once it is removed. |
 
@@ -7689,8 +7691,8 @@ A method whose driver is no longer installed. No checkout offers it, even when s
 | `sort` | integer | yes |  |
 | `counts` | object | yes |  |
 | `counts.payments` | integer | yes | The number of payments made with it. A method with payments cannot be deleted. |
-| `created_at` | string (date-time) | yes |  |
-| `updated_at` | string (date-time) | yes |  |
+| `created_at` | string (date-time) or null | yes |  |
+| `updated_at` | string (date-time) or null | yes |  |
 
 ### UpdateResponse
 
@@ -7760,8 +7762,8 @@ A Variza method (variza.ir), an online gateway: the customer transfers the exact
 | `sort` | integer | yes |  |
 | `counts` | object | yes |  |
 | `counts.payments` | integer | yes | The number of payments made with it. A method with payments cannot be deleted. |
-| `created_at` | string (date-time) | yes |  |
-| `updated_at` | string (date-time) | yes |  |
+| `created_at` | string (date-time) or null | yes |  |
+| `updated_at` | string (date-time) or null | yes |  |
 
 ### WalletMethodRequest
 
@@ -7794,8 +7796,8 @@ The wallet, the built-in method.
 | `sort` | integer | yes |  |
 | `counts` | object | yes |  |
 | `counts.payments` | integer | yes | The number of payments made with it. A method with payments cannot be deleted. |
-| `created_at` | string (date-time) | yes |  |
-| `updated_at` | string (date-time) | yes |  |
+| `created_at` | string (date-time) or null | yes |  |
+| `updated_at` | string (date-time) or null | yes |  |
 
 ### WebhookOutcome
 
@@ -7937,7 +7939,7 @@ A lucky wheel spin: the slice it landed on (as the slice was then) and the resul
 | `outcome` | string or null | yes | Why it was not given; null when it was. |
 | `order` | [RewardOrderRef](#rewardorderref) or null | yes | For a plan slice: the order that delivered its service. |
 | `subscription` | [NamedRef](API-Schemas.md#namedref) or null | yes | The service that got the traffic or days, or the plan's new service, by its client's name on the panel. |
-| `created_at` | string (date-time) | yes |  |
+| `created_at` | string (date-time) or null | yes |  |
 
 ### WheelSpinsResponse
 
@@ -7975,5 +7977,5 @@ A Zarinpal method (zarinpal.com), an online gateway: the customer pays with any 
 | `sort` | integer | yes |  |
 | `counts` | object | yes |  |
 | `counts.payments` | integer | yes | The number of payments made with it. A method with payments cannot be deleted. |
-| `created_at` | string (date-time) | yes |  |
-| `updated_at` | string (date-time) | yes |  |
+| `created_at` | string (date-time) or null | yes |  |
+| `updated_at` | string (date-time) or null | yes |  |

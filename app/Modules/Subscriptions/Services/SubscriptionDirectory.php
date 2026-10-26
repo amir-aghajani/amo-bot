@@ -96,7 +96,7 @@ final class SubscriptionDirectory
             'disabled_at' => $subscription->disabled_at?->toIso8601String(),
             'ended_at' => $subscription->ended_at?->toIso8601String(),
             'removes_at' => $this->cleanup->removesAt($subscription)?->toIso8601String(),
-            'created_at' => $subscription->created_at->toIso8601String(),
+            'created_at' => $subscription->created_at?->toIso8601String(),
             'actions' => $this->actions->allowed($subscription),
         ];
     }

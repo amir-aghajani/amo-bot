@@ -17,7 +17,8 @@ use Illuminate\Database\Eloquent\Collection;
 
 /**
  * Plan categories as the panels keep them (a name unique in the shop), and the catalogue customers browse: the active
- * categories with their sellable plans, then an «سایر پلن‌ها» group for the rest (groups(), catalogue()).
+ * categories with their sellable plans, then an «سایر پلن‌ها» group for the rest (groups(), catalogue(); group() files any
+ * plans so).
  */
 final class PlanCategoryService
 {
@@ -105,11 +106,28 @@ final class PlanCategoryService
         $plans = Plan::active()->get();
         $choices = $this->selector->offers($plans);
         $plans = $plans->filter(static fn(Plan $plan): bool => isset($choices[$plan->id]))->values();
+
+        return ['groups' => $this->group($plans, everyCategory: true), 'choices' => $choices];
+    }
+
+    /**
+     * `$plans` filed as customers browse them: under each active category in order, then — a null category, «سایر
+     * پلن‌ها» — those of none or of one switched off. A category none of them is in is left out unless `$everyCategory`
+     * (the catalogue lists an empty one too).
+     *
+     * @param Collection<int, Plan> $plans
+     * @return list<array{category: PlanCategory|null, plans: Collection<int, Plan>}>
+     */
+    public function group(Collection $plans, bool $everyCategory = false): array
+    {
         $categories = PlanCategory::active()->get()->keyBy('id');
 
         $groups = [];
         foreach ($categories as $category) {
-            $groups[] = ['category' => $category, 'plans' => $plans->filter(static fn(Plan $plan): bool => $plan->category_id === $category->id)->values()];
+            $listed = $plans->filter(static fn(Plan $plan): bool => $plan->category_id === $category->id)->values();
+            if ($everyCategory || $listed->isNotEmpty()) {
+                $groups[] = ['category' => $category, 'plans' => $listed];
+            }
         }
 
         // Plans with no category, or whose category is switched off, are still for sale — as "other".
@@ -118,7 +136,7 @@ final class PlanCategoryService
             $groups[] = ['category' => null, 'plans' => $other];
         }
 
-        return ['groups' => $groups, 'choices' => $choices];
+        return $groups;
     }
 
     /** @return array<string, mixed> */
@@ -135,8 +153,8 @@ final class PlanCategoryService
             'is_active' => $category->is_active,
             'sort' => $category->sort,
             'counts' => ['plans' => (int) $category->getAttribute('plans_count')],
-            'created_at' => $category->created_at->toIso8601String(),
-            'updated_at' => $category->updated_at->toIso8601String(),
+            'created_at' => $category->created_at?->toIso8601String(),
+            'updated_at' => $category->updated_at?->toIso8601String(),
         ];
     }
 

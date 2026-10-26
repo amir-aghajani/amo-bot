@@ -13,7 +13,7 @@ use App\Modules\Telegram\Texts\WebText;
  */
 final class NotificationPresenter
 {
-    /** @return array{id: int, type: string, text: string, html: string, subject: array{type: string, id: int}|null, read: bool, created_at: string} */
+    /** @return array{id: int, type: string, text: string, html: string, subject: array{type: string, id: int}|null, read: bool, created_at: string|null} */
     public static function present(Notification $notification): array
     {
         return [
@@ -25,7 +25,7 @@ final class NotificationPresenter
                 ? null
                 : ['type' => $notification->subject_type->value, 'id' => $notification->subject_id],
             'read' => $notification->read_at !== null,
-            'created_at' => $notification->created_at->toIso8601String(),
+            'created_at' => $notification->created_at?->toIso8601String(),
         ];
     }
 }

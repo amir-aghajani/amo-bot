@@ -11,8 +11,11 @@ shop up to sell.
 
 - **A domain with HTTPS.** Telegram sends webhooks only to `https://` addresses, and the panels' session cookie is
   marked secure over HTTPS.
-- **PHP 8.2, 8.3 or 8.4** with the extensions `pdo_mysql`, `curl`, `mbstring`, `openssl`, `bcmath` and `fileinfo`, and
-  a `memory_limit` of 64M or more. AmoBot does not start on an older PHP.
+- **PHP 8.3.36, 8.4.27 or 8.5.12, or a later release of the same branch**, with the extensions `pdo_mysql`, `curl`,
+  `mbstring`, `openssl`, `bcmath` and `fileinfo`, and a `memory_limit` of 64M or more. These releases closed PHP's
+  latest known security holes, among them two critical ones that let anyone who can reach a site run their own code
+  there (CVE-2026-109618 and CVE-2026-109619, closed on 21 October 2026). The installer stops on an older release and
+  names the one to move to; below 8.3.36, AmoBot does not start at all. PHP 8.2 is not supported.
 - **Three optional extensions.** The installer lists them as «اختیاری», and they hold nothing up:
   - `gd` — the QR card a delivered service comes with, and pictures written again without their metadata. Without it
     the bot sends a service's link as text, and uploaded pictures are kept as they came.
@@ -32,7 +35,7 @@ shop up to sell.
   that calls an address every minute ([the scheduler](Running-In-Production.md#the-scheduler)).
 - **A Telegram bot's token**, from @BotFather. The installer takes it, or you add it in the panel later.
 
-The installer's first step checks this list, all but PHP's version.
+The installer's «پیش‌نیازها» step checks this list, PHP's release among it.
 
 ## The release zip
 
@@ -47,8 +50,8 @@ On cPanel (DirectAdmin and the others have the same parts under other names):
 1. **Make the database.** In cPanel › *MySQL Databases*, create a database and a user, then, under *Add User To
    Database*, add the user to the database with *ALL PRIVILEGES*. cPanel puts your account's name before the database's
    and the user's names (`USER_amobot`): type these full names into the installer.
-2. **Pick PHP.** In cPanel › *MultiPHP Manager* or *Select PHP Version*, choose PHP 8.2 or newer for the domain, with
-   the extensions above.
+2. **Pick PHP.** In cPanel › *MultiPHP Manager* or *Select PHP Version*, choose the newest PHP the host offers for the
+   domain — at least its branch's release above —, with the extensions above.
 3. **Upload the files.** Upload the zip in cPanel › *File Manager* and unpack it there (*Extract*). The zip holds one folder,
    `amobot-<version>/`, and its contents are the shop: rename the folder (`amobot`, as below) or move its contents
    where they belong.
@@ -79,12 +82,12 @@ On cPanel (DirectAdmin and the others have the same parts under other names):
 Where the web server runs PHP as your account (PHP-FPM, suEXEC, LSAPI — not Apache's `mod_php`), the cron job may run
 the scheduler's command instead, and no cron token is needed: a cron job runs as your account too, so the command and
 the web server write files of the same owner. Use the PHP of the version you picked: on cPanel it is
-`/opt/cpanel/ea-php82/root/usr/bin/php` (`ea-php83` for 8.3 …), not always the plain `php`. Put your account's home
-folder in place of `/home/USER` (cPanel shows it as *Home Directory* under *General Information*), and paste this into
-the *Command* field, with *Once Per Minute*:
+`/opt/cpanel/ea-php83/root/usr/bin/php` for 8.3 (`ea-php84` for 8.4, `ea-php85` for 8.5), not always the plain `php`.
+Put your account's home folder in place of `/home/USER` (cPanel shows it as *Home Directory* under *General
+Information*), and paste this into the *Command* field, with *Once Per Minute*:
 
 ```
-/opt/cpanel/ea-php82/root/usr/bin/php /home/USER/amobot/bin/console schedule:run --quiet >> /home/USER/amobot/storage/logs/cron.log 2>&1
+/opt/cpanel/ea-php83/root/usr/bin/php /home/USER/amobot/bin/console schedule:run --quiet >> /home/USER/amobot/storage/logs/cron.log 2>&1
 ```
 
 The dashboard's card says whether it runs, as above; `storage/logs/cron.log` stays empty while all is well and holds

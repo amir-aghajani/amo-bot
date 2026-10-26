@@ -19,7 +19,10 @@ export interface PanelShell {
   picker?: ComponentType
   /** Beside a section's name in a column, what waits there (the agents' pending requests) — drawn by the panel. */
   sectionBadge?: ComponentType<{ area: string; section: string }>
-  /** A strip over every page the panel wants read wherever its user is (an agent's shop that sells nothing now). */
+  /**
+   * A strip over every page the panel wants read wherever its user is (an agent's shop that sells nothing now, the
+   * owner's host on a PHP with security holes open).
+   */
   banner?: ComponentType
 }
 

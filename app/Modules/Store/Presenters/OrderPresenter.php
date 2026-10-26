@@ -15,6 +15,7 @@ use App\Modules\Payments\Models\Payment;
 use App\Modules\Payments\Models\PaymentMethod;
 use App\Modules\Payments\Services\OnlinePayments;
 use App\Modules\Payments\Services\PaymentService;
+use App\Support\Money;
 use Illuminate\Support\Carbon;
 
 /**
@@ -51,7 +52,7 @@ final class OrderPresenter
             // The price a purchase or a renewal was made at: the plan's own, its first-purchase price or its agent price.
             'pricing' => $order->pricing->value,
         ] + OrderDirectory::discounts($order) + [
-            'created_at' => $order->created_at->toIso8601String(),
+            'created_at' => $order->created_at?->toIso8601String(),
             'fulfilled_at' => $order->fulfilled_at?->toIso8601String(),
             'plan' => $plan === null ? null : ['id' => $plan->id, 'name' => $plan->name],
             // What a purchase or a renewal buys, in words: its plan's name, or a built service's GB and days.
@@ -69,7 +70,7 @@ final class OrderPresenter
      * One attempt to pay an order: its way to pay, how it stands, whether a receipt was sent, its verdict's note, and an
      * online payment's page while it waits on it (openLink()).
      *
-     * @return array{id: int, method: array{id: int, label: string, kind: string|null, min_amount: string|null, max_amount: string|null}, status: string, amount: string, created_at: string, paid_at: string|null, receipt: array{sent_at: string}|null, note: string|null, link: array{payment_id: int, url: string, expires_at: string|null, amount: string, fee: string|null, card: array{number: string, holder: string|null, bank: string|null}|null}|null}
+     * @return array{id: int, method: array{id: int, label: string, kind: string|null, min_amount: string|null, max_amount: string|null}, status: string, amount: string, created_at: string|null, paid_at: string|null, receipt: array{sent_at: string}|null, note: string|null, link: array{payment_id: int, url: string, expires_at: string|null, amount: string, amount_rial: string, fee: string|null, card: array{number: string, holder: string|null, bank: string|null}|null}|null}
      */
     public function payment(Payment $payment): array
     {
@@ -78,7 +79,7 @@ final class OrderPresenter
             'method' => $this->method($payment->method),
             'status' => $payment->status->value,
             'amount' => $payment->amount,
-            'created_at' => $payment->created_at->toIso8601String(),
+            'created_at' => $payment->created_at?->toIso8601String(),
             'paid_at' => $payment->paid_at?->toIso8601String(),
             'receipt' => $payment->receipt_at === null ? null : ['sent_at' => $payment->receipt_at->toIso8601String()],
             // A hold's note is support's: the customer reads that it is with support, not to be paid again. Support's own
@@ -90,11 +91,12 @@ final class OrderPresenter
 
     /**
      * An online gateway's page to pay on (Payments\DTO\PayLink): the payment it is for, its address, until when it takes
-     * money (the gateway's end, or the time the shop keeps its page when the gateway gives none), the exact sum it asks — a gateway
-     * may add a few Toman to the payment's, and its fee when the customer pays it — and the card that sum goes to, when
-     * the gateway gave one to show (its holder and bank when it named them); and of that sum the gateway's fee.
+     * money (the gateway's end, or the time the shop keeps its page when the gateway gives none), the exact sum it asks
+     * — a gateway may add a few Toman to the payment's, and its fee when the customer pays it —, the same in Rial as a
+     * banking app takes it (Money::rials(): the digits to copy for the card), and the card that sum goes to, when the
+     * gateway gave one to show (its holder and bank when it named them); and of that sum the gateway's fee.
      *
-     * @return array{payment_id: int, url: string, expires_at: string|null, amount: string, fee: string|null, card: array{number: string, holder: string|null, bank: string|null}|null}
+     * @return array{payment_id: int, url: string, expires_at: string|null, amount: string, amount_rial: string, fee: string|null, card: array{number: string, holder: string|null, bank: string|null}|null}
      */
     public function link(Payment $payment, PayLink $link): array
     {
@@ -105,6 +107,7 @@ final class OrderPresenter
             'url' => $link->url,
             'expires_at' => $link->expiresAt === null ? null : Carbon::instance($link->expiresAt)->utc()->toIso8601String(),
             'amount' => $link->amount,
+            'amount_rial' => Money::rials($link->amount),
             'fee' => $link->fee,
             'card' => $card === '' ? null : ['number' => $card, 'holder' => self::words($link->card?->holder), 'bank' => self::words($link->card?->bank)],
         ];
@@ -115,7 +118,7 @@ final class OrderPresenter
      * (Payment::hasOpenPage()) —, as its gateway reads it off the payment (initiate() calls nothing); null for any other,
      * and for one held for support: its order is paid no more meanwhile.
      *
-     * @return array{payment_id: int, url: string, expires_at: string|null, amount: string, fee: string|null, card: array{number: string, holder: string|null, bank: string|null}|null}|null
+     * @return array{payment_id: int, url: string, expires_at: string|null, amount: string, amount_rial: string, fee: string|null, card: array{number: string, holder: string|null, bank: string|null}|null}|null
      */
     private function openLink(Payment $payment): ?array
     {

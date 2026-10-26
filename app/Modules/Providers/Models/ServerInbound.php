@@ -25,8 +25,8 @@ use Illuminate\Support\Carbon;
  * @property string|null $security none | tls | reality …
  * @property int $client_count
  * @property Carbon|null $synced_at
- * @property Carbon $created_at
- * @property Carbon $updated_at
+ * @property Carbon|null $created_at
+ * @property Carbon|null $updated_at
  */
 class ServerInbound extends Model
 {

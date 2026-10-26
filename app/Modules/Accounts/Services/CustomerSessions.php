@@ -173,7 +173,7 @@ final class CustomerSessions
     /**
      * A session as the customer's list shows it; `current` marks the one the request came with.
      *
-     * @return array{id: int, device: string|null, ip: string|null, created_at: string, last_used_at: string|null, current: bool}
+     * @return array{id: int, device: string|null, ip: string|null, created_at: string|null, last_used_at: string|null, current: bool}
      */
     public static function present(CustomerSession $session, CustomerSession $current): array
     {
@@ -181,7 +181,7 @@ final class CustomerSessions
             'id' => $session->id,
             'device' => $session->device,
             'ip' => $session->ip,
-            'created_at' => $session->created_at->toIso8601String(),
+            'created_at' => $session->created_at?->toIso8601String(),
             'last_used_at' => $session->last_used_at?->toIso8601String(),
             'current' => $session->id === $current->id,
         ];

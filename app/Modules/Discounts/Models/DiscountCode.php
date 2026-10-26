@@ -33,8 +33,8 @@ use Illuminate\Support\Carbon;
  * @property int|null $max_uses
  * @property int|null $per_user
  * @property bool $enabled
- * @property Carbon $created_at
- * @property Carbon $updated_at
+ * @property Carbon|null $created_at
+ * @property Carbon|null $updated_at
  * @property-read int|null $uses withCount: its orders neither cancelled nor refunded
  * @property-read bool|null $kept withExists: an order other than a cancelled one names it — kept for that order's history (Services\DiscountCodes::delete())
  */

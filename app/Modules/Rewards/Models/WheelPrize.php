@@ -24,8 +24,8 @@ use Illuminate\Support\Carbon;
  * @property int $weight
  * @property bool $enabled
  * @property int $sort
- * @property Carbon $created_at
- * @property Carbon $updated_at
+ * @property Carbon|null $created_at
+ * @property Carbon|null $updated_at
  * @property-read Plan|null $plan
  */
 class WheelPrize extends Model

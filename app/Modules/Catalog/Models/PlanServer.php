@@ -22,8 +22,8 @@ use Illuminate\Support\Carbon;
  * @property int $server_id
  * @property bool $all_inbounds
  * @property int $sort
- * @property Carbon $created_at
- * @property Carbon $updated_at
+ * @property Carbon|null $created_at
+ * @property Carbon|null $updated_at
  * @property-read Server $server
  * @property-read Collection<int, ServerInbound> $inbounds Pinned inbounds (empty when all_inbounds)
  */

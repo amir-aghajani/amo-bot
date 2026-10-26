@@ -39,17 +39,19 @@ async function openServers() {
 }
 
 describe('a plan’s form', () => {
-  it('lays every section out in one place — those not shown out of sight and out of reach —, so its height never jumps', async () => {
+  it('keeps every section, its drafts with it, but lays out only the one shown — each tab as long as its own', async () => {
     showForm()
     await screen.findByRole('tab', { name: /مشخصات/ })
 
     expect(panels()).toHaveLength(4)
-    expect(panels().some((panel) => panel.hasAttribute('hidden'))).toBe(false)
-    expect(panels().map((panel) => panel.hasAttribute('inert'))).toEqual([false, true, true, true])
+    expect(panels().map((panel) => panel.hasAttribute('hidden'))).toEqual([false, true, true, true])
 
+    fireEvent.change(screen.getByLabelText('نام پلن'), { target: { value: 'یک‌ماهه' } })
     await openServers()
-    expect(panels().map((panel) => panel.hasAttribute('inert'))).toEqual([true, true, false, true])
-    expect(panels().map((panel) => panel.classList.contains('invisible'))).toEqual([true, true, false, true])
+    expect(panels().map((panel) => panel.hasAttribute('hidden'))).toEqual([true, true, false, true])
+
+    fireEvent.click(screen.getByRole('tab', { name: /مشخصات/ }))
+    expect(screen.getByLabelText<HTMLInputElement>('نام پلن').value).toBe('یک‌ماهه')
   })
 
   it('lists every refusal about its servers, on the section that holds them', async () => {
@@ -76,6 +78,7 @@ describe('a plan’s form', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'افزودن پلن' }))
 
     await until(() => expect(screen.getByText('۳ فیلد نیاز به اصلاح دارد')).toBeTruthy())
+    await openServers()
     expect(screen.getByRole('group', { name: 'سرورها' }).getAttribute('aria-describedby')).toBeTruthy()
   })
 

@@ -78,7 +78,7 @@ final class SubscriptionPresenter
                 'last_online_at' => $client->lastOnlineAt === null ? null : Carbon::instance($client->lastOnlineAt)->utc()->toIso8601String(),
             ],
             'synced_at' => $subscription->last_synced_at?->toIso8601String(),
-            'created_at' => $subscription->created_at->toIso8601String(),
+            'created_at' => $subscription->created_at?->toIso8601String(),
         ];
     }
 

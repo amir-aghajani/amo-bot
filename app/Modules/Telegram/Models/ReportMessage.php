@@ -33,8 +33,8 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $sent_at
  * @property Carbon|null $failed_at Given up on: Telegram refused it for good, or it waited too long
  * @property string|null $error Why it was given up on
- * @property Carbon $created_at
- * @property Carbon $updated_at
+ * @property Carbon|null $created_at
+ * @property Carbon|null $updated_at
  */
 class ReportMessage extends Model
 {

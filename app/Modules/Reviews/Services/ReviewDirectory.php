@@ -66,7 +66,7 @@ final class ReviewDirectory
             'reviewer' => $this->reviewers->present($review->reviewer),
             'reviewer_name' => $names[$review->reviewer ?? ''] ?? null,
             'decided_at' => $review->decided_at?->toIso8601String(),
-            'created_at' => $review->created_at->toIso8601String(),
+            'created_at' => $review->created_at?->toIso8601String(),
             'actions' => Reviews::allowed($review),
         ])->all());
     }
@@ -105,7 +105,7 @@ final class ReviewDirectory
             'body' => $review->body,
             'context' => $review->context,
             'avatar' => $review->avatar,
-            'created_at' => $review->created_at->toIso8601String(),
+            'created_at' => $review->created_at?->toIso8601String(),
         ];
     }
 

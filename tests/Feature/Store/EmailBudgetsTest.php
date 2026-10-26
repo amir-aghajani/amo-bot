@@ -166,6 +166,8 @@ final class EmailBudgetsTest extends HttpTestCase
     /**
      * A forgotten password asked for `$address` on `$website` (the fixtures' own) from `$network` — straight into the
      * app: the description has nothing to say of where a request came from.
+     *
+     * @phpstan-impure
      */
     private function forgot(string $address, string $network = '203.0.113.7', ?Website $website = null): ResponseInterface
     {

@@ -23,8 +23,8 @@ use Illuminate\Support\Carbon;
  * @property int|null $payment_method_id
  * @property bool $enabled
  * @property int $sort
- * @property Carbon $created_at
- * @property Carbon $updated_at
+ * @property Carbon|null $created_at
+ * @property Carbon|null $updated_at
  * @property-read CustomerGroup|null $customerGroup
  * @property-read PaymentMethod|null $paymentMethod
  */

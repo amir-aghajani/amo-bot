@@ -35,7 +35,8 @@ final class ChannelMembership
 
     /**
      * The channels the customer has still to join, in the order they are shown — none while the rule is off, for a bot
-     * admin, or while a recent check holds (`$fresh` asks Telegram whatever the mark says: "عضو شدم").
+     * admin, or while a recent check holds (`$fresh` asks Telegram whatever the mark says: "عضو شدم"). A channel with no
+     * way in (BotChannel::link()) is not asked: no one could join it.
      *
      * @return list<BotChannel>
      */
@@ -45,7 +46,7 @@ final class ChannelMembership
             return [];
         }
 
-        $channels = BotChannel::ordered()->get();
+        $channels = BotChannel::ordered()->get()->filter(static fn(BotChannel $channel): bool => $channel->link() !== null)->values();
         if ($channels->isEmpty() || (!$fresh && $this->clearedRecently($ctx, $channels))) {
             return [];
         }

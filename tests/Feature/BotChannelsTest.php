@@ -55,6 +55,24 @@ final class BotChannelsTest extends BotTestCase
         self::assertCount(3, $this->inlineKeyboard(2), 'both channels now');
     }
 
+    public function testAChannelWithNoWayInIsNotAskedOfAnyone(): void
+    {
+        // Its handle taken away by hand, and no invite link: no one could join it.
+        BotChannel::query()->where('chat_id', -1002)->update(['username' => null, 'invite_link' => null]);
+        $this->telegram()->reply(['status' => 'left']);
+
+        $this->send($this->message('/start'));
+
+        self::assertSame(['getChatMember', 'sendMessage'], $this->calls(), 'only the channel with a way in looked up');
+        self::assertSame([[['text' => self::text(BotText::JoinChannel, ['title' => 'کانال اخبار']), 'url' => 'https://t.me/news']]], array_slice($this->inlineKeyboard(1), 0, 1));
+        self::assertCount(2, $this->inlineKeyboard(1));
+
+        BotChannel::query()->where('chat_id', -1001)->update(['username' => '']);
+        $this->send($this->message('/start'));
+        self::assertSame(['sendMessage'], $this->calls(), 'nothing left to ask: through to the menu');
+        self::assertSame([self::text(BotText::Welcome, ['name' => 'Ali'])], $this->said());
+    }
+
     public function testATapHeldBackGetsTheJoinScreenAndItsSpinnerStopped(): void
     {
         $this->telegram()->reply(['status' => 'left'], ['status' => 'member']);

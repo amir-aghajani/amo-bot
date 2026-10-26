@@ -107,6 +107,10 @@ bot never locks the shop over a channel:
 - **The reason is that one customer** (Telegram does not know them there), **or a moment's outage**: that customer is
   let through, and nothing is flagged.
 
+A channel with no way in — its handle and invite link taken out of the database by hand — reads «لینک عضویت ندارد و از
+کسی خواسته نمی‌شود» on the list, and no one is asked to join it. «بررسی دوباره» gets a public channel's handle back, or
+a private one's invite link once the bot is an admin there.
+
 ## Wallet
 
 «کیف پول» — the bot's «💰 کیف پول + شارژ»:
@@ -161,8 +165,8 @@ payments](Orders-And-Payments.md#receipts)):
 - **«جلوگیری از اسکرین‌شات و فوروارد»** (on) — the bot's message with the card number is sent protected: Telegram lets
   nobody forward or save it, or copy its text, and its mobile apps take no screenshot of it. It comes as a message of
   its own in place of the checkout (Telegram protects a message only as it is sent). Off, it is drawn in place of the
-  checkout as any screen. Either way, buttons under it copy the card number and the amount — the amount in Latin digits
-  without separators, as a banking app takes it.
+  checkout as any screen. Either way, buttons under it copy the card number and the amount — the amount in Rial (ten to
+  the Toman), in Latin digits without separators, as a banking app takes it.
 - **«هدایت پرداخت کارت به کارت به پیوی پشتیبانی»** (off) — on, no card is shown at all:
   - **The customer** reads the order's number and amount and is sent to support's private chat — «راه ارتباط با
     پشتیبانی» of [General](#general), with a button to it when it is a handle or a link — to get the card and send the

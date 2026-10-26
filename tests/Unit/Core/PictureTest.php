@@ -91,9 +91,7 @@ final class PictureTest extends TestCase
         $image = imagecreatetruecolor($width, $height);
         ob_start();
         imagepng($image);
-        $png = (string) ob_get_clean();
-        imagedestroy($image);
 
-        return $png;
+        return (string) ob_get_clean();
     }
 }

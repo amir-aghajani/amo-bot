@@ -26,8 +26,8 @@ use Illuminate\Support\Carbon;
  * @property string|null $max_amount
  * @property bool $enabled
  * @property int $sort
- * @property Carbon $created_at
- * @property Carbon $updated_at
+ * @property Carbon|null $created_at
+ * @property Carbon|null $updated_at
  */
 class PaymentMethod extends Model
 {

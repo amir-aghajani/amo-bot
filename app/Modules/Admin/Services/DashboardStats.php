@@ -214,7 +214,7 @@ final class DashboardStats
                 // Its plan's name — or a service the customer built, in words (Order::packageName()).
                 'plan' => $order->packageName(),
                 'user' => UserDirectory::presentRef($order->user),
-                'created_at' => $order->created_at->toIso8601String(),
+                'created_at' => $order->created_at?->toIso8601String(),
             ])
             ->values()
             ->all();
@@ -230,7 +230,7 @@ final class DashboardStats
             ->get()
             ->map(static fn(User $user): array => UserDirectory::presentRef($user) + [
                 'balance' => $user->balance(),
-                'created_at' => $user->created_at->toIso8601String(),
+                'created_at' => $user->created_at?->toIso8601String(),
             ])
             ->values()
             ->all();

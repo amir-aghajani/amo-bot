@@ -18,8 +18,8 @@ use Illuminate\Support\Carbon;
  * @property string|null $format How Telegram draws it: CustomEmojis::STATIC, ANIMATED (Lottie) or VIDEO (WebM); null = not asked yet
  * @property string|null $animation_file_id The sticker that moves (an animated or video one), for the panel
  * @property bool $repaint Whether Telegram paints it in the colour of the text around it
- * @property Carbon $created_at
- * @property Carbon $updated_at
+ * @property Carbon|null $created_at
+ * @property Carbon|null $updated_at
  */
 class CustomEmoji extends Model
 {

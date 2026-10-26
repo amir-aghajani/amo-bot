@@ -40,7 +40,7 @@ function Message({ ticket, customer, message }: { ticket: number; customer: User
             {support ? <SupportAuthor reviewer={message.reviewer} person={message.reviewer_name} /> : <UserLabel user={customer} />}
           </span>
           <Badge variant="outline">{TICKET_CHANNEL[message.channel]}</Badge>
-          <time dateTime={message.created_at} className="ms-auto text-muted-foreground">
+          <time dateTime={message.created_at ?? undefined} className="ms-auto text-muted-foreground">
             {formatDate(message.created_at)}
           </time>
         </header>

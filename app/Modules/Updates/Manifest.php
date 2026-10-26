@@ -8,8 +8,9 @@ use App\Modules\Updates\Exceptions\UpdateRefusedException;
 
 /**
  * A release's signed manifest (release.json, written by scripts/release.php): version, zip name, size and sha256, the
- * PHP and extensions it needs, and the top-level paths it replaces. Nothing in it is believed before the release key's
- * signature verifies, and it must be the release asked for — one signed for another version is no update.
+ * PHP and extensions it needs — since 0.7.1 the releases of each PHP branch it runs on too —, and the top-level paths it
+ * replaces. Nothing in it is believed before the release key's signature verifies, and it must be the release asked
+ * for — one signed for another version is no update.
  */
 final class Manifest
 {
@@ -39,12 +40,19 @@ final class Manifest
         public readonly string $file,
         public readonly int $size,
         public readonly string $sha256,
-        /** The oldest PHP it runs on ("8.2"). */
+        /** The oldest PHP it runs on ("8.3.36"). */
         public readonly string $php,
         /** The PHP extensions it needs (composer.json's ext-*), by name. */
         public readonly array $extensions,
         /** The app's top-level folders and files it replaces — never config.php nor storage/. */
         public readonly array $paths,
+        /**
+         * By PHP branch, its oldest release the release runs on (Support\PhpVersion::MINIMUMS as it shipped): none in a
+         * release made before 0.7.1, which named only the oldest PHP.
+         *
+         * @var array<string, string>
+         */
+        public readonly array $phpMinimums,
     ) {}
 
     /**
@@ -64,6 +72,7 @@ final class Manifest
         $size = is_int($data['size'] ?? null) ? $data['size'] : 0;
         $extensions = self::names($data['extensions'] ?? null, '/^[a-z0-9_]+$/');
         $paths = self::names($data['paths'] ?? null, self::PATH);
+        $minimums = self::minimums($data['php_minimums'] ?? []);
 
         $isThisRelease = $text('version') === $version
             && $text('file') === "amobot-{$version}.zip"
@@ -71,13 +80,31 @@ final class Manifest
             && preg_match('/^[0-9a-f]{64}$/', $text('sha256')) === 1
             && preg_match('/^\d+\.\d+(\.\d+)?$/', $text('php')) === 1
             && $extensions !== null
+            && $minimums !== null
             && $paths !== null && count(array_unique($paths)) === count($paths)
             && array_diff(self::ESSENTIAL, $paths) === [] && array_intersect(self::KEPT, $paths) === [];
         if (!$isThisRelease) {
             throw UpdateRefusedException::refused(self::NOT_THIS_RELEASE);
         }
 
-        return new self($version, $text('file'), $size, $text('sha256'), $text('php'), $extensions, $paths);
+        return new self($version, $text('file'), $size, $text('sha256'), $text('php'), $extensions, $paths, $minimums);
+    }
+
+    /** @return array<string, string>|null By branch ("8.3"), a release of it ("8.3.36"); null when it is anything else */
+    private static function minimums(mixed $value): ?array
+    {
+        if (!is_array($value)) {
+            return null;
+        }
+        $minimums = [];
+        foreach ($value as $branch => $minimum) {
+            if (!is_string($minimum) || preg_match('/^(\d+\.\d+)\.\d+$/', $minimum, $match) !== 1 || $match[1] !== (string) $branch) {
+                return null;
+            }
+            $minimums[$match[1]] = $minimum;
+        }
+
+        return $minimums;
     }
 
     /** @return list<string>|null The value when it is a list of names each `$pattern` takes; null otherwise */

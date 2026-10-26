@@ -17,7 +17,7 @@ use Illuminate\Support\Carbon;
  * @property string $key
  * @property int $order_id
  * @property int|null $payment_method_id Null only for a key kept before keys kept their way to pay
- * @property Carbon $created_at
+ * @property Carbon|null $created_at
  */
 class RequestKey extends Model
 {

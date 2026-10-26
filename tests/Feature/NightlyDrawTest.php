@@ -165,6 +165,18 @@ final class NightlyDrawTest extends DatabaseTestCase
         self::assertSame([[$this->sara->id], 1], [$draw->winners()->pluck('user_id')->all(), $draw->entries], 'a week without draws: only what was paid in the two days before this one');
     }
 
+    public function testADrawBeforeWithoutATimeLeavesTheWindowTwoDaysBack(): void
+    {
+        // Written outside AmoBot, the draw before has no time for this one's window to begin at.
+        LotteryDraw::query()->insert(['bot_id' => 1, 'day' => '2026-10-09', 'entries' => 0, 'prize_kind' => 'wallet', 'created_at' => null]);
+        $this->entry($this->ali, '2026-10-08 22:00:00');
+        $this->entry($this->sara, '2026-10-09 12:00:00');
+
+        $draw = $this->draw() ?? self::fail('the draw was due');
+
+        self::assertSame([[$this->sara->id], 1], [$draw->winners()->pluck('user_id')->all(), $draw->entries], 'only what was paid in the two days before this one');
+    }
+
     public function testBotAdminsBannedCustomersAndAgentsDoNotEnter(): void
     {
         $admin = $this->admin(['telegram_id' => 4004]);

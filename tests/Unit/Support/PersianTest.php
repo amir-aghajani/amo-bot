@@ -51,6 +51,7 @@ final class PersianTest extends TestCase
         self::assertSame('۲۸ شهریور ۱۴۰۵، ۱۴:۰۵', Persian::date($date, withTime: true));
         self::assertSame('۱ فروردین ۱۴۰۵', Persian::date(new \DateTimeImmutable('2026-03-21')), 'Nowruz');
         self::assertSame('۳۰ اسفند ۱۴۰۳', Persian::date(new \DateTimeImmutable('2025-03-20')), 'the leap day before it');
+        self::assertSame('—', Persian::date(null, withTime: true), 'a row without its time');
     }
 
     public function testADateReadsInTheShopsZone(): void

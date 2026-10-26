@@ -8,7 +8,6 @@
     // Vitest reads its setup files from Vite's root (resources/panel); knip reads them from here.
     "entry": ["resources/panel/src/**/*.test.{ts,tsx}", "resources/panel/src/test/setup.ts", "resources/panel/src/test/global-setup.ts"],
   },
-  "ignoreUnresolved": ["src/test/setup.ts", "src/test/global-setup.ts"],
   // Generated from the API description, a type per schema: one no screen names yet is no dead code.
   "ignoreIssues": { "resources/panel/src/lib/api-types.ts": ["exports", "types"] },
 }

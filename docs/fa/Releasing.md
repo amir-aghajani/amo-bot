@@ -16,6 +16,20 @@
 به‌روزرسانی آن را جلو می‌برد: ارتقاهای دیتابیس از همان‌جا شروع می‌شوند. نسخه‌ای که `database/schema.php` را تغییر
 می‌دهد، همان تغییر را به‌صورت `database/upgrades/<its version>.php` هم همراه دارد ([دیتابیس](Database.md)).
 
+## نسخه‌های امنیتی PHP
+
+وقتی PHP یک نسخه امنیتی اعلام می‌کند (اخبار php.net، و advisoryهای امنیتی php-src)، نسخه بعدی
+`App\Support\PhpVersion::MINIMUMS` را به نسخه اصلاح‌شده هر شاخه می‌رساند، حفره‌ها را در توضیح آن نام می‌برد، و همان را
+در `composer.json` می‌نویسد: مقدار `php` برابر <code dir="ltr">PhpVersion::composer()</code> است
+(<code dir="ltr">~8.3.36 || ~8.4.27 || >=8.5.12</code>) و `config.platform.php` نسخه قدیمی‌ترین شاخه، تا پکیج‌ها
+برای آن انتخاب شوند. تست `PhpVersionTest` این‌ها را با هم نگه می‌دارد، و `scripts/release.php` فایل `composer.json`ی را که
+PHP دیگری بگوید نمی‌پذیرد. شاخه‌ای که PHP دیگر پشتیبانی نمی‌کند از فهرست بیرون می‌رود. نسخه‌های PHP در CI
+(<code dir="ltr">.github/workflows/ci.yml</code>) باید از شاخه‌های این فهرست باشند.
+
+اسکریپت `scripts/release.php` این فهرست را با نام `php_minimums` در `release.json` می‌نویسد، کنار `php`، یعنی
+قدیمی‌ترین نسخه، که تنها چیزی است که به‌روزرسانی پیش از 0.7.1 می‌خواند: چنین فروشگاهی فقط PHP قدیمی‌تر از آن را
+نمی‌پذیرد.
+
 ## کلید امضا
 
 نسخه‌ها با یک کلید Ed25519 امضا می‌شوند. نیمه عمومی آن `resources/release-key.pub` است، که هر نسخه همراه دارد و هر
@@ -79,12 +93,12 @@ PHP و افزونه‌هایی که `composer.json` لازم دارد، و مس�
 
 فایل <code dir="ltr">.github/workflows/release.yml</code> بررسی می‌کند که تگ همان `Application::VERSION` را نام ببرد،
 فایل `docs/Releases.md` بخش آن نسخه را داشته باشد و Secret امضا تنظیم شده باشد (هیچ نسخه بدون امضایی هرگز منتشر
-نمی‌شود)، دوباره `composer check` (روی PHP 8.2) و `pnpm check` را اجرا می‌کند، نسخه را با `scripts/release.php` بیلد و
+نمی‌شود)، دوباره `composer check` (روی PHP 8.3) و `pnpm check` را اجرا می‌کند، نسخه را با `scripts/release.php` بیلد و
 امضا می‌کند (کلیدی که فروشگاه‌ها الان به آن اعتماد دارند از تگ آخرین نسخه گرفته می‌شود)، و نسخه را در GitHub منتشر
 می‌کند: فایل zip، `release.json` و `release.json.sig`، با همان بخش [نسخه‌ها](Releases.md) به عنوان یادداشت‌هایش. بررسی
 روزانه فروشگاه‌ها ظرف یک روز آن را می‌بیند؛ «بررسی دوباره» همان لحظه.
 
-هر push به `main` و هر Pull request بررسی‌ها را روی PHP 8.2 تا 8.4 اجرا می‌کند و پنل‌ها را بیلد می‌کند
+هر push به `main` و هر Pull request بررسی‌ها را روی PHP 8.3 تا 8.5 اجرا می‌کند و پنل‌ها را بیلد می‌کند
 (<code dir="ltr">.github/workflows/ci.yml</code>، [تست](Testing.md#اجرا-در-ci)).
 
 </div>

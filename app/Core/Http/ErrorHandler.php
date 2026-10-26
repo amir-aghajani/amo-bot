@@ -8,6 +8,8 @@ use App\Core\Exceptions\DomainRuleException;
 use App\Core\Exceptions\TooManyAttemptsException;
 use App\Core\Logging\Redact;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Database\LostConnectionDetector;
+use Illuminate\Database\QueryException;
 use Psr\Http\Message\ResponseFactoryInterface;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Log\LoggerInterface;
@@ -18,9 +20,10 @@ use Slim\Interfaces\CallableResolverInterface;
 
 /**
  * Turns every failure into the one JSON error shape (Json::error()). A DomainRuleException is answered with its own
- * status, message and field errors (a 429 with `Retry-After`); a missing row (findOrFail) is a 404; anything else is the
- * generic 500, logged once with its trace under the request's id — and shown in a `debug` block only with APP_DEBUG,
- * to a request from this machine.
+ * status, message and field errors (a 429 with `Retry-After`); a missing row (findOrFail) is a 404; a database that
+ * cannot be reached — down, out of reach, or refusing config.php's credentials — is a 503 that says so; anything else
+ * is the generic 500. A failure is logged once under the request's id, with its trace (not a database out of reach:
+ * where it failed says nothing) — and shown in a `debug` block only with APP_DEBUG, to a request from this machine.
  */
 final class ErrorHandler extends SlimErrorHandler
 {
@@ -36,6 +39,9 @@ final class ErrorHandler extends SlimErrorHandler
         405 => 'این روش درخواست پشتیبانی نمی‌شود.',
         500 => 'خطایی در سرور رخ داد. لطفا بعدا دوباره تلاش کنید.',
     ];
+
+    /** The words for a database that cannot be reached (databaseUnreachable()): the panels show them as the reason. */
+    public const DATABASE_UNREACHABLE = 'دیتابیس فروشگاه در دسترس نیست؛ چند لحظه بعد دوباره تلاش کنید. اگر ادامه داشت، روشن بودن دیتابیس هاست و اطلاعات اتصال آن را بررسی کنید.';
 
     public function __construct(
         CallableResolverInterface $callableResolver,
@@ -53,6 +59,7 @@ final class ErrorHandler extends SlimErrorHandler
         return match (true) {
             $this->exception instanceof DomainRuleException => $this->exception->status(),
             $this->exception instanceof ModelNotFoundException => 404,
+            self::databaseUnreachable($this->exception) => 503,
             default => parent::determineStatusCode(),
         };
     }
@@ -69,7 +76,7 @@ final class ErrorHandler extends SlimErrorHandler
 
         $this->logger->error(
             sprintf('%s %s -> %d %s', $this->request->getMethod(), $this->request->getUri()->getPath(), $this->statusCode, $this->exception->getMessage()),
-            ['exception' => $this->exception],
+            self::databaseUnreachable($this->exception) ? [] : ['exception' => $this->exception],
         );
     }
 
@@ -79,6 +86,7 @@ final class ErrorHandler extends SlimErrorHandler
         [$message, $errors] = match (true) {
             $exception instanceof DomainRuleException => [$exception->getMessage(), $exception->errors()],
             $exception instanceof ModelNotFoundException => [self::NOT_FOUND, []],
+            self::databaseUnreachable($exception) => [self::DATABASE_UNREACHABLE, []],
             default => [self::MESSAGES[$this->statusCode] ?? self::MESSAGES[500], []],
         };
 
@@ -125,6 +133,23 @@ final class ErrorHandler extends SlimErrorHandler
             'detail' => Redact::text($this->relative($exception->getMessage())),
             'trace' => array_map(fn(string $line): string => Redact::text($this->relative($line)), $trace),
         ];
+    }
+
+    /**
+     * Whether the database could not be reached: no connection made (PDO's connect error, "SQLSTATE[HY000] [2002] …" —
+     * down, out of reach, refusing the user or database config.php names, or out of connections) or one lost
+     * (LostConnectionDetector's words). Read off the driver's own words, never the statement and values a QueryException
+     * adds to them.
+     */
+    private static function databaseUnreachable(\Throwable $exception): bool
+    {
+        $driver = $exception instanceof QueryException ? $exception->getPrevious() : $exception;
+        if (!$driver instanceof \PDOException) {
+            return false;
+        }
+
+        return preg_match('/^SQLSTATE\[\w{5}\] \[\d+\]/', $driver->getMessage()) === 1
+            || (new LostConnectionDetector())->causedByLostConnection($driver);
     }
 
     /** A class's name without the file path PHP appends to an anonymous class's. */

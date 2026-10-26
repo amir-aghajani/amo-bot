@@ -79,6 +79,9 @@ too, where it can be stopped alone.
   ends at its next batch.
 - **A run needs the admin who sent it**: their message is copied from their own chat. When their account is gone — or
   has no Telegram any more —, the run ends as «لغوشده» at its next batch; those already sent keep it.
+- **A run edited by hand in the database** to name no message or no audience ends as «لغوشده» at its next batch, as one
+  whose admin is gone does; its progress message reads «—» for the audience. The list shows it — and an unpin run left
+  without the run it unpins — with «—» for what is unknown.
 - **Traffic a mass gift gives agents' customers** is not drawn from the agents' pools.
 - **A customer group deleted while its gift runs** — the gift keeps its parts and its list line («سرویس‌های گروهی که حذف
   شد»), and reaches nobody more: it finishes, never turning into a gift for everyone. A customer taken out of the group

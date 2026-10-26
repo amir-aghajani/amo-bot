@@ -54,8 +54,8 @@ use Illuminate\Support\Carbon;
  * @property string|null $referral_code The customer's own invite code (ReferralService::codeFor())
  * @property int|null $referred_by The customer whose link brought this one — set on their first update, never changed
  * @property Carbon|null $last_seen_at
- * @property Carbon $created_at
- * @property Carbon $updated_at
+ * @property Carbon|null $created_at
+ * @property Carbon|null $updated_at
  * @property-read \Illuminate\Database\Eloquent\Collection<int, Order> $orders
  * @property-read \Illuminate\Database\Eloquent\Collection<int, Subscription> $subscriptions
  * @property-read User|null $referrer

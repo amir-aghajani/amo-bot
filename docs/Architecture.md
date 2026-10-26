@@ -10,7 +10,7 @@ Internals pages — [commerce](Internals-Commerce.md), [services](Internals-Serv
 
 ## The shape of it
 
-AmoBot is a PHP 8.2 application (Slim 4, PHP-DI, Eloquent, Symfony Console) that renders no HTML but one small page —
+AmoBot is a PHP 8.3 application (Slim 4, PHP-DI, Eloquent, Symfony Console) that renders no HTML but one small page —
 the one a customer's browser comes back to from an online payment gateway (`Payments\Controllers\ReturnPage`). It has
 four faces:
 

@@ -122,6 +122,7 @@ final class StoreCheckoutTest extends HttpTestCase
         self::assertSame([
             'payment_id' => $payment->id,
             'amount' => '120000.00',
+            'amount_rial' => '1200000',
             'card' => '6037997700001119',
             'holder' => 'AmoBot',
             'bank' => null,

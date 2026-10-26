@@ -43,8 +43,8 @@ use Illuminate\Support\Carbon;
  * @property bool $hidden_by_owner An agent's plan the owner keeps from sale («پنهان‌شده توسط پشتیبانی»): never offered,
  *                                 whatever its own switch says; only the owner's agents screen changes it
  * @property int $sort
- * @property Carbon $created_at
- * @property Carbon $updated_at
+ * @property Carbon|null $created_at
+ * @property Carbon|null $updated_at
  * @property-read Collection<int, PlanServer> $servers
  * @property-read PlanCategory|null $category
  */

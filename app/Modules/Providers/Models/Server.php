@@ -44,8 +44,8 @@ use Illuminate\Support\Carbon;
  * @property int $test_traffic_bytes a test's traffic
  * @property int $test_duration_hours a test's term
  * @property bool $test_on_hold whether a test's term counts from its first connection, else from the moment it is made
- * @property Carbon $created_at
- * @property Carbon $updated_at
+ * @property Carbon|null $created_at
+ * @property Carbon|null $updated_at
  * @property-read Collection<int, ServerInbound> $inbounds
  * @property-read Collection<int, Subscription> $subscriptions
  */

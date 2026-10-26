@@ -18,8 +18,8 @@ use Illuminate\Support\Carbon;
  * @property int $discount_percent 0 none
  * @property int $cashback_percent 0 none
  * @property int $sort
- * @property Carbon $created_at
- * @property Carbon $updated_at
+ * @property Carbon|null $created_at
+ * @property Carbon|null $updated_at
  */
 class LoyaltyTier extends Model
 {

@@ -285,7 +285,7 @@ final class StoreExtrasTest extends HttpTestCase
 
         $payment = Payment::query()->sole();
         self::assertSame(['transfer', 'pending', Traffic::bytesOfGb(25), null], [$checkout['outcome'], $checkout['order']['status'], $checkout['order']['traffic_bytes'], $checkout['subscription']]);
-        self::assertSame(['payment_id' => $payment->id, 'amount' => '50000.00', 'card' => '6037997700001119', 'holder' => 'AmoBot', 'bank' => null, 'instructions' => null, 'contact' => null], $checkout['transfer']);
+        self::assertSame(['payment_id' => $payment->id, 'amount' => '50000.00', 'amount_rial' => '500000', 'card' => '6037997700001119', 'holder' => 'AmoBot', 'bank' => null, 'instructions' => null, 'contact' => null], $checkout['transfer']);
         self::assertSame([], FakeProvider::$updated, 'nothing added before the money is in');
 
         $this->service(PaymentService::class)->approve($this->receipt($payment), 'admin');

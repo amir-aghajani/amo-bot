@@ -118,7 +118,7 @@ final class CustomerGroups
             'agent_pricing' => $group->agent_pricing,
             'sort' => $group->sort,
             'counts' => ['users' => (int) $group->users_count],
-            'created_at' => $group->created_at->toIso8601String(),
+            'created_at' => $group->created_at?->toIso8601String(),
         ];
     }
 

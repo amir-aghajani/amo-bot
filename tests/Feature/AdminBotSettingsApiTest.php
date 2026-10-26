@@ -254,7 +254,6 @@ final class AdminBotSettingsApiTest extends HttpTestCase
         $image = imagecreatetruecolor($width, $height);
         ob_start();
         imagepng($image);
-        imagedestroy($image);
 
         return (string) ob_get_clean();
     }

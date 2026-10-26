@@ -239,6 +239,18 @@ final class AccountMergerTest extends DatabaseTestCase
         self::assertSame('root', AccountMerge::query()->latest('id')->firstOrFail()->actor, "a panel's principal");
     }
 
+    public function testAnAccountWithoutItsTimeGivesWayToTheOneNumberedFirst(): void
+    {
+        Carbon::setTestNow('2026-09-01 10:00:00');
+        $first = $this->customer(['telegram_id' => 7101]);
+        $second = $this->webCustomer();
+        // Written outside AmoBot without its time.
+        User::query()->whereKey($second->id)->update(['created_at' => null]);
+
+        self::assertSame($first->id, $this->merger->merge($second->refresh(), $first, AccountMerger::BY_CUSTOMER)->id);
+        self::assertNull(AccountMerge::query()->latest('id')->firstOrFail()->merged['created_at'], 'its record has no time for it either');
+    }
+
     public function testEachServiceWhoseClientNamesItsOwnerOtherwiseIsRelabelled(): void
     {
         $server = $this->sellingServer();

@@ -124,7 +124,7 @@ exception پرتاب می‌کند، یک task که اجراهایش را می�
 ## اجرا در CI
 
 هر push به `main` و هر Pull request به آن روی GitHub Actions اجرا می‌شود (<code dir="ltr">.github/workflows/ci.yml</code>):
-دستور `composer check` و بررسی مستندات روی PHP 8.2، 8.3 و 8.4 (همه نسخه‌هایی که یک فروشگاه ممکن است اجرا کند، هر کدام
+دستور `composer check` و بررسی مستندات روی PHP 8.3، 8.4 و 8.5 (همه نسخه‌هایی که یک فروشگاه ممکن است اجرا کند، هر کدام
 با کل مجموعه تست)، و `pnpm check` پنل‌ها و یک بیلد production. تست‌های به‌روزرسانی افزونه‌های `sodium` و `zip` را لازم
 دارند، که CI دارد؛ روی سیستم خودتان، `php -d extension=sodium -d extension=zip vendor/bin/phpunit` آن‌ها را اجرا می‌کند.
 

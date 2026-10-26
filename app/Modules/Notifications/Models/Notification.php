@@ -21,7 +21,7 @@ use Illuminate\Support\Carbon;
  * @property NoticeSubject|null $subject_type What it is about: one of the customer's orders, services or tickets; null for none
  * @property int|null $subject_id
  * @property Carbon|null $read_at When the customer read it on the website; null: not yet
- * @property Carbon $created_at
+ * @property Carbon|null $created_at
  */
 class Notification extends Model
 {

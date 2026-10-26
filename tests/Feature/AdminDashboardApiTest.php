@@ -13,6 +13,7 @@ use App\Modules\Payments\Enums\PaymentStatus;
 use App\Modules\Subscriptions\Services\SubscriptionDirectory;
 use App\Modules\Telegram\BotState;
 use App\Support\LocalTime;
+use App\Support\PhpVersion;
 use App\Support\Traffic;
 use Illuminate\Support\Carbon;
 use Tests\HttpTestCase;
@@ -166,10 +167,19 @@ final class AdminDashboardApiTest extends HttpTestCase
         self::assertSame(SubscriptionDirectory::EXPIRING_DAYS, $data['expiring_days']);
     }
 
+    public function testTheSystemSaysWhenTheHostsPhpHasItsBranchsKnownSecurityHolesOpen(): void
+    {
+        PhpVersion::setTestHost('8.3.10');
+
+        $system = $this->decode($this->get('/api/admin/system'))['system'];
+
+        self::assertSame(['8.3.10', false, '8.3.36'], [$system['php'], $system['php_safe'], $system['php_required']], 'the panel says so over every page, naming the release to move to');
+    }
+
     public function testTheSystemSaysHowTheOpenShopsBotAndTheMainBotGetTheirUpdates(): void
     {
         $system = fn(): array => $this->decode($this->get('/api/admin/system'))['system'];
-        self::assertSame([Application::VERSION, PHP_VERSION], [$system()['version'], $system()['php']]);
+        self::assertSame([Application::VERSION, self::HOST_PHP, true, '8.4.27'], [$system()['version'], $system()['php'], $system()['php_safe'], $system()['php_required']]);
         $quiet = ['configured' => false, 'enabled' => true, 'username' => null, 'mode' => 'offline', 'last_update_at' => null];
         self::assertSame(['id' => Bot::MAIN] + $quiet, $system()['bot']);
         self::assertSame($quiet, $system()['main_bot'], 'the main shop open: its bot twice');

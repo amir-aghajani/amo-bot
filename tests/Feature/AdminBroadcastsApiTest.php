@@ -123,6 +123,27 @@ final class AdminBroadcastsApiTest extends HttpTestCase
         self::assertSame(BroadcastStatus::Done, Broadcast::query()->findOrFail($run['id'])->status);
     }
 
+    public function testARunEditedByHandToHaveNoAudienceOrNoSourceIsListedWithThemUnknown(): void
+    {
+        $message = $this->start([]);
+        $source = $this->start(['pin' => true]);
+        $broadcasts = $this->service(BroadcastService::class);
+        $broadcasts->process($source, 50);
+        $broadcasts->startUnpin($source, null, self::ADMIN_USERNAME);
+        $unpin = Broadcast::query()->where('source_id', $source->id)->sole();
+        // Never so as AmoBot keeps them: a message run's audience, and an unpin run's source, taken away by hand.
+        Broadcast::query()->whereKey($message->id)->update(['audience' => null]);
+        Broadcast::query()->whereKey($unpin->id)->update(['source_id' => null]);
+
+        $response = $this->get('/api/admin/broadcasts');
+
+        self::assertSame(200, $response->getStatusCode(), (string) $response->getBody());
+        $rows = array_column($this->decode($response)['broadcasts'], null, 'id');
+        self::assertSame([null, null, null], [$rows[$unpin->id]['source_id'], $rows[$unpin->id]['mode'], $rows[$unpin->id]['audience']], 'what it was about unknown');
+        self::assertSame(['copy', null], [$rows[$message->id]['mode'], $rows[$message->id]['audience']]);
+        self::assertSame(['key' => 'all', 'id' => null, 'label' => Audience::LABELS[Audience::ALL]], $rows[$source->id]['audience'], 'the others as ever');
+    }
+
     public function testARunStartedOnTheWebsiteIsListedUnderItsAdminsName(): void
     {
         $broadcasts = $this->service(BroadcastService::class);

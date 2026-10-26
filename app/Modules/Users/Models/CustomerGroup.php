@@ -17,8 +17,8 @@ use Illuminate\Support\Carbon;
  * @property string $name
  * @property bool $agent_pricing Its customers pay plans' agent prices (User::paysAgentPrices())
  * @property int $sort
- * @property Carbon $created_at
- * @property Carbon $updated_at
+ * @property Carbon|null $created_at
+ * @property Carbon|null $updated_at
  * @property-read int|null $users_count
  */
 class CustomerGroup extends Model

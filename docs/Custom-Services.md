@@ -71,8 +71,8 @@ and `POST /custom-services/orders` ([Store API: buying](Store-API-Buying.md#a-se
 
 A built service has no plan, so its renewal — «تمدید» on its screen, or «♻️ تمدید سرویس» in the menu — first lists what
 to renew it on, as for a service added by its link ([Services added by their link](Service-Claims.md#renewing-one)): the
-plans on sale on its server, and under them, while the builder is on, **«🛠 تمدید با سرویس دلخواه»** — alone when no plan
-is sold there. That button leads through the same GB and days (buttons, or any amount typed within the bounds) — no
+plans on sale on its server (their category asked first when they are in more than one), and under them, while the
+builder is on, **«🛠 تمدید با سرویس دلخواه»** — alone when no plan is sold there. That button leads through the same GB and days (buttons, or any amount typed within the bounds) — no
 server to pick: a renewal makes no new client — to the renewal's checkout: «🌿 نام سرویس» reads «سرویس دلخواه · ۵۰ گیگ ·
 ۳۰ روز», and the rest is any renewal's ([Bot guide](Bot-Guide.md#renewing)): the shop's renewal window, its methods, the
 discount code and the ways to pay.

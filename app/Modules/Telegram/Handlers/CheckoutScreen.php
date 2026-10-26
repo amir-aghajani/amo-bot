@@ -504,9 +504,9 @@ final class CheckoutScreen
 
     /**
      * The card to transfer to — its number, holder and bank (when the owner named it) —, with buttons that copy its number
-     * and the amount (digits a banking app takes); the chat now waits for the receipt (ReceiptHandler). It is protected
-     * while the shop protects cards (showCard()). A payment shown no card, taken in support's private chat
-     * (PaymentCards::toSupport()), gets the way there instead (toSupport()).
+     * and the amount (in Rial, the digits a banking app takes: Money::rials()); the chat now waits for the receipt
+     * (ReceiptHandler). It is protected while the shop protects cards (showCard()). A payment shown no card, taken in
+     * support's private chat (PaymentCards::toSupport()), gets the way there instead (toSupport()).
      */
     private function transfer(Context $ctx, Payment $payment, CardTransfer $transfer, string $checkout): void
     {
@@ -518,16 +518,17 @@ final class CheckoutScreen
         }
 
         $ctx->session->enter(ReceiptHandler::stateFor($payment));
-        $digits = Money::digits($payment->amount);
+        $rials = Money::rials($payment->amount);
         $instructions = trim($this->texts->render(BotText::CardInstructions, [
             'amount' => Money::format($payment->amount),
-            'amount_digits' => $digits,
+            'amount_digits' => Money::digits($payment->amount),
+            'amount_rial' => $rials,
             'card' => $number,
             'holder' => (string) $transfer->holder,
             'bank' => $this->bank($transfer),
             'instructions' => $transfer->instructions,
         ]));
-        $keyboard = InlineKeyboard::make()->row(...$this->copyRow($digits, $number))->row($this->buttons->back($checkout));
+        $keyboard = InlineKeyboard::make()->row(...$this->copyRow($rials, $number))->row($this->buttons->back($checkout));
 
         $this->showCard($ctx, BotTexts::paragraphs($instructions, $this->texts->part(BotText::PayInstructionsSuffix)), $keyboard);
     }
@@ -555,15 +556,16 @@ final class CheckoutScreen
         $transfer = (string) $link->card?->card === '' ? null : $link->card;
         if ($transfer !== null) {
             $card = (string) $transfer->card;
-            $digits = Money::digits($link->amount);
+            $rials = Money::rials($link->amount);
             $holder = trim((string) $transfer->holder);
             $text = BotTexts::paragraphs($text, $this->texts->part(BotText::PayOnlineCard, [
                 'card' => $card,
                 'card_holder' => $holder === '' ? '' : $this->texts->part(BotText::PayOnlineCardHolder, ['holder' => $holder]),
                 'bank' => $this->bank($transfer),
-                'amount_digits' => $digits,
+                'amount_digits' => Money::digits($link->amount),
+                'amount_rial' => $rials,
             ]));
-            $keyboard->row(...$this->copyRow($digits, $card));
+            $keyboard->row(...$this->copyRow($rials, $card));
         }
         $keyboard->row(InlineKeyboard::callback($this->texts->get(BotText::PayOnlineCheck), OnlinePaymentHandler::checkCallback($payment)))
             ->row($this->buttons->back($checkout));
@@ -584,14 +586,14 @@ final class CheckoutScreen
     }
 
     /**
-     * The buttons copying a card's number and the sum to transfer to it (digits a banking app takes) — in reading order,
-     * the number first, on the right.
+     * The buttons copying a card's number and the sum to transfer to it, in Rial (`$rials`: the digits a banking app takes)
+     * — in reading order, the number first, on the right.
      *
      * @return list<array<string, mixed>>
      */
-    private function copyRow(string $digits, string $card): array
+    private function copyRow(string $rials, string $card): array
     {
-        return [InlineKeyboard::copy($this->texts->get(BotText::CardCopyAmount), $digits), InlineKeyboard::copy($this->texts->get(BotText::CardCopyNumber), $card)];
+        return [InlineKeyboard::copy($this->texts->get(BotText::CardCopyAmount), $rials), InlineKeyboard::copy($this->texts->get(BotText::CardCopyNumber), $card)];
     }
 
     /**

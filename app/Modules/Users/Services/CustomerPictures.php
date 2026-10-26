@@ -339,10 +339,8 @@ final class CustomerPictures
             return [$bytes, $extension];
         }
         $image = $type === 'image/jpeg' ? Picture::upright($image, $bytes) : $image;
-        $written = Picture::encoded($image, $type, self::QUALITY);
-        imagedestroy($image);
 
-        return [$written ?? $bytes, $extension];
+        return [Picture::encoded($image, $type, self::QUALITY) ?? $bytes, $extension];
     }
 
     private function path(PictureFolder $folder, string $name): string

@@ -13,13 +13,14 @@ import { SearchBox } from '@/components/search-box'
 import { RemoveConfirm } from '@/components/sortable-list'
 import { StatusBadge, statusTabs } from '@/components/status-badge'
 import { TextLink } from '@/components/text-link'
+import { TimeAgo } from '@/components/time-ago'
 import { DropdownMenuItem, DropdownMenuSeparator } from '@/components/ui/dropdown-menu'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { UserLabel, userPage } from '@/components/user-identity'
 import { api, stateChanged } from '@/lib/api'
 import type { ReviewRow, ReviewsResponse, ReviewStatus } from '@/lib/api-types'
 import { idLabel } from '@/lib/direction'
-import { formatDate, timeAgo } from '@/lib/format'
+import { timeAgo } from '@/lib/format'
 import { queryKeys } from '@/lib/query-keys'
 import { REVIEW_STATUS } from '@/lib/statuses'
 import { usePagedList } from '@/lib/use-paged-list'
@@ -148,9 +149,7 @@ export function ReviewsPage() {
                     <Decision review={review} />
                   </TableCell>
                   <TableCell className="hidden text-muted-foreground sm:table-cell">
-                    <time dateTime={review.created_at} title={formatDate(review.created_at)}>
-                      {timeAgo(review.created_at)}
-                    </time>
+                    <TimeAgo at={review.created_at} />
                   </TableCell>
                   <TableCell>
                     <RowMenu label={`نظر ${idLabel(review.id)}`}>

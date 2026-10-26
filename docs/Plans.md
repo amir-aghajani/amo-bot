@@ -63,7 +63,8 @@ server buttons come in.
 **«خرید اضافه»** — the prices its services buy extra traffic, time and devices at
 ([below](#extra-traffic-time-and-devices)).
 
-A refused save jumps to the tab that has the problem.
+A refused save jumps to the tab that has the problem. The dialog keeps its height as the tabs change, its buttons at its
+foot, and each tab scrolls only as far as its own fields.
 
 ### The term starts at the first connection
 
@@ -236,7 +237,9 @@ under «نیازمند رسیدگی» ([Orders and payments](Orders-And-Payments
 on, the bot's «خرید اشتراک» shows the categories first — every one switched on, in this order, an empty one too, which
 says it has nothing for sale now —, then «سایر پلن‌ها» for the plans of no category or of one switched off, when there
 are any. Without a category switched on, the bot lists the plans at once. The shop's website groups its catalogue the
-same way ([the shop](Store-API-Shop.md#what-it-sells)).
+same way ([the shop](Store-API-Shop.md#what-it-sells)). Renewing a service without a plan files its plans so too, but
+lists only the categories that have one of them, and asks for a category only when they are in more than one
+([Bot guide](Bot-Guide.md#renewing)).
 
 Deleting a category is always possible: its plans stay, without a category.
 

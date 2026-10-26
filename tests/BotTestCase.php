@@ -149,6 +149,7 @@ abstract class BotTestCase extends DatabaseTestCase
         return BotTexts::paragraphs(trim(self::text(BotText::CardInstructions, [
             'amount' => Money::format($amount),
             'amount_digits' => $amount,
+            'amount_rial' => Money::rials($amount),
             'card' => $card,
             'holder' => $holder,
             'bank' => '',

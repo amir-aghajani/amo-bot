@@ -169,9 +169,9 @@ A broadcast run («ارسال همگانی»): a message a bot admin sent with /
 |---|---|---|---|
 | `id` | integer | yes |  |
 | `kind` | string: `message`, `unpin` | yes |  |
-| `source_id` | integer or null | yes | For an unpin run: the broadcast whose pins it removes. |
-| `mode` | string: `copy`, `forward` | yes | Copied by the bot (with the link buttons), or forwarded from its original sender. |
-| `audience` | object | yes |  |
+| `source_id` | integer or null | yes | For an unpin run: the broadcast whose pins it removes — null only for a row edited outside AmoBot to have none. Null for a message run. |
+| `mode` | string: `copy`, `forward` or null | yes | Copied by the bot (with the link buttons), or forwarded from its original sender — an unpin run's, its source's. Null when that is unknown: a row edited outside AmoBot to have no mode, or no source. |
+| `audience` | object or null | yes | Who it went to — an unpin run's, its source's. Null when that is unknown: a row edited outside AmoBot to have no audience, or no source. |
 | `audience.key` | [BroadcastAudience](#broadcastaudience) | yes |  |
 | `audience.id` | integer or null | yes | The group or server the audience names. |
 | `audience.label` | string | yes |  |
@@ -188,7 +188,7 @@ A broadcast run («ارسال همگانی»): a message a bot admin sent with /
 | `admin` | [UserRef](#userref) or null | yes | The bot admin who sent it; null for a run started from the panel. |
 | `reviewer` | string or null | yes | Who started it from a panel or the website: the agent's @bot, a bot admin's @username, tg:&lt;id&gt; or user#&lt;id&gt;, or the owner's login (which anyone but the owner sees as «پشتیبانی»). |
 | `reviewer_name` | string or null | yes | The name of the bot admin `reviewer` is, as their account has it (their first and last name), to show beside it. Null for the owner, an agent, an admin whose account is gone or shows no name, a handle no admin of the shop has now, and while `reviewer` is null. |
-| `created_at` | string (date-time) | yes |  |
+| `created_at` | string (date-time) or null | yes |  |
 | `finished_at` | string (date-time) or null | yes |  |
 | `actions` | object | yes |  |
 | `actions.pause` | boolean | yes |  |
@@ -285,7 +285,7 @@ A customer group («گروه»), in the admin's order. A broadcast can target on
 | `sort` | integer | yes |  |
 | `counts` | object | yes |  |
 | `counts.users` | integer | yes |  |
-| `created_at` | string (date-time) | yes |  |
+| `created_at` | string (date-time) or null | yes |  |
 
 ### CustomerGroupsResponse
 
@@ -306,7 +306,7 @@ An account merged into this customer's account (its row no longer exists): how i
 | `merged.email` | string or null | yes |  |
 | `merged.google` | boolean | yes | It could sign in with a Google account. |
 | `merged.name` | string or null | yes | Its "first last" name; null without one. |
-| `created_at` | string (date-time) | yes |  |
+| `created_at` | string (date-time) or null | yes |  |
 
 ### CustomerReferral
 
@@ -385,14 +385,14 @@ String: `sale`, `personal`, `tier`, `code`.
 
 ### ErrorResponse
 
-The shape of every refusal and failure, whatever produced it. A 429 also sends the wait in seconds in `Retry-After`.
+The shape of every refusal and failure, whatever produced it. A 429 also sends the wait in seconds in `Retry-After`. A request that needs the shop's database is a 503 while it cannot be reached (down, out of reach, or refusing config.php's credentials), its `message` saying so.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `message` | string | yes | A message for the reader: the admin on the panels, the customer on the Store API. |
 | `errors` | map of list of string | no | Field errors, keyed by the field they are about |
 | `request_id` | string | yes | The request's id, the same as the `X-Request-Id` header and the id on every log line of the request. The panel shows it on a server failure («کد پیگیری») so the request can be found in the log. |
-| `debug` | object | no | Debug details. Only on a server failure (a 500, never a refusal), with APP_DEBUG on, and only for a request made directly from the server's own machine (never one forwarded by a proxy or tunnel). Paths are relative to the app's folder; call arguments are never included. |
+| `debug` | object | no | Debug details. Only on a server failure (a 500, or the 503 of a database out of reach; never a refusal), with APP_DEBUG on, and only for a request made directly from the server's own machine (never one forwarded by a proxy or tunnel). Paths are relative to the app's folder; call arguments are never included. |
 | `debug.exception` | string | yes |  |
 | `debug.detail` | string | yes |  |
 | `debug.trace` | list of string | yes |  |
@@ -476,7 +476,7 @@ A customer who joined through someone's link.
 | `status` | [UserStatus](#userstatus) | yes |  |
 | `referrer` | [UserRef](#userref) or null | yes |  |
 | `earned` | string | yes | What this customer's payments earned their current referrer (the commissions credited to that referrer). |
-| `joined_at` | string (date-time) | yes |  |
+| `joined_at` | string (date-time) or null | yes |  |
 
 ### InviteeSort
 
@@ -589,7 +589,7 @@ String or null.
 | `paid_at` | string (date-time) or null | yes |  |
 | `to_wallet` | boolean | yes | Paid on its online gateway after the order had closed: its money went to the customer's wallet, and it paid nothing of the order (`PaymentRow.to_wallet`). |
 | `held` | boolean | yes | An online payment held for support: its gateway took money on it that does not fit, kept it unsettled, or closed it after saying money had come in (`PaymentRow.held`). |
-| `created_at` | string (date-time) | yes |  |
+| `created_at` | string (date-time) or null | yes |  |
 
 ### OrderPricing
 
@@ -634,7 +634,7 @@ An order, as a row of the orders screen: what the customer asked for, and how fa
 | `payments` | list of [OrderPayment](#orderpayment) | yes | The payment attempts, newest first. |
 | `paid_at` | string (date-time) or null | yes |  |
 | `fulfilled_at` | string (date-time) or null | yes |  |
-| `created_at` | string (date-time) | yes |  |
+| `created_at` | string (date-time) or null | yes |  |
 | `actions` | object | yes |  |
 | `actions.retry` | boolean | yes |  |
 | `actions.cancel` | boolean | yes |  |
@@ -745,7 +745,7 @@ A payment, as a row of the payments screen.
 | `checked_at` | string (date-time) or null | yes | An online payment: when the shop last asked its gateway what came of it — its callback, the customer's question, «استعلام از درگاه» (`POST …/check`), or the scheduler every few minutes while it is open. Null until asked. |
 | `to_wallet` | boolean | yes | Paid after its order had closed (paid another way, cancelled or expired): the online gateway took the money when the order no longer waited for it, so it went to the customer's wallet («پرداخت آنلاین #12 پس از بسته شدن سفارش #7») and `description` says so. It paid nothing of the order: it is neither retried nor refunded here. |
 | `held` | boolean | yes | An online payment held for support: its gateway took money on it that does not fit — for another order or amount, or less than asked that the customer accepted (AtlasPay) —, kept money on it unsettled for two days after its page closed, or closed it after saying money had come in on it (held at once). `description` says why. It is never asked about again, and only «لغو پرداخت» is offered here, once support has settled it with the customer at the gateway; while it is still waiting (pending, or failed with its page), its order never expires and nothing of it is paid any other way — cancelled, it holds nothing. |
-| `created_at` | string (date-time) | yes |  |
+| `created_at` | string (date-time) or null | yes |  |
 | `actions` | object | yes | Which operations its current state allows (the server decides). |
 | `actions.approve` | boolean | yes |  |
 | `actions.reject` | boolean | yes |  |
@@ -814,8 +814,8 @@ A plan category.
 | `sort` | integer | yes |  |
 | `counts` | object | yes |  |
 | `counts.plans` | integer | yes |  |
-| `created_at` | string (date-time) | yes |  |
-| `updated_at` | string (date-time) | yes |  |
+| `created_at` | string (date-time) or null | yes |  |
+| `updated_at` | string (date-time) or null | yes |  |
 
 ### PlanInboundRef
 
@@ -905,8 +905,8 @@ A plan, as the list shows it.
 | `counts.sales` | integer | yes | Its sold orders: paid, being delivered or delivered. |
 | `counts.orders` | integer | yes | All orders placed for it, whatever their status. A plan with any orders or services cannot be deleted (switch it off instead). |
 | `counts.subscriptions` | integer | yes | All services sold on it, ended ones included. |
-| `created_at` | string (date-time) | yes |  |
-| `updated_at` | string (date-time) | yes |  |
+| `created_at` | string (date-time) or null | yes |  |
+| `updated_at` | string (date-time) or null | yes |  |
 
 ### PlanServerEntry
 
@@ -986,7 +986,7 @@ Integer: `7`, `30`, `90`.
 | `amount` | string | yes |  |
 | `plan` | string or null | yes | What it buys in words, as `OrderPackageName`: its plan's name (an extra's: its service's plan's), or a service the customer built as «سرویس دلخواه · ۵۰ گیگ · ۳۰ روز»; null for any other order. |
 | `user` | [UserRef](#userref) | yes |  |
-| `created_at` | string (date-time) | yes |  |
+| `created_at` | string (date-time) or null | yes |  |
 
 ### RecentUser
 
@@ -998,7 +998,7 @@ Integer: `7`, `30`, `90`.
 | `telegram_id` | integer or null | yes | Their Telegram user id; null for a customer who signed up on the website (the bot cannot message them). |
 | `email` | string or null | yes | Their verified email, in lower case; null when they have none. |
 | `balance` | string | yes |  |
-| `created_at` | string (date-time) | yes |  |
+| `created_at` | string (date-time) or null | yes |  |
 
 ### ReferralAlertReason
 
@@ -1017,7 +1017,7 @@ An alert on a referrer whose referrals look fake («هشدار زیرمجموع�
 | `status` | [UserStatus](#userstatus) | yes | The referrer's status. |
 | `reason` | [ReferralAlertReason](#referralalertreason) | yes |  |
 | `count` | integer | yes | The number of referrals when it was raised: those in the window, or those who never bought. |
-| `created_at` | string (date-time) | yes |  |
+| `created_at` | string (date-time) or null | yes |  |
 
 ### ReferralAlertsResponse
 
@@ -1043,7 +1043,7 @@ A referral commission paid out.
 | `order.type` | [OrderType](#ordertype) | yes |  |
 | `rate` | integer | yes | The percent in force at the time. |
 | `commission` | string | yes |  |
-| `created_at` | string (date-time) | yes |  |
+| `created_at` | string (date-time) or null | yes |  |
 
 ### ReferralCommissionSort
 
@@ -1160,7 +1160,7 @@ A review written on the website, as the moderation screen lists it.
 | `reviewer` | string or null | yes | Who last approved or rejected it: a panel user, or a website admin (@username, tg:&lt;id&gt; or user#&lt;id&gt;). Anyone but the owner sees the owner's login as «پشتیبانی». Null while pending. |
 | `reviewer_name` | string or null | yes | The name of the bot admin `reviewer` is, as their account has it (their first and last name), to show beside it. Null for the owner, an agent, an admin whose account is gone or shows no name, a handle no admin of the shop has now, and while `reviewer` is null. |
 | `decided_at` | string (date-time) or null | yes | When it was last approved or rejected; null while pending. |
-| `created_at` | string (date-time) | yes |  |
+| `created_at` | string (date-time) or null | yes |  |
 | `actions` | object | yes | Which decisions its status allows (deleting is always allowed). |
 | `actions.approve` | boolean | yes |  |
 | `actions.reject` | boolean | yes |  |
@@ -1255,7 +1255,7 @@ A service, as a row of the subscriptions screen: a client on a panel, as last re
 | `disabled_at` | string (date-time) or null | yes |  |
 | `ended_at` | string (date-time) or null | yes | When it ended: the deadline it passed, or when the shop found its traffic used up or its client gone from the panel. Null while it runs, and past a deadline until the shop next reads its panel. |
 | `removes_at` | string (date-time) or null | yes | When the shop removes it from its panel and the shop by itself, by its rules now: `expired_cleanup_hours` after it ended while `expired_cleanup` is on; a test, while `test_cleanup` is on, `test_cleanup_hours` after it ended — or, never connected, `test_unused_days` after it was made. Null when no rule removes it: it runs (a test never connected aside), it is switched off, or the rule is off. A moment already past: it goes at the next check (every 15 minutes), unless an order of it is still open. |
-| `created_at` | string (date-time) | yes |  |
+| `created_at` | string (date-time) or null | yes |  |
 | `actions` | object | yes | Which operations its current state allows (the server decides). |
 | `actions.sync` | boolean | yes |  |
 | `actions.disable` | boolean | yes |  |
@@ -1328,10 +1328,10 @@ A support ticket with its whole conversation, oldest message first.
 | `status` | [TicketStatus](#ticketstatus) | yes |  |
 | `customer` | [UserRef](#userref) | yes |  |
 | `subscription` | [NamedRef](#namedref) or null | yes | The customer's service it is about, by its panel name; null for none, or when the service was deleted. |
-| `last_message_at` | string (date-time) | yes | When its latest message was written; the list is sorted by it. |
+| `last_message_at` | string (date-time) or null | yes | When its latest message was written; the list is sorted by it. |
 | `messages_count` | integer | yes |  |
 | `rating` | integer or null | yes | The customer's rating after it closed, 1 to 5; null for none. |
-| `created_at` | string (date-time) | yes |  |
+| `created_at` | string (date-time) or null | yes |  |
 | `closed_at` | string (date-time) or null | yes | When it was closed; null while open (reopening clears it). |
 | `rating_note` | string or null | yes | The note the customer left with their rating. |
 | `messages` | list of [TicketMessageRow](#ticketmessagerow) | yes |  |
@@ -1349,7 +1349,7 @@ A ticket message.
 | `body` | string | yes |  |
 | `attachment` | [TicketAttachment](#ticketattachment) or null | yes | Its picture; null for none. |
 | `channel` | [TicketChannel](#ticketchannel) | yes |  |
-| `created_at` | string (date-time) | yes |  |
+| `created_at` | string (date-time) or null | yes |  |
 
 ### TicketResponse
 
@@ -1368,10 +1368,10 @@ A support ticket, as the list shows it.
 | `status` | [TicketStatus](#ticketstatus) | yes |  |
 | `customer` | [UserRef](#userref) | yes |  |
 | `subscription` | [NamedRef](#namedref) or null | yes | The customer's service it is about, by its panel name; null for none, or when the service was deleted. |
-| `last_message_at` | string (date-time) | yes | When its latest message was written; the list is sorted by it. |
+| `last_message_at` | string (date-time) or null | yes | When its latest message was written; the list is sorted by it. |
 | `messages_count` | integer | yes |  |
 | `rating` | integer or null | yes | The customer's rating after it closed, 1 to 5; null for none. |
-| `created_at` | string (date-time) | yes |  |
+| `created_at` | string (date-time) or null | yes |  |
 | `closed_at` | string (date-time) or null | yes | When it was closed; null while open (reopening clears it). |
 
 ### TicketStatus
@@ -1458,7 +1458,7 @@ A customer, as a row of the users table. (The panel login is not a customer.)
 | `counts.subscriptions` | integer | yes |  |
 | `counts.active_subscriptions` | integer | yes |  |
 | `groups` | list of [NamedRef](#namedref) | yes | The customer groups they are in, in the groups' order. |
-| `created_at` | string (date-time) | yes |  |
+| `created_at` | string (date-time) or null | yes |  |
 | `last_seen_at` | string (date-time) or null | yes |  |
 
 ### UserSort
@@ -1513,7 +1513,7 @@ One line of a customer's wallet ledger.
 | `counterpart` | [UserRef](#userref) or null | yes | A wallet transfer's line («انتقال موجودی»): the other customer — whom the money went to (a debit) or came from (a credit). Null for every other line. |
 | `reviewer` | string or null | yes | Who added the line by hand: a panel user or a website admin (@username, tg:&lt;id&gt; or user#&lt;id&gt;). Anyone but the owner sees the owner's login as «پشتیبانی». Null for lines the shop wrote automatically. |
 | `reviewer_name` | string or null | yes | The name of the bot admin `reviewer` is, as their account has it (their first and last name), to show beside it. Null for the owner, an agent, an admin whose account is gone or shows no name, a handle no admin of the shop has now, and while `reviewer` is null. |
-| `created_at` | string (date-time) | yes |  |
+| `created_at` | string (date-time) or null | yes |  |
 
 ### WalletTransactionType
 

@@ -22,7 +22,7 @@ use Illuminate\Support\Carbon;
  * @property string|null $payload What the flow keeps with it: JSON, encrypted at rest
  * @property int $attempts
  * @property Carbon $expires_at
- * @property Carbon $created_at
+ * @property Carbon|null $created_at
  */
 class AuthChallenge extends Model
 {

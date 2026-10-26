@@ -20,7 +20,7 @@ use Illuminate\Support\Carbon;
  * @property string|null $outcome What they were given, as the customer reads it
  * @property int|null $order_id
  * @property int|null $subscription_id
- * @property Carbon $created_at
+ * @property Carbon|null $created_at
  * @property-read User $user
  * @property-read Order|null $order
  * @property-read Subscription|null $subscription

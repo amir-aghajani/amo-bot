@@ -28,6 +28,21 @@ Telegram, Google and the other services AmoBot talks to, and social engineering.
 AmoBot is pre-release: fixes land on the main branch and in the next release; there are no older release lines to
 patch yet.
 
+### PHP itself
+
+A shop runs only on a PHP release without PHP's known security holes: on each branch it supports, the release that
+closed the latest ones, or a later one. The list is `Support\PhpVersion::MINIMUMS`: 8.3.36, 8.4.27 and 8.5.12 since
+21 October 2026, when PHP closed two critical holes that let anyone who can reach a site run their own code there
+(CVE-2026-109618 and CVE-2026-109619). PHP 8.2 is no branch of the shop's since 0.7.1. On an older release:
+
+- the installer stops;
+- the panel's update installs no release, going by the list each release carries in its signed `release.json`;
+- a shop already running on one says so in a strip over every page of the owner's panel;
+- below 8.3.36, the shop does not start at all.
+
+When PHP announces a security release, the next AmoBot release raises the list
+([Releasing](Releasing.md#php-security-releases)).
+
 ## How a shop is kept safe
 
 What the code does by itself, in short. [Architecture](Architecture.md#failures-and-hardening) says how, and what an

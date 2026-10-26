@@ -409,11 +409,15 @@ what renewing on it costs the customer today:
 ```json
 {
   "plans": [
-    { "id": 3, "name": "یک ماهه ۵۰ گیگ", "description": null, "checkout_note": null, "price": "120000.00", "renewal_price": "108000.00", "discounts": [{ "source": "personal", "label": "تخفیف اختصاصی شما ۱۰٪", "amount": "12000.00", "percent": 10 }], "traffic_gb": 50, "duration_days": 30, "duration_hours": 720, "devices": 2 }
+    { "id": 3, "name": "یک ماهه ۵۰ گیگ", "description": null, "checkout_note": null, "price": "120000.00", "renewal_price": "108000.00", "discounts": [{ "source": "personal", "label": "تخفیف اختصاصی شما ۱۰٪", "amount": "12000.00", "percent": 10 }], "traffic_gb": 50, "duration_days": 30, "duration_hours": 720, "devices": 2, "category_id": 4 }
   ],
   "custom_services": true
 }
 ```
+
+Each says the category it is listed under (`category_id`, as [`GET /plans`](Store-API-Shop.md#what-it-sells) groups them; null for the
+group without one), and the list comes in that order: show them by category as the bot does — it asks for the category
+first when they are in more than one.
 
 Then pass the one picked as `plan_id`: `GET /subscriptions/{id}/renewal?plan_id=3` previews it, and the `POST` body
 carries it too (and `POST /discount-codes/check`'s, for a renewal). Without it both are `422` on `plan_id` (`یک پلن برای
@@ -823,6 +827,7 @@ Only a `delivery` failure is delivered later, once support retries it; a `first_
     "transfer": {
       "payment_id": 89,
       "amount": "120000.00",
+      "amount_rial": "1200000",
       "card": "6037997700001119",
       "holder": "محمد کریمی",
       "bank": "ملت",
@@ -876,8 +881,9 @@ A wallet purchase, renewal or extra made on the site sends no notice: this answe
 ## Card transfer and the receipt
 
 After a `transfer` outcome, show `transfer.card` grouped and left-to-right (`6037 9977 0000 1119`, with a copy button),
-`holder`, `bank` when there is one, `amount` (with a copy button too, copying the digits alone — `120000` —, as a banking
-app takes them) and `instructions` (the shop's note, `null` without one). The card is the payment's own: a shop with
+`holder`, `bank` when there is one, `amount` in Toman, with a copy button that copies `amount_rial` — the same sum in
+Rial, ten to the Toman, as Iran's banks count: `1200000`, the digits alone, as a banking app takes them —, and
+`instructions` (the shop's note, `null` without one). The card is the payment's own: a shop with
 several cards shows each payment one of them, picked at random, and the same one every time after — a request made
 again with its key answers the same card, even if the shop switched it off since. Once the customer has paid, upload the
 receipt for `transfer.payment_id`:
@@ -977,6 +983,7 @@ shown. A request made again answers the same payment — given a card, should th
 "transfer": {
   "payment_id": 89,
   "amount": "120000.00",
+  "amount_rial": "1200000",
   "card": null,
   "holder": null,
   "bank": null,
@@ -1022,6 +1029,7 @@ gateway's own page, and the gateway tells the shop. Its checkout answers `link`,
       "url": "https://cubevps.ir/smspay/pay.php?authority=…",
       "expires_at": "2026-10-07T12:40:00+00:00",
       "amount": "120037.00",
+      "amount_rial": "1200370",
       "fee": null,
       "card": null
     },
@@ -1044,7 +1052,8 @@ gateway's own page, and the gateway tells the shop. Its checkout answers `link`,
 - `amount` — what to pay, in Toman: the payment's own, or more when the gateway adds a few Toman to tell its transfers
   apart (above: 37) or passes on its fee (`fee`). Show this one as what they pay. Two gateways' pages ask in their own
   terms: Variza's asks a few Toman more of its own, and Plisio's asks the sum in the coin the customer picks. The order's
-  `amount` is what they bought, and what a top-up adds to the wallet.
+  `amount` is what they bought, and what a top-up adds to the wallet. `amount_rial` is the same in Rial (ten to the Toman),
+  the digits a banking app takes: copy it for a transfer to `card`.
 - `fee` — of `amount`, the gateway's fee the customer pays, in Toman (`null` for none): the one the shop passes on
   (CubePay), Zarinpal's when the merchant set the payer to pay it, or AtlasPay's markup on the order's amount. Say it
   beside the sum, as the bot does: «شامل ۲٬۰۰۰ تومان کارمزد درگاه».
@@ -1053,7 +1062,8 @@ gateway's own page, and the gateway tells the shop. Its checkout answers `link`,
 - `card` — `{ "number", "holder", "bank" }` when the gateway gave a card to show (CubePay's «🤖 نمایش کارت در ربات»,
   AtlasPay's «نمایش مستقیم اطلاعات پرداخت», AbanGateway's «نمایش کارت در ربات و سایت» in the shop) — `holder` and
   `bank` `null` when it did not say them —, else `null`: show it as a card transfer's
-  ([the receipt](#card-transfer-and-the-receipt)), with `amount` — the customer may transfer exactly that sum to it, and
+  ([the receipt](#card-transfer-and-the-receipt)), with `amount` (and `amount_rial` to copy) — the customer may transfer
+  exactly that sum to it, and
   the gateway knows the transfer by the sum. No receipt is sent for it.
 
 **The outcome.** The gateway tells the shop by itself once the customer paid; the shop then asks the gateway what came

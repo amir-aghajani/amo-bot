@@ -275,7 +275,7 @@ final class DiscountCodes
             'uses' => (int) $code->uses,
             'deletable' => $code->kept !== true,
             'state' => self::state($code)->value,
-            'created_at' => $code->created_at->toIso8601String(),
+            'created_at' => $code->created_at?->toIso8601String(),
         ])->all());
     }
 

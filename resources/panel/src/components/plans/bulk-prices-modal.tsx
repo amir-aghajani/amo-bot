@@ -134,14 +134,15 @@ function BulkPricesForm({ plans, invalidates, onClose, onSaved }: Omit<BulkPrice
     void preview.run()
   }
 
+  // Refused — a plan's prices moved since the preview —, the preview is no longer the server's word on the change: it is
+  // asked again, the plans that cannot take it named under the plans meanwhile.
+  const refused = (failure: unknown) => {
+    if (failure instanceof ApiError && failure.status === 422) preview.clear()
+    throw failure
+  }
+
   const apply = handleSubmit(async () => {
     if (!ready) return
-    // Refused — a plan's prices moved since the preview —, the preview is no longer the server's word on the change: it is
-    // asked again, the plans that cannot take it named under the plans meanwhile.
-    const refused = (failure: unknown) => {
-      if (failure instanceof ApiError && failure.status === 422) preview.clear()
-      throw failure
-    }
     const data = await submit(() => api.post('/plans/prices', shown.body).catch(refused), { invalidates })
     if (data) {
       toast.success(`قیمت ${formatNumber(changed)} پلن تغییر کرد`)

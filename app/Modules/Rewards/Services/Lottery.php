@@ -110,20 +110,22 @@ final class Lottery
 
     /**
      * The window of `$draw`, just made: from where the draw before it ended to SETTLING_SECONDS before this one — but never
-     * further back than WINDOW_MAX_HOURS; a shop's first, FIRST_WINDOW_HOURS.
+     * further back than WINDOW_MAX_HOURS (all of them when the draw before has no time: written outside AmoBot); a
+     * shop's first, FIRST_WINDOW_HOURS.
      *
      * @return array{Carbon, Carbon} From (inclusive), until (exclusive), UTC
      */
     private static function window(LotteryDraw $draw): array
     {
-        $until = $draw->created_at->copy()->startOfSecond()->subSeconds(self::SETTLING_SECONDS)->utc();
+        $until = ($draw->created_at ?? now())->copy()->startOfSecond()->subSeconds(self::SETTLING_SECONDS)->utc();
         $before = LotteryDraw::query()->where('id', '<', $draw->id)->latest('id')->first();
         if ($before === null) {
             return [$until->copy()->subHours(self::FIRST_WINDOW_HOURS), $until];
         }
-        $since = $before->created_at->copy()->subSeconds(self::SETTLING_SECONDS)->utc();
+        $furthest = $until->copy()->subHours(self::WINDOW_MAX_HOURS);
+        $since = $before->created_at?->copy()->subSeconds(self::SETTLING_SECONDS)->utc()->max($furthest);
 
-        return [$since->max($until->copy()->subHours(self::WINDOW_MAX_HOURS)), $until];
+        return [$since ?? $furthest, $until];
     }
 
     /** The draw of `$day`, made now; null when another run drew it first. */

@@ -26,8 +26,8 @@ use Illuminate\Support\Carbon;
  * @property ReviewStatus $status
  * @property string|null $reviewer Who of support decided it last
  * @property Carbon|null $decided_at When
- * @property Carbon $created_at
- * @property Carbon $updated_at
+ * @property Carbon|null $created_at
+ * @property Carbon|null $updated_at
  * @property-read User|null $user
  */
 class Review extends Model

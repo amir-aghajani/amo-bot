@@ -382,7 +382,7 @@ final class ServerMigrations
             'last_failure' => $job->last_failure,
             'reviewer' => $job->reviewer,
             'reviewer_name' => $names[$job->reviewer ?? ''] ?? null,
-            'created_at' => $job->created_at->toIso8601String(),
+            'created_at' => $job->created_at?->toIso8601String(),
             'started_at' => $job->started_at?->toIso8601String(),
             'finished_at' => $job->finished_at?->toIso8601String(),
         ];
@@ -392,7 +392,7 @@ final class ServerMigrations
      * The services the job could not move, the latest first (FAILURES of them): which, of which shop while it lasts, and
      * why.
      *
-     * @return list<array{id: int, subscription_id: int|null, client: string, shop: array<string, mixed>|null, reason: string, created_at: string}>
+     * @return list<array{id: int, subscription_id: int|null, client: string, shop: array<string, mixed>|null, reason: string, created_at: string|null}>
      */
     public function failures(ServerMigration $job): array
     {
@@ -402,7 +402,7 @@ final class ServerMigrations
             'client' => $failure->remote_name,
             'shop' => $failure->subscription !== null ? $this->shops->shop($failure->subscription->shop()) : null,
             'reason' => $failure->reason,
-            'created_at' => $failure->created_at->toIso8601String(),
+            'created_at' => $failure->created_at?->toIso8601String(),
         ])->values()->all();
     }
 

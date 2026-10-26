@@ -8,12 +8,13 @@ import { StatusBadge } from '@/components/status-badge'
 import { UsageMeter } from '@/components/subscriptions/service-usage'
 import { TestTerms } from '@/components/tests/test-terms'
 import { searchLink, TextLink } from '@/components/text-link'
+import { TimeAgo } from '@/components/time-ago'
 import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { UserIdentity, userPage } from '@/components/user-identity'
 import { api } from '@/lib/api'
 import type { TestAccountRow, TestAccountsResponse, TestAccountState } from '@/lib/api-types'
-import { formatDate, timeAgo, timeLeft } from '@/lib/format'
+import { timeLeft } from '@/lib/format'
 import { queryKeys } from '@/lib/query-keys'
 import { TEST_STATE } from '@/lib/statuses'
 import { usePagedList } from '@/lib/use-paged-list'
@@ -85,9 +86,7 @@ export function TestsList() {
                   <State test={test} />
                 </TableCell>
                 <TableCell className="hidden text-muted-foreground sm:table-cell">
-                  <time dateTime={test.created_at} title={formatDate(test.created_at)}>
-                    {timeAgo(test.created_at)}
-                  </time>
+                  <TimeAgo at={test.created_at} />
                 </TableCell>
               </TableRow>
             ))}

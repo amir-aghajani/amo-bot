@@ -13,12 +13,13 @@ import { Reviewer } from '@/components/reviewer'
 import { MigrationForm } from '@/components/servers/migration-form'
 import { isOpen, useMigrations, workable, type MigrationAction } from '@/components/servers/use-migrations'
 import { StatusBadge } from '@/components/status-badge'
+import { TimeAgo } from '@/components/time-ago'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardHeading, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { api } from '@/lib/api'
 import type { ServerMigrationDetailResponse, ServerMigrationLeftovers, ServerMigrationRow, ServerRow } from '@/lib/api-types'
-import { formatDate, formatNumber, timeAgo } from '@/lib/format'
+import { formatNumber } from '@/lib/format'
 import { queryKeys } from '@/lib/query-keys'
 import { MIGRATION_MODE, MIGRATION_STATUS } from '@/lib/statuses'
 
@@ -175,9 +176,7 @@ function MigrationItem({ job, busy, onAction, onDetails }: { job: ServerMigratio
       {job.last_failure && <LastFailure failure={job.last_failure} />}
       <div className="flex min-h-7 flex-wrap items-center justify-between gap-2 text-footnote text-muted-foreground">
         <span>
-          <time dateTime={job.created_at} title={formatDate(job.created_at)}>
-            {timeAgo(job.created_at)}
-          </time>
+          <TimeAgo at={job.created_at} />
           {job.reviewer && (
             <>
               {' · '}

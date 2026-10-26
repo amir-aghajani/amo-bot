@@ -43,7 +43,7 @@ final class LotteryDraws
                 'order_id' => $winner->order_id,
                 'subscription_id' => $winner->subscription_id,
             ])->values()->all(),
-            'created_at' => $draw->created_at->toIso8601String(),
+            'created_at' => $draw->created_at?->toIso8601String(),
         ];
     }
 }

@@ -17,6 +17,7 @@ import { SearchBox } from '@/components/search-box'
 import { RemoveConfirm } from '@/components/sortable-list'
 import { StatusBadge, statusTabs } from '@/components/status-badge'
 import { searchLink, TextLink } from '@/components/text-link'
+import { TimeAgo } from '@/components/time-ago'
 import { Button } from '@/components/ui/button'
 import { DropdownMenuItem, DropdownMenuSeparator } from '@/components/ui/dropdown-menu'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -26,7 +27,7 @@ import type { GiftCodeBatch, GiftCodeBatchesResponse, GiftCodeRow, GiftCodesResp
 import { copyText } from '@/lib/clipboard'
 import { idLabel } from '@/lib/direction'
 import { messageOf } from '@/lib/failure'
-import { formatDate, formatMoney, formatNumber, timeAgo } from '@/lib/format'
+import { formatDate, formatMoney, formatNumber } from '@/lib/format'
 import { botSettingsQuery } from '@/lib/queries'
 import { queryKeys } from '@/lib/query-keys'
 import { GIFT_CODE_KIND, GIFT_CODE_STATUS } from '@/lib/statuses'
@@ -281,9 +282,7 @@ function Taken({ code }: { code: GiftCodeRow }) {
         <span className="text-muted-foreground">حساب حذف‌شده</span>
       )}
       <span className="text-footnote text-muted-foreground">
-        <time dateTime={code.redeemed_at} title={formatDate(code.redeemed_at)}>
-          {timeAgo(code.redeemed_at)}
-        </time>
+        <TimeAgo at={code.redeemed_at} />
         {code.order && (
           <>
             {' · '}

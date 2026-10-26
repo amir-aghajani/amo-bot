@@ -167,7 +167,7 @@ final class AccountMerger
                     'google' => $merged->google_sub !== null,
                     'first_name' => $merged->first_name,
                     'last_name' => $merged->last_name,
-                    'created_at' => $merged->created_at->toIso8601String(),
+                    'created_at' => $merged->created_at?->toIso8601String(),
                 ],
                 'moved' => $moved,
                 'actor' => $actor,
@@ -347,10 +347,17 @@ final class AccountMerger
         return $this->db->table($table)->where($column, $merged->id)->update([$column => $survivor->id]);
     }
 
-    /** The account a merge keeps: the one made earlier, or at the same moment the lower id. */
+    /**
+     * The account a merge keeps: the one made earlier; the lower id when both were made at the same moment, or either has
+     * no time (a row written outside AmoBot).
+     */
     public static function older(User $a, User $b): User
     {
-        return $a->created_at->lt($b->created_at) || ($a->created_at->eq($b->created_at) && $a->id < $b->id) ? $a : $b;
+        if ($a->created_at === null || $b->created_at === null || $a->created_at->eq($b->created_at)) {
+            return $a->id < $b->id ? $a : $b;
+        }
+
+        return $a->created_at->lt($b->created_at) ? $a : $b;
     }
 
     /** An agent now or once: on a level, or owning a bot. */

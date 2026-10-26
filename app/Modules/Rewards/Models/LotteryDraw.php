@@ -24,7 +24,7 @@ use Illuminate\Support\Carbon;
  * @property RewardKind $prize_kind
  * @property string|null $prize_amount Toman, GB or days
  * @property int|null $prize_plan_id
- * @property Carbon $created_at When it was drawn: its entries' window ends just before, where the next draw's begins (Services\Lottery)
+ * @property Carbon|null $created_at When it was drawn: its entries' window ends just before, where the next draw's begins (Services\Lottery)
  * @property-read Plan|null $prizePlan
  * @property-read Collection<int, LotteryWinner> $winners
  */

@@ -47,11 +47,12 @@ use Tests\Fakes\FakeProvider;
  * renewal's checkout says what the plan renews it with, for how much, and the service as the renewal would leave it; a
  * way to pay picked, the renewal is ordered (or the open one found) and paid — the wallet renews it at once, a card once
  * support approved its receipt. A service without a plan (claimed by its link) first lists the plans on sale on its
- * server to renew it on, and the one picked — a discount code keeps it — becomes its plan. A service its customer may not
- * renew, one whose renewal is under way, or one without a plan and none to pick, gets a popup saying so and nothing is
- * ordered; in an agent's bot their traffic must cover the plan. One the shop holds back until it nears its end gets a
- * popup saying from when. While the shop offers more than one renewal method, the checkout has a button per method and
- * is drawn by the one picked, which its pay buttons renew by.
+ * server to renew it on — by category, as «خرید اشتراک» files them, when they are in several —, and the one picked — a
+ * discount code keeps it — becomes its plan. A service its customer may not renew, one whose renewal is under way, or
+ * one without a plan and none to pick, gets a popup saying so and nothing is ordered; in an agent's bot their traffic
+ * must cover the plan. One the shop holds back until it nears its end gets a popup saying from when. While the shop
+ * offers more than one renewal method, the checkout has a button per method and is drawn by the one picked, which its
+ * pay buttons renew by.
  */
 final class BotRenewalTest extends BotTestCase
 {
@@ -350,6 +351,85 @@ final class BotRenewalTest extends BotTestCase
 
         $this->send($this->tap(SubscriptionHandler::serviceCallback($claimed->id, 'renew')));
         self::assertSame([CallbackData::build(RenewalHandler::checkoutCallback($claimed->id), $this->wallet->id), SubscriptionHandler::serviceCallback($claimed->id)], $this->callbacks(0), 'the next renewal goes straight to its checkout');
+    }
+
+    public function testAServiceWithoutAPlanPicksACategoryFirstWhenItsPlansAreInSeveral(): void
+    {
+        $claimed = $this->claimedService('manual_7');
+        $monthly = $this->category(['name' => 'ماهانه']);
+        $quarterly = $this->category(['name' => 'سه‌ماهه']);
+        $off = $this->category(['name' => 'خاموش', 'is_active' => false]);
+        $dutch = $this->category(['name' => 'هلند']);
+        $this->category(['name' => 'سازمانی']);
+        $this->plan->forceFill(['category_id' => $monthly->id])->save();
+        $quarter = $this->quarterPlan();
+        $quarter->forceFill(['category_id' => $quarterly->id])->save();
+        $loose = $this->plan(['name' => 'بی دسته'], $this->server);
+        $offPlan = $this->plan(['name' => 'دسته خاموش', 'category_id' => $off->id], $this->server);
+        $this->plan(['name' => 'هلند', 'category_id' => $dutch->id], $this->sellingServer('هلند'));
+        $categories = RenewalHandler::checkoutCallback($claimed->id);
+
+        $this->send($this->tap(SubscriptionHandler::serviceCallback($claimed->id, 'renew')));
+        self::assertSame([self::text(BotText::RenewPickPlan, ['client' => 'manual_7'])], $this->said());
+        self::assertSame([
+            RenewalHandler::categoryCallback($claimed->id, 0, $monthly->id),
+            RenewalHandler::categoryCallback($claimed->id, 0, $quarterly->id),
+            RenewalHandler::categoryCallback($claimed->id, 0, 0),
+            SubscriptionHandler::serviceCallback($claimed->id),
+        ], $this->callbacks(0), "the categories its plans are in, in order — not Holland's, sold on another server, nor an empty one —, then «سایر پلن‌ها»; and back to the service");
+        self::assertSame(['ماهانه', 'سه‌ماهه', self::text(BotText::CategoryOther)], array_map(static fn(array $row): string => $row[0]['text'], array_slice($this->inlineKeyboard(0), 0, 3)), 'one a row');
+
+        $this->send($this->tap(RenewalHandler::categoryCallback($claimed->id, 0, $quarterly->id)));
+        self::assertSame([self::text(BotText::RenewCategoryPlans, ['client' => 'manual_7', 'category' => 'سه‌ماهه'])], $this->said());
+        self::assertSame([RenewalHandler::checkoutCallback($claimed->id, 0, $quarter->id), $categories], $this->callbacks(0), 'its plans, and back to the categories');
+        self::assertSame(self::text(BotText::PlanButton, [
+            'plan' => 'سه‌ماهه',
+            'traffic' => Messages::traffic(Traffic::bytesOfGb(90)),
+            'duration' => Messages::duration(90 * 24),
+            'price' => Money::format('300000'),
+        ]), $this->inlineKeyboard(0)[0][0]['text'], 'at its renewal price');
+
+        $this->send($this->tap(RenewalHandler::categoryCallback($claimed->id, 0, 0)));
+        self::assertSame([self::text(BotText::RenewCategoryPlans, ['client' => 'manual_7', 'category' => self::text(BotText::CategoryOther)])], $this->said());
+        self::assertSame([RenewalHandler::checkoutCallback($claimed->id, 0, $loose->id), RenewalHandler::checkoutCallback($claimed->id, 0, $offPlan->id), $categories], $this->callbacks(0), 'a plan whose category is switched off is renewed on too, under «سایر پلن‌ها»');
+
+        $monthly->forceFill(['is_active' => false])->save();
+        $this->send($this->tap(RenewalHandler::categoryCallback($claimed->id, 0, $monthly->id)));
+        self::assertSame([self::text(BotText::RenewPickPlan, ['client' => 'manual_7'])], $this->said(), 'a category switched off since: the categories as they are now');
+        self::assertSame([RenewalHandler::categoryCallback($claimed->id, 0, $quarterly->id), RenewalHandler::categoryCallback($claimed->id, 0, 0), SubscriptionHandler::serviceCallback($claimed->id)], $this->callbacks(0));
+
+        $this->send($this->tap(RenewalHandler::checkoutCallback($claimed->id, 0, $offPlan->id)));
+        self::assertSame(RenewalHandler::categoryCallback($claimed->id, 0, 0), $this->callbacks(0)[1], 'back from a plan whose category is switched off lands on «سایر پلن‌ها»');
+
+        $this->send($this->tap(RenewalHandler::checkoutCallback($claimed->id, 0, $quarter->id)));
+        $pay = CallbackData::build($categories, $this->wallet->id, $quarter->id);
+        self::assertSame([$pay, RenewalHandler::categoryCallback($claimed->id, 0, $quarterly->id)], $this->callbacks(0), "back from the checkout lands on the plan's category");
+
+        $this->send($this->tap($pay));
+        self::assertSame([OrderStatus::Fulfilled, $quarter->id], [Order::query()->sole()->status, $claimed->refresh()->plan_id], 'renewed on the plan picked, its own now');
+    }
+
+    public function testAServiceWhosePlansAreInOneCategoryListsThemAtOnce(): void
+    {
+        $claimed = $this->claimedService('manual_7');
+        $monthly = $this->category(['name' => 'ماهانه']);
+        $this->category(['name' => 'سازمانی']);
+        $this->plan->forceFill(['category_id' => $monthly->id])->save();
+        $quarter = $this->quarterPlan();
+        $quarter->forceFill(['category_id' => $monthly->id])->save();
+        $plans = [RenewalHandler::checkoutCallback($claimed->id, 0, $this->plan->id), RenewalHandler::checkoutCallback($claimed->id, 0, $quarter->id), SubscriptionHandler::serviceCallback($claimed->id)];
+
+        $this->send($this->tap(SubscriptionHandler::serviceCallback($claimed->id, 'renew')));
+        self::assertSame([self::text(BotText::RenewPickPlan, ['client' => 'manual_7'])], $this->said());
+        self::assertSame($plans, $this->callbacks(0), 'one category is no choice: its plans at once');
+
+        $this->send($this->tap(RenewalHandler::checkoutCallback($claimed->id, 0, $quarter->id)));
+        $back = RenewalHandler::categoryCallback($claimed->id, 0, $monthly->id);
+        self::assertSame($back, $this->callbacks(0)[1]);
+
+        $this->send($this->tap($back));
+        self::assertSame([self::text(BotText::RenewPickPlan, ['client' => 'manual_7'])], $this->said(), 'back to the plans as they were listed');
+        self::assertSame($plans, $this->callbacks(0));
     }
 
     public function testAPayButtonOfAPickedPlanForAServiceThatHasAPlanSinceShowsItsCheckoutFirst(): void

@@ -42,8 +42,8 @@ use Illuminate\Support\Carbon;
  * @property string|null $lease_token The worker holding the run (Core\Database\Lease)
  * @property Carbon|null $leased_until
  * @property Carbon|null $finished_at
- * @property Carbon $created_at
- * @property Carbon $updated_at
+ * @property Carbon|null $created_at
+ * @property Carbon|null $updated_at
  * @property-read User|null $user
  * @property-read Broadcast|null $source
  */
@@ -168,7 +168,16 @@ class Broadcast extends Model
     /** The message run this one is about: itself, or an unpin run's source — the message, its mode and audience are that run's. */
     public function message(): self
     {
-        return $this->isUnpin() ? ($this->source ?? throw new \LogicException("Unpin run #{$this->id} has no source.")) : $this;
+        return $this->messageRun() ?? throw new \LogicException("Unpin run #{$this->id} has no source.");
+    }
+
+    /**
+     * message(), or null for an unpin run left without its source — never so as AmoBot keeps it (deleting a run takes its
+     * unpin runs with it), only as a row is edited by hand: what a list shows, where sending refuses it.
+     */
+    public function messageRun(): ?self
+    {
+        return $this->isUnpin() ? $this->source : $this;
     }
 
     /** @return array{int, int} Where a message run's message is: its admin's chat, and the message's id there. */

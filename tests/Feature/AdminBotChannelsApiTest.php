@@ -175,6 +175,18 @@ final class AdminBotChannelsApiTest extends HttpTestCase
         self::assertNull($channel->refresh()->invite_link, 'its handle is the way in now');
     }
 
+    public function testAChannelLeftWithNoWayInIsListedWithoutALinkUntilACheckGivesItOne(): void
+    {
+        // Neither a handle nor an invite link: only a row edited by hand, which AmoBot never leaves so.
+        $channel = $this->channel(self::PRIVATE_CHAT['id'], 'Private', ['username' => null, 'invite_link' => '']);
+
+        $listed = $this->decode($this->get('/api/admin/bot/channels'))['channels'];
+        self::assertSame([[$channel->id, null]], array_map(static fn(array $row): array => [$row['id'], $row['link']], $listed), 'listed, with no link to follow');
+
+        $this->telegram()->reply(self::PRIVATE_CHAT + ['invite_link' => 'https://t.me/+again'], ['status' => 'administrator']);
+        self::assertSame('https://t.me/+again', $this->decode($this->postJson("/api/admin/bot/channels/{$channel->id}/check"))['channel']['link']);
+    }
+
     public function testAPrivateChannelKeepsItsLastInviteLinkWhileTheBotCannotMakeOne(): void
     {
         $channel = $this->channel(self::PRIVATE_CHAT['id'], 'Private', ['username' => null, 'invite_link' => 'https://t.me/+kept']);

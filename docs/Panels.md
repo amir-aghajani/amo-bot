@@ -99,6 +99,10 @@ text editor, where writing is the whole point, opens with its field ready to typ
 at its top — its description scrolls with the rest —, and a form's buttons, like a receipt review's decisions, stay at
 its foot.
 
+**A PHP with security holes**: while the host runs a PHP release older than its branch's in
+[what you need](Installation.md#what-you-need), a strip over every page of the owner's panel says so and names the
+release to move to; until then the panel's update installs no release.
+
 ## The dashboard
 
 What the shop did over a range and what waits on someone, read again every minute and as the shop moves.
@@ -203,7 +207,8 @@ have ▲▼ instead, and no pages.
 - **A failure** says what failed and why, in plain words, with «تلاش دوباره» where trying again may help. A failure of
   the server's own ends with «کد پیگیری: …»: the shop's log has that request's lines under it
   ([health and logs](Running-In-Production.md#health-and-logs)). «جزئیات فنی» under a failure holds what support needs,
-  and «کپی جزئیات» copies it.
+  and «کپی جزئیات» copies it. While the shop cannot reach its database, every page says «دیتابیس فروشگاه در دسترس
+  نیست…».
 - **After an upgrade**, a tab opened before it reloads itself once to the new panel.
 
 ## The look
@@ -211,4 +216,4 @@ have ▲▼ instead, and no pages.
 Dark or light: «تنظیمات پنل › ظاهر», or the switch in the top bar of every screen. Dark is the default; the choice is
 kept in the browser, for both panels. Dates are Jalali and read in the shop's time zone (`APP_TIMEZONE`), whatever the browser's;
 quantities, money and dates use Persian digits, while numbers that are identifiers — `#12`, a Telegram id, a port —
-keep Latin ones.
+keep Latin ones. A row written outside AmoBot without its time — added by hand in phpMyAdmin, say — shows «—» for it.

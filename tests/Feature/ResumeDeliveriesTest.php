@@ -183,6 +183,18 @@ final class ResumeDeliveriesTest extends DatabaseTestCase
         self::assertSame([], FakeProvider::$created);
     }
 
+    public function testAnOrderWithoutItsTimeIsNeverTakenUp(): void
+    {
+        $order = $this->paidOrder($this->purchaseOrder($this->customer, $this->plan, $this->server, ['status' => OrderStatus::Paid]));
+        // Written outside AmoBot without its time: nothing says its process died.
+        Order::query()->whereKey($order->id)->update(['updated_at' => null]);
+
+        $this->runAfter(OrderService::STALE_PAID_MINUTES * 3);
+        self::assertSame(OrderStatus::Paid, $order->refresh()->status);
+        self::assertFalse(OrderService::isStale($order), 'the same rule for the one order');
+        self::assertSame([], FakeProvider::$created);
+    }
+
     public function testAResumedDeliveryThatFailsIsLeftToSupportAndTheCustomerHearsNothing(): void
     {
         $order = $this->paidOrder($this->purchaseOrder($this->customer, $this->plan, $this->server, ['status' => OrderStatus::Paid]));

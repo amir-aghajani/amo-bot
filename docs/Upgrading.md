@@ -24,7 +24,9 @@ on from the same step:
 2. **«باز کردن بسته»** — the zip unpacked into `storage/updates/<version>/`, a slice a request. An entry that would land
    anywhere but the app's own folders refuses the whole zip.
 3. **«بررسی هاست»** — the host's PHP and extensions against what the release needs, and whether PHP may swap the app's
-   folders: it runs as the account that owns them, may write them, and `storage/` is on the same disk.
+   folders: it runs as the account that owns them, may write them, and `storage/` is on the same disk. A PHP older than
+   its branch's release in the release's list — its known security holes still open — is refused, with the release to
+   move to.
 4. **«نصب»**, in one request. It first waits up to a minute for a scheduler run under way to end. Meanwhile every other
    request is told the shop is updating — «فروشگاه در حال به‌روزرسانی است؛ چند لحظه دیگر دوباره امتحان کنید.», a 503
    with `Retry-After` of a few seconds; Telegram and the cron come again by themselves. Each folder of the app the
@@ -51,6 +53,8 @@ update — unless the update changed the database: then only your backup takes i
 
 What the panel's update needs, and says it needs where it is missing:
 
+- a PHP the release takes: at least its branch's release in the release's list
+  ([what you need](Installation.md#what-you-need)) — cPanel › *MultiPHP Manager* or *Select PHP Version*;
 - PHP's **sodium** and **zip** extensions — the host's PHP settings (cPanel › *Select PHP Version* › *Extensions*);
 - PHP running as your account (PHP-FPM, LSAPI, suEXEC — the usual on shared hosting), so it may change the app's files;
 - free disk of about four times the release's zip;
@@ -59,7 +63,8 @@ What the panel's update needs, and says it needs where it is missing:
 
 ## By hand
 
-1. **Back up** the database, `config.php` and `storage/` ([Backups](Backups.md)).
+1. **Back up** the database, `config.php` and `storage/` ([Backups](Backups.md)), and check that the host's PHP is one
+   the release takes ([what you need](Installation.md#what-you-need)): below 8.3.36 the new release does not start.
 2. **Replace the files.** In the host's File Manager, delete every folder and file of the old release except
    `config.php` and `storage/`, then upload and extract the new release's zip in their place (its own `storage/` folder
    may be left out). Extracting over the old files would leave behind what the new release no longer has — a file of

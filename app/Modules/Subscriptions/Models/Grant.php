@@ -29,7 +29,7 @@ use Illuminate\Support\Carbon;
  * @property int|null $customer_group_id the group, for audience group; null too once the group was deleted
  * @property int $upto_subscription_id the newest service when it was issued: none bought after it gets it
  * @property string|null $reviewer who issued it
- * @property Carbon $created_at
+ * @property Carbon|null $created_at
  * @property-read Collection<int, GrantPart> $parts
  * @property-read CustomerGroup|null $customerGroup
  */

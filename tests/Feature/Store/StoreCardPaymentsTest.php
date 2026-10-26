@@ -67,6 +67,7 @@ final class StoreCardPaymentsTest extends HttpTestCase
         self::assertSame([
             'payment_id' => Payment::query()->sole()->id,
             'amount' => '120000.00',
+            'amount_rial' => '1200000',
             'card' => null,
             'holder' => null,
             'bank' => null,

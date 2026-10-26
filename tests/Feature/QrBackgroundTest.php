@@ -141,7 +141,6 @@ final class QrBackgroundTest extends DatabaseTestCase
         $image = imagecreatetruecolor(4, 4);
         ob_start();
         $type === 'png' ? imagepng($image) : imagejpeg($image);
-        imagedestroy($image);
 
         return (string) ob_get_clean();
     }

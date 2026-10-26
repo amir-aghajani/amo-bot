@@ -23,7 +23,7 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $last_used_at
  * @property Carbon|null $authenticated_at When a way in was last proven on it: the sign-in, or a reauthentication since
  * @property Carbon $expires_at The end whatever its use: 180 days after the sign-in
- * @property Carbon $created_at
+ * @property Carbon|null $created_at
  * @property-read User $user
  */
 class CustomerSession extends Model

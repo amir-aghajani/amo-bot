@@ -75,12 +75,26 @@ final class StoreClaimedRenewalTest extends HttpTestCase
             'duration_days' => 30,
             'duration_hours' => 720,
             'devices' => 1,
+            'category_id' => null,
         ], $plans[0]);
 
         $this->sale('حراج', 10);
         $quarterly = $this->plans($this->claimed)[1];
         self::assertSame(['270000.00', [['source' => 'sale', 'label' => 'حراج ۱۰٪', 'amount' => '30000.00', 'percent' => 10]]], [$quarterly['renewal_price'], $quarterly['discounts']]);
         self::assertSame('270000.00', $this->decode($this->preview($this->claimed, $this->quarterly->id))['renewal']['price'], 'what the preview says');
+    }
+
+    public function testItsPlansComeByCategoryAsTheCatalogueGroupsThem(): void
+    {
+        $long = $this->category(['name' => 'بلندمدت']);
+        $off = $this->category(['name' => 'خاموش', 'is_active' => false]);
+        $this->quarterly->forceFill(['category_id' => $long->id])->save();
+        $this->monthly->forceFill(['category_id' => $off->id])->save();
+        $loose = $this->plan(['name' => 'بی دسته'], $this->server);
+
+        $plans = $this->plans($this->claimed);
+
+        self::assertSame([[$this->quarterly->id, $long->id], [$this->monthly->id, null], [$loose->id, null]], array_map(static fn(array $plan): array => [$plan['id'], $plan['category_id']], $plans), "the category's first, then those of none or of one switched off, as `GET /plans` groups them");
     }
 
     public function testAServiceWithItsPlanListsItAloneAndOneThatMayNotBeRenewedNone(): void

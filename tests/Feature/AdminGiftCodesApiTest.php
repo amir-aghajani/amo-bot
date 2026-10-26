@@ -115,6 +115,15 @@ final class AdminGiftCodesApiTest extends HttpTestCase
         self::assertSame(['codes' => ['CCCCCCCC22', 'DDDDDDDD22']], $this->decode($this->get('/api/admin/gift-codes/unused?batch=' . rawurlencode('نوروز'))));
     }
 
+    public function testABatchWhoseCodesHaveNoTimeHasNone(): void
+    {
+        $this->giftCode('AAAAAAAA22');
+        GiftCode::query()->toBase()->update(['created_at' => null, 'updated_at' => null]);
+        Carbon::setTestNow('2026-10-09 08:00:00');
+
+        self::assertNull($this->decode($this->get('/api/admin/gift-codes/batches'))['batches'][0]['created_at'], 'written outside AmoBot: not the moment it was asked');
+    }
+
     public function testOnlyCodesNobodyTookAreDeleted(): void
     {
         $taken = $this->giftCode('TAKENCODE234', ['redeemed_by' => $this->ali->id, 'redeemed_at' => now()]);

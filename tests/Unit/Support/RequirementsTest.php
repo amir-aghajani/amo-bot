@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Unit\Support;
 
+use App\Support\PhpVersion;
 use App\Support\Requirements;
 use Tests\TestCase;
 
@@ -14,15 +15,29 @@ final class RequirementsTest extends TestCase
         $checks = array_column($this->service(Requirements::class)->check(), 'ok', 'name');
 
         self::assertSame(
-            ['ext-pdo_sqlite', 'ext-curl', 'ext-mbstring', 'ext-openssl', 'ext-bcmath', 'ext-fileinfo', 'memory_limit >= 64M', 'storage/ writable', 'config.php writable', 'ext-sodium', 'ext-zip', 'ext-gd'],
+            ['php', 'ext-pdo_sqlite', 'ext-curl', 'ext-mbstring', 'ext-openssl', 'ext-bcmath', 'ext-fileinfo', 'memory_limit >= 64M', 'storage/ writable', 'config.php writable', 'ext-sodium', 'ext-zip', 'ext-gd'],
             array_keys($checks),
-            'the suite runs on SQLite: its driver\'s extension; PHP\'s version is Composer\'s platform check',
+            'a PHP without its known security holes first; the suite runs on SQLite: its driver\'s extension',
         );
+        self::assertTrue($checks['php'], 'the suite plays a host on a PHP without them');
         self::assertTrue($checks['ext-bcmath'], 'Money is bcmath');
         self::assertTrue($checks['ext-fileinfo'], 'the receipt endpoint sniffs the content type');
         self::assertTrue($checks['memory_limit >= 64M'], 'this machine runs the suite: it has the memory');
         self::assertTrue($checks['storage/ writable']);
         self::assertTrue($checks['config.php writable'], 'the config.php the app writes — the run\'s own here, not there yet: its folder takes it');
+    }
+
+    public function testAPhpWithItsBranchsKnownSecurityHolesHoldsTheInstallUpAndSaysWhichReleaseToMoveTo(): void
+    {
+        PhpVersion::setTestHost('8.3.10');
+
+        $checks = $this->service(Requirements::class)->check();
+        $php = array_column($checks, null, 'name')['php'];
+
+        self::assertFalse($php['ok']);
+        self::assertFalse($php['optional']);
+        self::assertSame('PHP 8.3.36 یا بالاتر؛ نسخه‌های قدیمی‌تر حفره امنیتی دارند (PHP این هاست: 8.3.10)', $php['label']);
+        self::assertFalse(Requirements::met($checks), 'the installer does not go on');
     }
 
     public function testWhatThePanelsOwnUpdateNeedsIsShownAndHoldsNothingUp(): void

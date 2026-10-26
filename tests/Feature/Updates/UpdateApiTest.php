@@ -257,7 +257,13 @@ final class UpdateApiTest extends UpdateTestCase
 
     public function testAHostTheReleaseOutgrowsIsSaidSoBeforeAnythingIsReplaced(): void
     {
-        foreach ([[['php' => '99.0'], 'PHP 99.0'], [['extensions' => ['json', 'an_extension_nobody_has']], 'an_extension_nobody_has']] as [$needs, $said]) {
+        $needs = [
+            [['php' => '99.0'], 'PHP 99.0'],
+            [['extensions' => ['json', 'an_extension_nobody_has']], 'an_extension_nobody_has'],
+            // A release of the host's PHP branch with holes the release names closed in a later one.
+            [['php_minimums' => ['8.4' => '8.4.28']], 'حفره امنیتی دارد و نسخه ' . $this->next . ' روی آن نصب نمی‌شود؛ از تنظیمات هاست PHP را به 8.4.28 یا بالاتر ببرید.'],
+        ];
+        foreach ($needs as [$needs, $said]) {
             $zip = FakeRelease::zip($this->next, FakeRelease::files($this->next));
             $manifest = FakeRelease::manifest($this->next, $zip, $needs);
             $this->gitHub->publish($this->next, ["amobot-{$this->next}.zip" => $zip, 'release.json' => $manifest, 'release.json.sig' => $this->release()->sign($manifest)]);

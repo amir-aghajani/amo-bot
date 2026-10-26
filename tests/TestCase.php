@@ -19,6 +19,7 @@ use App\Modules\Providers\ProviderRegistry;
 use App\Modules\Settings\Services\Settings;
 use App\Modules\Telegram\Messages;
 use App\Modules\Telegram\Texts\BotText;
+use App\Support\PhpVersion;
 use GuzzleHttp\Exception\ConnectException;
 use GuzzleHttp\HandlerStack;
 use GuzzleHttp\Promise\PromiseInterface;
@@ -102,6 +103,9 @@ abstract class TestCase extends BaseTestCase
         'LOG_FILE' => 'tests.log',
     ];
 
+    /** The PHP every test plays the host as (PhpVersion::setTestHost()): one without known holes, whatever runs the suite. */
+    public const HOST_PHP = '8.4.27';
+
     /** Who the shop's emails come from once a test sets its mail up (mail()). */
     protected const MAIL_FROM = 'shop@example.com';
 
@@ -140,6 +144,7 @@ abstract class TestCase extends BaseTestCase
     protected function tearDown(): void
     {
         Carbon::setTestNow();
+        PhpVersion::setTestHost(self::HOST_PHP);
         // The current shop and request id are process-wide: the next test starts with neither.
         CurrentBot::reset();
         RequestId::reset();

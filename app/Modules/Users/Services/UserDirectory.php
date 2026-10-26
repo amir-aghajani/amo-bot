@@ -103,7 +103,7 @@ final class UserDirectory
             'reviewer' => $this->reviewers->present($transaction->reviewer),
             'reviewer_name' => $reviewerName,
             'counterpart' => $counterpart === null ? null : self::presentRef($counterpart),
-            'created_at' => $transaction->created_at->toIso8601String(),
+            'created_at' => $transaction->created_at?->toIso8601String(),
         ];
     }
 
@@ -145,7 +145,7 @@ final class UserDirectory
                 'active_subscriptions' => (int) $user->getAttribute('active_subscriptions_count'),
             ],
             'groups' => $user->groups->map(static fn(CustomerGroup $group): array => CustomerGroups::presentRef($group))->values()->all(),
-            'created_at' => $user->created_at->toIso8601String(),
+            'created_at' => $user->created_at?->toIso8601String(),
             'last_seen_at' => $user->last_seen_at?->toIso8601String(),
         ];
     }

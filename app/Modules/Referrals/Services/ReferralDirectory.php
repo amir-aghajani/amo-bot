@@ -103,7 +103,7 @@ final class ReferralDirectory
             'status' => $alert->referrer->status->value,
             'reason' => $alert->reason->value,
             'count' => $alert->count,
-            'created_at' => $alert->created_at->toIso8601String(),
+            'created_at' => $alert->created_at?->toIso8601String(),
         ]);
     }
 
@@ -137,7 +137,7 @@ final class ReferralDirectory
             'status' => $user->status->value,
             'referrer' => $user->referrer === null ? null : UserDirectory::presentRef($user->referrer),
             'earned' => self::money($user->getAttribute('earned')),
-            'joined_at' => $user->created_at->toIso8601String(),
+            'joined_at' => $user->created_at?->toIso8601String(),
         ], $sort);
     }
 
@@ -173,7 +173,7 @@ final class ReferralDirectory
                 'order' => ['id' => $payment->order->id, 'type' => $payment->order->type->value],
                 'rate' => $commission->rate,
                 'commission' => $commission->commission,
-                'created_at' => $commission->created_at->toIso8601String(),
+                'created_at' => $commission->created_at?->toIso8601String(),
             ];
         }, $sort);
     }

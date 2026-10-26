@@ -19,7 +19,7 @@ use Illuminate\Support\Carbon;
  * @property string $referrer_amount What the referrer's wallet got, Toman (0: nothing)
  * @property string $invitee_amount What the newcomer's wallet got, Toman (0: nothing)
  * @property StartGiftTrigger $trigger
- * @property Carbon $created_at
+ * @property Carbon|null $created_at
  */
 class ReferralBonus extends Model
 {

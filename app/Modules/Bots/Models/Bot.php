@@ -54,8 +54,8 @@ use Illuminate\Support\Carbon;
  * @property string|null $minimum_warned_month The Jalali month the agent was warned of falling short in
  * @property Carbon|null $selling_suspended_at Since when its shop sells nothing new; null while it sells
  * @property SellingSuspension|null $suspension_reason Why
- * @property Carbon $created_at
- * @property Carbon $updated_at
+ * @property Carbon|null $created_at
+ * @property Carbon|null $updated_at
  * @property-read User|null $agent
  * @property-read int|null $customers_count
  * @property-read int|null $sold_count

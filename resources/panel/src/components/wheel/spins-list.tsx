@@ -5,12 +5,12 @@ import { ListView, PhoneFacts } from '@/components/list-view'
 import { SearchBox } from '@/components/search-box'
 import { StatusBadge } from '@/components/status-badge'
 import { searchLink, TextLink } from '@/components/text-link'
+import { TimeAgo } from '@/components/time-ago'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { UserIdentity, userPage } from '@/components/user-identity'
 import { api } from '@/lib/api'
 import type { WheelSpinRow, WheelSpinsResponse } from '@/lib/api-types'
 import { idLabel } from '@/lib/direction'
-import { formatDate, timeAgo } from '@/lib/format'
 import { queryKeys } from '@/lib/query-keys'
 import { WHEEL_PRIZE_KIND, type Status } from '@/lib/statuses'
 import { usePagedList } from '@/lib/use-paged-list'
@@ -74,9 +74,7 @@ export function SpinsList() {
                   <Outcome spin={spin} />
                 </TableCell>
                 <TableCell className="hidden text-muted-foreground sm:table-cell">
-                  <time dateTime={spin.created_at} title={formatDate(spin.created_at)}>
-                    {timeAgo(spin.created_at)}
-                  </time>
+                  <TimeAgo at={spin.created_at} />
                 </TableCell>
               </TableRow>
             ))}

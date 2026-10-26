@@ -9,10 +9,10 @@ use App\Core\Config\ConfigFile;
 use App\Core\Database\DatabaseManager;
 
 /**
- * What a host must have before the shop runs — the one list the installer shows, matching composer.json's required
- * extensions plus the database driver's. PHP's version is not listed: Composer's platform check stops an older PHP
- * first. The `optional` ones — composer.json's suggestions: sodium and zip (the panel's own update), gd (the QR card) —
- * are shown but hold nothing up.
+ * What a host must have before the shop runs — the one list the installer shows, matching composer.json's PHP and
+ * required extensions plus the database driver's. PHP comes first: a release without its branch's known security holes
+ * (PhpVersion); Composer's own platform check stops only one older than the oldest branch's. The `optional` ones —
+ * composer.json's suggestions: sodium and zip (the panel's own update), gd (the QR card) — are shown but hold nothing up.
  */
 final class Requirements
 {
@@ -31,8 +31,10 @@ final class Requirements
         foreach ($driver->extensions() as $extension) {
             $requirements[] = self::requirement("ext-{$extension}", "افزونه {$extension}، برای اتصال به {$driver->describe()->label}", extension_loaded($extension));
         }
+        $php = PhpVersion::host();
 
         return [
+            self::requirement('php', sprintf('PHP %s یا بالاتر؛ نسخه‌های قدیمی‌تر حفره امنیتی دارند (PHP این هاست: %s)', PhpVersion::required($php), $php), PhpVersion::isSafe($php)),
             ...$requirements,
             self::requirement('ext-curl', 'افزونه curl، برای ارتباط با تلگرام و پنل‌ها', extension_loaded('curl')),
             self::requirement('ext-mbstring', 'افزونه mbstring، برای متن فارسی', extension_loaded('mbstring')),

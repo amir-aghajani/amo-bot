@@ -134,7 +134,7 @@ final class BotTextsTest extends DatabaseTestCase
         }
 
         $variables = array_column($this->texts->present(BotText::PayOnlineCard)['variables'], 'html', 'name');
-        self::assertSame(['card' => false, 'card_holder' => true, 'bank' => true, 'amount_digits' => false], $variables, "a part's wording is HTML; a card number is not");
+        self::assertSame(['card' => false, 'card_holder' => true, 'bank' => true, 'amount_digits' => false, 'amount_rial' => false], $variables, "a part's wording is HTML; a card number is not");
         self::assertSame("\n👤 به نام <b>سارا احمدی</b>", TextCatalog::VARIABLES['card_holder'][1]);
     }
 

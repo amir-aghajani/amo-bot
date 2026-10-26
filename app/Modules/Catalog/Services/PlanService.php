@@ -238,8 +238,8 @@ final class PlanService
             'hidden_by_owner' => (bool) $plan->hidden_by_owner,
             'sort' => $plan->sort,
             'counts' => $counts,
-            'created_at' => $plan->created_at->toIso8601String(),
-            'updated_at' => $plan->updated_at->toIso8601String(),
+            'created_at' => $plan->created_at?->toIso8601String(),
+            'updated_at' => $plan->updated_at?->toIso8601String(),
         ];
     }
 

@@ -20,7 +20,7 @@ use Illuminate\Support\Carbon;
  * @property int $debit_id The sender's line
  * @property int $credit_id The recipient's line
  * @property string|null $request_key The website's Idempotency-Key; null from the bot
- * @property Carbon $created_at
+ * @property Carbon|null $created_at
  * @property-read User $sender
  * @property-read User $recipient
  */

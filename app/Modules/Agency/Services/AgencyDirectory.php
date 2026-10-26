@@ -160,7 +160,7 @@ final class AgencyDirectory
                 'reviewer' => $request->reviewer,
                 'reviewer_name' => $names[$request->reviewer ?? ''] ?? null,
                 'decided_at' => $request->decided_at?->toIso8601String(),
-                'created_at' => $request->created_at->toIso8601String(),
+                'created_at' => $request->created_at?->toIso8601String(),
                 'actions' => ['approve' => $open, 'reject' => $open],
             ];
         })->all());

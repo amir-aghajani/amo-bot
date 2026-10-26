@@ -326,8 +326,8 @@ final class PaymentMethods
                 'enabled' => $method->enabled,
                 'sort' => $method->sort,
                 'counts' => ['payments' => (int) $method->getAttribute('payments_count')],
-                'created_at' => $method->created_at->toIso8601String(),
-                'updated_at' => $method->updated_at->toIso8601String(),
+                'created_at' => $method->created_at?->toIso8601String(),
+                'updated_at' => $method->updated_at?->toIso8601String(),
             ] + ($this->gateways->isManual($method) ? ['cards' => $cards[$method->id] ?? [], 'to_support' => $toSupport] : []);
         }, $methods);
     }

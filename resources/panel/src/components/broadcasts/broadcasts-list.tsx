@@ -4,10 +4,11 @@ import { Ban, BarChart3, Disc, File, Film, Image, Megaphone, MessageSquare, Mic,
 import { toast } from 'sonner'
 import { ConfirmModal } from '@/components/confirm-modal'
 import { EmptyState } from '@/components/empty-state'
-import { ListView, PhoneFacts, RowMenu } from '@/components/list-view'
+import { Dash, ListView, PhoneFacts, RowMenu } from '@/components/list-view'
 import { ProgressBar } from '@/components/progress-bar'
 import { Reviewer } from '@/components/reviewer'
 import { StatusBadge } from '@/components/status-badge'
+import { TimeAgo } from '@/components/time-ago'
 import { Badge } from '@/components/ui/badge'
 import { DropdownMenuItem, DropdownMenuSeparator } from '@/components/ui/dropdown-menu'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -15,7 +16,7 @@ import { UserIdentity } from '@/components/user-identity'
 import { api } from '@/lib/api'
 import type { BroadcastRow, BroadcastsResponse } from '@/lib/api-types'
 import { idLabel } from '@/lib/direction'
-import { formatDate, formatNumber, timeAgo } from '@/lib/format'
+import { formatNumber } from '@/lib/format'
 import { queryKeys } from '@/lib/query-keys'
 import { BROADCAST_STATUS } from '@/lib/statuses'
 import { usePagedList } from '@/lib/use-paged-list'
@@ -136,9 +137,7 @@ export function BroadcastsList() {
                   {/* The space keeps who and when words apart for assistive tech, not one. */}
                   <div className="grid">
                     {broadcast.admin ? <UserIdentity user={broadcast.admin} /> : broadcast.reviewer && <Reviewer name={broadcast.reviewer} person={broadcast.reviewer_name} />}{' '}
-                    <time dateTime={broadcast.created_at} title={formatDate(broadcast.created_at)}>
-                      {timeAgo(broadcast.created_at)}
-                    </time>
+                    <TimeAgo at={broadcast.created_at} />
                   </div>
                 </TableCell>
                 <TableCell>
@@ -172,9 +171,9 @@ export function BroadcastsList() {
   )
 }
 
-/** Who it went to: its audience — an unpin, the run's own. */
+/** Who it went to: its audience — an unpin, the run's own; a dash for one a row edited by hand left unknown. */
 function Audience({ broadcast }: { broadcast: BroadcastRow }) {
-  return broadcast.kind === 'unpin' ? <span className="text-muted-foreground">همان گیرنده‌ها</span> : broadcast.audience.label
+  return broadcast.kind === 'unpin' ? <span className="text-muted-foreground">همان گیرنده‌ها</span> : (broadcast.audience?.label ?? <Dash />)
 }
 
 /** What went: its kind and the start of its text, how (a copy or a forward), pinned, with buttons. */
@@ -184,7 +183,7 @@ function MessageCell({ broadcast }: { broadcast: BroadcastRow }) {
       <span className="flex items-center gap-2">
         <PinOff className="size-4 shrink-0 text-muted-foreground" aria-hidden />
         <span>
-          لغو پین ارسال <bdi dir="ltr">#{broadcast.source_id}</bdi>
+          لغو پین ارسال <bdi dir="ltr">{broadcast.source_id === null ? '—' : `#${broadcast.source_id}`}</bdi>
         </span>
       </span>
     )
@@ -207,7 +206,7 @@ function MessageCell({ broadcast }: { broadcast: BroadcastRow }) {
         )}
       </span>
       <span className="flex flex-wrap items-center gap-1">
-        <Chip>{broadcast.mode === 'forward' ? 'فوروارد' : 'کپی'}</Chip>
+        {broadcast.mode !== null && <Chip>{broadcast.mode === 'forward' ? 'فوروارد' : 'کپی'}</Chip>}
         {broadcast.pin && (
           <Chip>
             <Pin className="size-3" aria-hidden />

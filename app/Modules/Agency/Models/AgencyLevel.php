@@ -18,8 +18,8 @@ use Illuminate\Support\Carbon;
  * @property string $name
  * @property string $price_per_gb
  * @property int $sort
- * @property Carbon $created_at
- * @property Carbon $updated_at
+ * @property Carbon|null $created_at
+ * @property Carbon|null $updated_at
  * @property-read int|null $agents_count
  */
 class AgencyLevel extends Model

@@ -122,12 +122,13 @@ final class BotOnlinePaymentTest extends BotTestCase
             'card_holder' => self::text(BotText::PayOnlineCardHolder, ['holder' => 'CubePay Holder']),
             'bank' => '',
             'amount_digits' => '120037',
+            'amount_rial' => '1200370',
         ]))], $this->said());
         self::assertStringContainsString('تا آخرین رقم', $this->said()[0]);
         self::assertSame([
             [['text' => self::text(BotText::PayOnlineButton), 'url' => (string) $payment->link]],
             [
-                ['text' => self::text(BotText::CardCopyAmount), 'copy_text' => ['text' => '120037']],
+                ['text' => self::text(BotText::CardCopyAmount), 'copy_text' => ['text' => '1200370']],
                 ['text' => self::text(BotText::CardCopyNumber), 'copy_text' => ['text' => FakeCubePay::CARD]],
             ],
             [['text' => self::text(BotText::PayOnlineCheck), 'callback_data' => OnlinePaymentHandler::checkCallback($payment)]],
@@ -397,6 +398,7 @@ final class BotOnlinePaymentTest extends BotTestCase
             'card_holder' => self::text(BotText::PayOnlineCardHolder, ['holder' => 'Ali Rezaei']),
             'bank' => self::text(BotText::CardBank, ['bank_name' => 'Bank Melli']),
             'amount_digits' => (string) (120000 + FakeAtlasPay::MARKUP),
+            'amount_rial' => (string) ((120000 + FakeAtlasPay::MARKUP) * 10),
         ]), $this->said()[0]);
 
         $atlasPay->payShort($atlasPay->onlyOrder(), 100000);

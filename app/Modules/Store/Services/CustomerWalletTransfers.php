@@ -39,14 +39,14 @@ final class CustomerWalletTransfers
         ];
     }
 
-    /** @return array{id: int, amount: string, recipient: array{name: string|null, username: string|null}, created_at: string} */
+    /** @return array{id: int, amount: string, recipient: array{name: string|null, username: string|null}, created_at: string|null} */
     public static function present(WalletTransfer $transfer): array
     {
         return [
             'id' => $transfer->id,
             'amount' => $transfer->amount,
             'recipient' => RecipientPresenter::present($transfer->recipient),
-            'created_at' => $transfer->created_at->toIso8601String(),
+            'created_at' => $transfer->created_at?->toIso8601String(),
         ];
     }
 }

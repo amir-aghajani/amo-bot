@@ -152,11 +152,11 @@ final class LuckyWheel
         return new Spun($spin, $slices, $landed, $given);
     }
 
-    /** When the customer may spin next (their last given spin plus the cooldown); null: now. */
+    /** When the customer may spin next (their last given spin plus the cooldown); null: now, or that spin has no time. */
     public function nextSpinAt(User $customer): ?Carbon
     {
         $last = WheelSpin::query()->where('user_id', $customer->id)->whereNull('outcome')->latest('created_at')->latest('id')->first();
-        $next = $last?->created_at->copy()->addHours($this->settings->cooldownHours());
+        $next = $last?->created_at?->copy()->addHours($this->settings->cooldownHours());
 
         return $next !== null && $next->isFuture() ? $next : null;
     }

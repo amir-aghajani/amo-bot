@@ -103,10 +103,12 @@ still waits.
 
 ### Paying by card
 
-The card's screen comes in place of the checkout: the amount, the card's number — one of the method's cards picked at
-random, and always that one for this payment ([Payment methods](Payment-Methods.md#its-cards-and-their-rotation)) —, its
-holder, its bank when you named one, and your words. Under them, «📋 کپی شماره کارت» and «📋 کپی مبلغ»; a tap on either
-number in the text copies it too. The amount goes in Latin digits without separators, as a banking app takes it.
+The card's screen comes in place of the checkout: the price in Toman, the card's number, its holder, its bank when you
+named one, the amount to transfer, and your words. The card is one of the method's cards, picked at random, and always
+that one for this payment ([Payment methods](Payment-Methods.md#its-cards-and-their-rotation)). The amount to transfer
+is in Rial, ten to the Toman, as Iran's banks count — `1200000` for a price of 120,000 Toman —, in Latin digits without
+separators, as a banking app takes it. Under the message, «📋 کپی شماره کارت» and «📋 کپی مبلغ (ریال)» copy the two
+numbers; a tap on either number in the text copies it too.
 
 By default the message is protected — it cannot be forwarded, saved or screenshotted — and comes as a message of its own
 in place of the checkout, which is deleted (one older than Telegram's 48 hours for deleting loses its buttons instead)
@@ -138,8 +140,8 @@ checkout:
   «💳 پرداخت» opens a page of the shop's first, whose «ورود به درگاه پرداخت» opens the bank's.
 - **A card to show** — when the gateway gives one (CubePay's «🤖 نمایش کارت در ربات», AtlasPay's «نمایش مستقیم اطلاعات
   پرداخت», AbanGateway's «نمایش کارت در ربات و سایت»), the card — with its holder and its bank when the gateway gave them
-  — and the exact sum come under the page («مبلغ باید دقیقا همین باشد، تا آخرین رقم»), with «📋 کپی مبلغ» and
-  «📋 کپی شماره کارت», protected as a card transfer's message is.
+  — and the exact sum in Rial come under the page («مبلغ باید دقیقا همین باشد، تا آخرین رقم»), with
+  «📋 کپی مبلغ (ریال)» and «📋 کپی شماره کارت», protected as a card transfer's message is.
 
 **No receipt is sent, and none is taken.** The order is delivered once the gateway says it was paid — when it calls the
 shop back, when the customer taps «🔄 بررسی پرداخت», or when the shop asks it every few minutes; Variza's word comes by
@@ -344,8 +346,11 @@ period in use, when the devices bought for it stay until then) —, then the way
 under it too.
 
 - **A service without a plan** (added by its link, or built) first lists the plans on sale on its server, each at the
-  customer's renewal price; the plan picked is the checkout's — and, once renewed, the service's own. While the builder
-  is on, «🛠 تمدید با سرویس دلخواه» comes under them — alone when no plan is sold there —: the builder's GB and days,
+  customer's renewal price. When they are in more than one category, it asks for the category first, as
+  [buying](#buying) does — only the categories with such a plan, «سایر پلن‌ها» last —, then lists that category's
+  plans; «بازگشت» from a plan's checkout leads back to them. The plan picked is the checkout's and, once renewed, the
+  service's own. While the builder is on, «🛠 تمدید با سرویس دلخواه» comes under the list — alone when no plan is sold
+  there —: the builder's GB and days,
   then the renewal's checkout of that package, «سرویس دلخواه · ۵۰ گیگ · ۳۰ روز». Renewed so, the service still has no
   plan, and «تمدید خودکار» is never offered for it ([Custom services](Custom-Services.md#renewing-a-built-service)). With
   nothing to pick: «فعلا پلنی برای تمدید این سرویس فروخته نمی‌شود …».
@@ -359,7 +364,7 @@ under it too.
   A renewal that would end the service after 17 January 2038 («۲۸ دی ۱۴۱۶») is refused in a popup, «تاریخ پایان سرویس
   نمی‌تواند بعد از ۲۸ دی ۱۴۱۶ باشد؛ مدت کوتاه‌تری انتخاب کنید.» — and «تمدید خودکار» is not offered for it: its
   customer is reminded of its end instead.
-- **Many plans to pick from** are paged past 90, as in [buying](#buying).
+- **Many plans or categories to pick from** are paged past 90, as in [buying](#buying).
 
 While the shop offers more than one renewal method ([Bot settings](Bot-Settings.md#renewal)) the checkout has a row of
 them — «✅ تمدید پلن فعلی», «ریست حجم + افزایش روز», «ریست زمان + انتقال حجم» —, opens on the first one on, and draws the

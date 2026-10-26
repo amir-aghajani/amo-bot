@@ -24,14 +24,16 @@ interface EditorModalProps<Row extends { id: number }> {
   title: (row: Row | null) => string
   description?: (row: Row | null) => ReactNode
   size?: 'sm' | 'md' | 'lg'
+  /** A form in tabs: the dialog as tall as the screen gives, whichever tab is shown (Modal's `tall`). */
+  tall?: boolean
   /** The row's form — mounted afresh for each row it opens on. */
   children: (row: Row | null) => ReactNode
 }
 
 /** A list page's create/edit form in its dialog — a new row's with nothing saved to go back to (`Creating`): no revert. */
-export function EditorModal<Row extends { id: number }>({ editor, title, description, size = 'sm', children }: EditorModalProps<Row>) {
+export function EditorModal<Row extends { id: number }>({ editor, title, description, size = 'sm', tall, children }: EditorModalProps<Row>) {
   return (
-    <Modal open={editor.open} onClose={editor.close} size={size} title={title(editor.row)} description={description?.(editor.row)}>
+    <Modal open={editor.open} onClose={editor.close} size={size} tall={tall} title={title(editor.row)} description={description?.(editor.row)}>
       {editor.open && (
         <Creating key={editor.row?.id ?? 'new'} value={editor.row === null}>
           {children(editor.row)}

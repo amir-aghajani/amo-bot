@@ -5,13 +5,14 @@ declare(strict_types=1);
 namespace App\Modules\Telegram\Models;
 
 use App\Modules\Bots\Models\Concerns\BelongsToBot;
+use App\Support\Text;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 
 /**
- * A channel a customer must join before the bot serves them (Channels\RequiredChannels); it always has a way in, a
- * public handle or a private invite link.
+ * A channel a customer must join before the bot serves them (Channels\RequiredChannels); AmoBot always keeps it a way
+ * in, a public handle or a private invite link (link()).
  *
  * @property int $id
  * @property int $chat_id Telegram chat id (-100… for channels and supergroups)
@@ -22,8 +23,8 @@ use Illuminate\Support\Carbon;
  * @property bool $bot_is_admin What the last check found; the bot needs it to see the member list
  * @property Carbon|null $checked_at
  * @property int $sort
- * @property Carbon $created_at
- * @property Carbon $updated_at
+ * @property Carbon|null $created_at
+ * @property Carbon|null $updated_at
  */
 class BotChannel extends Model
 {
@@ -47,9 +48,16 @@ class BotChannel extends Model
         return static::query()->oldest('sort')->oldest('id');
     }
 
-    /** Where the customer is sent to join: the public handle's t.me link, else the private one's invite link. */
-    public function link(): string
+    /**
+     * Where the customer is sent to join: the public handle's t.me link, else the private one's invite link; null when
+     * it has neither — never so as AmoBot adds or checks one, only as a row is edited by hand — and no one can be sent.
+     */
+    public function link(): ?string
     {
-        return $this->username !== null ? "https://t.me/{$this->username}" : ($this->invite_link ?? throw new \LogicException("Channel #{$this->id} has no way in."));
+        if ($this->username !== null && !Text::blank($this->username)) {
+            return "https://t.me/{$this->username}";
+        }
+
+        return $this->invite_link !== null && !Text::blank($this->invite_link) ? $this->invite_link : null;
     }
 }

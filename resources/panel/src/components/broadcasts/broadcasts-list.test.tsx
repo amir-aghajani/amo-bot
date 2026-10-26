@@ -102,3 +102,21 @@ describe('a run’s controls', () => {
     expect(toast.success).toHaveBeenCalledWith('لغو پین شروع شد؛ ربات پیام‌ها را یکی‌یکی از حالت پین درمی‌آورد')
   })
 })
+
+describe('a run a row edited by hand left half-known', () => {
+  it('has a dash for its audience, its time and an unpin’s source, and no word of its mode', async () => {
+    const unknown = broadcast({ mode: null, audience: null, created_at: null })
+    const orphan = broadcast({ id: 6, kind: 'unpin', mode: null, audience: null, pinned: 0, actions: { pause: false, resume: false, cancel: false, unpin: false } })
+    server().on('GET', '/api/admin/broadcasts', runs(orphan, unknown))
+    render(<BroadcastsList />, { wrapper: providers({ at: '/broadcasts' }).wrapper })
+
+    const row = (await screen.findByText('تخفیف آخر هفته')).closest('tr')
+    const cells = row?.querySelectorAll('td')
+    // Its audience's column, and its sender's: who, then when.
+    expect(cells?.[1]?.textContent).toBe('—')
+    expect(cells?.[4]?.textContent).toMatch(/—$/)
+    expect(row?.querySelector('time')).toBeNull()
+    expect(row?.textContent).not.toContain('کپی')
+    expect(document.body.textContent).toContain('لغو پین ارسال —')
+  })
+})

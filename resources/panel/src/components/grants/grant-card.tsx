@@ -11,11 +11,11 @@ import { useReadFailure } from '@/components/page'
 import { ProgressBar } from '@/components/progress-bar'
 import { Reviewer } from '@/components/reviewer'
 import { StatusBadge } from '@/components/status-badge'
+import { TimeAgo } from '@/components/time-ago'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardHeading, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { ServerGrantRow } from '@/lib/api-types'
-import { formatDate, timeAgo } from '@/lib/format'
 import { GRANT_STATUS } from '@/lib/statuses'
 
 interface GrantCardProps<Row extends GrantRowBase> {
@@ -169,9 +169,7 @@ export function GrantItem({ grant, audience, detail, waiting, waitingNote, failu
       {failure && <LastFailure failure={failure} />}
       <div className="flex min-h-7 items-center justify-between gap-2 text-footnote text-muted-foreground">
         <span>
-          <time dateTime={grant.created_at} title={formatDate(grant.created_at)}>
-            {timeAgo(grant.created_at)}
-          </time>
+          <TimeAgo at={grant.created_at} />
           {grant.reviewer && (
             <>
               {' · '}

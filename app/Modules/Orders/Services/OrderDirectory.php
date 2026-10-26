@@ -131,11 +131,11 @@ final class OrderDirectory
                 'to_wallet' => $payment->wentToWallet(),
                 // Held for support: its gateway took money on it that does not fit, for support to settle.
                 'held' => OnlinePayments::isHeld($payment),
-                'created_at' => $payment->created_at->toIso8601String(),
+                'created_at' => $payment->created_at?->toIso8601String(),
             ])->values()->all(),
             'paid_at' => $order->paidAt()?->toIso8601String(),
             'fulfilled_at' => $order->fulfilled_at?->toIso8601String(),
-            'created_at' => $order->created_at->toIso8601String(),
+            'created_at' => $order->created_at?->toIso8601String(),
             'actions' => $this->actions->allowed($order),
         ];
     }

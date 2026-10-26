@@ -41,7 +41,7 @@ final class GiftCodeDirectory
     /**
      * Every batch, newest first, with how many codes it has, how many were taken and how many ran out untaken.
      *
-     * @return list<array{batch: string|null, total: int, redeemed: int, expired: int, unused: int, created_at: string}>
+     * @return list<array{batch: string|null, total: int, redeemed: int, expired: int, unused: int, created_at: string|null}>
      */
     public function batches(): array
     {
@@ -63,7 +63,8 @@ final class GiftCodeDirectory
                 'redeemed' => $redeemed,
                 'expired' => $expired,
                 'unused' => $total - $redeemed - $expired,
-                'created_at' => Carbon::parse((string) $row->made, 'UTC')->toIso8601String(),
+                // Null when none of its codes has a time (written outside AmoBot) — not the moment it was asked.
+                'created_at' => $row->made === null ? null : Carbon::parse((string) $row->made, 'UTC')->toIso8601String(),
             ];
         }
 
@@ -95,7 +96,7 @@ final class GiftCodeDirectory
             'redeemed_by' => $code->redeemer === null ? null : UserDirectory::presentRef($code->redeemer),
             'redeemed_at' => $code->redeemed_at?->toIso8601String(),
             'order' => $code->order === null ? null : ['id' => $code->order->id, 'status' => $code->order->status->value],
-            'created_at' => $code->created_at->toIso8601String(),
+            'created_at' => $code->created_at?->toIso8601String(),
         ];
     }
 

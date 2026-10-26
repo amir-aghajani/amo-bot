@@ -424,7 +424,7 @@ final class OrderService
 
     /**
      * Paid and untouched for STALE_PAID_MINUTES, or processing and untouched for STALE_PROCESSING_MINUTES: its process
-     * died (Order::stale() as a query).
+     * died (Order::stale() as a query, which no order without `updated_at` matches either).
      */
     public static function isStale(Order $order): bool
     {
@@ -434,7 +434,7 @@ final class OrderService
             default => null,
         };
 
-        return $minutes !== null && $order->updated_at->lessThanOrEqualTo(now()->subMinutes($minutes));
+        return $minutes !== null && $order->updated_at?->lessThanOrEqualTo(now()->subMinutes($minutes)) === true;
     }
 
     /** The order the customer's Idempotency-Key came to; null for none. */

@@ -34,8 +34,8 @@ use Illuminate\Support\Carbon;
  * @property bool $staff_enabled Whether the shop's admins work it from the website (its admin API, Http\StaffMiddleware)
  * @property bool $staff_strong_sign_in Whether they must have signed in strongly: Telegram, Google, or a password with its second step
  * @property list<string>|null $staff_grants What they may do beyond the shop's daily work (Auth\StaffGrant values)
- * @property Carbon $created_at
- * @property Carbon $updated_at
+ * @property Carbon|null $created_at
+ * @property Carbon|null $updated_at
  */
 class Website extends Model implements SignInSite
 {

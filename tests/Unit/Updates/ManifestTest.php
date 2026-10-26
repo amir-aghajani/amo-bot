@@ -42,6 +42,10 @@ final class ManifestTest extends TestCase
         self::assertSame(['0.2.0', 'amobot-0.2.0.zip', strlen($zip), hash('sha256', $zip), '8.3'], [$manifest->version, $manifest->file, $manifest->size, $manifest->sha256, $manifest->php]);
         self::assertSame(['bcmath', 'pdo_mysql'], $manifest->extensions);
         self::assertSame(FakeRelease::PATHS, $manifest->paths);
+        self::assertSame([], $manifest->phpMinimums, 'a release made before 0.7.1 names none');
+
+        $json = FakeRelease::manifest('0.2.0', $zip, ['php' => '8.3.36', 'php_minimums' => ['8.3' => '8.3.36', '8.4' => '8.4.27']]);
+        self::assertSame(['8.3' => '8.3.36', '8.4' => '8.4.27'], Manifest::verified($json, $this->release->sign($json), $this->key, '0.2.0')->phpMinimums);
     }
 
     public function testOnlyTheKeysSignatureOverTheVeryBytesIsBelieved(): void
@@ -49,7 +53,7 @@ final class ManifestTest extends TestCase
         $json = FakeRelease::manifest('0.2.0', 'the zip');
 
         $this->assertRefused(Manifest::UNSIGNED, $json, (new FakeRelease())->sign($json), 'another key signed it: a hijacked account\'s');
-        $this->assertRefused(Manifest::UNSIGNED, str_replace('8.2', '8.1', $json), $this->release->sign($json), 'a byte of it changed after it was signed');
+        $this->assertRefused(Manifest::UNSIGNED, str_replace('8.3', '8.4', $json), $this->release->sign($json), 'a byte of it changed after it was signed');
         $this->assertRefused(Manifest::UNSIGNED, $json, 'bm90IGEgc2lnbmF0dXJl', 'no signature at all');
         $this->assertRefused(Manifest::UNSIGNED, $json, '', 'an empty one');
 
@@ -80,6 +84,9 @@ final class ManifestTest extends TestCase
             'one bigger than a release is' => ['size' => Manifest::MAX_BYTES + 1],
             'a sha256 that is none' => ['sha256' => 'abc'],
             'a PHP that is no version' => ['php' => 'latest'],
+            'PHP releases that are no list of them' => ['php_minimums' => 'all'],
+            'a branch\'s release of another branch' => ['php_minimums' => ['8.3' => '8.4.1']],
+            'a branch that is none' => ['php_minimums' => ['latest' => '8.3.1']],
             'an extension that is no name' => ['extensions' => ['bcmath; rm -rf /']],
         ];
         foreach ($cases as $why => $overrides) {

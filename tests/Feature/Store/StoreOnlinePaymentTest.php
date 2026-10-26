@@ -83,7 +83,7 @@ final class StoreOnlinePaymentTest extends HttpTestCase
         $topUp = $this->checkout($this->placeTopUp($this->website, 50000, $this->online));
         $payment = Payment::query()->sole();
         self::assertSame(['link', null], [$topUp['outcome'], $topUp['transfer']]);
-        self::assertSame(['payment_id' => $payment->id, 'url' => $payment->link, 'amount' => '50037.00', 'fee' => null, 'card' => null], array_diff_key($topUp['link'], ['expires_at' => true]));
+        self::assertSame(['payment_id' => $payment->id, 'url' => $payment->link, 'amount' => '50037.00', 'amount_rial' => '500370', 'fee' => null, 'card' => null], array_diff_key($topUp['link'], ['expires_at' => true]));
         self::assertStringStartsWith('https://cubevps.ir/', $topUp['link']['url']);
         self::assertStringEndsWith('+00:00', (string) $topUp['link']['expires_at'], 'in UTC, as every moment of the API');
         self::assertTrue(Carbon::parse($topUp['link']['expires_at'])->between(now()->addMinutes(29), now()->addMinutes(31)), 'until the page closes');

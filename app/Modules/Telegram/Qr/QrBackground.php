@@ -155,8 +155,6 @@ final class QrBackground
 
         $image = Picture::decode($bytes) ?? throw ValidationException::on('file', 'این تصویر خوانده نشد؛ تصویر دیگری بفرستید.');
         if (max($width, $height) <= self::MAX_SIDE) {
-            imagedestroy($image);
-
             return $bytes;
         }
 
@@ -164,10 +162,8 @@ final class QrBackground
         if ($scaled === null) {
             return $bytes;
         }
-        $written = Picture::encoded($scaled, $mime, self::QUALITY);
-        imagedestroy($scaled);
 
-        return $written ?? $bytes;
+        return Picture::encoded($scaled, $mime, self::QUALITY) ?? $bytes;
     }
 
     private function customPath(): ?string

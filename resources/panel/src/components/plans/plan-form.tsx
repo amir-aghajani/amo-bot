@@ -22,7 +22,6 @@ import { useMainShop } from '@/lib/auth'
 import { amountDraft, MONEY_UNIT, wholeOf } from '@/lib/format'
 import { planOptionsQuery } from '@/lib/queries'
 import { asAmount, trimmed, useForm } from '@/lib/use-form'
-import { cn } from '@/lib/utils'
 
 /** What a plan's term is typed in: days — a daily plan's, sent as days × 24 — or hours (an hourly plan's). */
 type TermUnit = 'days' | 'hours'
@@ -79,6 +78,9 @@ const SECTION_OF: Record<string, Section> = {
   servers: 'servers',
   extras: 'extras',
 }
+
+/** The section a field's error points at (SECTION_OF, by its head); the servers' for anything else. */
+const sectionOf = (field: string): Section => SECTION_OF[field.split('.')[0] ?? ''] ?? 'servers'
 
 const TERM_UNITS: PageTab<TermUnit>[] = [
   { value: 'days', label: 'روز' },
@@ -206,7 +208,6 @@ export function PlanForm({ plan, addServers, onSaved, onCancel }: PlanFormProps)
 
   const options = useQuery(planOptionsQuery)
 
-  const sectionOf = (field: string): Section => SECTION_OF[field.split('.')[0] ?? ''] ?? 'servers'
   // A refusal of the plan's own prices is not shown while the shop's are chosen: the list is not on the form then.
   const onForm = (field: string) => values.extras === 'own' || !field.startsWith(PLAN_EXTRAS)
   const sectionHasErrors = (s: Section) => Object.keys(errors).some((field) => sectionOf(field) === s && onForm(field))
@@ -241,16 +242,17 @@ export function PlanForm({ plan, addServers, onSaved, onCancel }: PlanFormProps)
     ),
   })
 
-  // Every section in one cell of the grid, those not shown out of sight and out of reach: the dialog is as tall as its
-  // tallest section whichever is shown, so a tab never moves under the pointer that pressed it.
+  // Every section stays mounted, its drafts kept, and only the one shown is laid out: each tab is as long as its own. The
+  // dialog (`tall`) keeps its height whichever is shown, so a tab never moves under the pointer that pressed it.
   const panel = (value: Section, children: ReactNode) => (
-    <div {...tabPanel(tabs, value)} inert={section !== value} className={cn('col-start-1 row-start-1 grid content-start gap-5', section !== value && 'invisible')}>
+    <div {...tabPanel(tabs, value)} hidden={section !== value} className="grid content-start gap-5">
       {children}
     </div>
   )
 
   return (
-    <form onSubmit={save} noValidate className="grid gap-5">
+    // In its tall dialog the form fills it: the actions at its foot whichever tab is shown.
+    <form onSubmit={save} noValidate className="flex grow flex-col gap-5">
       <PageTabs
         id={tabs}
         value={section}
@@ -259,7 +261,7 @@ export function PlanForm({ plan, addServers, onSaved, onCancel }: PlanFormProps)
         aria-label="بخش‌های پلن"
       />
 
-      <div className="grid">
+      <div className="grow">
         {panel(
           'details',
           <>

@@ -98,9 +98,14 @@ export function ChannelsCard({ required }: { required: boolean }) {
                   <TableCell>
                     <div className="grid">
                       <span className="font-medium">{channel.title}</span>
-                      <TextLink href={channel.link} className="w-fit truncate text-footnote">
-                        <bdi dir="ltr">{channel.username ? `@${channel.username}` : channel.link}</bdi>
-                      </TextLink>
+                      {channel.link === null ? (
+                        // Only a row edited by hand has neither a handle nor an invite link; «بررسی دوباره» gets one again.
+                        <span className="text-footnote text-warning">لینک عضویت ندارد و از کسی خواسته نمی‌شود</span>
+                      ) : (
+                        <TextLink href={channel.link} className="w-fit truncate text-footnote">
+                          <bdi dir="ltr">{channel.username ? `@${channel.username}` : channel.link}</bdi>
+                        </TextLink>
+                      )}
                     </div>
                   </TableCell>
                   <TableCell className="hidden md:table-cell">

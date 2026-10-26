@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: AmoBot API
-  version: 0.7.0
+  version: 0.7.1
   description: |
     AmoBot's HTTP API. Every answer is JSON; the panels are static files that render their own pages.
 
@@ -3576,7 +3576,7 @@ paths:
   /api/store/v1/{store}/subscriptions/{id}/renewal-plans:
     parameters: [{ $ref: '#/components/parameters/Store' }, { $ref: '#/components/parameters/Id' }]
     get:
-      summary: "The plans a service can be renewed on now, each at the customer's renewal price today. For a service without a plan (added by its link, `claimed_at`, or built) that is no test account: the plans on sale that are sold on its server and give a renewal something, in the catalogue's order, for the customer to pick one (`plan_id` of `…/renewal`); the renewal makes it the service's plan. For any other service: its own plan. Empty — and `custom_services` false — while the service cannot be renewed now: not at all, not yet (its `renewal_window` closed), or a renewal of it under way (as `…/renewal` would refuse it). `custom_services` says whether a service without a plan may be renewed with a package the customer builds instead (`gb` and `days` of `…/renewal`)."
+      summary: "The plans a service can be renewed on now, each at the customer's renewal price today. For a service without a plan (added by its link, `claimed_at`, or built) that is no test account: the plans on sale that are sold on its server and give a renewal something, in the catalogue's order (`GET /plans`: by category, `category_id`, as the bot files them), for the customer to pick one (`plan_id` of `…/renewal`); the renewal makes it the service's plan. For any other service: its own plan. Empty — and `custom_services` false — while the service cannot be renewed now: not at all, not yet (its `renewal_window` closed), or a renewal of it under way (as `…/renewal` would refuse it). `custom_services` says whether a service without a plan may be renewed with a package the customer builds instead (`gb` and `days` of `…/renewal`)."
       security: [{ customer: [] }]
       responses:
         '200':
@@ -4079,7 +4079,7 @@ components:
     # ---------------------------------------------------------------- shared
 
     ErrorResponse:
-      description: "The shape of every refusal and failure, whatever produced it. A 429 also sends the wait in seconds in `Retry-After`."
+      description: "The shape of every refusal and failure, whatever produced it. A 429 also sends the wait in seconds in `Retry-After`. A request that needs the shop's database is a 503 while it cannot be reached (down, out of reach, or refusing config.php's credentials), its `message` saying so."
       type: object
       additionalProperties: false
       required: [message, request_id]
@@ -4094,7 +4094,7 @@ components:
           description: "The request's id, the same as the `X-Request-Id` header and the id on every log line of the request. The panel shows it on a server failure («کد پیگیری») so the request can be found in the log."
         debug:
           type: object
-          description: "Debug details. Only on a server failure (a 500, never a refusal), with APP_DEBUG on, and only for a request made directly from the server's own machine (never one forwarded by a proxy or tunnel). Paths are relative to the app's folder; call arguments are never included."
+          description: "Debug details. Only on a server failure (a 500, or the 503 of a database out of reach; never a refusal), with APP_DEBUG on, and only for a request made directly from the server's own machine (never one forwarded by a proxy or tunnel). Paths are relative to the app's folder; call arguments are never included."
           additionalProperties: false
           required: [exception, detail, trace]
           properties:
@@ -4588,7 +4588,7 @@ components:
             subscriptions: { type: integer }
             active_subscriptions: { type: integer }
         groups: { type: array, items: { $ref: '#/components/schemas/NamedRef' }, description: "The customer groups they are in, in the groups' order." }
-        created_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time, nullable: true }
         last_seen_at: { type: string, format: date-time, nullable: true }
 
     UserSort:
@@ -4660,7 +4660,7 @@ components:
             email: { type: string, nullable: true }
             google: { type: boolean, description: 'It could sign in with a Google account.' }
             name: { type: string, nullable: true, description: 'Its "first last" name; null without one.' }
-        created_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time, nullable: true }
 
     CustomerAccountResponse:
       type: object
@@ -4727,7 +4727,7 @@ components:
           required: [users]
           properties:
             users: { type: integer }
-        created_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time, nullable: true }
 
     CustomerGroupsResponse:
       type: object
@@ -4770,7 +4770,7 @@ components:
         counterpart: { allOf: [{ $ref: '#/components/schemas/UserRef' }], nullable: true, description: "A wallet transfer's line («انتقال موجودی»): the other customer — whom the money went to (a debit) or came from (a credit). Null for every other line." }
         reviewer: { type: string, nullable: true, description: "Who added the line by hand: a panel user or a website admin (@username, tg:<id> or user#<id>). Anyone but the owner sees the owner's login as «پشتیبانی». Null for lines the shop wrote automatically." }
         reviewer_name: { type: string, nullable: true, description: &reviewerName "The name of the bot admin `reviewer` is, as their account has it (their first and last name), to show beside it. Null for the owner, an agent, an admin whose account is gone or shows no name, a handle no admin of the shop has now, and while `reviewer` is null." }
-        created_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time, nullable: true }
 
     UserWalletResponse:
       type: object
@@ -4897,7 +4897,7 @@ components:
         amount: { type: string }
         plan: { type: string, nullable: true, description: &orderPackageWords "What it buys in words, as `OrderPackageName`: its plan's name (an extra's: its service's plan's), or a service the customer built as «سرویس دلخواه · ۵۰ گیگ · ۳۰ روز»; null for any other order." }
         user: { $ref: '#/components/schemas/UserRef' }
-        created_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time, nullable: true }
 
     RecentUser:
       type: object
@@ -4906,7 +4906,7 @@ components:
       properties:
         <<: *userRefProperties
         balance: { type: string }
-        created_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time, nullable: true }
 
     BotRuntime:
       description: "How a bot runs. The main bot's mode applies to the whole installation: every bot gets updates the same way (all on webhooks, or all polling), and the main bot's token is in config.php."
@@ -4929,10 +4929,12 @@ components:
       description: "The system's health: the version, PHP, the bots and the scheduler. Owner only."
       type: object
       additionalProperties: false
-      required: [version, php, bot, main_bot, cron]
+      required: [version, php, php_safe, php_required, bot, main_bot, cron]
       properties:
         version: { type: string }
         php: { type: string }
+        php_safe: { type: boolean, description: "Whether this PHP release is free of the security holes PHP has closed in its branch (false for a release older than its branch's first without them, or a branch past PHP's support). While false the panel says so over every page, and an update is not installed." }
+        php_required: { type: string, description: "The release of this PHP branch the shop asks for at least (\"8.3.36\"); for a branch past PHP's support, the oldest supported branch's." }
         bot:
           description: "The bot of the shop the request names (the dashboard's shop): the main bot or an agent's."
           type: object
@@ -5102,7 +5104,7 @@ components:
         checked_at: { type: string, format: date-time, nullable: true, description: "An online payment: when the shop last asked its gateway what came of it — its callback, the customer's question, «استعلام از درگاه» (`POST …/check`), or the scheduler every few minutes while it is open. Null until asked." }
         to_wallet: { type: boolean, description: "Paid after its order had closed (paid another way, cancelled or expired): the online gateway took the money when the order no longer waited for it, so it went to the customer's wallet («پرداخت آنلاین #12 پس از بسته شدن سفارش #7») and `description` says so. It paid nothing of the order: it is neither retried nor refunded here." }
         held: { type: boolean, description: "An online payment held for support: its gateway took money on it that does not fit — for another order or amount, or less than asked that the customer accepted (AtlasPay) —, kept money on it unsettled for two days after its page closed, or closed it after saying money had come in on it (held at once). `description` says why. It is never asked about again, and only «لغو پرداخت» is offered here, once support has settled it with the customer at the gateway; while it is still waiting (pending, or failed with its page), its order never expires and nothing of it is paid any other way — cancelled, it holds nothing." }
-        created_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time, nullable: true }
         actions:
           type: object
           description: "Which operations its current state allows (the server decides)."
@@ -5233,7 +5235,7 @@ components:
         payments: { type: array, items: { $ref: '#/components/schemas/OrderPayment' }, description: 'The payment attempts, newest first.' }
         paid_at: { type: string, format: date-time, nullable: true }
         fulfilled_at: { type: string, format: date-time, nullable: true }
-        created_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time, nullable: true }
         actions:
           type: object
           additionalProperties: false
@@ -5264,7 +5266,7 @@ components:
         paid_at: { type: string, format: date-time, nullable: true }
         to_wallet: { type: boolean, description: "Paid on its online gateway after the order had closed: its money went to the customer's wallet, and it paid nothing of the order (`PaymentRow.to_wallet`)." }
         held: { type: boolean, description: "An online payment held for support: its gateway took money on it that does not fit, kept it unsettled, or closed it after saying money had come in (`PaymentRow.held`)." }
-        created_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time, nullable: true }
 
     OrderSort:
       description: "The orders list's sort keys: creation time (the default) or amount."
@@ -5386,7 +5388,7 @@ components:
         disabled_at: { type: string, format: date-time, nullable: true }
         ended_at: { type: string, format: date-time, nullable: true, description: "When it ended: the deadline it passed, or when the shop found its traffic used up or its client gone from the panel. Null while it runs, and past a deadline until the shop next reads its panel." }
         removes_at: { type: string, format: date-time, nullable: true, description: "When the shop removes it from its panel and the shop by itself, by its rules now: `expired_cleanup_hours` after it ended while `expired_cleanup` is on; a test, while `test_cleanup` is on, `test_cleanup_hours` after it ended — or, never connected, `test_unused_days` after it was made. Null when no rule removes it: it runs (a test never connected aside), it is switched off, or the rule is off. A moment already past: it goes at the next check (every 15 minutes), unless an order of it is still open." }
-        created_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time, nullable: true }
         actions:
           type: object
           description: "Which operations its current state allows (the server decides)."
@@ -5515,10 +5517,10 @@ components:
         status: { $ref: '#/components/schemas/TicketStatus' }
         customer: { $ref: '#/components/schemas/UserRef' }
         subscription: { allOf: [{ $ref: '#/components/schemas/NamedRef' }], nullable: true, description: "The customer's service it is about, by its panel name; null for none, or when the service was deleted." }
-        last_message_at: { type: string, format: date-time, description: &ticketLastMessageAt "When its latest message was written; the list is sorted by it." }
+        last_message_at: { type: string, format: date-time, nullable: true, description: &ticketLastMessageAt "When its latest message was written; the list is sorted by it." }
         messages_count: { type: integer }
         rating: { type: integer, nullable: true, description: "The customer's rating after it closed, 1 to 5; null for none." }
-        created_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time, nullable: true }
         closed_at: { type: string, format: date-time, nullable: true, description: 'When it was closed; null while open (reopening clears it).' }
 
     TicketMessageRow:
@@ -5534,7 +5536,7 @@ components:
         body: { type: string }
         attachment: { allOf: [{ $ref: '#/components/schemas/TicketAttachment' }], nullable: true, description: 'Its picture; null for none.' }
         channel: { $ref: '#/components/schemas/TicketChannel' }
-        created_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time, nullable: true }
 
     TicketDetail:
       description: "A support ticket with its whole conversation, oldest message first."
@@ -5607,7 +5609,7 @@ components:
         reviewer: { type: string, nullable: true, description: "Who last approved or rejected it: a panel user, or a website admin (@username, tg:<id> or user#<id>). Anyone but the owner sees the owner's login as «پشتیبانی». Null while pending." }
         reviewer_name: { type: string, nullable: true, description: *reviewerName }
         decided_at: { type: string, format: date-time, nullable: true, description: 'When it was last approved or rejected; null while pending.' }
-        created_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time, nullable: true }
         actions:
           type: object
           additionalProperties: false
@@ -5680,8 +5682,8 @@ components:
             selectable_inbounds: { type: integer }
             active_subscriptions: { type: integer, description: "Its active services across all shops (the main bot's and the agents'); this is what its capacity counts." }
             shop_active_subscriptions: { type: integer, description: "Of those, the ones in the shop the panel has open: what its subscriptions screen lists with `?server=`." }
-        created_at: { type: string, format: date-time }
-        updated_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time, nullable: true }
+        updated_at: { type: string, format: date-time, nullable: true }
 
     ProbeInbound:
       description: An inbound as the panel reports it, from a probe or from the stored copy.
@@ -5929,7 +5931,7 @@ components:
         last_failure: { type: string, nullable: true, description: 'The last service the panel refused, and why.' }
         reviewer: { type: string, nullable: true }
         reviewer_name: { type: string, nullable: true, description: *reviewerName }
-        created_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time, nullable: true }
         finished_at: { type: string, format: date-time, nullable: true }
 
     ServerGrantsResponse:
@@ -5994,7 +5996,7 @@ components:
         last_failure: { type: string, nullable: true, description: 'The latest service it could not move, and why.' }
         reviewer: { type: string, nullable: true, description: Who started it. }
         reviewer_name: { type: string, nullable: true, description: *reviewerName }
-        created_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time, nullable: true }
         started_at: { type: string, format: date-time, nullable: true, description: When its first turn began. }
         finished_at: { type: string, format: date-time, nullable: true }
 
@@ -6034,7 +6036,7 @@ components:
         client: { type: string, description: "Its client's name when it failed." }
         shop: { allOf: [{ $ref: '#/components/schemas/ShopRef' }], nullable: true, description: 'Its shop; null once it is deleted.' }
         reason: { type: string }
-        created_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time, nullable: true }
 
     ServerMigrationDetailResponse:
       type: object
@@ -6165,7 +6167,7 @@ components:
         parts: { type: array, items: { $ref: '#/components/schemas/MassGrantPart' } }
         reviewer: { type: string, nullable: true }
         reviewer_name: { type: string, nullable: true, description: *reviewerName }
-        created_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time, nullable: true }
         finished_at: { type: string, format: date-time, nullable: true }
 
     MassGrantsResponse:
@@ -6243,10 +6245,12 @@ components:
       properties:
         id: { type: integer }
         kind: { type: string, enum: [message, unpin] }
-        source_id: { type: integer, nullable: true, description: 'For an unpin run: the broadcast whose pins it removes.' }
-        mode: { type: string, enum: [copy, forward], description: 'Copied by the bot (with the link buttons), or forwarded from its original sender.' }
+        source_id: { type: integer, nullable: true, description: 'For an unpin run: the broadcast whose pins it removes — null only for a row edited outside AmoBot to have none. Null for a message run.' }
+        mode: { type: string, enum: [copy, forward], nullable: true, description: 'Copied by the bot (with the link buttons), or forwarded from its original sender — an unpin run''s, its source''s. Null when that is unknown: a row edited outside AmoBot to have no mode, or no source.' }
         audience:
           type: object
+          nullable: true
+          description: "Who it went to — an unpin run's, its source's. Null when that is unknown: a row edited outside AmoBot to have no audience, or no source."
           additionalProperties: false
           required: [key, id, label]
           properties:
@@ -6266,7 +6270,7 @@ components:
         admin: { allOf: [{ $ref: '#/components/schemas/UserRef' }], nullable: true, description: 'The bot admin who sent it; null for a run started from the panel.' }
         reviewer: { type: string, nullable: true, description: "Who started it from a panel or the website: the agent's @bot, a bot admin's @username, tg:<id> or user#<id>, or the owner's login (which anyone but the owner sees as «پشتیبانی»)." }
         reviewer_name: { type: string, nullable: true, description: *reviewerName }
-        created_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time, nullable: true }
         finished_at: { type: string, format: date-time, nullable: true }
         actions:
           type: object
@@ -6632,8 +6636,8 @@ components:
           required: [plans]
           properties:
             plans: { type: integer }
-        created_at: { type: string, format: date-time }
-        updated_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time, nullable: true }
+        updated_at: { type: string, format: date-time, nullable: true }
 
     PlanRow:
       description: A plan, as the list shows it.
@@ -6670,8 +6674,8 @@ components:
             sales: { type: integer, description: 'Its sold orders: paid, being delivered or delivered.' }
             orders: { type: integer, description: "All orders placed for it, whatever their status. A plan with any orders or services cannot be deleted (switch it off instead)." }
             subscriptions: { type: integer, description: 'All services sold on it, ended ones included.' }
-        created_at: { type: string, format: date-time }
-        updated_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time, nullable: true }
+        updated_at: { type: string, format: date-time, nullable: true }
 
     PlanOptionServer:
       type: object
@@ -6851,8 +6855,8 @@ components:
           required: [payments]
           properties:
             payments: { type: integer, description: The number of payments made with it. A method with payments cannot be deleted. }
-        created_at: { type: string, format: date-time }
-        updated_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time, nullable: true }
+        updated_at: { type: string, format: date-time, nullable: true }
 
     ManualMethodRow:
       description: "A card-to-card method, with its cards: each payment is shown one of them at random, among those switched on whose daily cap leaves room for its amount, and always that one after — none while `to_support`."
@@ -7468,7 +7472,7 @@ components:
           enum: [static, animated, video]
           description: 'How Telegram draws it: a still picture, a Lottie animation or a WebM video (see `…/animation`); null while unknown.'
         repaint: { type: boolean, description: 'Telegram paints it in the colour of the surrounding text (`needs_repainting`).' }
-        updated_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time, nullable: true }
 
     CustomEmojisResponse:
       type: object
@@ -7515,7 +7519,7 @@ components:
         redeemed_by: { allOf: [{ $ref: '#/components/schemas/UserRef' }], nullable: true, description: 'Who redeemed it; null while unredeemed, or once their account is gone.' }
         redeemed_at: { type: string, format: date-time, nullable: true }
         order: { allOf: [{ $ref: '#/components/schemas/RewardOrderRef' }], nullable: true, description: "For a redeemed plan code: the order that delivered its service." }
-        created_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time, nullable: true }
 
     RewardOrderRef:
       type: object
@@ -7565,7 +7569,7 @@ components:
         redeemed: { type: integer }
         expired: { type: integer, description: 'Expired without being redeemed.' }
         unused: { type: integer, description: 'Not yet redeemed.' }
-        created_at: { type: string, format: date-time, description: 'When its newest codes were created.' }
+        created_at: { type: string, format: date-time, nullable: true, description: 'When its newest codes were created.' }
 
     GiftCodeBatchesResponse:
       type: object
@@ -7659,7 +7663,7 @@ components:
         outcome: { type: string, nullable: true, description: 'Why it was not given; null when it was.' }
         order: { allOf: [{ $ref: '#/components/schemas/RewardOrderRef' }], nullable: true, description: "For a plan slice: the order that delivered its service." }
         subscription: { allOf: [{ $ref: '#/components/schemas/NamedRef' }], nullable: true, description: 'The service that got the traffic or days, or the plan''s new service, by its client''s name on the panel.' }
-        created_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time, nullable: true }
 
     WheelSpinsResponse:
       type: object
@@ -7703,7 +7707,7 @@ components:
             starts_at: { type: string, format: date-time, nullable: true, description: 'When the first connection started its hours; null until then.' }
             expires_at: { type: string, format: date-time, nullable: true, description: 'Null while it waits for the first connection.' }
         bought_after: { type: boolean, description: 'The customer bought a service with a price after taking it.' }
-        created_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time, nullable: true }
         issued_at: { type: string, format: date-time, nullable: true, description: 'When its service was made; null while it is being made.' }
         ended_at: { type: string, format: date-time, nullable: true, description: "When it ended — its deadline, or when the shop found its traffic used up or its client gone (its removal is counted from then); null while it runs (and past its deadline until the shop next reads its panel), and once it is removed." }
 
@@ -7880,7 +7884,7 @@ components:
             plan: { allOf: [{ $ref: '#/components/schemas/NamedRef' }], nullable: true, description: "For a plan prize: the plan; null once it is deleted." }
             words: { type: string, description: "What it gives, as the customer reads it." }
         winners: { type: array, items: { $ref: '#/components/schemas/LotteryWinnerRow' } }
-        created_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time, nullable: true }
 
     LotteryWinnerRow:
       type: object
@@ -7968,7 +7972,7 @@ components:
         uses: { type: integer, description: "Orders made with it that are neither cancelled nor refunded. An unpaid order frees its use when it is cancelled or expires (see the `hold_minutes` bot setting); a refunded one gives it back." }
         deletable: { type: boolean, description: "Whether `DELETE /discount-codes/{id}` would delete it: false while any order but a cancelled one names it — refunded ones too, which count no use — and it is kept for their history (switch it off instead). The delete is a 409 then." }
         state: { $ref: '#/components/schemas/DiscountState' }
-        created_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time, nullable: true }
 
     DiscountCodesResponse:
       type: object
@@ -8024,7 +8028,7 @@ components:
         ends_at: { type: string, format: date-time, nullable: true }
         enabled: { type: boolean }
         state: { $ref: '#/components/schemas/DiscountState' }
-        created_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time, nullable: true }
 
     SalesResponse:
       type: object
@@ -8614,7 +8618,7 @@ components:
         type: { type: string, enum: [channel, supergroup] }
         title: { type: string }
         username: { type: string, nullable: true, description: 'Public handle without "@"; null for a private chat.' }
-        link: { type: string, description: The link customers follow to join. }
+        link: { type: string, nullable: true, description: 'The link customers follow to join. Null when it has neither a public handle nor an invite link — only ever a row edited outside AmoBot: the bot then asks no one to join it, and «بررسی دوباره» gets its handle, or a private one''s invite link, again once the bot is an admin there.' }
         bot_is_admin: { type: boolean, description: 'Whether the bot was an admin at the last check; it needs admin rights to see the members.' }
         checked_at: { type: string, format: date-time, nullable: true }
         sort: { type: integer }
@@ -8762,7 +8766,7 @@ components:
         status: { $ref: '#/components/schemas/UserStatus' }
         referrer: { allOf: [{ $ref: '#/components/schemas/UserRef' }], nullable: true }
         earned: { type: string, description: "What this customer's payments earned their current referrer (the commissions credited to that referrer)." }
-        joined_at: { type: string, format: date-time }
+        joined_at: { type: string, format: date-time, nullable: true }
 
     ReferralCommissionRow:
       description: A referral commission paid out.
@@ -8789,7 +8793,7 @@ components:
             type: { $ref: '#/components/schemas/OrderType' }
         rate: { type: integer, description: The percent in force at the time. }
         commission: { type: string }
-        created_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time, nullable: true }
 
     ReferrerSort:
       description: "The referrers list's sort keys: number of referrals (the default), amount earned, or time of the latest referral."
@@ -8867,7 +8871,7 @@ components:
         status: { allOf: [{ $ref: '#/components/schemas/UserStatus' }], description: "The referrer's status." }
         reason: { $ref: '#/components/schemas/ReferralAlertReason' }
         count: { type: integer, description: 'The number of referrals when it was raised: those in the window, or those who never bought.' }
-        created_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time, nullable: true }
 
     ReferralAlertsResponse:
       type: object
@@ -8956,8 +8960,8 @@ components:
           required: [agents]
           properties:
             agents: { type: integer }
-        created_at: { type: string, format: date-time }
-        updated_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time, nullable: true }
+        updated_at: { type: string, format: date-time, nullable: true }
 
     AgencyLevelsResponse:
       type: object
@@ -9003,7 +9007,7 @@ components:
         reviewer: { type: string, nullable: true, description: 'Who decided it: the panel login, or a bot admin (@username or tg:<id>).' }
         reviewer_name: { type: string, nullable: true, description: *reviewerName }
         decided_at: { type: string, format: date-time, nullable: true }
-        created_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time, nullable: true }
         actions:
           type: object
           additionalProperties: false
@@ -9677,7 +9681,7 @@ components:
         two_factor: { type: boolean, description: 'Password sign-in also asks for their authenticator app''s code (or a recovery code).' }
         phone: { type: string, nullable: true, description: 'The number they shared with the bot, in E.164 form (+98912…).' }
         balance: { type: string, description: "Their wallet balance in Toman, as a decimal string ('120000.00'). Below zero is an agent's debt." }
-        created_at: { type: string, format: date-time, description: "When they became a customer of the shop." }
+        created_at: { type: string, format: date-time, nullable: true, description: "When they became a customer of the shop." }
 
     StoreMeResponse:
       type: object
@@ -9721,7 +9725,7 @@ components:
         id: { type: integer }
         device: { type: string, nullable: true, description: 'The device as its browser describes it, in words: «Chrome در Windows».' }
         ip: { type: string, nullable: true, description: 'The IP address it signed in from.' }
-        created_at: { type: string, format: date-time, description: 'When it signed in.' }
+        created_at: { type: string, format: date-time, nullable: true, description: 'When it signed in.' }
         last_used_at: { type: string, format: date-time, nullable: true, description: 'Its last request (updated every few minutes, not on every request).' }
         current: { type: boolean, description: 'The session this request was made with.' }
 
@@ -9876,7 +9880,7 @@ components:
               required: [name, created_at, services, orders, balance, telegram, email, google]
               properties:
                 name: { type: string, nullable: true, description: '"first last"; null if none.' }
-                created_at: { type: string, format: date-time, description: "When it became a customer of the shop." }
+                created_at: { type: string, format: date-time, nullable: true, description: "When it became a customer of the shop." }
                 services: { type: integer, description: 'Its active services.' }
                 orders: { type: integer }
                 balance: { type: string, description: 'Its wallet balance, in Toman.' }
@@ -10085,7 +10089,7 @@ components:
             online: { type: boolean, nullable: true, description: 'Connected right now; null when the panel cannot tell.' }
             last_online_at: { type: string, format: date-time, nullable: true, description: 'Its last connection; null if never, or when the panel cannot tell.' }
         synced_at: { type: string, format: date-time, nullable: true, description: 'When the panel was last read for it; the numbers are from then.' }
-        created_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time, nullable: true }
 
     StoreServiceTraffic:
       description: "A service's quota, and how much is used and left, in bytes."
@@ -10184,7 +10188,7 @@ components:
         method: { allOf: [{ $ref: '#/components/schemas/StorePaymentMethod' }], description: "The payment method." }
         status: { $ref: '#/components/schemas/PaymentStatus' }
         amount: { type: string, description: 'Toman.' }
-        created_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time, nullable: true }
         paid_at: { type: string, format: date-time, nullable: true }
         receipt:
           type: object
@@ -10201,12 +10205,13 @@ components:
       description: "An online gateway's page to pay a payment on: the customer pays there, and the gateway tells the shop by itself."
       type: object
       additionalProperties: false
-      required: [payment_id, url, expires_at, amount, fee, card]
+      required: [payment_id, url, expires_at, amount, amount_rial, fee, card]
       properties:
         payment_id: { type: integer, description: 'The payment it pays: the one to ask about (`POST /payments/{id}/check`).' }
         url: { type: string, description: "The gateway's page: open it (a link or a redirect) for the customer to pay there. For AqayePardakht, a page on the shop's own address that leads on to the bank's (the bank opens its page only for a visitor coming from the gateway's verified address)." }
         expires_at: { type: string, format: date-time, nullable: true, description: "Until when the page takes money: the gateway's own end, or the time the shop keeps its page when the gateway gives none. A request made again with its `Idempotency-Key` answers the same page while it has more than 3 minutes left, else a new one." }
         amount: { type: string, description: "The sum to pay, in Toman: the payment's own, or more when the gateway adds a few Toman to tell transfers apart (CubePay, AbanGateway) or the customer pays the gateway's fee (`fee`). Show this one as what to pay. A page may still ask it otherwise: Variza's asks a few Toman more of its own, and Plisio's the same in a coin the customer picks there (at the shop's dollar rate)." }
+        amount_rial: { type: string, description: "`amount` in Rial — ten to the Toman, as Iran's banks count —: whole, in Latin digits, no separators. What a banking app takes: the digits to copy for a transfer to `card`." }
         fee: { type: string, nullable: true, description: "Of `amount`, the gateway's fee the customer pays: the one the shop passes on (CubePay), Zarinpal's when its merchant set the payer to pay it, or what AtlasPay puts on the order's amount; null for none. The order is still paid, delivered and credited at its own amount." }
         card:
           type: object
@@ -10234,7 +10239,7 @@ components:
         discount_amount: { type: string, description: "The total its discounts took off (the automatic one and the code's), in Toman; 0 for none. `amount` is after discounts." }
         discounts: { type: array, items: { $ref: '#/components/schemas/DiscountLine' }, description: *orderDiscounts }
         discount_code: { allOf: [{ $ref: '#/components/schemas/OrderDiscountCode' }], nullable: true, description: 'The discount code used; null for none.' }
-        created_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time, nullable: true }
         fulfilled_at: { type: string, format: date-time, nullable: true }
         plan: { allOf: [{ $ref: '#/components/schemas/NamedRef' }], nullable: true, description: "The plan of a purchase or renewal (for extras, the service's plan); null for a wallet top-up or a service the customer built. The shop never deletes a plan an order names." }
         package_name: { $ref: '#/components/schemas/OrderPackageName' }
@@ -10535,10 +10540,11 @@ components:
           nullable: true
           description: "For `transfer`: where to send the money, and the payment the receipt is for. Null otherwise. A payment taken in support's private chat (made while the bot setting «هدایت پرداخت کارت به کارت به پیوی پشتیبانی» is on) is shown no card: `card`, `holder` and `bank` are null and `contact` says where to go — tell the customer to send the order's number there, get the card from support, and send the receipt to support too; support approves the payment in its panel."
           additionalProperties: false
-          required: [payment_id, amount, card, holder, bank, instructions, contact]
+          required: [payment_id, amount, amount_rial, card, holder, bank, instructions, contact]
           properties:
             payment_id: { type: integer, description: 'The payment to upload the receipt for.' }
             amount: { type: string, description: "The amount to transfer, in Toman: the payment's own. A wallet top-up's may be a few Toman more than the order's (the bot setting of a random sum added to card-to-card top-ups), so its receipt is told apart; the whole of it is credited." }
+            amount_rial: { type: string, description: "`amount` in Rial — ten to the Toman, as Iran's banks count —: whole, in Latin digits, no separators (`1200000` for 120000 Toman). What a banking app takes: copy these digits." }
             card: { type: string, nullable: true, description: "The card number: 16 digits, no separators. Each payment is shown one of its method's cards, picked at random, and always that one after — the same card on a request made again. Null while the card is given in support's private chat (`contact`)." }
             holder: { type: string, nullable: true, description: "The card holder's name. Null while the card is given in support's private chat (`contact`)." }
             bank: { type: string, nullable: true, description: "The shop's word for the card, such as its bank; null for none, and while the card is given in support's private chat." }
@@ -10593,7 +10599,7 @@ components:
         plan:
           type: object
           nullable: true
-          description: 'The service''s own plan, or the one picked (`plan_id`) for a service without one, which the renewal uses: what a renewal gives, as the catalogue says it (`StoreRenewalPlan` without the prices). Null for a package built (`custom`).'
+          description: 'The service''s own plan, or the one picked (`plan_id`) for a service without one, which the renewal uses: what a renewal gives, as the catalogue says it (`StoreRenewalPlan` without the prices and the category). Null for a package built (`custom`).'
           additionalProperties: false
           required: [id, name, description, checkout_note, price, traffic_gb, duration_days, duration_hours, devices]
           properties:
@@ -10642,7 +10648,7 @@ components:
       description: "A plan a service can be renewed on: what a renewal on it gives, its price, and what the renewal costs the customer today."
       type: object
       additionalProperties: false
-      required: [id, name, description, checkout_note, price, renewal_price, discounts, traffic_gb, duration_days, duration_hours, devices]
+      required: [id, name, description, checkout_note, price, renewal_price, discounts, traffic_gb, duration_days, duration_hours, devices, category_id]
       properties:
         id: { type: integer, description: "The `plan_id` to renew on (`…/renewal`)." }
         name: { type: string }
@@ -10655,13 +10661,14 @@ components:
         duration_days: { type: integer, description: 'Whole days, rounded up; 0 never ends. `duration_hours` is exact.' }
         duration_hours: { type: integer, description: 'Hours; 0 never ends.' }
         devices: { type: integer, description: 'Devices at once once renewed on it; 0 for no limit.' }
+        category_id: { type: integer, nullable: true, description: "The category it is listed under, as `GET /plans` groups the catalogue; null for the group without a category (no category, or a switched-off one). The bot asks for the category first when the plans to pick are in more than one." }
 
     StoreRenewalPlansResponse:
       type: object
       additionalProperties: false
       required: [plans, custom_services]
       properties:
-        plans: { type: array, items: { $ref: '#/components/schemas/StoreRenewalPlan' }, description: 'In the catalogue''s order; empty while the service cannot be renewed now: not at all, not yet (its renewal window), or a renewal of it under way.' }
+        plans: { type: array, items: { $ref: '#/components/schemas/StoreRenewalPlan' }, description: 'In the catalogue''s order: by category (`category_id`), as `GET /plans` groups them; empty while the service cannot be renewed now: not at all, not yet (its renewal window), or a renewal of it under way.' }
         custom_services: { type: boolean, description: "Whether the service may be renewed instead with a package the customer builds («🛠 تمدید با سرویس دلخواه»): it has no plan, is no test account, may be renewed now (as `plans`), and the shop's builder is offered (`shop.custom_services` of `GET /`). Then send `gb` and `days` — within the bounds and tiers of `GET /custom-services` — to `…/renewal` in place of `plan_id`." }
 
     StoreWalletResponse:
@@ -10719,7 +10726,7 @@ components:
             id: { type: integer }
             amount: { type: string, description: 'Toman.' }
             recipient: { $ref: '#/components/schemas/StoreRecipient' }
-            created_at: { type: string, format: date-time }
+            created_at: { type: string, format: date-time, nullable: true }
         wallet: { $ref: '#/components/schemas/StoreWalletResponse' }
 
     StoreWalletTransaction:
@@ -10733,7 +10740,7 @@ components:
         amount: { type: string, description: 'Toman.' }
         balance_after: { type: string, description: 'The balance after this line.' }
         description: { type: string, nullable: true, description: 'What it was for («شارژ کیف پول (سفارش #12)»).' }
-        created_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time, nullable: true }
 
     StoreWalletTransactionsResponse:
       type: object
@@ -10827,7 +10834,7 @@ components:
             type: { type: string, enum: [order, subscription, ticket] }
             id: { type: integer }
         read: { type: boolean, description: 'Marked as read (`POST /notifications/read`).' }
-        created_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time, nullable: true }
 
     StoreNotificationsResponse:
       type: object
@@ -10867,10 +10874,10 @@ components:
         subject: { type: string }
         status: { $ref: '#/components/schemas/TicketStatus' }
         subscription: { allOf: [{ $ref: '#/components/schemas/NamedRef' }], nullable: true, description: 'Their service it is about, by its name; null for none, or when the service was deleted.' }
-        last_message_at: { type: string, format: date-time, description: *ticketLastMessageAt }
+        last_message_at: { type: string, format: date-time, nullable: true, description: *ticketLastMessageAt }
         unread: { type: boolean, description: 'Support wrote since they last read it (`POST /tickets/{id}/read` marks it read, as does viewing it in the bot).' }
         rating: { type: integer, nullable: true, description: 'Their rating after it closed, 1 to 5; null for none, and after it is reopened.' }
-        created_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time, nullable: true }
         closed_at: { type: string, format: date-time, nullable: true, description: 'When it was closed; null unless it is closed (reopening clears it).' }
 
     StoreTicketMessage:
@@ -10883,7 +10890,7 @@ components:
         author: { $ref: '#/components/schemas/TicketAuthor' }
         body: { type: string, description: 'Its text as plain text, with line breaks kept.' }
         attachment: { allOf: [{ $ref: '#/components/schemas/TicketAttachment' }], nullable: true, description: 'Its picture (`GET /tickets/{id}/messages/{message}/attachment`); null for none.' }
-        created_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time, nullable: true }
 
     StoreTicketDetail:
       description: "One of the customer's support tickets, with its whole conversation, oldest message first."
@@ -10956,7 +10963,7 @@ components:
         body: { type: string, description: *reviewBody }
         context: { type: string, nullable: true, description: *reviewContext }
         avatar: { type: string, nullable: true, description: "The key of the avatar they picked from the website's own set; null for none (the website shows its default)." }
-        created_at: { type: string, format: date-time, description: 'When it was written.' }
+        created_at: { type: string, format: date-time, nullable: true, description: 'When it was written.' }
 
     StoreReviewsResponse:
       type: object

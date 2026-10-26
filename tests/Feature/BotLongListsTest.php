@@ -122,6 +122,24 @@ final class BotLongListsTest extends BotTestCase
         self::assertSame([$taps[Buttons::LIST_PAGE], RenewalHandler::checkoutCallback($claimed->id), SubscriptionHandler::serviceCallback($claimed->id)], $this->callbacks(0), 'the last plan, «قبلی» to the first page');
     }
 
+    public function testTheCategoryPlansAServiceWithoutOneRenewsOnArePagedPastOneKeyboardsWorth(): void
+    {
+        $claimed = $this->mirrored($this->claimedSubscription($this->ali, $this->berlin, 'manual_7'));
+        $category = $this->category(['name' => 'دسته 1']);
+        $plans = $this->plans(Buttons::LIST_PAGE + 1, category: $category);
+        $this->plan(['name' => 'بی دسته'], $this->berlin);
+        $taps = array_map(static fn(Plan $plan): string => RenewalHandler::checkoutCallback($claimed->id, 0, $plan->id), $plans);
+        $categories = RenewalHandler::checkoutCallback($claimed->id);
+
+        $this->send($this->tap(RenewalHandler::categoryCallback($claimed->id, 0, $category->id)));
+        self::assertSame([self::text(BotText::RenewCategoryPlans, ['client' => 'manual_7', 'category' => 'دسته 1']) . self::page(1, 2)], $this->said());
+        self::assertSame([...array_slice($taps, 0, Buttons::LIST_PAGE), RenewalHandler::categoryCallback($claimed->id, 0, $category->id, 2), $categories], $this->callbacks(0), 'its plans a page at a time, then back to the categories');
+
+        $this->send($this->tap(RenewalHandler::categoryCallback($claimed->id, 0, $category->id, 2)));
+        self::assertSame([self::text(BotText::RenewCategoryPlans, ['client' => 'manual_7', 'category' => 'دسته 1']) . self::page(2, 2)], $this->said());
+        self::assertSame([$taps[Buttons::LIST_PAGE], RenewalHandler::categoryCallback($claimed->id, 0, $category->id), $categories], $this->callbacks(0), 'the last plan, «قبلی» to the first page');
+    }
+
     public function testTheServersGivingATestArePagedByTheLinesTheMessageHolds(): void
     {
         $this->botSettings('test_accounts', ['test_enabled' => true, 'test_per_user' => 1, 'test_period_days' => 0, 'test_daily_limit' => 0, 'test_newcomers_only' => false, 'test_cleanup' => true, 'test_cleanup_hours' => 24, 'test_unused_days' => 7]);

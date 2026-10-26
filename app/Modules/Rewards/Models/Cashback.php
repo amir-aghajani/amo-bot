@@ -21,7 +21,7 @@ use Illuminate\Support\Carbon;
  * @property int $percent
  * @property string $amount Toman
  * @property Carbon|null $reversed_at When the order's refund took it back
- * @property Carbon $created_at
+ * @property Carbon|null $created_at
  * @property-read Order $order
  * @property-read User $user
  */

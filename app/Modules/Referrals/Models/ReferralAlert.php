@@ -19,7 +19,7 @@ use Illuminate\Support\Carbon;
  * @property int $referrer_id
  * @property AlertReason $reason
  * @property int $count
- * @property Carbon $created_at
+ * @property Carbon|null $created_at
  * @property-read User $referrer
  */
 class ReferralAlert extends Model

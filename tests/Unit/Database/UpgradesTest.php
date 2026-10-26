@@ -297,6 +297,32 @@ final class UpgradesTest extends TestCase
         }
     }
 
+    public function testAnOwnersCardTextShowsTheAmountToCopyInRialAsItsButtonCopiesIt(): void
+    {
+        $installed = self::firstRelease();
+        (new Upgrades($installed))->run(self::ROOT . '/database/upgrades', Installation::FIRST_RELEASE, '0.7.0', static function (): void {});
+        $agent = $installed->table('bots')->insertGetId(['title' => 'agent']);
+        $encode = static fn(string $wording): string => json_encode($wording, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+        $installed->table('settings')->insert([
+            ['bot_id' => 1, 'key' => 'bot.text.card_instructions', 'value' => $encode("مبلغ %amount% را واریز کنید:\n💳 <code>%card%</code>\n💰 مبلغ: <code>%amount_digits%</code> تومان")],
+            ['bot_id' => $agent, 'key' => 'bot.text.pay_online_card', 'value' => $encode('یا به این کارت: <code>%card%</code>، <code>%amount_digits%</code> تومان')],
+            // Worded otherwise: as the owner wrote it.
+            ['bot_id' => $agent, 'key' => 'bot.text.card_instructions', 'value' => $encode('مبلغ %amount_digits% تومان را به <code>%card%</code> بزنید.')],
+            ['bot_id' => 1, 'key' => 'bot.text.welcome', 'value' => $encode('<code>%amount_digits%</code> تومان')],
+        ]);
+
+        self::upgradeToCode($installed);
+        self::upgradeToCode($installed);
+
+        $wordings = $installed->table('settings')->orderBy('id')->pluck('value')->map(static fn(string $value): mixed => json_decode($value, true))->all();
+        self::assertSame([
+            "مبلغ %amount% را واریز کنید:\n💳 <code>%card%</code>\n💰 مبلغ: <code>%amount_rial%</code> ریال",
+            'یا به این کارت: <code>%card%</code>، <code>%amount_rial%</code> ریال',
+            'مبلغ %amount_digits% تومان را به <code>%card%</code> بزنید.',
+            '<code>%amount_digits%</code> تومان',
+        ], $wordings, 'only the card texts\' amount to copy, in every shop, once');
+    }
+
     public function testTheUpgradesBetweenTwoVersionsRunInVersionOrder(): void
     {
         foreach (['0.1.0', '0.2.0', '0.3.0', '0.10.0', '0.11.0'] as $version) {

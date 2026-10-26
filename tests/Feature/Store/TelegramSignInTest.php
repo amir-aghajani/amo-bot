@@ -290,6 +290,7 @@ final class TelegramSignInTest extends HttpTestCase
      *
      * @param array<string, mixed> $claims
      * @param array<string, string> $more
+     * @phpstan-impure
      */
     private function signIn(array $claims = [], array $more = []): ResponseInterface
     {

@@ -68,6 +68,15 @@ final class MoneyTest extends TestCase
         self::assertSame('0', Money::digits(0));
     }
 
+    public function testRialsAreTenToTheTomanAsABankingAppTakesThem(): void
+    {
+        self::assertSame('1200000', Money::rials('120000.00'));
+        self::assertSame('1200370', Money::rials('120037.00'), 'to the last Toman a gateway added');
+        self::assertSame('130', Money::rials('12.50'), 'the Toman the customer reads, rounded as format() shows them, times ten');
+        self::assertSame('1200000', Money::rials('۱۲۰۰۰۰'));
+        self::assertSame('0', Money::rials(0));
+    }
+
     public function testWhatIsLeftIsNeverBelowZero(): void
     {
         self::assertSame('120.50', Money::atLeastZero('120.5'));

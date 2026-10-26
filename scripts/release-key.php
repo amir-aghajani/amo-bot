@@ -19,8 +19,12 @@ if (PHP_SAPI !== 'cli') {
 
 $root = dirname(__DIR__);
 $public = $root . '/resources/release-key.pub';
-$arguments = array_values(array_filter(array_slice($argv, 1), static fn(string $argument): bool => $argument !== '--rotate'));
-$rotate = in_array('--rotate', $argv, true);
+// $_SERVER['argv'], not $argv: since PHP 8.5 the CLI reports register_argc_argv as php.ini sets it (off in PHP's own
+// php.ini files), and phpstan then counts $argv as maybe undefined.
+$words = $_SERVER['argv'] ?? [];
+$words = is_array($words) ? array_values(array_filter($words, is_string(...))) : [];
+$arguments = array_values(array_filter(array_slice($words, 1), static fn(string $argument): bool => $argument !== '--rotate'));
+$rotate = in_array('--rotate', $words, true);
 
 if (count($arguments) !== 1) {
     fail('Name the file the secret key goes to — outside this repository: php scripts/release-key.php ~/amobot-release.key');

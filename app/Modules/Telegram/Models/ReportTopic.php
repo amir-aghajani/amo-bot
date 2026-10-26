@@ -18,8 +18,8 @@ use Illuminate\Support\Carbon;
  * @property int|null $thread_id Its message_thread_id; null while it is being made (again)
  * @property string|null $lease_token Whoever is making it (Core\Database\Lease)
  * @property Carbon|null $leased_until
- * @property Carbon $created_at
- * @property Carbon $updated_at
+ * @property Carbon|null $created_at
+ * @property Carbon|null $updated_at
  */
 class ReportTopic extends Model
 {

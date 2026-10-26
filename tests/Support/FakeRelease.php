@@ -90,7 +90,7 @@ final class FakeRelease
             'file' => "amobot-{$version}.zip",
             'size' => strlen($zip),
             'sha256' => hash('sha256', $zip),
-            'php' => '8.2',
+            'php' => '8.3',
             'extensions' => ['json', 'pdo'],
             'paths' => self::PATHS,
             ...$overrides,

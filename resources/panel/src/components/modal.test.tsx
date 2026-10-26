@@ -132,6 +132,22 @@ describe('opening', () => {
     expect(sheet().getAttribute('aria-describedby')).toBe(screen.getByText(DESCRIPTION).id)
   })
 
+  it('stands as tall as the screen gives when asked, its content a column to fill it — otherwise as tall as its content', () => {
+    const { rerender } = render(<Described />)
+
+    expect(sheet().className).not.toContain('h-full')
+    expect(scroller().className).not.toContain('flex-col')
+
+    rerender(
+      <Modal open onClose={() => undefined} title="افزودن آبان گیت وی" description={DESCRIPTION} tall>
+        <input aria-label="کلید API" />
+      </Modal>,
+    )
+
+    expect(sheet().className).toContain('h-full')
+    expect(scroller().className).toContain('flex-col')
+  })
+
   it('on a phone keeps its keyboard down — the focus on the sheet itself, its name read —, unless typing is its point; its ✕ a finger’s size', () => {
     resizeWindow(375)
     const { rerender } = render(

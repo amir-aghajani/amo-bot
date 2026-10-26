@@ -18,6 +18,7 @@ use App\Modules\Providers\Exceptions\ConnectionException;
 use App\Modules\Providers\Models\Server;
 use App\Modules\Subscriptions\Exceptions\MoveException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Database\QueryException;
 use Monolog\Handler\TestHandler;
 use Monolog\Logger;
 use Psr\Http\Message\ResponseInterface;
@@ -72,6 +73,44 @@ final class ErrorHandlerTest extends TestCase
         $record = $this->log->getRecords()[0];
         self::assertSame('GET /api/admin/boom -> 500 disk on fire', $record->message);
         self::assertSame($exception, $record->context['exception'], 'the formatter prints the trace from the context');
+    }
+
+    public function testADatabaseOutOfReachIsA503ThatSaysSoAndIsLoggedWithoutItsTrace(): void
+    {
+        $refused = new QueryException('mysql', 'select * from `users`', [], new \PDOException('SQLSTATE[HY000] [2002] No connection could be made because the target machine actively refused it'));
+        $response = $this->handle($refused, details: false);
+
+        self::assertSame(503, $response->getStatusCode());
+        self::assertSame(['message' => ErrorHandler::DATABASE_UNREACHABLE], $this->decode($response), 'the panels show these words as the reason');
+        self::assertCount(1, $this->log->getRecords(), 'still a failure, in the log');
+        self::assertStringStartsWith('GET /api/admin/boom -> 503 SQLSTATE[HY000] [2002]', $this->log->getRecords()[0]->message);
+        self::assertSame([], $this->log->getRecords()[0]->context, 'no trace: where it failed says nothing');
+
+        foreach (['SQLSTATE[HY000] [1045] Access denied for user \'shop\'@\'localhost\' (using password: YES)', 'SQLSTATE[HY000] [1049] Unknown database \'shop\'', 'SQLSTATE[HY000]: General error: 2006 MySQL server has gone away'] as $words) {
+            $answer = $this->handle(new QueryException('mysql', 'select 1', [], new \PDOException($words)), details: false);
+            self::assertSame([503, ErrorHandler::DATABASE_UNREACHABLE], [$answer->getStatusCode(), $this->decode($answer)['message']], $words);
+        }
+
+        $missing = $this->handle(new QueryException('mysql', 'select * from `users`', [], new \PDOException("SQLSTATE[42S02]: Base table or view not found: 1146 Table 'shop.users' doesn't exist")), details: false);
+        self::assertSame(500, $missing->getStatusCode(), 'a database that answers with an error is the server failing');
+        self::assertSame(['message' => ErrorHandler::MESSAGES[500]], $this->decode($missing));
+    }
+
+    public function testEveryConnectionTheDatabaseRefusesIsA503AndAStatementsValuesNeverPassForOne(): void
+    {
+        // A socket-authenticated user (MySqlDriver::explain() names it too), and a shared host's caps on connections.
+        $refusals = [
+            "SQLSTATE[HY000] [1698] Access denied for user 'root'@'localhost'",
+            'SQLSTATE[08004] [1040] Too many connections',
+            "SQLSTATE[HY000] [1203] User shop already has more than 'max_user_connections' active connections",
+        ];
+        foreach ($refusals as $words) {
+            $answer = $this->handle(new QueryException('mysql', 'select 1', [], new \PDOException($words)), details: false);
+            self::assertSame([503, ErrorHandler::DATABASE_UNREACHABLE], [$answer->getStatusCode(), $this->decode($answer)['message']], $words);
+        }
+
+        $duplicate = new QueryException('mysql', 'insert into `users` (`name`) values (?)', ['SQLSTATE[HY000] [1045] Access denied for user'], new \PDOException('SQLSTATE[23000]: Integrity constraint violation: 1062 Duplicate entry'));
+        self::assertSame(500, $this->handle($duplicate, details: false)->getStatusCode(), 'the driver\'s words decide, not a value the statement carried');
     }
 
     public function testAClientErrorIsNotLogged(): void

@@ -130,8 +130,8 @@ final class ServerService
                 'active_subscriptions' => (int) $server->getAttribute('active_subscriptions_count'),
                 'shop_active_subscriptions' => (int) $server->getAttribute('shop_active_subscriptions_count'),
             ],
-            'created_at' => $server->created_at->toIso8601String(),
-            'updated_at' => $server->updated_at->toIso8601String(),
+            'created_at' => $server->created_at?->toIso8601String(),
+            'updated_at' => $server->updated_at?->toIso8601String(),
         ];
     }
 

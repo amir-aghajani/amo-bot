@@ -82,8 +82,8 @@ final class AgencyLevels
             'price_per_gb' => Money::normalize($level->price_per_gb),
             'sort' => $level->sort,
             'counts' => ['agents' => (int) $level->agents_count],
-            'created_at' => $level->created_at->toIso8601String(),
-            'updated_at' => $level->updated_at->toIso8601String(),
+            'created_at' => $level->created_at?->toIso8601String(),
+            'updated_at' => $level->updated_at?->toIso8601String(),
         ];
     }
 

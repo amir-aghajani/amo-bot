@@ -134,11 +134,18 @@ final class BroadcastService
         if ($lease === null) {
             return false;
         }
-        if (!$broadcast->isUnpin() && $broadcast->adminChat() === null) {
-            // Its admin's account is gone, or has no Telegram any more: the message has no chat to be copied from, now or
-            // ever — the run ends rather than stay «در حال ارسال» for good.
+        // A message run that can never send — its admin's account gone or without Telegram (the message has no chat to be
+        // copied from), or a row edited by hand to name no message or no audience — ends rather than stay «در حال ارسال».
+        $unsendable = match (true) {
+            $broadcast->isUnpin() => null,
+            $broadcast->adminChat() === null => 'its admin has no Telegram chat to send its message from any more',
+            $broadcast->message_id === null || $broadcast->audience === null => 'it names no message or no audience to send it to',
+            default => null,
+        };
+        if ($unsendable !== null) {
             $lease->finish(['status' => BroadcastStatus::Cancelled, 'finished_at' => now()]);
-            $this->logger->warning('Broadcast {id} was cancelled: its admin has no Telegram chat to send its message from any more', ['id' => $broadcast->id]);
+            $this->logger->warning('Broadcast {id} was cancelled: {reason}', ['id' => $broadcast->id, 'reason' => $unsendable]);
+            $this->showProgress($broadcast);
 
             return true;
         }
@@ -290,11 +297,12 @@ final class BroadcastService
         if ($broadcast->isUnpin()) {
             return Messages::fill(Messages::UNPIN_PROGRESS, $values + ['source' => (string) $broadcast->source_id]);
         }
-        ['key' => $audience, 'id' => $audienceId] = $broadcast->audienceRef();
+        // A row edited by hand may name no audience: shown «—», as the panel's list shows it.
+        $audience = $broadcast->audience === null ? '—' : Audience::labelOf($broadcast->audience, $broadcast->audience_id);
 
         return Messages::fill(Messages::BROADCAST_PROGRESS, $values + [
             'id' => (string) $broadcast->id,
-            'audience' => htmlspecialchars(Audience::labelOf($audience, $audienceId)),
+            'audience' => htmlspecialchars($audience),
             'pin' => $broadcast->pin ? Messages::BROADCAST_PROGRESS_PINNED : '',
             'blocked' => Persian::number($broadcast->blocked),
         ]);

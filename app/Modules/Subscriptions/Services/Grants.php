@@ -303,7 +303,7 @@ final class Grants
             ] + self::progress($part))->values()->all(),
             'reviewer' => $grant->reviewer,
             'reviewer_name' => $names[$grant->reviewer ?? ''] ?? null,
-            'created_at' => $grant->created_at->toIso8601String(),
+            'created_at' => $grant->created_at?->toIso8601String(),
             'finished_at' => $grant->finishedAt()?->toIso8601String(),
         ];
     }
@@ -327,7 +327,7 @@ final class Grants
         ] + self::terms($grant) + self::progress($part) + [
             'reviewer' => $grant->reviewer,
             'reviewer_name' => $names[$grant->reviewer ?? ''] ?? null,
-            'created_at' => $grant->created_at->toIso8601String(),
+            'created_at' => $grant->created_at?->toIso8601String(),
             'finished_at' => $part->finished_at?->toIso8601String(),
         ];
     }

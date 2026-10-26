@@ -2,7 +2,7 @@
     "openapi": "3.0.3",
     "info": {
         "title": "AmoBot API",
-        "version": "0.7.0",
+        "version": "0.7.1",
         "description": "AmoBot's HTTP API. Every answer is JSON; the panels are static files that render their own pages.\n\n**The panels.** `/api/admin/*` is the owner's panel and `/api/agent/*` an agent's; each has its own session. The\nowner signs in with the login kept in config.php and may work in any shop: each request names its shop in the\n`X-Shop` header (none means the main shop), and the session itself remembers no shop. An agent signs in with a\none-time link from the main bot and works only in their own bot's shop. Screens both panels have are described once,\nunder `/api/{panel}/…`; a screen only one panel has is under that panel's prefix. Panel requests send the session\ncookie, and a request that changes something also sends `X-Requested-With: XMLHttpRequest` (the CSRF guard).\n`/api/app` is public. `/api/install/*` answers only until the shop is installed, and only with the install key in\n`X-Install-Key` (the text of storage/install-key.txt, which the first request creates); without it the answer is a\n403 on `key`. Every answer carries its request id in `X-Request-Id`; an error answer also has it in its body\n(`request_id`), and every log line the request wrote carries the same id.\n\n**The Store API.** `/api/store/v1/{store}/*` is the API of a shop's own website (the main bot's or an agent's). The\nstore key in the path names the shop. A customer signs in (Telegram, Google, or an email and a password, plus a\nsecond step when two-factor sign-in is on) and gets a bearer token: the `customer` scheme, with no cookie, session or\nCSRF header. Pages on the website's origins may call it from a browser: preflight requests are answered, and every\nanswer, errors included, carries the CORS headers.\n- Public: the plans the bot sells now, the status of the servers they are sold on and, while the website shows\n  reviews, the approved reviews with their count and average rating. Anyone may then write a review: a guest\n  through the website's captcha (only signed-in customers while the website asks for no captcha). A review waits for\n  support's approval; sent with a bearer token, it belongs to that customer.\n- A signed-in customer manages their account: names, password, two-factor sign-in, the ways they sign in (adding one\n  that another account of the shop already has offers a merge, 202) and their signed-in devices. Changing how the\n  account signs in (the password, two-factor sign-in, a way in, a merge) also needs a sign-in from the last 15\n  minutes, else a 403 whose `WWW-Authenticate` says so; `POST /me/reauthenticate` proves a way in again. A bearer\n  token alone cannot change any of it, nor hand a service to another customer (`POST /subscriptions/{id}/transfer`\n  asks the same).\n- They read their own services (refreshed from the panel, auto-renewal switched, link changed, handed to another\n  customer), add a service by its link, and read their orders and payments, wallet and ledger (and send money to\n  another customer), referral numbers and notifications. They order through the bot's checkout (a plan, a service\n  they build, a renewal, a wallet top-up, extra traffic, time or devices), each ordering request with an\n  `Idempotency-Key`, upload a card transfer's receipt, ask an online gateway what came of their payment, and redeem\n  gift codes. They open support tickets, about a service or not, write with or without a picture, close them, reopen\n  them by writing, and rate them.\n- A form on the site itself (a contact form) may use the website's captcha too: the site's backend asks the shop to\n  check the widget's token (`POST /captcha/verify`), so the site never holds the captcha's secret.\n- Request bodies are JSON (`Content-Type: application/json`). A form is accepted only where a picture may be\n  uploaded (a receipt, a ticket message); any other body type is a 415.\n\n**The website's admin API.** `/api/store/v1/{store}/admin/*` gives the shop's admins (customers whose role is admin)\nthe shop's daily work on its website, with their bearer token. It has the panel operations marked `x-staff`: the\nmarker's value is the grant the operation needs, or `true` for none.\n- It answers only while the website lets admins in (`staff_enabled`).\n- While the website asks for a strong sign-in (`staff_strong_sign_in`), a session signed in with a password alone is\n  refused: it needs Telegram, Google, or a password with its second step (`POST /me/reauthenticate` can prove one).\n- Every operation needs a way in proven on the session within the last 12 hours: an admin's token lasts a working\n  day, not the months a customer's does.\n- An operation that names a grant works only while the website grants it (`staff_grants`), and it needs a sign-in\n  from the last 15 minutes. Approving a payment, which delivers a service, needs one too (`x-staff-recent`).\n- Each refusal is a 403 (`StaffRefused`). The shop's configuration (payment methods, the bot's settings, texts and\n  keyboards, the report group, the website, who the admins are) is not there at all (404).\n- An admin cannot act on themselves: approve or refund their own payment, adjust their own wallet, make themselves an\n  order by hand, change their own service (days and traffic, switch, move, transfer, delete), moderate their own\n  review or clear an alert on their own referrals. These guards protect only an admin's own account: two admins can\n  do for each other what each is refused for themselves, so give the role only to people you trust.\n- They cannot touch any admin's account (their own included: ban it, put it in a group, turn off its two-factor\n  sign-in, end its sessions) or an agent's, switch «همکار» on for a group an admin is in, approve a payment without\n  a receipt in review, or leave a client on a panel that answers.\nThe admin paths are the panel paths, described once: tests/Support/ApiDescription expands each marked operation to\nits `/admin` path (the store key instead of the panel, the `customer` bearer scheme, the 401 and the 403).\n\n**Versioning.** The Store API's version is in its address: this is v1. Within v1 an answer only gains fields; no\nfield is removed, renamed or given another type, and a request keeps accepting what it accepted, so a website keeps\nworking across the shop's upgrades. A breaking change comes as v2, beside v1. Every refusal and failure uses the one\nerror shape; its `message` is written for the reader (the customer on the Store API, the admin on the panels).\n\n**The contract.** Both sides are checked against this file. Every request the PHP tests send and every answer they\nget must match it (tests/HttpTestCase); every route must be described here, and nothing else; every POST, PUT and\nPATCH describes its body or says it takes none (`x-no-body: true`) (tests/Unit/Http/ApiDescriptionTest); and the\npanels' TypeScript types are generated from it (`pnpm api:types` writes resources/panel/src/lib/api-types.ts).\nObjects are closed: a field the server sends, or a request carries, that is not described here fails the tests.\n"
     },
     "paths": {
@@ -9506,7 +9506,7 @@
                 }
             ],
             "get": {
-                "summary": "The plans a service can be renewed on now, each at the customer's renewal price today. For a service without a plan (added by its link, `claimed_at`, or built) that is no test account: the plans on sale that are sold on its server and give a renewal something, in the catalogue's order, for the customer to pick one (`plan_id` of `…/renewal`); the renewal makes it the service's plan. For any other service: its own plan. Empty — and `custom_services` false — while the service cannot be renewed now: not at all, not yet (its `renewal_window` closed), or a renewal of it under way (as `…/renewal` would refuse it). `custom_services` says whether a service without a plan may be renewed with a package the customer builds instead (`gb` and `days` of `…/renewal`).",
+                "summary": "The plans a service can be renewed on now, each at the customer's renewal price today. For a service without a plan (added by its link, `claimed_at`, or built) that is no test account: the plans on sale that are sold on its server and give a renewal something, in the catalogue's order (`GET /plans`: by category, `category_id`, as the bot files them), for the customer to pick one (`plan_id` of `…/renewal`); the renewal makes it the service's plan. For any other service: its own plan. Empty — and `custom_services` false — while the service cannot be renewed now: not at all, not yet (its `renewal_window` closed), or a renewal of it under way (as `…/renewal` would refuse it). `custom_services` says whether a service without a plan may be renewed with a package the customer builds instead (`gb` and `days` of `…/renewal`).",
                 "security": [
                     {
                         "customer": []
@@ -14732,7 +14732,7 @@
         },
         "schemas": {
             "ErrorResponse": {
-                "description": "The shape of every refusal and failure, whatever produced it. A 429 also sends the wait in seconds in `Retry-After`.",
+                "description": "The shape of every refusal and failure, whatever produced it. A 429 also sends the wait in seconds in `Retry-After`. A request that needs the shop's database is a 503 while it cannot be reached (down, out of reach, or refusing config.php's credentials), its `message` saying so.",
                 "type": "object",
                 "additionalProperties": false,
                 "required": [
@@ -14760,7 +14760,7 @@
                     },
                     "debug": {
                         "type": "object",
-                        "description": "Debug details. Only on a server failure (a 500, never a refusal), with APP_DEBUG on, and only for a request made directly from the server's own machine (never one forwarded by a proxy or tunnel). Paths are relative to the app's folder; call arguments are never included.",
+                        "description": "Debug details. Only on a server failure (a 500, or the 503 of a database out of reach; never a refusal), with APP_DEBUG on, and only for a request made directly from the server's own machine (never one forwarded by a proxy or tunnel). Paths are relative to the app's folder; call arguments are never included.",
                         "additionalProperties": false,
                         "required": [
                             "exception",
@@ -16030,7 +16030,8 @@
                     },
                     "created_at": {
                         "type": "string",
-                        "format": "date-time"
+                        "format": "date-time",
+                        "nullable": true
                     },
                     "last_seen_at": {
                         "type": "string",
@@ -16240,7 +16241,8 @@
                     },
                     "created_at": {
                         "type": "string",
-                        "format": "date-time"
+                        "format": "date-time",
+                        "nullable": true
                     }
                 }
             },
@@ -16386,7 +16388,8 @@
                     },
                     "created_at": {
                         "type": "string",
-                        "format": "date-time"
+                        "format": "date-time",
+                        "nullable": true
                     }
                 }
             },
@@ -16495,7 +16498,8 @@
                     },
                     "created_at": {
                         "type": "string",
-                        "format": "date-time"
+                        "format": "date-time",
+                        "nullable": true
                     }
                 }
             },
@@ -16862,7 +16866,8 @@
                     },
                     "created_at": {
                         "type": "string",
-                        "format": "date-time"
+                        "format": "date-time",
+                        "nullable": true
                     }
                 }
             },
@@ -16907,7 +16912,8 @@
                     },
                     "created_at": {
                         "type": "string",
-                        "format": "date-time"
+                        "format": "date-time",
+                        "nullable": true
                     }
                 }
             },
@@ -16962,6 +16968,8 @@
                 "required": [
                     "version",
                     "php",
+                    "php_safe",
+                    "php_required",
                     "bot",
                     "main_bot",
                     "cron"
@@ -16972,6 +16980,14 @@
                     },
                     "php": {
                         "type": "string"
+                    },
+                    "php_safe": {
+                        "type": "boolean",
+                        "description": "Whether this PHP release is free of the security holes PHP has closed in its branch (false for a release older than its branch's first without them, or a branch past PHP's support). While false the panel says so over every page, and an update is not installed."
+                    },
+                    "php_required": {
+                        "type": "string",
+                        "description": "The release of this PHP branch the shop asks for at least (\"8.3.36\"); for a branch past PHP's support, the oldest supported branch's."
                     },
                     "bot": {
                         "description": "The bot of the shop the request names (the dashboard's shop): the main bot or an agent's.",
@@ -17528,7 +17544,8 @@
                     },
                     "created_at": {
                         "type": "string",
-                        "format": "date-time"
+                        "format": "date-time",
+                        "nullable": true
                     },
                     "actions": {
                         "type": "object",
@@ -17938,7 +17955,8 @@
                     },
                     "created_at": {
                         "type": "string",
-                        "format": "date-time"
+                        "format": "date-time",
+                        "nullable": true
                     },
                     "actions": {
                         "type": "object",
@@ -18022,7 +18040,8 @@
                     },
                     "created_at": {
                         "type": "string",
-                        "format": "date-time"
+                        "format": "date-time",
+                        "nullable": true
                     }
                 }
             },
@@ -18416,7 +18435,8 @@
                     },
                     "created_at": {
                         "type": "string",
-                        "format": "date-time"
+                        "format": "date-time",
+                        "nullable": true
                     },
                     "actions": {
                         "type": "object",
@@ -18724,6 +18744,7 @@
                     "last_message_at": {
                         "type": "string",
                         "format": "date-time",
+                        "nullable": true,
                         "description": "When its latest message was written; the list is sorted by it."
                     },
                     "messages_count": {
@@ -18736,7 +18757,8 @@
                     },
                     "created_at": {
                         "type": "string",
-                        "format": "date-time"
+                        "format": "date-time",
+                        "nullable": true
                     },
                     "closed_at": {
                         "type": "string",
@@ -18794,7 +18816,8 @@
                     },
                     "created_at": {
                         "type": "string",
-                        "format": "date-time"
+                        "format": "date-time",
+                        "nullable": true
                     }
                 }
             },
@@ -18841,6 +18864,7 @@
                     "last_message_at": {
                         "type": "string",
                         "format": "date-time",
+                        "nullable": true,
                         "description": "When its latest message was written; the list is sorted by it."
                     },
                     "messages_count": {
@@ -18853,7 +18877,8 @@
                     },
                     "created_at": {
                         "type": "string",
-                        "format": "date-time"
+                        "format": "date-time",
+                        "nullable": true
                     },
                     "closed_at": {
                         "type": "string",
@@ -19042,7 +19067,8 @@
                     },
                     "created_at": {
                         "type": "string",
-                        "format": "date-time"
+                        "format": "date-time",
+                        "nullable": true
                     },
                     "actions": {
                         "type": "object",
@@ -19251,11 +19277,13 @@
                     },
                     "created_at": {
                         "type": "string",
-                        "format": "date-time"
+                        "format": "date-time",
+                        "nullable": true
                     },
                     "updated_at": {
                         "type": "string",
-                        "format": "date-time"
+                        "format": "date-time",
+                        "nullable": true
                     }
                 }
             },
@@ -20393,7 +20421,8 @@
                     },
                     "created_at": {
                         "type": "string",
-                        "format": "date-time"
+                        "format": "date-time",
+                        "nullable": true
                     },
                     "finished_at": {
                         "type": "string",
@@ -20603,7 +20632,8 @@
                     },
                     "created_at": {
                         "type": "string",
-                        "format": "date-time"
+                        "format": "date-time",
+                        "nullable": true
                     },
                     "started_at": {
                         "type": "string",
@@ -20708,7 +20738,8 @@
                     },
                     "created_at": {
                         "type": "string",
-                        "format": "date-time"
+                        "format": "date-time",
+                        "nullable": true
                     }
                 }
             },
@@ -21069,7 +21100,8 @@
                     },
                     "created_at": {
                         "type": "string",
-                        "format": "date-time"
+                        "format": "date-time",
+                        "nullable": true
                     },
                     "finished_at": {
                         "type": "string",
@@ -21314,7 +21346,7 @@
                     "source_id": {
                         "type": "integer",
                         "nullable": true,
-                        "description": "For an unpin run: the broadcast whose pins it removes."
+                        "description": "For an unpin run: the broadcast whose pins it removes — null only for a row edited outside AmoBot to have none. Null for a message run."
                     },
                     "mode": {
                         "type": "string",
@@ -21322,10 +21354,13 @@
                             "copy",
                             "forward"
                         ],
-                        "description": "Copied by the bot (with the link buttons), or forwarded from its original sender."
+                        "nullable": true,
+                        "description": "Copied by the bot (with the link buttons), or forwarded from its original sender — an unpin run's, its source's. Null when that is unknown: a row edited outside AmoBot to have no mode, or no source."
                     },
                     "audience": {
                         "type": "object",
+                        "nullable": true,
+                        "description": "Who it went to — an unpin run's, its source's. Null when that is unknown: a row edited outside AmoBot to have no audience, or no source.",
                         "additionalProperties": false,
                         "required": [
                             "key",
@@ -21412,7 +21447,8 @@
                     },
                     "created_at": {
                         "type": "string",
-                        "format": "date-time"
+                        "format": "date-time",
+                        "nullable": true
                     },
                     "finished_at": {
                         "type": "string",
@@ -22295,11 +22331,13 @@
                     },
                     "created_at": {
                         "type": "string",
-                        "format": "date-time"
+                        "format": "date-time",
+                        "nullable": true
                     },
                     "updated_at": {
                         "type": "string",
-                        "format": "date-time"
+                        "format": "date-time",
+                        "nullable": true
                     }
                 }
             },
@@ -22460,11 +22498,13 @@
                     },
                     "created_at": {
                         "type": "string",
-                        "format": "date-time"
+                        "format": "date-time",
+                        "nullable": true
                     },
                     "updated_at": {
                         "type": "string",
-                        "format": "date-time"
+                        "format": "date-time",
+                        "nullable": true
                     }
                 }
             },
@@ -23032,11 +23072,13 @@
                     },
                     "created_at": {
                         "type": "string",
-                        "format": "date-time"
+                        "format": "date-time",
+                        "nullable": true
                     },
                     "updated_at": {
                         "type": "string",
-                        "format": "date-time"
+                        "format": "date-time",
+                        "nullable": true
                     }
                 }
             },
@@ -23125,11 +23167,13 @@
                     },
                     "created_at": {
                         "type": "string",
-                        "format": "date-time"
+                        "format": "date-time",
+                        "nullable": true
                     },
                     "updated_at": {
                         "type": "string",
-                        "format": "date-time"
+                        "format": "date-time",
+                        "nullable": true
                     },
                     "cards": {
                         "type": "array",
@@ -23227,11 +23271,13 @@
                     },
                     "created_at": {
                         "type": "string",
-                        "format": "date-time"
+                        "format": "date-time",
+                        "nullable": true
                     },
                     "updated_at": {
                         "type": "string",
-                        "format": "date-time"
+                        "format": "date-time",
+                        "nullable": true
                     }
                 }
             },
@@ -23318,11 +23364,13 @@
                     },
                     "created_at": {
                         "type": "string",
-                        "format": "date-time"
+                        "format": "date-time",
+                        "nullable": true
                     },
                     "updated_at": {
                         "type": "string",
-                        "format": "date-time"
+                        "format": "date-time",
+                        "nullable": true
                     }
                 }
             },
@@ -23409,11 +23457,13 @@
                     },
                     "created_at": {
                         "type": "string",
-                        "format": "date-time"
+                        "format": "date-time",
+                        "nullable": true
                     },
                     "updated_at": {
                         "type": "string",
-                        "format": "date-time"
+                        "format": "date-time",
+                        "nullable": true
                     }
                 }
             },
@@ -23500,11 +23550,13 @@
                     },
                     "created_at": {
                         "type": "string",
-                        "format": "date-time"
+                        "format": "date-time",
+                        "nullable": true
                     },
                     "updated_at": {
                         "type": "string",
-                        "format": "date-time"
+                        "format": "date-time",
+                        "nullable": true
                     }
                 }
             },
@@ -23591,11 +23643,13 @@
                     },
                     "created_at": {
                         "type": "string",
-                        "format": "date-time"
+                        "format": "date-time",
+                        "nullable": true
                     },
                     "updated_at": {
                         "type": "string",
-                        "format": "date-time"
+                        "format": "date-time",
+                        "nullable": true
                     }
                 }
             },
@@ -23682,11 +23736,13 @@
                     },
                     "created_at": {
                         "type": "string",
-                        "format": "date-time"
+                        "format": "date-time",
+                        "nullable": true
                     },
                     "updated_at": {
                         "type": "string",
-                        "format": "date-time"
+                        "format": "date-time",
+                        "nullable": true
                     }
                 }
             },
@@ -23773,11 +23829,13 @@
                     },
                     "created_at": {
                         "type": "string",
-                        "format": "date-time"
+                        "format": "date-time",
+                        "nullable": true
                     },
                     "updated_at": {
                         "type": "string",
-                        "format": "date-time"
+                        "format": "date-time",
+                        "nullable": true
                     }
                 }
             },
@@ -23868,11 +23926,13 @@
                     },
                     "created_at": {
                         "type": "string",
-                        "format": "date-time"
+                        "format": "date-time",
+                        "nullable": true
                     },
                     "updated_at": {
                         "type": "string",
-                        "format": "date-time"
+                        "format": "date-time",
+                        "nullable": true
                     }
                 }
             },
@@ -25569,7 +25629,8 @@
                     },
                     "updated_at": {
                         "type": "string",
-                        "format": "date-time"
+                        "format": "date-time",
+                        "nullable": true
                     }
                 }
             },
@@ -25708,7 +25769,8 @@
                     },
                     "created_at": {
                         "type": "string",
-                        "format": "date-time"
+                        "format": "date-time",
+                        "nullable": true
                     }
                 }
             },
@@ -25847,6 +25909,7 @@
                     "created_at": {
                         "type": "string",
                         "format": "date-time",
+                        "nullable": true,
                         "description": "When its newest codes were created."
                     }
                 }
@@ -26112,7 +26175,8 @@
                     },
                     "created_at": {
                         "type": "string",
-                        "format": "date-time"
+                        "format": "date-time",
+                        "nullable": true
                     }
                 }
             },
@@ -26255,7 +26319,8 @@
                     },
                     "created_at": {
                         "type": "string",
-                        "format": "date-time"
+                        "format": "date-time",
+                        "nullable": true
                     },
                     "issued_at": {
                         "type": "string",
@@ -26743,7 +26808,8 @@
                     },
                     "created_at": {
                         "type": "string",
-                        "format": "date-time"
+                        "format": "date-time",
+                        "nullable": true
                     }
                 }
             },
@@ -27003,7 +27069,8 @@
                     },
                     "created_at": {
                         "type": "string",
-                        "format": "date-time"
+                        "format": "date-time",
+                        "nullable": true
                     }
                 }
             },
@@ -27222,7 +27289,8 @@
                     },
                     "created_at": {
                         "type": "string",
-                        "format": "date-time"
+                        "format": "date-time",
+                        "nullable": true
                     }
                 }
             },
@@ -29361,7 +29429,8 @@
                     },
                     "link": {
                         "type": "string",
-                        "description": "The link customers follow to join."
+                        "nullable": true,
+                        "description": "The link customers follow to join. Null when it has neither a public handle nor an invite link — only ever a row edited outside AmoBot: the bot then asks no one to join it, and «بررسی دوباره» gets its handle, or a private one's invite link, again once the bot is an admin there."
                     },
                     "bot_is_admin": {
                         "type": "boolean",
@@ -29747,7 +29816,8 @@
                     },
                     "joined_at": {
                         "type": "string",
-                        "format": "date-time"
+                        "format": "date-time",
+                        "nullable": true
                     }
                 }
             },
@@ -29821,7 +29891,8 @@
                     },
                     "created_at": {
                         "type": "string",
-                        "format": "date-time"
+                        "format": "date-time",
+                        "nullable": true
                     }
                 }
             },
@@ -30038,7 +30109,8 @@
                     },
                     "created_at": {
                         "type": "string",
-                        "format": "date-time"
+                        "format": "date-time",
+                        "nullable": true
                     }
                 }
             },
@@ -30288,11 +30360,13 @@
                     },
                     "created_at": {
                         "type": "string",
-                        "format": "date-time"
+                        "format": "date-time",
+                        "nullable": true
                     },
                     "updated_at": {
                         "type": "string",
-                        "format": "date-time"
+                        "format": "date-time",
+                        "nullable": true
                     }
                 }
             },
@@ -30426,7 +30500,8 @@
                     },
                     "created_at": {
                         "type": "string",
-                        "format": "date-time"
+                        "format": "date-time",
+                        "nullable": true
                     },
                     "actions": {
                         "type": "object",
@@ -32179,6 +32254,7 @@
                     "created_at": {
                         "type": "string",
                         "format": "date-time",
+                        "nullable": true,
                         "description": "When they became a customer of the shop."
                     }
                 }
@@ -32302,6 +32378,7 @@
                     "created_at": {
                         "type": "string",
                         "format": "date-time",
+                        "nullable": true,
                         "description": "When it signed in."
                     },
                     "last_used_at": {
@@ -32638,6 +32715,7 @@
                                     "created_at": {
                                         "type": "string",
                                         "format": "date-time",
+                                        "nullable": true,
                                         "description": "When it became a customer of the shop."
                                     },
                                     "services": {
@@ -33277,7 +33355,8 @@
                     },
                     "created_at": {
                         "type": "string",
-                        "format": "date-time"
+                        "format": "date-time",
+                        "nullable": true
                     }
                 }
             },
@@ -33509,7 +33588,8 @@
                     },
                     "created_at": {
                         "type": "string",
-                        "format": "date-time"
+                        "format": "date-time",
+                        "nullable": true
                     },
                     "paid_at": {
                         "type": "string",
@@ -33556,6 +33636,7 @@
                     "url",
                     "expires_at",
                     "amount",
+                    "amount_rial",
                     "fee",
                     "card"
                 ],
@@ -33577,6 +33658,10 @@
                     "amount": {
                         "type": "string",
                         "description": "The sum to pay, in Toman: the payment's own, or more when the gateway adds a few Toman to tell transfers apart (CubePay, AbanGateway) or the customer pays the gateway's fee (`fee`). Show this one as what to pay. A page may still ask it otherwise: Variza's asks a few Toman more of its own, and Plisio's the same in a coin the customer picks there (at the shop's dollar rate)."
+                    },
+                    "amount_rial": {
+                        "type": "string",
+                        "description": "`amount` in Rial — ten to the Toman, as Iran's banks count —: whole, in Latin digits, no separators. What a banking app takes: the digits to copy for a transfer to `card`."
                     },
                     "fee": {
                         "type": "string",
@@ -33686,7 +33771,8 @@
                     },
                     "created_at": {
                         "type": "string",
-                        "format": "date-time"
+                        "format": "date-time",
+                        "nullable": true
                     },
                     "fulfilled_at": {
                         "type": "string",
@@ -34610,6 +34696,7 @@
                         "required": [
                             "payment_id",
                             "amount",
+                            "amount_rial",
                             "card",
                             "holder",
                             "bank",
@@ -34624,6 +34711,10 @@
                             "amount": {
                                 "type": "string",
                                 "description": "The amount to transfer, in Toman: the payment's own. A wallet top-up's may be a few Toman more than the order's (the bot setting of a random sum added to card-to-card top-ups), so its receipt is told apart; the whole of it is credited."
+                            },
+                            "amount_rial": {
+                                "type": "string",
+                                "description": "`amount` in Rial — ten to the Toman, as Iran's banks count —: whole, in Latin digits, no separators (`1200000` for 120000 Toman). What a banking app takes: copy these digits."
                             },
                             "card": {
                                 "type": "string",
@@ -34778,7 +34869,7 @@
                     "plan": {
                         "type": "object",
                         "nullable": true,
-                        "description": "The service's own plan, or the one picked (`plan_id`) for a service without one, which the renewal uses: what a renewal gives, as the catalogue says it (`StoreRenewalPlan` without the prices). Null for a package built (`custom`).",
+                        "description": "The service's own plan, or the one picked (`plan_id`) for a service without one, which the renewal uses: what a renewal gives, as the catalogue says it (`StoreRenewalPlan` without the prices and the category). Null for a package built (`custom`).",
                         "additionalProperties": false,
                         "required": [
                             "id",
@@ -34939,7 +35030,8 @@
                     "traffic_gb",
                     "duration_days",
                     "duration_hours",
-                    "devices"
+                    "devices",
+                    "category_id"
                 ],
                 "properties": {
                     "id": {
@@ -34988,6 +35080,11 @@
                     "devices": {
                         "type": "integer",
                         "description": "Devices at once once renewed on it; 0 for no limit."
+                    },
+                    "category_id": {
+                        "type": "integer",
+                        "nullable": true,
+                        "description": "The category it is listed under, as `GET /plans` groups the catalogue; null for the group without a category (no category, or a switched-off one). The bot asks for the category first when the plans to pick are in more than one."
                     }
                 }
             },
@@ -35004,7 +35101,7 @@
                         "items": {
                             "$ref": "#/components/schemas/StoreRenewalPlan"
                         },
-                        "description": "In the catalogue's order; empty while the service cannot be renewed now: not at all, not yet (its renewal window), or a renewal of it under way."
+                        "description": "In the catalogue's order: by category (`category_id`), as `GET /plans` groups them; empty while the service cannot be renewed now: not at all, not yet (its renewal window), or a renewal of it under way."
                     },
                     "custom_services": {
                         "type": "boolean",
@@ -35168,7 +35265,8 @@
                             },
                             "created_at": {
                                 "type": "string",
-                                "format": "date-time"
+                                "format": "date-time",
+                                "nullable": true
                             }
                         }
                     },
@@ -35211,7 +35309,8 @@
                     },
                     "created_at": {
                         "type": "string",
-                        "format": "date-time"
+                        "format": "date-time",
+                        "nullable": true
                     }
                 }
             },
@@ -35510,7 +35609,8 @@
                     },
                     "created_at": {
                         "type": "string",
-                        "format": "date-time"
+                        "format": "date-time",
+                        "nullable": true
                     }
                 }
             },
@@ -35624,6 +35724,7 @@
                     "last_message_at": {
                         "type": "string",
                         "format": "date-time",
+                        "nullable": true,
                         "description": "When its latest message was written; the list is sorted by it."
                     },
                     "unread": {
@@ -35637,7 +35738,8 @@
                     },
                     "created_at": {
                         "type": "string",
-                        "format": "date-time"
+                        "format": "date-time",
+                        "nullable": true
                     },
                     "closed_at": {
                         "type": "string",
@@ -35680,7 +35782,8 @@
                     },
                     "created_at": {
                         "type": "string",
-                        "format": "date-time"
+                        "format": "date-time",
+                        "nullable": true
                     }
                 }
             },
@@ -35723,6 +35826,7 @@
                     "last_message_at": {
                         "type": "string",
                         "format": "date-time",
+                        "nullable": true,
                         "description": "When its latest message was written; the list is sorted by it."
                     },
                     "unread": {
@@ -35736,7 +35840,8 @@
                     },
                     "created_at": {
                         "type": "string",
-                        "format": "date-time"
+                        "format": "date-time",
+                        "nullable": true
                     },
                     "closed_at": {
                         "type": "string",
@@ -35939,6 +36044,7 @@
                     "created_at": {
                         "type": "string",
                         "format": "date-time",
+                        "nullable": true,
                         "description": "When it was written."
                     }
                 }

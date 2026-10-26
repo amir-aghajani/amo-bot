@@ -31,8 +31,8 @@ use Illuminate\Support\Carbon;
  * @property int|null $rating 1 to 5: the customer's word on it once it was closed; null for none
  * @property string|null $rating_note What they said with it
  * @property Carbon|null $closed_at When it was closed; null while it is not
- * @property Carbon $created_at
- * @property Carbon $updated_at
+ * @property Carbon|null $created_at
+ * @property Carbon|null $updated_at
  * @property-read User $user
  * @property-read Subscription|null $subscription
  * @property-read Collection<int, TicketMessage> $messages

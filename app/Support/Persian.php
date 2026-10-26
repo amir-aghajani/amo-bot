@@ -51,9 +51,15 @@ final class Persian
         return self::digits(number_format($value, 0, '٫', '٬'));
     }
 
-    /** "۲۶ شهریور ۱۴۰۵" — Jalali date in the shop's zone (LocalTime), computed here so no PHP extension is required. */
-    public static function date(\DateTimeInterface $date, bool $withTime = false): string
+    /**
+     * "۲۶ شهریور ۱۴۰۵" — Jalali date in the shop's zone (LocalTime), computed here so no PHP extension is required; "—"
+     * for none (a row written outside AmoBot without its time).
+     */
+    public static function date(?\DateTimeInterface $date, bool $withTime = false): string
     {
+        if ($date === null) {
+            return '—';
+        }
         [$year, $month, $day] = self::jalali($date);
         $text = self::digits($day) . ' ' . self::jalaliMonth($year, $month);
 

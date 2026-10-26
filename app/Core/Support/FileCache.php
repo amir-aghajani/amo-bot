@@ -20,6 +20,7 @@ final class FileCache
      * What `$key` holds while fresh, else what `$fetch` returns, kept (a null is not kept).
      *
      * @param \Closure(): ?string $fetch
+     * @phpstan-impure
      */
     public function remember(string $key, \Closure $fetch): ?string
     {

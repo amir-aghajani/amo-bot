@@ -81,7 +81,7 @@ final class CustomEmojis
     /**
      * The picker's emoji, the latest seen first — each with how Telegram draws it (`format` null: not known yet).
      *
-     * @return list<array{id: string, emoji: string, format: string|null, repaint: bool, updated_at: string}>
+     * @return list<array{id: string, emoji: string, format: string|null, repaint: bool, updated_at: string|null}>
      */
     public function present(): array
     {
@@ -91,7 +91,7 @@ final class CustomEmojis
                 'emoji' => $row->emoji,
                 'format' => $row->format,
                 'repaint' => $row->repaint,
-                'updated_at' => $row->updated_at->toIso8601String(),
+                'updated_at' => $row->updated_at?->toIso8601String(),
             ])
             ->values()->all();
     }

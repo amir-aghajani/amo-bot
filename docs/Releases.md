@@ -13,6 +13,83 @@ While a version is being made its changes collect under **Unreleased**; releasin
 
 Nothing yet.
 
+## Version 0.7.1
+
+### Security
+
+- **PHP with known security holes is refused.** The shop needs PHP 8.3.36, 8.4.27 or 8.5.12, or a later release of
+  the same branch: the releases that closed two critical holes through which anyone who can reach a site could run
+  their own code there (CVE-2026-109618 and CVE-2026-109619, 21 October 2026). On an older release
+  ([what you need](Installation.md#what-you-need)):
+  - the installer stops and names the release to move to;
+  - the panel's update installs no release;
+  - a strip over every page of the owner's panel says so while the shop runs on it («PHP این هاست … حفره امنیتی جدی
+    دارد…»);
+  - below 8.3.36, the shop does not start at all.
+- **PHP 8.2 is no longer supported**, though PHP still patches it until the end of 2026: a shop on it moves to PHP
+  8.3.36 or later before this release. CI runs the suite on PHP 8.3, 8.4 and 8.5.
+- **Every dependency on its latest patch.** The PHP packages — Illuminate 12.70, Guzzle 8.3, Symfony 7.4.21, Carbon
+  3.15, Monolog 3.12.1 and the rest — have no known advisory against them. The tools that build the panels and run
+  their tests never reach a shop: Vite 8.3.5 (GHSA-rq7h-c2jc-7f22, GHSA-vfpm-58rq-9qcg, GHSA-9jrq-w75r-8gcw, and
+  launch-editor's GHSA-587h-7wmj-h5pm, GHSA-r825-w8mm-5pxw and GHSA-698v-4r3x-3vcv), happy-dom 21.0.4
+  (GHSA-834v-8h66-3h79), source-map-js (GHSA-68fv-2mgg-jv7q) and zod (GHSA-mrhx-c7xc-m3w5).
+
+### Changed
+
+- **The amount to transfer to a card is in Rial**, ten to the Toman, as Iran's banks count. The card's message still
+  reads the price in Toman, and gives the amount to transfer in Rial — «💰 مبلغ: 1200000 ریال» for a price of 120,000
+  Toman —; «📋 کپی مبلغ (ریال)» and a tap on it copy `1200000`. The same goes for an online payment's card. In
+  «متن‌های ربات», `%amount_rial%` is that amount; `%amount_digits%` is still the Toman.
+
+### Fixed
+
+- **Rows written outside AmoBot without a time** — imported, or added by hand in phpMyAdmin, with no `created_at` or
+  `updated_at` — no longer stop a page of the panels with a server error. The customers, orders, payments, services,
+  tickets, plans, the dashboard and the rest list them, the missing time as «—»; so do the bot's wallet history and
+  ticket messages. The shop's website gets such a time as null.
+- **A required channel with no way in** — its handle and invite link taken out by hand — no longer stops the channels
+  list. The list says it has no link to join by, and the bot asks no one to join it. «بررسی دوباره» gets a public
+  channel's handle back, or a private one's invite link once the bot is an admin there.
+- **A broadcast run edited by hand** to name no message or no audience is cancelled at its next batch, as one whose
+  admin is gone already was, instead of failing every minute; its progress message reads «—» for the audience. Such a
+  run — or an unpin run left without its source — no longer stops «پیام همگانی»'s list, which shows what is unknown as
+  «—».
+- **A database the shop cannot reach** — stopped, out of reach, refusing `config.php`'s credentials, or out of
+  connections — no longer gives a bare server error: every page of the panels says «دیتابیس فروشگاه در دسترس نیست…»
+  (a `503`). Its log line holds the database's own words, without a trace.
+- **On PHP 8.5**, drawing a service's QR card or shrinking an uploaded picture no longer writes a deprecation notice to
+  the log.
+- **Renewing a service without a plan** — added by its link, or built — offers its plans by category, as «خرید اشتراک»
+  does, instead of every plan on its server in one list. When they are in more than one category, a button per category
+  comes first — only those with such a plan, «سایر پلن‌ها» last —, then that category's plans; «بازگشت» from a plan's
+  checkout leads back to them. A new text in «متن‌های ربات», «انتخاب پلن تمدید در دسته», heads a category's plans.
+- **A plan's dialog** scrolls only as far as the tab shown: every tab was as long as the longest, so a short one ended
+  in blank space. The dialog keeps its height as the tabs change, its buttons at its foot.
+
+### Upgrading
+
+- **Check the host's PHP first**, in cPanel › *MultiPHP Manager* or *Select PHP Version*: at least 8.3.36, 8.4.27 or
+  8.5.12 on its branch. From 0.7.0, the panel's update refuses a PHP older than 8.3.36 — PHP 8.2 among them —, and a
+  release put in place by hand does not start on one. On an older 8.4 or 8.5 release, 0.7.0's update still installs
+  0.7.1; its strip then names the release to move to, and no later release installs until you do.
+- **An owner's own card texts** — «راهنمای کارت به کارت» or «کارت پرداخت آنلاین» reworded in «متن‌های ربات» — that show
+  the amount as the default did, `<code>%amount_digits%</code> تومان`, are changed to `<code>%amount_rial%</code> ریال`
+  by the upgrade, in every shop; the rest of their wording stays. Any other `%amount_digits%` there is left as written:
+  it is still the Toman, which a banking app does not take.
+
+### For website developers
+
+- **`amount_rial`** beside `amount` in a checkout's `transfer` and `link`: the same sum in Rial, ten to the Toman — the
+  digits a banking app takes. Copy it for a transfer; show `amount` as the price.
+- **`created_at` and `updated_at` may be null** wherever the Store API sends them, for a row written outside AmoBot
+  without them: show such a time as unknown.
+- **A broadcast's `mode` and `audience` may be null** in the admin API's `GET /admin/broadcasts`, for a run edited by
+  hand to name no audience, or an unpin run left without its source.
+- **A `503` with «دیتابیس فروشگاه در دسترس نیست؛ …»** answers any request while the shop's database cannot be reached.
+- **`category_id`** on each plan of `GET …/renewal-plans`: the category it is listed under, as `GET /plans` groups the
+  catalogue (null for «سایر پلن‌ها»), and the list now comes in that order. Show a service's plans by category, as the
+  bot does.
+
 ## Version 0.7.0
 
 ### Added

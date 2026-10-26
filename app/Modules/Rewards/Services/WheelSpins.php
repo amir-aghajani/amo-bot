@@ -41,7 +41,7 @@ final class WheelSpins
             'outcome' => $spin->outcome,
             'order' => $spin->order === null ? null : ['id' => $spin->order->id, 'status' => $spin->order->status->value],
             'subscription' => $spin->subscription === null ? null : ['id' => $spin->subscription->id, 'name' => $spin->subscription->remote_name],
-            'created_at' => $spin->created_at->toIso8601String(),
+            'created_at' => $spin->created_at?->toIso8601String(),
         ];
     }
 }

@@ -173,7 +173,8 @@ the visitor's address to `X-Forwarded-For` and pass their `User-Agent` on.
 - **Times** are ISO 8601 in UTC: `"2026-10-07T12:00:00+00:00"`. Show them in the shop's zone — the API does not say
   it: ask the owner (it is `APP_TIMEZONE`, «تنظیمات پنل › برنامه») —, e.g.
   `new Intl.DateTimeFormat('fa-IR-u-ca-persian', { timeZone: 'Asia/Tehran', dateStyle: 'medium' })` for Jalali dates in
-  Iran's time.
+  Iran's time. A row's `created_at` or `updated_at` is null when the row was written outside AmoBot without it
+  (imported, or added by hand in the database): show it as unknown.
 - **What a customer types** may use Persian or Arabic digits: emailed codes (six digits and nothing else — take out a
   space or a dash before sending), authenticator codes (spaces and dashes are fine there), an invite code, a Telegram
   id, and the amounts below.
@@ -241,7 +242,7 @@ Every refusal and failure has one shape:
 | `429` | Too many tries ([limits and lifetimes](Store-API-Sign-In.md#limits-and-lifetimes)), or past one of the customer's own caps ([the Idempotency-Key](Store-API-Buying.md#the-idempotency-key), [the receipt](Store-API-Buying.md#card-transfer-and-the-receipt), [an online payment asked about](Store-API-Buying.md#paying-online), [reading a service now](Store-API-After-Buying.md#reading-a-service-now), [a new link](Store-API-After-Buying.md#a-new-link), [sending money](Store-API-After-Buying.md#sending-money-to-another-customer), [the tickets' limits](Store-API-Support-Tickets.md#limits)) — or the admins' work on the VPN panels ([the shop's admins](Store-API-Admins.md#refusals)); wait the seconds `Retry-After` says | hold the action that long |
 | `500` | The server failed (logged under `request_id`) | message and «کد پیگیری» |
 | `502` | Something the shop relies on did not answer: Telegram, Google, a VPN server's panel, the mail server | try again later |
-| `503` | The shop's email does not go out — or its budget of sign-in emails is spent for now —, the captcha could not be judged, an online payment's gateway could not be asked, the server's disk is too full to take a picture or the shop took its pictures for the day, the shop takes no orders now (its bot switched off — or, an agent's shop, its selling suspended by the main shop, where a receipt is still taken and what only prices an order answers a `422` on `status`: [buying](Store-API-Buying.md#the-flow)), the shop keeps as many sign-ins begun — or reviews waiting on support — as it takes, or the shop is not installed | another way in, or later |
+| `503` | The shop's email does not go out — or its budget of sign-in emails is spent for now —, the captcha could not be judged, an online payment's gateway could not be asked, the server's disk is too full to take a picture or the shop took its pictures for the day, the shop takes no orders now (its bot switched off — or, an agent's shop, its selling suspended by the main shop, where a receipt is still taken and what only prices an order answers a `422` on `status`: [buying](Store-API-Buying.md#the-flow)), the shop keeps as many sign-ins begun — or reviews waiting on support — as it takes, the shop's database cannot be reached, or the shop is not installed | another way in, or later |
 
 ## Versioning
 
@@ -459,4 +460,5 @@ a site may want to tell apart, or explain better.
 | 422 | `اطلاعات واردشده معتبر نیست.` | a form's fields refused: see `errors` |
 | 422 | `متن این فیلد درست نیست؛ آن را با کدگذاری UTF-8 بفرستید.` | a form field that is not UTF-8 (under its field) |
 | 413 | `درخواست بزرگ‌تر از حد مجاز است.` | a body over 1 MiB, or a form over what the host's PHP takes: shrink the picture |
+| 503 | `دیتابیس فروشگاه در دسترس نیست؛ …` | the shop's database cannot be reached (down, out of reach, refusing the shop's credentials, or out of connections): any request, until it answers again |
 | 500 | `خطایی در سرور رخ داد. لطفا بعدا دوباره تلاش کنید.` | the server failed: show `request_id` |

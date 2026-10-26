@@ -62,7 +62,7 @@ jobs:
       - if: steps.wiki.outputs.ready == 'true'
         uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.2'
+          php-version: '8.3'
           coverage: none
 
       - if: steps.wiki.outputs.ready == 'true'

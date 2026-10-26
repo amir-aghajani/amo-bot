@@ -12,7 +12,7 @@
 
 ## شکل کلی
 
-پروژه AmoBot یک برنامه PHP 8.2 است (Slim 4، PHP-DI، Eloquent، Symfony Console) که هیچ HTMLی رندر نمی‌کند جز یک صفحه
+پروژه AmoBot یک برنامه PHP 8.3 است (Slim 4، PHP-DI، Eloquent، Symfony Console) که هیچ HTMLی رندر نمی‌کند جز یک صفحه
 کوچک — صفحه‌ای که مرورگر کاربر از یک درگاه پرداخت آنلاین به آن برمی‌گردد (`Payments\Controllers\ReturnPage`). این
 برنامه چهار چهره دارد:
 

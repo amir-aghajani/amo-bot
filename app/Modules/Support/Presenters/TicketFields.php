@@ -28,9 +28,9 @@ final class TicketFields
             'subject' => $ticket->subject,
             'status' => $ticket->status->value,
             'subscription' => $service === null ? null : ['id' => $service->id, 'name' => $service->remote_name],
-            'last_message_at' => ($ticket->last_message_at ?? $ticket->created_at)->toIso8601String(),
+            'last_message_at' => ($ticket->last_message_at ?? $ticket->created_at)?->toIso8601String(),
             'rating' => $ticket->rating,
-            'created_at' => $ticket->created_at->toIso8601String(),
+            'created_at' => $ticket->created_at?->toIso8601String(),
             'closed_at' => $ticket->closed_at?->toIso8601String(),
         ];
     }
@@ -47,7 +47,7 @@ final class TicketFields
             'author' => $message->author->value,
             'body' => $message->body,
             'attachment' => $message->hasPicture() ? ['name' => (string) $message->attachment_name, 'kept' => $message->keepsPicture()] : null,
-            'created_at' => $message->created_at->toIso8601String(),
+            'created_at' => $message->created_at?->toIso8601String(),
         ];
     }
 }

@@ -23,8 +23,8 @@ use Illuminate\Support\Carbon;
  * @property string|null $reason Support's word on a rejection
  * @property string|null $reviewer Who decided: the panel login, or a bot admin's @username / tg:<id>
  * @property Carbon|null $decided_at
- * @property Carbon $created_at
- * @property Carbon $updated_at
+ * @property Carbon|null $created_at
+ * @property Carbon|null $updated_at
  * @property-read User $user
  * @property-read AgencyLevel|null $level
  */

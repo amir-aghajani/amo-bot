@@ -59,8 +59,8 @@ use Illuminate\Support\Carbon;
  *                                          then are no longer in it
  * @property string|null $lease_token
  * @property Carbon|null $leased_until
- * @property Carbon $created_at
- * @property Carbon $updated_at
+ * @property Carbon|null $created_at
+ * @property Carbon|null $updated_at
  * @property-read User $user
  * @property-read Plan|null $plan
  * @property-read Server $server

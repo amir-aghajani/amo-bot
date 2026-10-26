@@ -102,7 +102,7 @@ final class TestAccountDirectory
                 'expires_at' => $service->expires_at?->toIso8601String(),
             ],
             'bought_after' => (bool) $test->getAttribute('bought_after'),
-            'created_at' => $test->created_at->toIso8601String(),
+            'created_at' => $test->created_at?->toIso8601String(),
             'issued_at' => $test->issued_at?->toIso8601String(),
             'ended_at' => $service?->ended_at?->toIso8601String(),
         ];

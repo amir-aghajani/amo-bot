@@ -182,6 +182,7 @@ export function PlansPage({ addServers }: { addServers?: string }) {
       <EditorModal
         editor={editor}
         size="lg"
+        tall
         title={(plan) => (plan ? `ویرایش «${plan.name}»` : 'افزودن پلن')}
         // A renewal is the plan as it is then: its price, term and traffic.
         description={(plan) =>

@@ -1589,7 +1589,7 @@ final class ProvisioningService
     private function beat(): void
     {
         $order = $this->delivering;
-        if ($order === null || $order->updated_at->greaterThan(now()->subSeconds(self::BEAT_EVERY))) {
+        if ($order === null || $order->updated_at?->greaterThan(now()->subSeconds(self::BEAT_EVERY))) {
             return;
         }
         $column = $order->getUpdatedAtColumn();

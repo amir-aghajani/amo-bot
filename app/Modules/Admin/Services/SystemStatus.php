@@ -11,6 +11,7 @@ use App\Modules\Bots\Models\Bot;
 use App\Modules\Bots\Services\Bots;
 use App\Modules\Telegram\BotSettings;
 use App\Modules\Telegram\BotState;
+use App\Support\PhpVersion;
 
 /**
  * Whether the machinery behind the shop is alive (the owner's dashboard card; agents are not told about the installation):
@@ -33,10 +34,14 @@ final class SystemStatus
     public function present(): array
     {
         $shop = CurrentBot::get();
+        $php = PhpVersion::host();
 
         return [
             'version' => Application::VERSION,
-            'php' => PHP_VERSION,
+            'php' => $php,
+            // A PHP release with its branch's known security holes open (PhpVersion): the panel says so over every page.
+            'php_safe' => PhpVersion::isSafe($php),
+            'php_required' => PhpVersion::required($php),
             'bot' => ['id' => $shop->id] + $this->bot(),
             'main_bot' => CurrentBot::run(Bot::MAIN, fn(): array => $this->bot()),
             'cron' => [
