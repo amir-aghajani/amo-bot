@@ -94,7 +94,7 @@ first sent with (`method_id`), for a week. (`POST /wallet/transfer` takes a key 
     of extra traffic, time or devices no longer sold, or a top-up outside today's bounds is a `422` although the order
     exists (look at `GET /orders`);
   - **cancelled since** — see the next point.
-- **Once that order was cancelled** — by support, or left unpaid for 48 hours, perhaps days ago —, a retry with its key
+- **Once that order was cancelled** — by support, or left unpaid for 48 hours by default, perhaps days ago —, a retry with its key
   is a `409` in words of its own (`این سفارش لغو شده است؛ پرداخت نشد یا پشتیبانی آن را لغو کرد. برای خرید دوباره از نو
   شروع کنید.`), not the «همین حالا» `409` of an order closed elsewhere a moment ago
   ([refusals and what to do](#refusals-and-what-to-do)): buying it again is a new attempt, with a new key.
@@ -394,7 +394,7 @@ opens it — `opens_at` (the moment its end date comes near enough), `days_befor
 connection: so many days before the end date it will have), `traffic_percent` (once that share of its traffic or less
 is left); whichever comes first, and with none of them its end. A service that never ends by time waits on its traffic
 alone, and is let in at once while the shop sets no percent or it has no quota. Until the window opens, the preview, the
-renewal and a code's check are `422` on `status` saying from when: `تمدید این سرویس از ۲۳ مهر ۱۴۰۵، ۱۵:۳۰ یا وقتی ٪۲۰
+renewal and a code's check are `422` on `status` saying from when: `تمدید این سرویس از ۲۳ مهر ۱۴۰۵، ۱۵:۳۰ یا وقتی ۲۰٪
 از حجم یا کمتر مانده باشد ممکن است.` Keep the renewal button and show the same words beside it. An ended service may
 always be renewed.
 
@@ -750,6 +750,8 @@ Only a `delivery` failure is delivered later, once support retries it; a `first_
           "paid_at": "2026-10-07T12:00:00+00:00",
           "receipt": null,
           "note": null,
+          "reference": null,
+          "held": false,
           "link": null
         }
       ]
@@ -820,6 +822,8 @@ Only a `delivery` failure is delivered later, once support retries it; a `first_
           "paid_at": null,
           "receipt": null,
           "note": null,
+          "reference": null,
+          "held": false,
           "link": null
         }
       ]
@@ -863,7 +867,7 @@ A wallet purchase, renewal or extra made on the site sends no notice: this answe
 | `422` on `status`: `رسید سفارش #142 هنوز در حال بررسی پشتیبانی است؛ …` | a card while the shop takes one receipt at a time and the customer's last receipt (of that order) is still with support; nothing was ordered | show the message, link to that order; the wallet still pays |
 | `409` on `expected_amount`: `قیمت این سفارش تغییر کرده و الان ۱۲۰٬۰۰۰ تومان است؛ اگر هنوز می‌خواهید، دوباره پرداخت کنید.` | the price now is not the `expected_amount` sent — a sale ended, a first purchase made elsewhere ([the price shown](#the-price-shown)); nothing was ordered | read the price again, show it, and let the customer confirm: a new attempt, with a new key |
 | `409` `این سفارش همین حالا جای دیگری پرداخت یا بسته شد؛ وضعیت آن را در سفارش‌ها ببینید.` | the order was paid or closed elsewhere in the same moment; nothing was charged | show the orders |
-| `409` `این سفارش لغو شده است؛ پرداخت نشد یا پشتیبانی آن را لغو کرد. برای خرید دوباره از نو شروع کنید.` | made again with its key, its order was cancelled since — by support, or unpaid for 48 hours; nothing was charged | a new attempt, with a new key |
+| `409` `این سفارش لغو شده است؛ پرداخت نشد یا پشتیبانی آن را لغو کرد. برای خرید دوباره از نو شروع کنید.` | made again with its key, its order was cancelled since — by support, or unpaid for 48 hours (by default); nothing was charged | a new attempt, with a new key |
 | `429` `درخواست پرداخت زیادی فرستاده‌اید؛ ۸ دقیقه دیگر دوباره امتحان کنید.` | 30 ordering requests in 10 minutes | hold the pay button for `Retry-After` |
 | `503` `فروشگاه فعلا سفارش نمی‌گیرد؛ کمی بعد دوباره سر بزنید.` | the shop takes no orders now (its bot switched off); nothing was ordered | say so; offer it again later |
 | `503` `فروش این فروشگاه فعلا متوقف است؛ …` | an agent's shop whose selling the main shop suspended; nothing was ordered (a renewal's preview and a code's check say it as a `422` on `status`) | say so; the customer's services keep working, and a receipt for an earlier order is still taken |
@@ -930,6 +934,8 @@ The answer is the order, its payment now `awaiting_review` with `receipt.sent_at
         "paid_at": null,
         "receipt": { "sent_at": "2026-10-07T12:16:41+00:00" },
         "note": null,
+        "reference": null,
+        "held": false,
         "link": null
       }
     ]
@@ -1005,9 +1011,10 @@ which accepts on its own a receipt sent in the bot that nobody looked at, never 
   new `transfer` comes with a new `payment_id`. The customer gets a `payment_rejected` notice.
 - **Cancelled** by support — the order is `cancelled` (`order_cancelled` notice).
 - **Left alone** — an unpaid order with nothing happening for 48 hours is cancelled soon after (the shop looks every
-  10 minutes), quietly — no notice: only `GET /orders/{id}` shows it. Its payments' `note` reads
-  `پرداخت در مهلت کامل نشد` unless one already had a note (a refused receipt keeps support's reason), and a receipt
-  uploaded for it is deleted. A receipt with support never expires.
+  10 minutes; both are the defaults of the owner's
+  [«زمان‌بندی کارها»](Running-In-Production.md#the-task-schedule)), quietly — no notice: only `GET /orders/{id}` shows
+  it. Its payments' `note` reads `پرداخت در مهلت کامل نشد` unless one already had a note (a refused receipt keeps
+  support's reason), and a receipt uploaded for it is deleted. A receipt with support never expires.
 
 To learn the outcome, read `GET /orders/{id}` while its page is open (every 15–30 seconds) until the order is
 `fulfilled`, `failed` or `cancelled`, or watch `unread_notifications` in `GET /me`.
@@ -1069,7 +1076,8 @@ gateway's own page, and the gateway tells the shop. Its checkout answers `link`,
 **The outcome.** The gateway tells the shop by itself once the customer paid; the shop then asks the gateway what came
 of the payment — it never takes the call's word for it —, and asks it every few minutes too, until two hours after the
 page closed (48 hours while the gateway says money came in on it that it has not settled yet: a receipt in review, a
-sum paid in part). Variza answers no question: its word is its webhook, which the shop believes only when it is signed
+sum paid in part) — the defaults of the owner's [«زمان‌بندی کارها»](Running-In-Production.md#the-task-schedule). Variza
+answers no question: its word is its webhook, which the shop believes only when it is signed
 with the merchant's secret. A payment the gateway says was paid is settled at once — the order paid and delivered, as a card
 payment approved is ([the review](#the-review)) — and the customer gets a `payment_settled` notice. Meanwhile read
 `GET /orders/{id}` every 15–30 seconds while the order's page is open, until it is `fulfilled`, `failed` or `cancelled`
@@ -1109,6 +1117,11 @@ it has more than 3 minutes left; after that, the gateway is asked about the old 
 the order as it stands (`settled` or `processing`) and no new page opens —, else a new payment and a new page — the old
 one is still settled should the gateway take money on it after all.
 
+**Its tracking code.** Once its page opened, the payment's `reference` is its tracking code at the gateway, as the
+gateway gave it — its invoice, then what settled it once paid (Zarinpal's `ref_id`, AtlasPay's tracking code) —: show it
+on the order, for the customer to quote to the gateway or to support. Only an online payment has one: `null` for every
+other way to pay (the wallet, a card transfer), and before its page opened.
+
 **Refusals.** A gateway out of reach, or one that would not open the payment, is a `422` on `method_id` (`درگاه پرداخت
 الان در دسترس نیست؛ …`): nothing paid, the order left `pending` with that payment `failed` — try again a little later,
 with the same key or a new one, or another way to pay. A receipt for an online payment is a `422` on `status` (`رسید
@@ -1122,11 +1135,12 @@ closed.
 ### A payment held for support
 
 The shop does not settle a payment it cannot take at its gateway's word — one the gateway confirmed for another order
-or amount, or on which it kept money unsettled for 48 hours —: the payment is held for support
+or amount, or on which it kept money unsettled for 48 hours by default —: the payment is held for support
 ([Payment methods](Payment-Methods.md#a-payment-held-for-you)), and nothing more is asked of the gateway about it. Its
 `note` says so in the customer's words, whatever its `status` — `پرداخت سفارش #53 برای بررسی به پشتیبانی رسیده است؛ …`,
 in place of the shop's words to support on why. While it still waits — `pending`, or `failed` with its page — its
-order stays `pending` and never expires. Meanwhile:
+`held` is `true` (`false` for every other payment, and for this one once support cancelled it), and its order stays
+`pending` and never expires. Branch on `held`, not on the words. Meanwhile:
 
 - `POST /payments/{id}/check` is a `422` on `status`: `پرداخت سفارش #53 برای بررسی به پشتیبانی رسیده است؛ دوباره
   پرداخت نکنید و برای پیگیری به پشتیبانی پیام بدهید.`;

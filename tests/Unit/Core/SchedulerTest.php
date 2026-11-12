@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Unit\Core;
 
 use App\Core\Scheduling\Budget;
+use App\Core\Scheduling\Intervals;
 use App\Core\Scheduling\Scheduler;
 use App\Core\Scheduling\Task;
 use App\Core\Support\FileLock;
@@ -226,6 +227,55 @@ final class SchedulerTest extends TestCase
             self::assertEqualsWithDelta($seconds, $timed->given[$turn], 0.5, 'each gets what is left over the turns still to come');
         }
         self::assertEqualsWithDelta(Budget::OUTSIDE_A_RUN, $this->budget->seconds(), 0.5, 'outside a run, work gets a turn\'s time of its own');
+    }
+
+    public function testTheOwnersIntervalTakesTheDefaultsPlaceAndAnUnreadableOneLeavesTheDefault(): void
+    {
+        $intervals = new class implements Intervals {
+            /** @var array<string, int> */
+            public array $minutes = [];
+
+            public bool $broken = false;
+
+            public function minutes(string $key, int $default): int
+            {
+                if ($this->broken) {
+                    throw new \RuntimeException('database down');
+                }
+
+                return $this->minutes[$key] ?? $default;
+            }
+        };
+        $scheduler = new Scheduler($this->container, $this->shops, $this->budget, new Logger('test', [$this->log]), $this->stateFile, $intervals);
+        $scheduler->everyMinutes(5, CountingTask::class);
+        $scheduler->run();
+
+        self::assertSame(5 * 60, $scheduler->interval(CountingTask::class), 'none set: the schedule\'s');
+        $intervals->minutes['counting'] = 30;
+        self::assertSame(30 * 60, $scheduler->interval(CountingTask::class));
+        self::assertSame(5 * 60, $scheduler->tasks()[CountingTask::class]['interval'], 'the default stays the schedule\'s');
+
+        $this->backdate(CountingTask::class, 10 * 60);
+        self::assertSame([], $scheduler->run(), 'ten minutes: not yet, by the owner\'s thirty');
+        $this->backdate(CountingTask::class, 30 * 60);
+        self::assertSame([CountingTask::class], $scheduler->run());
+
+        $intervals->broken = true;
+        self::assertSame(5 * 60, $scheduler->interval(CountingTask::class), 'unreadable: the work goes on at its default');
+        self::assertTrue($this->log->hasWarningThatContains('runs at its default'));
+    }
+
+    public function testATaskIsKeyedByItsClassAndItsLastRunIsKept(): void
+    {
+        self::assertSame('counting', Scheduler::key(CountingTask::class));
+        self::assertSame('sync_subscriptions', Scheduler::key('App\\Modules\\Subscriptions\\Tasks\\SyncSubscriptionsTask'));
+        self::assertSame('counting', $this->scheduler()->everyMinutes(1, CountingTask::class)->tasks()[CountingTask::class]['key']);
+
+        $scheduler = $this->scheduler()->everyMinutes(1, CountingTask::class)->everyMinutes(1, FailingTask::class);
+        self::assertCount(0, $scheduler->lastRuns(), 'nothing ran yet');
+        $scheduler->run();
+        self::assertSame([CountingTask::class, FailingTask::class], array_keys($scheduler->lastRuns()), 'a task that failed ran too: its time was written first');
+        self::assertEqualsWithDelta(time(), $scheduler->lastRuns()[CountingTask::class]->getTimestamp(), 2);
     }
 
     private function scheduler(): Scheduler

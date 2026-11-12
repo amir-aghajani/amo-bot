@@ -33,11 +33,16 @@ use App\Core\Mail\Mailer;
 use App\Core\Mail\MailTransport;
 use App\Core\Scheduling\BackgroundRun;
 use App\Core\Scheduling\Budget;
+use App\Core\Scheduling\Intervals;
 use App\Core\Scheduling\Scheduler;
 use App\Core\Scheduling\Shops;
 use App\Core\Security\Encrypter;
 use App\Core\Security\RateLimiter;
 use App\Core\Session\Session;
+use App\Core\Sms\Drivers\IpPanel;
+use App\Core\Sms\Sms;
+use App\Core\Sms\SmsSender;
+use App\Core\Sms\SmsSenders;
 use App\Core\Support\FileCache;
 use App\Core\Support\Sleeper;
 use App\Core\Support\SystemSleeper;
@@ -46,6 +51,7 @@ use App\Modules\Auth\PanelAuthMiddleware;
 use App\Modules\Auth\Services\AgentAuth;
 use App\Modules\Auth\Services\OwnerAuth;
 use App\Modules\Auth\Services\RecoveryKey;
+use App\Modules\Backups\Backups;
 use App\Modules\Bots\Scheduling\BotShops;
 use App\Modules\Bots\ShopScopeMiddleware;
 use App\Modules\Catalog\Services\CustomServiceSettings;
@@ -65,6 +71,7 @@ use App\Modules\Payments\Drivers\Zarinpal\ZarinpalDriver;
 use App\Modules\Payments\GatewayRegistry;
 use App\Modules\Payments\Services\OnlinePayments;
 use App\Modules\Payments\Services\PaymentSettings;
+use App\Modules\Providers\Drivers\HmPanel\HmPanelDriver;
 use App\Modules\Providers\Drivers\PasarGuard\PasarGuardDriver;
 use App\Modules\Providers\Drivers\ThreeXui\ThreeXuiDriver;
 use App\Modules\Providers\ProviderRegistry;
@@ -77,8 +84,11 @@ use App\Modules\Rewards\Services\WheelSettings;
 use App\Modules\Settings\Services\BotSettingsScreen;
 use App\Modules\Settings\Services\DatabaseSettings;
 use App\Modules\Settings\Services\MailSettings;
+use App\Modules\Settings\Services\ScheduleSettings;
 use App\Modules\Settings\Services\Settings;
+use App\Modules\Settings\Services\SmsSettings;
 use App\Modules\Store\Http\WebsiteCorsPolicy;
+use App\Modules\Store\Services\MiniApps;
 use App\Modules\Subscriptions\Services\ClientNameSettings;
 use App\Modules\Subscriptions\Services\ExpiredServicesSettings;
 use App\Modules\Subscriptions\Services\ExtrasSettings;
@@ -90,6 +100,7 @@ use App\Modules\Subscriptions\Services\ServiceTransferSettings;
 use App\Modules\Subscriptions\Services\TestAccountSettings;
 use App\Modules\Telegram\Api\BotApi;
 use App\Modules\Telegram\BotSettings;
+use App\Modules\Telegram\Contracts\MiniAppAddress;
 use App\Modules\Telegram\Emoji\PremiumEmojiStatus;
 use App\Modules\Telegram\Polling\LongPolls;
 use App\Modules\Telegram\Polling\Poller;
@@ -219,6 +230,14 @@ return [
     Mailer::class => autowire()->constructorParameter('transport', get('mail.transport'))->constructorParameter('drivers', get('mail.drivers')),
     MailSettings::class => autowire()->constructorParameter('drivers', get('mail.drivers')),
 
+    // The ways one-time codes go out by SMS, by what SMS_DRIVER holds (Core\Sms\Drivers): register additional drivers here.
+    'sms.drivers' => factory(static fn(ContainerInterface $c): Registry => new Registry([$c->get(IpPanel::class)])),
+    // How they go out now (config.php's SMS_*; null: none) — the one place a test puts its fake (RecordingSmsSender), as
+    // `mail.transport` is for email, so the Sms built around it is never built again.
+    'sms.sender' => factory(static fn(Config $config, ContainerInterface $c, LoggerInterface $logger): ?SmsSender => SmsSenders::fromConfig($config, $c->get('sms.drivers'), $logger)),
+    Sms::class => autowire()->constructorParameter('sender', get('sms.sender')),
+    SmsSettings::class => autowire()->constructorParameter('drivers', get('sms.drivers')),
+
     Sleeper::class => autowire(SystemSleeper::class),
 
     // The lock the installer writes once the shop is set up.
@@ -254,12 +273,21 @@ return [
 
     // A refund takes back what its order gave a service: the services' side of it (Payments names no service).
     RefundedOrders::class => autowire(RefundedDeliveries::class),
+    // The bot's buttons open the mini app the Store module keeps; the logos the panels upload for it, each shop's its own.
+    'miniapp.logos' => factory(fn(Application $app) => $app->storagePath('uploads/logos')),
+    // The backups: one made to download, uploads waiting to be restored, the states kept from before a restore.
+    'backups.path' => factory(fn(Application $app) => $app->storagePath('backups')),
+    Backups::class => autowire()->constructorParameter('folder', get('backups.path')),
+    MiniApps::class => autowire()->constructorParameter('logos', get('miniapp.logos')),
+    MiniAppAddress::class => get(MiniApps::class),
 
     // Where the scheduler remembers when each task last ran; the shops it goes round are the bots'.
     'schedule.state' => factory(fn(Application $app) => $app->storagePath('cache/schedule.json')),
     Shops::class => autowire(BotShops::class),
+    // How often each task runs: the owner's «زمان‌بندی کارها», kept with the main shop (the schedule's minutes the defaults).
+    Intervals::class => get(ScheduleSettings::class),
     Scheduler::class => factory(function (Application $app, ContainerInterface $c, Shops $shops, Budget $budget, LoggerInterface $logger) {
-        $scheduler = new Scheduler($c, $shops, $budget, $logger, $c->get('schedule.state'));
+        $scheduler = new Scheduler($c, $shops, $budget, $logger, $c->get('schedule.state'), $c->get(Intervals::class));
         $register = require $app->basePath('bootstrap/schedule.php');
         $register($scheduler);
 
@@ -269,7 +297,7 @@ return [
     // --- Domain registries: register additional drivers here ---------------------------------
     // The panel connectors, by what servers.driver holds (Providers\Drivers) — and, on them, the client of each
     // server's panel, kept a while (ProviderRegistry).
-    'panel.drivers' => factory(static fn(ContainerInterface $c): Registry => new Registry([$c->get(ThreeXuiDriver::class), $c->get(PasarGuardDriver::class)])),
+    'panel.drivers' => factory(static fn(ContainerInterface $c): Registry => new Registry([$c->get(ThreeXuiDriver::class), $c->get(PasarGuardDriver::class), $c->get(HmPanelDriver::class)])),
     ProviderRegistry::class => factory(static function (PanelHttp $http, ContainerInterface $c): ProviderRegistry {
         $registry = new ProviderRegistry($http);
         foreach ($c->get('panel.drivers')->all() as $driver) {

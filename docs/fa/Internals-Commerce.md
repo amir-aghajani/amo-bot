@@ -195,7 +195,8 @@ refunded. فهرست‌های خواندن روی `Order` هستند: `SOLD` (ی
   برداشته می‌ماند — مال همان تحویل است (<code dir="ltr">OrderService::withTraffic()</code>؛
   <code dir="ltr">TrafficPool::draw()</code> هرگز برای یک سفارش دو بار برنمی‌دارد).
 
-سفارش‌های پرداخت‌نشده بعد از `ExpireOrdersTask::EXPIRE_HOURS` منقضی می‌شوند (<code dir="ltr">Order::expirable()</code>)،
+سفارش‌های پرداخت‌نشده بعد از ساعت‌هایی که مالک تعیین کرده منقضی می‌شوند (<code dir="ltr">ScheduleSettings::orderHours()</code>،
+«زمان‌بندی کارها»؛ پیش‌فرضش `ScheduleSettings::ORDER_HOURS`) (<code dir="ltr">Order::expirable()</code>)،
 هرگز تا وقتی ممکن است پولشان دست پشتیبانی باشد (<code dir="ltr">Payment::isWithSupport()</code>): رسیدی در حال بررسی، یا
 انتقال کارتی که در پیوی پشتیبانی انجام می‌شود — که هیچ کارتی به آن نشان داده نشده و تایید یا لغوش با پشتیبانی می‌ماند،
 هر چه تنظیم از آن به بعد بگوید.
@@ -371,7 +372,8 @@ database/schema.php، <code dir="ltr">createBuiltins()</code>، ارتقای 0.5
 (<code dir="ltr">OnlinePayments::check()</code>، فقط حرف درگاه آن را جابه‌جا می‌کند)، و پرداختی که بعد از بسته شدن
 سفارشش انجام شده (<code dir="ltr">Payment::wentToWallet()</code>: پولش در کیف پول است) نه دوباره امتحان می‌شود و نه
 بازپرداخت — هیچ بخشی از سفارش را نپرداخته است. پرداخت آنلاین وقتی برای پشتیبانی نگه داشته می‌شود
-(<code dir="ltr">OnlinePayments::isHeld()</code>) که درگاهش پاسخی بدهد که با آن جور نیست، پولی را که برایش رسیده تا ۴۸
+(<code dir="ltr">OnlinePayments::isHeld()</code>) که درگاهش پاسخی بدهد که با آن جور نیست، پولی را که برایش رسیده تا
+<code dir="ltr">ScheduleSettings::reviewHours()</code> (پیش‌فرضش `ScheduleSettings::REVIEW_HOURS`، یعنی ۴۸)
 ساعت پس از بسته شدن صفحه‌اش تسویه نکند، یا آن را پس از اینکه گفته بود پولی برایش رسیده ببندد — این آخری همان لحظه —،
 و هر کدام یادداشت خودش را دارد (`PaymentService::HELD_NOTES`). پرداخت نگه‌داشته‌شده دیگر پرسیده نمی‌شود — فقط
 <code dir="ltr">cancel()</code> مجاز است —، و تا وقتی هنوز منتظر است (در انتظار، یا ناموفق با صفحه‌اش) سفارشش نه منقضی
@@ -582,7 +584,7 @@ database/schema.php، <code dir="ltr">createBuiltins()</code>، ارتقای 0.5
 گروه اصلی (بعد <code dir="ltr">remedy()</code>، راه برگشت مالک فروشگاه) و، کلمه به کلمه کپی‌شده، `SELLING_SUSPENSION`
 پنل‌ها. کف خرید برنامه و کف خرید خود یک نماینده یک فیلدند (<code dir="ltr">AgencySettings::minimumOf()</code>): تومان کامل،
 ۰ برای هیچ — `monthly_minimum` خالی (null). <code dir="ltr">Bot::sells()</code> تنها پرسشی است که همه ورودی‌ها می‌پرسند
-— برای ربات اصلی true؛ پایانی که گذشته بلافاصله حساب می‌شود، پیش از اینکه `Agency\Tasks\AgencyStandingTask` ساعتی آن را
+— برای ربات اصلی true؛ پایانی که گذشته بلافاصله حساب می‌شود، پیش از اینکه `Agency\Tasks\AgencyStandingTask` (به‌طور پیش‌فرض ساعتی) آن را
 ثبت کند. هرگز <code dir="ltr">Bot::status()</code> نیست، که ربات، Webhookش، پنلش، وب‌سایتش و کارهایش را متوقف می‌کرد. جایی
 که پاسخ باید همان باشد که دیتابیس همین الان دارد — پروسه پولینگ یک ربات ردیف فروشگاهش را چند ثانیه نگه می‌دارد، و توقف
 از همان لحظه که نوشته شود برقرار است — ورودی <code dir="ltr">Bot::sellsNow()</code> را می‌پرسد، که ردیف نماینده را دوباره

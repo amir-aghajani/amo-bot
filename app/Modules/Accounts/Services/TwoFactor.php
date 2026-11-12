@@ -30,14 +30,16 @@ use Psr\Log\LoggerInterface;
 
 /**
  * Two-factor sign-in on the website: the email-and-password sign-in's second step, an authenticator app's code (RFC 6238,
- * Core\Security\Totp). Telegram and Google sign-ins are not asked — the provider signed them in.
+ * Core\Security\Totp) — asked of a sign-in by a code texted to the account's mobile too (PhoneSignIn), which a SIM
+ * swapped or a number given to someone else reads. Telegram and Google sign-ins are not asked — the provider signed them
+ * in.
  *
  * On: setup() keeps a new secret waiting, enable() takes the app's first code and hands out RECOVERY_CODES one-time
- * codes (shown once, kept as keyed hashes). Then a password sign-in answers a challenge (EmailSignIn) that signIn()
- * opens with the app's code or a recovery code. Every code tried is counted first against the account's second-step
- * budget (SignInThrottle::secondStep()), so someone holding the password cannot guess on from many addresses; no app
- * code opens twice (`totp_last_step`), and a recovery code is spent. A reset's new password waits in the challenge and
- * is set only when the second step opens. Off: disable() with the password, or turnOff() by support. The customer is
+ * codes (shown once, kept as keyed hashes). Then a password sign-in (EmailSignIn) or one by SMS answers a challenge that
+ * signIn() opens with the app's code or a recovery code. Every code tried is counted first against the account's
+ * second-step budget (SignInThrottle::secondStep()), so someone holding the password cannot guess on from many addresses;
+ * no app code opens twice (`totp_last_step`), and a recovery code is spent. A reset's new password waits in the challenge
+ * and is set only when the second step opens. Off: disable() with the password, or turnOff() by support. The customer is
  * told every time.
  */
 final class TwoFactor
@@ -58,6 +60,9 @@ final class TwoFactor
     /** The payload key a reset's challenge keeps the new password's hash under, until the second step opens. */
     public const NEW_PASSWORD = 'password_hash';
 
+    /** The payload key a sign-in by SMS keeps the number it proved under (PhoneSignIn), for the session it opens. */
+    public const BY_PHONE = 'phone';
+
     public const SETUP_GONE = 'زمان راه‌اندازی ورود دو مرحله‌ای گذشته است؛ آن را از اول راه‌اندازی کنید.';
     public const WRONG_CODE = 'کد درست نیست؛ کدی را که برنامه احراز هویت همین حالا نشان می‌دهد وارد کنید.';
     public const WRONG_SIGN_IN_CODE = 'کد درست نیست؛ کد شش‌رقمی برنامه احراز هویت یا یکی از کدهای بازیابی را وارد کنید.';
@@ -66,6 +71,7 @@ final class TwoFactor
     public function __construct(
         private readonly AuthChallenges $challenges,
         private readonly EmailSignIn $email,
+        private readonly PhoneSignIn $phone,
         private readonly CustomerSessions $sessions,
         private readonly Customers $customers,
         private readonly SignInThrottle $throttle,
@@ -174,11 +180,12 @@ final class TwoFactor
     }
 
     /**
-     * A password sign-in's second step: the challenge and the app's code (Persian digits too) or a recovery code. A wrong
-     * code is a 422 on `code`, counted on the challenge (AuthChallenges::CODE_ATTEMPTS), on the second-step budget and as a
-     * failed sign-in. A challenge that opens nothing any more (unknown, expired, tried out, two-factor off since) is a 401:
-     * start with the password again. A reset's new password kept in the challenge is set now, every session ended and the
-     * customer told.
+     * A sign-in's second step — a password's, or a code by SMS's: the challenge and the app's code (Persian digits too) or
+     * a recovery code. A wrong code is a 422 on `code`, counted on the challenge (AuthChallenges::CODE_ATTEMPTS), on the
+     * second-step budget and as a failed sign-in. A challenge that opens nothing any more (unknown, expired, tried out,
+     * two-factor off since) is a 401: start with the first step again. A reset's new password kept in the challenge is
+     * set now, every session ended and the customer told. A sign-in by SMS opens its session as one (PhoneAndCode), with
+     * the merge offered with another account holding its number (PhoneSignIn::mergeOffer()).
      *
      * @param array<string, mixed> $input {challenge, code}
      * @throws SignInRefusedException 401 the challenge opens nothing; 403 banned
@@ -189,7 +196,7 @@ final class TwoFactor
     {
         $secret = Input::text($input, 'challenge');
         if ($secret === '') {
-            throw ValidationException::on('challenge', 'challenge ورود را هم بفرستید؛ همان که POST /auth/login برگرداند.');
+            throw ValidationException::on('challenge', 'challenge ورود را هم بفرستید؛ همان که POST /auth/login یا POST /auth/phone/verify برگرداند.');
         }
         $code = self::typed($input);
         if ($code === '') {
@@ -220,7 +227,13 @@ final class TwoFactor
         }
         $this->customers->seen($user);
 
-        return $this->sessions->open($user, $request, SignInMethod::PasswordAndCode);
+        $phone = is_string($kept[self::BY_PHONE] ?? null) ? $kept[self::BY_PHONE] : null;
+        if ($phone === null) {
+            return $this->sessions->open($user, $request, SignInMethod::PasswordAndCode);
+        }
+        $signedIn = $this->sessions->open($user, $request, SignInMethod::PhoneAndCode);
+
+        return new SignedIn($signedIn->token, $signedIn->session, $this->phone->mergeOffer($user, $phone));
     }
 
     /**

@@ -80,7 +80,7 @@ ticket opened again, whichever way, leaves its `closed_at`, `rating` and `rating
     "closed_at": null,
     "rating_note": null,
     "messages": [
-      { "id": 31, "author": "customer", "body": "از دیشب سرویس ali_1 وصل نمی‌شود.\nروی دو گوشی امتحان کردم.", "attachment": null, "created_at": "2026-10-08T10:15:00+00:00" }
+      { "id": 31, "author": "customer", "body": "از دیشب سرویس ali_1 وصل نمی‌شود.\nروی دو گوشی امتحان کردم.", "attachment": null, "created_at": "2026-10-08T10:15:00+00:00", "seen": false }
     ]
   }
 }
@@ -153,15 +153,18 @@ the customer has the page in view. Writing in it, closing or rating it reads not
     "closed_at": null,
     "rating_note": null,
     "messages": [
-      { "id": 31, "author": "customer", "body": "از دیشب سرویس ali_1 وصل نمی‌شود.\nروی دو گوشی امتحان کردم.", "attachment": null, "created_at": "2026-10-08T10:15:00+00:00" },
-      { "id": 33, "author": "customer", "body": "این خطا را می‌دهد:", "attachment": { "name": "screenshot.jpg", "kept": true }, "created_at": "2026-10-08T10:18:00+00:00" },
-      { "id": 35, "author": "support", "body": "مشکل سرور برطرف شد؛ لطفا یک بار اتصال را قطع و دوباره وصل کنید.", "attachment": null, "created_at": "2026-10-08T10:40:00+00:00" }
+      { "id": 31, "author": "customer", "body": "از دیشب سرویس ali_1 وصل نمی‌شود.\nروی دو گوشی امتحان کردم.", "attachment": null, "created_at": "2026-10-08T10:15:00+00:00", "seen": true },
+      { "id": 33, "author": "customer", "body": "این خطا را می‌دهد:", "attachment": { "name": "screenshot.jpg", "kept": true }, "created_at": "2026-10-08T10:18:00+00:00", "seen": true },
+      { "id": 35, "author": "support", "body": "مشکل سرور برطرف شد؛ لطفا یک بار اتصال را قطع و دوباره وصل کنید.", "attachment": null, "created_at": "2026-10-08T10:40:00+00:00", "seen": null }
     ]
   }
 }
 ```
 
 The messages run first to last; `author` is `customer` or `support` — support's never say who of support wrote them.
+A customer's message says whether support has read it, `seen` — the second tick of a chat: `true` once support opened
+the ticket after it was written (in a panel, or from the website's admin side) or answered after it, else `false`;
+support's own messages say `null`.
 `body` is plain text: show it as text, never as HTML, with `white-space: pre-line`.
 
 A message's picture is `GET /tickets/{id}/messages/{message}/attachment`: its bytes — a JPEG, PNG, WebP or GIF as itself,
@@ -171,8 +174,9 @@ readable cross-origin). A picture uploaded from the website or a panel comes bac
 ([the receipt](Store-API-Buying.md#card-transfer-and-the-receipt)), not as it was sent.
 
 `attachment.kept` says whether there is a picture to fetch. One uploaded to a ticket goes 30 days after the ticket
-closed — a ticket opened again before then keeps its own —: the message still says it had one (`kept: false`) and its
-address is a `404`, so show the name without asking for the picture. A picture sent in the bot stays Telegram's.
+closed by default ([«زمان‌بندی کارها»](Running-In-Production.md#the-task-schedule)) — a ticket opened again before then
+keeps its own —: the message still says it had one (`kept: false`) and its address is a `404`, so show the name without
+asking for the picture. A picture sent in the bot stays Telegram's.
 
 ```ts
 // lib/store.ts, beside store(): a picture the API serves, as an address an <img> can show —

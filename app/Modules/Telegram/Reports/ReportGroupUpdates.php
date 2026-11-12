@@ -4,13 +4,15 @@ declare(strict_types=1);
 
 namespace App\Modules\Telegram\Reports;
 
+use App\Modules\Telegram\Reports\Customers\CustomerCards;
 use App\Modules\Telegram\Update\GroupHandler;
 use App\Modules\Telegram\Update\Update;
 
 /**
  * A group's other updates (as an admin there, the bot gets every message): the bot's membership changing, the group's
- * new title, a reply answering a ticket (TicketReplies), and a reply giving a receipt's rejection its reason
- * (ReceiptReview::reason()). Ticket replies are asked first; the rest of the chatter is ignored.
+ * new title, a reply answering a ticket (TicketReplies), a reply answering a customer card's question
+ * (CustomerCards::reply()), and a reply giving a receipt's rejection its reason (ReceiptReview::reason()). Ticket
+ * replies are asked first; the rest of the chatter is ignored.
  */
 final class ReportGroupUpdates implements GroupHandler
 {
@@ -18,6 +20,7 @@ final class ReportGroupUpdates implements GroupHandler
         private readonly ReportGroup $group,
         private readonly ReceiptReview $review,
         private readonly TicketReplies $tickets,
+        private readonly CustomerCards $cards,
     ) {}
 
     public function handle(Update $update): void
@@ -38,7 +41,7 @@ final class ReportGroupUpdates implements GroupHandler
             return;
         }
 
-        if (!$this->tickets->answer($update)) {
+        if (!$this->tickets->answer($update) && !$this->cards->reply($update)) {
             $this->review->reason($update);
         }
     }

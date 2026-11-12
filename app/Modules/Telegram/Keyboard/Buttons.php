@@ -14,6 +14,7 @@ use App\Modules\Telegram\Handlers\TopUpHandler;
 use App\Modules\Telegram\Messages;
 use App\Modules\Telegram\Texts\BotText;
 use App\Modules\Telegram\Texts\BotTexts;
+use App\Modules\Telegram\Texts\PremiumText;
 use App\Support\Money;
 use App\Support\Persian;
 
@@ -170,14 +171,15 @@ final class Buttons
 
     /**
      * A plan's button in a list to pick it from — «name — traffic / term — price», at the customer's `$price` — in the
-     * colour its plan's form gives it, with how many share its row (InlineKeyboard::flow()).
+     * colour its plan's form gives it, with how many share its row (InlineKeyboard::flow()); the name's premium emoji, at
+     * the start of the label, is its icon (BotApi, PlainWording).
      *
      * @return array{array<string, mixed>, int}
      */
     public function plan(Plan $plan, string $price, string $callback): array
     {
         $label = $this->texts->render(BotText::PlanButton, [
-            'plan' => $plan->name,
+            'plan' => PremiumText::plan($plan),
             'traffic' => Messages::traffic($plan->trafficBytes()),
             'duration' => Messages::duration($plan->duration_hours),
             'price' => Money::format($price),
@@ -193,7 +195,9 @@ final class Buttons
      */
     public function server(Server $server, string $callback): array
     {
-        return [InlineKeyboard::callback($this->texts->render(BotText::ServerButton, ['server' => $server->name]), $callback, KeyboardLayout::style($server->buttonStyle())), $server->buttonRow()];
+        $label = $this->texts->render(BotText::ServerButton, ['server' => PremiumText::server($server)]);
+
+        return [InlineKeyboard::callback($label, $callback, KeyboardLayout::style($server->buttonStyle())), $server->buttonRow()];
     }
 
     /**

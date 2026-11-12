@@ -28,6 +28,8 @@ interface Schema {
   anyOf?: Schema[]
   not?: Schema
   pattern?: string
+  maxLength?: number
+  minLength?: number
   minimum?: number
   description?: string
 }
@@ -191,6 +193,8 @@ const KEYWORDS = new Set([
   'anyOf',
   'not',
   'pattern',
+  'maxLength',
+  'minLength',
   'minimum',
   'description',
 ])
@@ -209,6 +213,9 @@ function check(value: unknown, given: Schema, where: string): string[] {
   const problems: string[] = []
   if (schema.enum !== undefined && !schema.enum.includes(value)) problems.push(`${where}: ${shown(value)}, none of ${schema.enum.map(shown).join(', ')}`)
   if (schema.pattern !== undefined && typeof value === 'string' && !new RegExp(schema.pattern, 'u').test(value)) problems.push(`${where}: ${shown(value)}, not of the pattern ${schema.pattern}`)
+  // Characters as the server counts them: code points, not UTF-16 units.
+  if (schema.maxLength !== undefined && typeof value === 'string' && [...value].length > schema.maxLength) problems.push(`${where}: ${[...value].length} characters, more than ${schema.maxLength}`)
+  if (schema.minLength !== undefined && typeof value === 'string' && [...value].length < schema.minLength) problems.push(`${where}: ${[...value].length} characters, fewer than ${schema.minLength}`)
   if (schema.minimum !== undefined && typeof value === 'number' && value < schema.minimum) problems.push(`${where}: ${value}, below ${schema.minimum}`)
   if (typeof value === 'string' && schema.format !== undefined && !formatOf(schema.format, where).test(value)) problems.push(`${where}: ${shown(value)}, not a ${schema.format}`)
   if (isObject(value)) problems.push(...objectProblems(value, schema, where))

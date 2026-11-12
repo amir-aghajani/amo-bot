@@ -119,6 +119,14 @@ Screens both panels have: `{panel}` is `admin` in the owner's panel and `agent` 
 | [`POST /api/{panel}/bot/channels/reorder`](#post-apipanelbotchannelsreorder) | Reorder the required channels |
 | [`POST /api/{panel}/bot/channels/{id}/check`](#post-apipanelbotchannelsidcheck) | Check a channel with Telegram again |
 | [`DELETE /api/{panel}/bot/channels/{id}`](#delete-apipanelbotchannelsid) | Remove a required channel |
+| [`GET /api/{panel}/preferences`](#get-apipanelpreferences) | What the panel's user keeps for themselves, on every device |
+| [`PUT /api/{panel}/preferences/favorites`](#put-apipanelpreferencesfavorites) | The settings search's favorites, in the user's order |
+| [`GET /api/{panel}/backups`](#get-apipanelbackups) | «پشتیبان‌گیری» |
+| [`PUT /api/{panel}/backups/auto`](#put-apipanelbackupsauto) | Whether the shop's backup goes to its report group's «پشتیبان‌گیری» topic (the `report_backups` switch of the bot settings) |
+| [`GET /api/{panel}/backups/download`](#get-apipanelbackupsdownload) | A backup made now, to save |
+| [`POST /api/{panel}/backups/inspect`](#post-apipanelbackupsinspect) | Check a backup file to restore and describe it, before anything moves |
+| [`POST /api/{panel}/backups/restore`](#post-apipanelbackupsrestore) | Restore the file an inspection kept, all of it or nothing |
+| [`GET /api/{panel}/backups/kept/{name}`](#get-apipanelbackupskeptname) | A state kept from before a restore, to save |
 | [`GET /api/{panel}/bot/report-group`](#get-apipanelbotreport-group) | The report group's state |
 | [`DELETE /api/{panel}/bot/report-group`](#delete-apipanelbotreport-group) | Disconnect the report group |
 | [`POST /api/{panel}/bot/report-group/link`](#post-apipanelbotreport-grouplink) | Make a one-time link that adds the bot to a group with topics |
@@ -143,6 +151,12 @@ Screens both panels have: `{panel}` is `admin` in the owner's panel and `agent` 
 | [`GET /api/{panel}/website`](#get-apipanelwebsite) | The shop's website settings |
 | [`PATCH /api/{panel}/website`](#patch-apipanelwebsite) | Update the website's settings |
 | [`POST /api/{panel}/website/key`](#post-apipanelwebsitekey) | Make a new store key |
+| [`GET /api/{panel}/mini-app`](#get-apipanelmini-app) | The shop's Telegram mini app settings |
+| [`PATCH /api/{panel}/mini-app`](#patch-apipanelmini-app) | Update the mini app's settings |
+| [`GET /api/{panel}/mini-app/logo`](#get-apipanelmini-applogo) | The mini app's logo, as bytes |
+| [`POST /api/{panel}/mini-app/logo`](#post-apipanelmini-applogo) | Upload the mini app's logo |
+| [`DELETE /api/{panel}/mini-app/logo`](#delete-apipanelmini-applogo) | Remove the mini app's logo |
+| [`POST /api/{panel}/mini-app/preview`](#post-apipanelmini-apppreview) | Open the mini app as one of the shop's customers sees it, to look and not to act |
 | [`GET /api/{panel}/discount-codes`](#get-apipaneldiscount-codes) | The discount codes, newest first, each with its uses |
 | [`POST /api/{panel}/discount-codes`](#post-apipaneldiscount-codes) | Create a discount code |
 | [`PUT /api/{panel}/discount-codes/{id}`](#put-apipaneldiscount-codesid) | Update a discount code |
@@ -401,6 +415,7 @@ A plan's whole form, to add or update it: its texts, its price, what it gives (0
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `name` | string | yes |  |
+| `emoji_id` | string or null | no | The premium emoji the bot draws for the name's leading emoji (a custom emoji id, digits): the name must start with an emoji while one is set. Blank or null for none. Left out: none for a new one; an existing one keeps its own while its name still starts with an emoji. |
 | `description` | string | no | Shown with the plan in the bot; blank for none. |
 | `price` | [AmountInput](API-Schemas.md#amountinput) | yes | Whole Toman; 0 for a free plan. |
 | `duration_hours` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | The term in hours from the first connection (a daily plan's is days × 24); 0 never ends. This or `duration_days` is required; when both are sent, this one is used. |
@@ -412,6 +427,7 @@ A plan's whole form, to add or update it: its texts, its price, what it gives (0
 | `checkout_note` | string or null | no | A note shown under the bot's checkout for this plan, at most 500 characters. Blank or null for none. Left out: none for a new plan, unchanged for an existing one. |
 | `button_style` | string: ``, `primary`, `success`, `danger`, `null` or null | no | The colour of its button in the bot's plan list: blue, green or red. Blank or null for the client's default. Left out: the default for a new plan, unchanged for an existing one. |
 | `button_row` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | How many buttons share its row there, 1 to 3. Left out: a row of its own for a new plan, unchanged for an existing one. |
+| `badge` | string: ``, `bestseller`, `recommended`, `vip`, `null` or null | no | The label its card wears in the mini app and on the website (a PlanBadge). Blank or null for none. Left out: none for a new plan, unchanged for an existing one. |
 | `extras` | [ExtraPricesRequest](API-Schemas.md#extrapricesrequest) or null | no | The plan's own prices for extra traffic, time and devices; null to use the shop's. Left out: the shop's for a new plan, unchanged for an existing one. |
 | `category_id` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | A category id (`PlanCategoryRow.id`); blank or 0 for none. |
 | `servers` | list of [PlanServerEntryInput](API-Schemas.md#planserverentryinput) | yes | At least one, each server once. |
@@ -529,6 +545,7 @@ A plan's whole form, to add or update it: its texts, its price, what it gives (0
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `name` | string | yes |  |
+| `emoji_id` | string or null | no | The premium emoji the bot draws for the name's leading emoji (a custom emoji id, digits): the name must start with an emoji while one is set. Blank or null for none. Left out: none for a new one; an existing one keeps its own while its name still starts with an emoji. |
 | `description` | string | no | Shown with the plan in the bot; blank for none. |
 | `price` | [AmountInput](API-Schemas.md#amountinput) | yes | Whole Toman; 0 for a free plan. |
 | `duration_hours` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | The term in hours from the first connection (a daily plan's is days × 24); 0 never ends. This or `duration_days` is required; when both are sent, this one is used. |
@@ -540,6 +557,7 @@ A plan's whole form, to add or update it: its texts, its price, what it gives (0
 | `checkout_note` | string or null | no | A note shown under the bot's checkout for this plan, at most 500 characters. Blank or null for none. Left out: none for a new plan, unchanged for an existing one. |
 | `button_style` | string: ``, `primary`, `success`, `danger`, `null` or null | no | The colour of its button in the bot's plan list: blue, green or red. Blank or null for the client's default. Left out: the default for a new plan, unchanged for an existing one. |
 | `button_row` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | How many buttons share its row there, 1 to 3. Left out: a row of its own for a new plan, unchanged for an existing one. |
+| `badge` | string: ``, `bestseller`, `recommended`, `vip`, `null` or null | no | The label its card wears in the mini app and on the website (a PlanBadge). Blank or null for none. Left out: none for a new plan, unchanged for an existing one. |
 | `extras` | [ExtraPricesRequest](API-Schemas.md#extrapricesrequest) or null | no | The plan's own prices for extra traffic, time and devices; null to use the shop's. Left out: the shop's for a new plan, unchanged for an existing one. |
 | `category_id` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | A category id (`PlanCategoryRow.id`); blank or 0 for none. |
 | `servers` | list of [PlanServerEntryInput](API-Schemas.md#planserverentryinput) | yes | At least one, each server once. |
@@ -645,6 +663,7 @@ A plan category to add or update.
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `name` | string | yes | Unique in the shop. |
+| `emoji_id` | string or null | no | The premium emoji the bot draws for the name's leading emoji (a custom emoji id, digits): the name must start with an emoji while one is set. Blank or null for none. Left out: none for a new one; an existing one keeps its own while its name still starts with an emoji. |
 | `is_active` | boolean | no | Left out: on for a new category, unchanged for an existing one. |
 
 **Answers**
@@ -694,6 +713,7 @@ A plan category to add or update.
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `name` | string | yes | Unique in the shop. |
+| `emoji_id` | string or null | no | The premium emoji the bot draws for the name's leading emoji (a custom emoji id, digits): the name must start with an emoji while one is set. Blank or null for none. Left out: none for a new one; an existing one keeps its own while its name still starts with an emoji. |
 | `is_active` | boolean | no | Left out: on for a new category, unchanged for an existing one. |
 
 **Answers**
@@ -1748,7 +1768,7 @@ All support tickets. Latest activity first; searchable by customer, subject or n
 
 ### GET /api/{panel}/tickets/{id}
 
-One ticket, with its whole conversation.
+One ticket, with its whole conversation. Opening it is support reading it — from either panel or through the website's admin API (`/admin`) alike: the customer's messages written so far turn read on their side (the Store API's `StoreTicketMessage.seen`, the second tick). Written only when a message came since support last read it, and not counted in the change feed (`GET /api/{panel}/changes`).
 
 - **On the website:** the website's admins can also use it, as [`GET /tickets/{id}`](Store-Admin-API-Reference.md#get-ticketsid).
 
@@ -2471,6 +2491,8 @@ One of:
 |---|---|---|---|
 | `report_purchases` | boolean | yes |  |
 | `report_renewals` | boolean | yes |  |
+| `report_tests` | boolean | yes |  |
+| `report_deletions` | boolean | yes |  |
 | `report_wallet` | boolean | yes |  |
 | `report_receipts` | boolean | yes |  |
 | `report_users` | boolean | yes |  |
@@ -2478,6 +2500,7 @@ One of:
 | `report_agency` | boolean | no | Main shop only, where it is required; an agent's bot has no such switch. |
 | `report_tickets` | boolean | yes |  |
 | `report_reviews` | boolean | yes |  |
+| `report_backups` | boolean | yes |  |
 
 **`BotQrSettingsRequest`**
 
@@ -2664,6 +2687,134 @@ Remove a required channel.
 | Status | What it is | Body |
 |---|---|---|
 | `204` | [NoContent](API-Schemas.md#response-nocontent) | none |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### GET /api/{panel}/preferences
+
+What the panel's user keeps for themselves, on every device: their favorites in the settings search. The owner's are one list whatever shop is open; an agent's are their own.
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | OK | [PanelPreferencesResponse](#panelpreferencesresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### PUT /api/{panel}/preferences/favorites
+
+The settings search's favorites, in the user's order — the whole list each time. An id the panel no longer knows (a setting since removed) is kept as it is: the panel leaves it out.
+
+**Body**, as JSON:
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `favorites` | list of [PanelFavoriteId](#panelfavoriteid), at most 100 | yes | The whole list, in the user's order; an id twice is kept once. |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | Saved | [PanelPreferencesResponse](#panelpreferencesresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### GET /api/{panel}/backups
+
+«پشتیبان‌گیری»: what this panel's backups hold — the whole installation for the owner in the main shop, the shop alone in any other panel —, their sending to the report group, and the states kept from before a restore.
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | OK | [BackupsResponse](#backupsresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### PUT /api/{panel}/backups/auto
+
+Whether the shop's backup goes to its report group's «پشتیبان‌گیری» topic (the `report_backups` switch of the bot settings).
+
+**Body**, as JSON:
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `enabled` | boolean | yes |  |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | Saved | [BackupsResponse](#backupsresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### GET /api/{panel}/backups/download
+
+A backup made now, to save: gzip of JSON lines, signed by this installation's key.
+
+**Parameters**
+
+| Name | In | Type | Required | What it is |
+|---|---|---|---|---|
+| `shop` | query | integer, at least 1 | no | The shop, as in `X-Shop`, for pictures, videos and download links, which cannot send a header (the panel adds it to every such address). Only reads may use it; a write names the shop in the header (else a 422 on `shop`). A header and a query naming two different shops are a 422 too. |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | [Backup](API-Schemas.md#response-backup) | the bytes, as `application/gzip` |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### POST /api/{panel}/backups/inspect
+
+Check a backup file to restore and describe it, before anything moves: made by this installation and unchanged, by this version or an older one, of this panel's scope (and shop). A 422 under `file` says why one is refused. The file waits under the token for 30 minutes.
+
+**Body**, as a form (`multipart/form-data`):
+
+A backup file to restore, as a browser form uploads it.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `file` | file | yes |  |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | Checked | [BackupInspectionResponse](#backupinspectionresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### POST /api/{panel}/backups/restore
+
+Restore the file an inspection kept, all of it or nothing — the state now kept first, to download (`kept`). A shop's restore touches its own rows alone and signs its customers out of its website and mini app; the whole installation's signs every shop's customers out. The panels' own sign-ins stay.
+
+**Body**, as JSON:
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `token` | string | yes |  |
+| `confirm` | boolean: `true` | yes | The admin's yes: what changed since the backup is lost. |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | Restored | [BackupRestoreResponse](#backuprestoreresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### GET /api/{panel}/backups/kept/{name}
+
+A state kept from before a restore, to save.
+
+**Parameters**
+
+| Name | In | Type | Required | What it is |
+|---|---|---|---|---|
+| `name` | path | string matching `^[A-Za-z0-9_.-]+$` | yes | A kept file's `name` (BackupsStatus.kept). |
+| `shop` | query | integer, at least 1 | no | The shop, as in `X-Shop`, for pictures, videos and download links, which cannot send a header (the panel adds it to every such address). Only reads may use it; a write names the shop in the header (else a 422 on `shop`). A header and a query naming two different shops are a 422 too. |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | [Backup](API-Schemas.md#response-backup) | the bytes, as `application/gzip` |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
 ### GET /api/{panel}/bot/report-group
@@ -3052,11 +3203,12 @@ A partial update of the website's settings; each panel card sends its own fields
 | `telegram_client_secret` | string | no | Blank: the stored secret stays. |
 | `clear_telegram_client_secret` | boolean | no | True empties the stored secret. |
 | `email_signup` | boolean | no | Customers can sign up with an email. Cannot be switched on while the installation cannot send email. |
+| `phone_login` | boolean | no | Customers sign in with a code texted to their mobile. Cannot be switched on while no SMS goes out for the website (`phone.sms`). |
 | `google_client_id` | string | no | The OAuth client id Google Cloud shows (&lt;digits&gt;-&lt;letters and digits&gt;.apps.googleusercontent.com). Blank turns Google sign-in off. |
 | `captcha` | [WebsiteCaptchaRequest](#websitecaptcharequest) | no |  |
 | `reviews_enabled` | boolean | no | Whether the website shows approved reviews and accepts new ones. |
 | `staff_enabled` | boolean | no | Whether the shop's admins can use the admin API. |
-| `staff_strong_sign_in` | boolean | no | Whether admins must sign in strongly: Telegram, Google, or a password with its second step. |
+| `staff_strong_sign_in` | boolean | no | Whether admins must sign in strongly: Telegram, Google, or a password or a code to their mobile with its second step (a code by SMS alone is not strong). |
 | `staff_grants` | list of [StaffGrant](API-Schemas.md#staffgrant) | no | The full list of grants beyond the daily work; any grant left out is not given. |
 
 **Answers**
@@ -3077,6 +3229,108 @@ Make a new store key. The old base address stops working at once.
 | Status | What it is | Body |
 |---|---|---|
 | `200` | Replaced | [WebsiteResponse](#websiteresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### GET /api/{panel}/mini-app
+
+The shop's Telegram mini app settings. The first read creates it, switched off.
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | OK | [MiniAppSettingsResponse](#miniappsettingsresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### PATCH /api/{panel}/mini-app
+
+Update the mini app's settings. Only the fields sent change, every refusal returned at once under its field. Every save sets the bot's menu button again as the app now stands: the app's while it is on with its button; otherwise the app's button is given back to Telegram's own, and a button the shop set at @BotFather is left as it is. `menu_button_error` says why Telegram did not take it — the save stands either way. An empty body changes nothing and only sets the menu button again: the panel's «تنظیم دوباره دکمه منو», for after `APP_URL` or the bot's token changed.
+
+**Body**, as JSON:
+
+A partial update of the mini app's settings: a field sent changes, one left out keeps its value. Blank text clears its field.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `enabled` | boolean | no | Switching on needs APP_URL on https. |
+| `title` | string | no | At most 64 characters; blank for the shop's name. |
+| `accent_color` | string | no | #rrggbb; blank for the Telegram client's colour. |
+| `announcement` | string | no | At most 500 characters, line breaks kept; blank for none. |
+| `announcement_url` | string | no | An https address, at most 255 characters; blank for none. |
+| `fullscreen` | boolean | no |  |
+| `reviews_enabled` | boolean | no |  |
+| `menu_button` | boolean | no |  |
+| `menu_button_text` | string | no | At most 32 characters; blank for the default words. |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | Saved | [MiniAppSettingsResponse](#miniappsettingsresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### GET /api/{panel}/mini-app/logo
+
+The mini app's logo, as bytes; a 404 while it has none.
+
+**Parameters**
+
+| Name | In | Type | Required | What it is |
+|---|---|---|---|---|
+| `shop` | query | integer, at least 1 | no | The shop, as in `X-Shop`, for pictures, videos and download links, which cannot send a header (the panel adds it to every such address). Only reads may use it; a write names the shop in the header (else a 422 on `shop`). A header and a query naming two different shops are a 422 too. |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | [Picture](API-Schemas.md#response-picture) | the bytes, as `image/jpeg`, `image/png`, `image/webp` |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### POST /api/{panel}/mini-app/logo
+
+Upload the mini app's logo: a PNG, JPEG or WebP (checked by its content), square or not, up to 2 MB; kept at most 512 pixels a side. Replaces the one before.
+
+**Body**, as a form (`multipart/form-data`):
+
+The mini app's logo, as a browser form uploads it: a PNG, JPEG or WebP (checked by its content), up to 2 MB.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `file` | file | yes |  |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | Uploaded | [MiniAppSettingsResponse](#miniappsettingsresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### DELETE /api/{panel}/mini-app/logo
+
+Remove the mini app's logo: it shows the shop's initial instead.
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | Removed | [MiniAppSettingsResponse](#miniappsettingsresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### POST /api/{panel}/mini-app/preview
+
+Open the mini app as one of the shop's customers sees it, to look and not to act: a preview session for that customer — 30 minutes from now, never longer —, its token given here once. It reads everything the customer's own session reads, through the mini app's key alone (even while the mini app is switched off), and is refused every write (a 403 on any request but GET or HEAD, «این پیش‌نمایش است؛ در آن چیزی ذخیره یا فرستاده نمی‌شود.», before anything runs — all but a built service's price, `POST /custom-services/quote` without a `discount_code`, which only works it out): no order, payment, ticket, spin, change, nor any "read" mark. It counts as no visit of theirs, is not in their list of devices, tells them nothing, and is never a recent sign-in. A 422 on `user_id` for anyone who is not a customer of this shop, or is banned.
+
+**Body**, as JSON:
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `user_id` | integer | yes | The customer to see the mini app as: one of this shop's, not banned. |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | Opened | [MiniAppPreviewResponse](#miniapppreviewresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
 ### GET /api/{panel}/discount-codes
@@ -3449,7 +3703,7 @@ A wheel slice to add or update. Every refusal is returned at once, under its fie
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `label` | string | yes | The text the wheel shows, at most 32 characters. |
-| `kind` | [WheelPrizeKind](#wheelprizekind) | yes |  |
+| `kind` | [WheelPrizeKind](API-Schemas.md#wheelprizekind) | yes |  |
 | `amount` | [AmountInput](API-Schemas.md#amountinput) | no | For wallet: whole Toman, at least 1,000. For traffic: GB above zero, up to two decimals, at most 10000. For days: whole days, 1 to 3650. Ignored for nothing and plan. |
 | `plan_id` | integer | no | For a plan slice: the plan whose service it gives. |
 | `weight` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | 1 to 10000. |
@@ -3498,7 +3752,7 @@ A wheel slice to add or update. Every refusal is returned at once, under its fie
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `label` | string | yes | The text the wheel shows, at most 32 characters. |
-| `kind` | [WheelPrizeKind](#wheelprizekind) | yes |  |
+| `kind` | [WheelPrizeKind](API-Schemas.md#wheelprizekind) | yes |  |
 | `amount` | [AmountInput](API-Schemas.md#amountinput) | no | For wallet: whole Toman, at least 1,000. For traffic: GB above zero, up to two decimals, at most 10000. For days: whole days, 1 to 3650. Ignored for nothing and plan. |
 | `plan_id` | integer | no | For a plan slice: the plan whose service it gives. |
 | `weight` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | 1 to 10000. |
@@ -3855,6 +4109,8 @@ Operations only the owner's panel has.
 | [`POST /api/admin/mass-grants/{id}/run`](#post-apiadminmass-grantsidrun) | Apply a mass gift for a few seconds |
 | [`POST /api/admin/mass-grants/{id}/cancel`](#post-apiadminmass-grantsidcancel) | Stop a mass gift |
 | [`GET /api/admin/agency`](#get-apiadminagency) | The agency program's numbers |
+| [`GET /api/admin/schedule`](#get-apiadminschedule) | «زمان‌بندی کارها» |
+| [`PUT /api/admin/schedule`](#put-apiadminschedule) | Save the schedule |
 | [`GET /api/admin/agency/settings`](#get-apiadminagencysettings) | The agency program's settings |
 | [`PUT /api/admin/agency/settings`](#put-apiadminagencysettings) | Save the agency program's settings |
 | [`GET /api/admin/agency/requests`](#get-apiadminagencyrequests) | Requests to become an agent |
@@ -3879,6 +4135,8 @@ Operations only the owner's panel has.
 | [`POST /api/admin/settings/config/telegram/test`](#post-apiadminsettingsconfigtelegramtest) | Ask Telegram which bot a token belongs to |
 | [`POST /api/admin/settings/config/database/test`](#post-apiadminsettingsconfigdatabasetest) | Test database settings without saving them |
 | [`POST /api/admin/settings/config/mail/test`](#post-apiadminsettingsconfigmailtest) | Send a test email with the saved mail settings |
+| [`POST /api/admin/settings/config/sms/test`](#post-apiadminsettingsconfigsmstest) | Send a test code by SMS with the saved SMS settings, through the approved pattern a sign-in code goes by |
+| [`GET /api/admin/settings/config/sms/credit`](#get-apiadminsettingsconfigsmscredit) | The SMS account's credit by the saved settings, asked of its provider (which also checks the key) |
 | [`PUT /api/admin/settings/config/{group}`](#put-apiadminsettingsconfiggroup) | Save one group of the config.php settings |
 
 ### POST /api/admin/auth/login
@@ -4121,14 +4379,12 @@ One of:
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `driver` | string: `3x-ui` | yes |  |
-| `name` | string | yes | Shown only in the panels; at most 100 characters. |
-| `base_url` | string | yes | The panel's address, including its path: http(s), without credentials, query or fragment, and not one of the panel's own pages (3X-UI's /panel, PasarGuard's /dashboard). |
+| `name` | string | yes | The location's name, as customers see it in the bot; at most 100 characters. Never a premium emoji's tag: one is chosen in `emoji_id`. |
+| `emoji_id` | string | no | The premium emoji the bot draws for the name's leading emoji (a custom emoji id, digits): on its location button as the icon, in its texts in the emoji's place. The name must start with an emoji while one is set. Blank or left out: none. |
+| `base_url` | string | yes | The panel's address, including its path: http(s), without credentials, query or fragment, and not one of the panel's own pages (3X-UI's /panel, PasarGuard's /dashboard, HMPanel's /api or /dashboard). |
 | `auth_mode` | string: `token`, `password` | yes | How to sign in: an API token, or an admin's username and password. |
-| `api_token` | string | no | For `token`: the panel's API token (PasarGuard's whole `pg_key_…` key). Left out or blank: the stored token stays. |
+| `api_token` | string | no | For `token`: the panel's API token (PasarGuard's whole `pg_key_…` key, HMPanel's whole `hmp_…` key). Left out or blank: the stored token stays. |
 | `clear_api_token` | boolean | no | True empties the stored token. |
-| `username` | string | no | For `password`: a panel admin's username. |
-| `password` | string | no | For `password`. Left out or blank: the stored password stays. |
-| `clear_password` | boolean | no | True empties the stored password. |
 | `verify_tls` | boolean | yes | Whether to verify the panel's TLS certificate; off for a self-signed one. |
 | `timeout` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Request timeout in seconds, 5 to 120. |
 | `subscription_url` | string | no | A base address to use before the token in subscription links instead of the panel's own: a full address without credentials, query or fragment. Blank: the panel's. |
@@ -4143,6 +4399,9 @@ One of:
 | `is_active` | boolean | yes | Off: no new service is placed on it. |
 | `button_style` | string: ``, `primary`, `success`, `danger` | no | The colour of its button among a plan's locations in the bot: blue, green or red. Blank or left out: the client's default. |
 | `button_row` | string: `1`, `2`, `3` | no | How many location buttons share its row in the bot. Left out: a row of its own. |
+| `username` | string | no | For `password`: a panel admin's username. |
+| `password` | string | no | For `password`. Left out or blank: the stored password stays. |
+| `clear_password` | boolean | no | True empties the stored password. |
 | `totp_secret` | string | no | For `password`: the two-factor secret (Base32) the shop makes sign-in codes from, as an authenticator app shows it (spaces, dashes and lower case accepted). Left out or blank: the stored secret stays. |
 | `clear_totp_secret` | boolean | no | True empties the stored two-factor secret; the sign-in then asks for no code. |
 
@@ -4151,14 +4410,41 @@ One of:
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `driver` | string: `pasarguard` | yes |  |
-| `name` | string | yes | Shown only in the panels; at most 100 characters. |
-| `base_url` | string | yes | The panel's address, including its path: http(s), without credentials, query or fragment, and not one of the panel's own pages (3X-UI's /panel, PasarGuard's /dashboard). |
+| `name` | string | yes | The location's name, as customers see it in the bot; at most 100 characters. Never a premium emoji's tag: one is chosen in `emoji_id`. |
+| `emoji_id` | string | no | The premium emoji the bot draws for the name's leading emoji (a custom emoji id, digits): on its location button as the icon, in its texts in the emoji's place. The name must start with an emoji while one is set. Blank or left out: none. |
+| `base_url` | string | yes | The panel's address, including its path: http(s), without credentials, query or fragment, and not one of the panel's own pages (3X-UI's /panel, PasarGuard's /dashboard, HMPanel's /api or /dashboard). |
 | `auth_mode` | string: `token`, `password` | yes | How to sign in: an API token, or an admin's username and password. |
-| `api_token` | string | no | For `token`: the panel's API token (PasarGuard's whole `pg_key_…` key). Left out or blank: the stored token stays. |
+| `api_token` | string | no | For `token`: the panel's API token (PasarGuard's whole `pg_key_…` key, HMPanel's whole `hmp_…` key). Left out or blank: the stored token stays. |
 | `clear_api_token` | boolean | no | True empties the stored token. |
+| `verify_tls` | boolean | yes | Whether to verify the panel's TLS certificate; off for a self-signed one. |
+| `timeout` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Request timeout in seconds, 5 to 120. |
+| `subscription_url` | string | no | A base address to use before the token in subscription links instead of the panel's own: a full address without credentials, query or fragment. Blank: the panel's. |
+| `proxy_enabled` | boolean | yes | Every request to the panel goes through a SOCKS5 proxy (the panel's name looked up by the proxy), for a panel the shop's host cannot reach directly. Off: straight to the panel, and the proxy's fields are emptied. |
+| `proxy_host` | string | no | With `proxy_enabled`: the proxy's host name or IP address, without a scheme or a port (an IPv6 address may be in brackets); at most 255 characters. |
+| `proxy_port` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | With `proxy_enabled`: the proxy's port, 1 to 65535. |
+| `proxy_username` | string | no | With `proxy_enabled`: the proxy's username, at most 255 characters; blank for a proxy without a login. |
+| `proxy_password` | string | no | With `proxy_enabled`: the proxy's password, only with a username. Left out or blank: the stored password stays while the proxy's host and port stay (after a change it must be typed again). |
+| `clear_proxy_password` | boolean | no | True empties the stored proxy password. |
+| `capacity` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | How many active services it takes. Blank for no limit; 0 for full. |
+| `notes` | string | no | The owner's notes, at most 1000 characters. |
+| `is_active` | boolean | yes | Off: no new service is placed on it. |
+| `button_style` | string: ``, `primary`, `success`, `danger` | no | The colour of its button among a plan's locations in the bot: blue, green or red. Blank or left out: the client's default. |
+| `button_row` | string: `1`, `2`, `3` | no | How many location buttons share its row in the bot. Left out: a row of its own. |
 | `username` | string | no | For `password`: a panel admin's username. |
 | `password` | string | no | For `password`. Left out or blank: the stored password stays. |
 | `clear_password` | boolean | no | True empties the stored password. |
+
+**`ServerHmPanelRequest`** — A server on an HMPanel panel (2.5 and later): its `hmp_…` API key, the one way in.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `driver` | string: `hmpanel` | yes |  |
+| `name` | string | yes | The location's name, as customers see it in the bot; at most 100 characters. Never a premium emoji's tag: one is chosen in `emoji_id`. |
+| `emoji_id` | string | no | The premium emoji the bot draws for the name's leading emoji (a custom emoji id, digits): on its location button as the icon, in its texts in the emoji's place. The name must start with an emoji while one is set. Blank or left out: none. |
+| `base_url` | string | yes | The panel's address, including its path: http(s), without credentials, query or fragment, and not one of the panel's own pages (3X-UI's /panel, PasarGuard's /dashboard, HMPanel's /api or /dashboard). |
+| `auth_mode` | string: `token` | yes | How to sign in: HMPanel's API key, the one way its API takes. |
+| `api_token` | string | no | For `token`: the panel's API token (PasarGuard's whole `pg_key_…` key, HMPanel's whole `hmp_…` key). Left out or blank: the stored token stays. |
+| `clear_api_token` | boolean | no | True empties the stored token. |
 | `verify_tls` | boolean | yes | Whether to verify the panel's TLS certificate; off for a self-signed one. |
 | `timeout` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Request timeout in seconds, 5 to 120. |
 | `subscription_url` | string | no | A base address to use before the token in subscription links instead of the panel's own: a full address without credentials, query or fragment. Blank: the panel's. |
@@ -4197,14 +4483,12 @@ One of:
 |---|---|---|---|
 | `id` | integer | no | The saved server this form belongs to. |
 | `driver` | string: `3x-ui` | yes |  |
-| `name` | string | yes | Shown only in the panels; at most 100 characters. |
-| `base_url` | string | yes | The panel's address, including its path: http(s), without credentials, query or fragment, and not one of the panel's own pages (3X-UI's /panel, PasarGuard's /dashboard). |
+| `name` | string | yes | The location's name, as customers see it in the bot; at most 100 characters. Never a premium emoji's tag: one is chosen in `emoji_id`. |
+| `emoji_id` | string | no | The premium emoji the bot draws for the name's leading emoji (a custom emoji id, digits): on its location button as the icon, in its texts in the emoji's place. The name must start with an emoji while one is set. Blank or left out: none. |
+| `base_url` | string | yes | The panel's address, including its path: http(s), without credentials, query or fragment, and not one of the panel's own pages (3X-UI's /panel, PasarGuard's /dashboard, HMPanel's /api or /dashboard). |
 | `auth_mode` | string: `token`, `password` | yes | How to sign in: an API token, or an admin's username and password. |
-| `api_token` | string | no | For `token`: the panel's API token (PasarGuard's whole `pg_key_…` key). Left out or blank: the stored token stays. |
+| `api_token` | string | no | For `token`: the panel's API token (PasarGuard's whole `pg_key_…` key, HMPanel's whole `hmp_…` key). Left out or blank: the stored token stays. |
 | `clear_api_token` | boolean | no | True empties the stored token. |
-| `username` | string | no | For `password`: a panel admin's username. |
-| `password` | string | no | For `password`. Left out or blank: the stored password stays. |
-| `clear_password` | boolean | no | True empties the stored password. |
 | `verify_tls` | boolean | yes | Whether to verify the panel's TLS certificate; off for a self-signed one. |
 | `timeout` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Request timeout in seconds, 5 to 120. |
 | `subscription_url` | string | no | A base address to use before the token in subscription links instead of the panel's own: a full address without credentials, query or fragment. Blank: the panel's. |
@@ -4219,6 +4503,9 @@ One of:
 | `is_active` | boolean | yes | Off: no new service is placed on it. |
 | `button_style` | string: ``, `primary`, `success`, `danger` | no | The colour of its button among a plan's locations in the bot: blue, green or red. Blank or left out: the client's default. |
 | `button_row` | string: `1`, `2`, `3` | no | How many location buttons share its row in the bot. Left out: a row of its own. |
+| `username` | string | no | For `password`: a panel admin's username. |
+| `password` | string | no | For `password`. Left out or blank: the stored password stays. |
+| `clear_password` | boolean | no | True empties the stored password. |
 | `totp_secret` | string | no | For `password`: the two-factor secret (Base32) the shop makes sign-in codes from, as an authenticator app shows it (spaces, dashes and lower case accepted). Left out or blank: the stored secret stays. |
 | `clear_totp_secret` | boolean | no | True empties the stored two-factor secret; the sign-in then asks for no code. |
 
@@ -4228,14 +4515,42 @@ One of:
 |---|---|---|---|
 | `id` | integer | no | The saved server this form belongs to. |
 | `driver` | string: `pasarguard` | yes |  |
-| `name` | string | yes | Shown only in the panels; at most 100 characters. |
-| `base_url` | string | yes | The panel's address, including its path: http(s), without credentials, query or fragment, and not one of the panel's own pages (3X-UI's /panel, PasarGuard's /dashboard). |
+| `name` | string | yes | The location's name, as customers see it in the bot; at most 100 characters. Never a premium emoji's tag: one is chosen in `emoji_id`. |
+| `emoji_id` | string | no | The premium emoji the bot draws for the name's leading emoji (a custom emoji id, digits): on its location button as the icon, in its texts in the emoji's place. The name must start with an emoji while one is set. Blank or left out: none. |
+| `base_url` | string | yes | The panel's address, including its path: http(s), without credentials, query or fragment, and not one of the panel's own pages (3X-UI's /panel, PasarGuard's /dashboard, HMPanel's /api or /dashboard). |
 | `auth_mode` | string: `token`, `password` | yes | How to sign in: an API token, or an admin's username and password. |
-| `api_token` | string | no | For `token`: the panel's API token (PasarGuard's whole `pg_key_…` key). Left out or blank: the stored token stays. |
+| `api_token` | string | no | For `token`: the panel's API token (PasarGuard's whole `pg_key_…` key, HMPanel's whole `hmp_…` key). Left out or blank: the stored token stays. |
 | `clear_api_token` | boolean | no | True empties the stored token. |
+| `verify_tls` | boolean | yes | Whether to verify the panel's TLS certificate; off for a self-signed one. |
+| `timeout` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Request timeout in seconds, 5 to 120. |
+| `subscription_url` | string | no | A base address to use before the token in subscription links instead of the panel's own: a full address without credentials, query or fragment. Blank: the panel's. |
+| `proxy_enabled` | boolean | yes | Every request to the panel goes through a SOCKS5 proxy (the panel's name looked up by the proxy), for a panel the shop's host cannot reach directly. Off: straight to the panel, and the proxy's fields are emptied. |
+| `proxy_host` | string | no | With `proxy_enabled`: the proxy's host name or IP address, without a scheme or a port (an IPv6 address may be in brackets); at most 255 characters. |
+| `proxy_port` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | With `proxy_enabled`: the proxy's port, 1 to 65535. |
+| `proxy_username` | string | no | With `proxy_enabled`: the proxy's username, at most 255 characters; blank for a proxy without a login. |
+| `proxy_password` | string | no | With `proxy_enabled`: the proxy's password, only with a username. Left out or blank: the stored password stays while the proxy's host and port stay (after a change it must be typed again). |
+| `clear_proxy_password` | boolean | no | True empties the stored proxy password. |
+| `capacity` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | How many active services it takes. Blank for no limit; 0 for full. |
+| `notes` | string | no | The owner's notes, at most 1000 characters. |
+| `is_active` | boolean | yes | Off: no new service is placed on it. |
+| `button_style` | string: ``, `primary`, `success`, `danger` | no | The colour of its button among a plan's locations in the bot: blue, green or red. Blank or left out: the client's default. |
+| `button_row` | string: `1`, `2`, `3` | no | How many location buttons share its row in the bot. Left out: a row of its own. |
 | `username` | string | no | For `password`: a panel admin's username. |
 | `password` | string | no | For `password`. Left out or blank: the stored password stays. |
 | `clear_password` | boolean | no | True empties the stored password. |
+
+**`ServerHmPanelTestRequest`** — An HMPanel server to test.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `id` | integer | no | The saved server this form belongs to. |
+| `driver` | string: `hmpanel` | yes |  |
+| `name` | string | yes | The location's name, as customers see it in the bot; at most 100 characters. Never a premium emoji's tag: one is chosen in `emoji_id`. |
+| `emoji_id` | string | no | The premium emoji the bot draws for the name's leading emoji (a custom emoji id, digits): on its location button as the icon, in its texts in the emoji's place. The name must start with an emoji while one is set. Blank or left out: none. |
+| `base_url` | string | yes | The panel's address, including its path: http(s), without credentials, query or fragment, and not one of the panel's own pages (3X-UI's /panel, PasarGuard's /dashboard, HMPanel's /api or /dashboard). |
+| `auth_mode` | string: `token` | yes | How to sign in: HMPanel's API key, the one way its API takes. |
+| `api_token` | string | no | For `token`: the panel's API token (PasarGuard's whole `pg_key_…` key, HMPanel's whole `hmp_…` key). Left out or blank: the stored token stays. |
+| `clear_api_token` | boolean | no | True empties the stored token. |
 | `verify_tls` | boolean | yes | Whether to verify the panel's TLS certificate; off for a self-signed one. |
 | `timeout` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Request timeout in seconds, 5 to 120. |
 | `subscription_url` | string | no | A base address to use before the token in subscription links instead of the panel's own: a full address without credentials, query or fragment. Blank: the panel's. |
@@ -4296,14 +4611,12 @@ One of:
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `driver` | string: `3x-ui` | yes |  |
-| `name` | string | yes | Shown only in the panels; at most 100 characters. |
-| `base_url` | string | yes | The panel's address, including its path: http(s), without credentials, query or fragment, and not one of the panel's own pages (3X-UI's /panel, PasarGuard's /dashboard). |
+| `name` | string | yes | The location's name, as customers see it in the bot; at most 100 characters. Never a premium emoji's tag: one is chosen in `emoji_id`. |
+| `emoji_id` | string | no | The premium emoji the bot draws for the name's leading emoji (a custom emoji id, digits): on its location button as the icon, in its texts in the emoji's place. The name must start with an emoji while one is set. Blank or left out: none. |
+| `base_url` | string | yes | The panel's address, including its path: http(s), without credentials, query or fragment, and not one of the panel's own pages (3X-UI's /panel, PasarGuard's /dashboard, HMPanel's /api or /dashboard). |
 | `auth_mode` | string: `token`, `password` | yes | How to sign in: an API token, or an admin's username and password. |
-| `api_token` | string | no | For `token`: the panel's API token (PasarGuard's whole `pg_key_…` key). Left out or blank: the stored token stays. |
+| `api_token` | string | no | For `token`: the panel's API token (PasarGuard's whole `pg_key_…` key, HMPanel's whole `hmp_…` key). Left out or blank: the stored token stays. |
 | `clear_api_token` | boolean | no | True empties the stored token. |
-| `username` | string | no | For `password`: a panel admin's username. |
-| `password` | string | no | For `password`. Left out or blank: the stored password stays. |
-| `clear_password` | boolean | no | True empties the stored password. |
 | `verify_tls` | boolean | yes | Whether to verify the panel's TLS certificate; off for a self-signed one. |
 | `timeout` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Request timeout in seconds, 5 to 120. |
 | `subscription_url` | string | no | A base address to use before the token in subscription links instead of the panel's own: a full address without credentials, query or fragment. Blank: the panel's. |
@@ -4318,6 +4631,9 @@ One of:
 | `is_active` | boolean | yes | Off: no new service is placed on it. |
 | `button_style` | string: ``, `primary`, `success`, `danger` | no | The colour of its button among a plan's locations in the bot: blue, green or red. Blank or left out: the client's default. |
 | `button_row` | string: `1`, `2`, `3` | no | How many location buttons share its row in the bot. Left out: a row of its own. |
+| `username` | string | no | For `password`: a panel admin's username. |
+| `password` | string | no | For `password`. Left out or blank: the stored password stays. |
+| `clear_password` | boolean | no | True empties the stored password. |
 | `totp_secret` | string | no | For `password`: the two-factor secret (Base32) the shop makes sign-in codes from, as an authenticator app shows it (spaces, dashes and lower case accepted). Left out or blank: the stored secret stays. |
 | `clear_totp_secret` | boolean | no | True empties the stored two-factor secret; the sign-in then asks for no code. |
 
@@ -4326,14 +4642,41 @@ One of:
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `driver` | string: `pasarguard` | yes |  |
-| `name` | string | yes | Shown only in the panels; at most 100 characters. |
-| `base_url` | string | yes | The panel's address, including its path: http(s), without credentials, query or fragment, and not one of the panel's own pages (3X-UI's /panel, PasarGuard's /dashboard). |
+| `name` | string | yes | The location's name, as customers see it in the bot; at most 100 characters. Never a premium emoji's tag: one is chosen in `emoji_id`. |
+| `emoji_id` | string | no | The premium emoji the bot draws for the name's leading emoji (a custom emoji id, digits): on its location button as the icon, in its texts in the emoji's place. The name must start with an emoji while one is set. Blank or left out: none. |
+| `base_url` | string | yes | The panel's address, including its path: http(s), without credentials, query or fragment, and not one of the panel's own pages (3X-UI's /panel, PasarGuard's /dashboard, HMPanel's /api or /dashboard). |
 | `auth_mode` | string: `token`, `password` | yes | How to sign in: an API token, or an admin's username and password. |
-| `api_token` | string | no | For `token`: the panel's API token (PasarGuard's whole `pg_key_…` key). Left out or blank: the stored token stays. |
+| `api_token` | string | no | For `token`: the panel's API token (PasarGuard's whole `pg_key_…` key, HMPanel's whole `hmp_…` key). Left out or blank: the stored token stays. |
 | `clear_api_token` | boolean | no | True empties the stored token. |
+| `verify_tls` | boolean | yes | Whether to verify the panel's TLS certificate; off for a self-signed one. |
+| `timeout` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Request timeout in seconds, 5 to 120. |
+| `subscription_url` | string | no | A base address to use before the token in subscription links instead of the panel's own: a full address without credentials, query or fragment. Blank: the panel's. |
+| `proxy_enabled` | boolean | yes | Every request to the panel goes through a SOCKS5 proxy (the panel's name looked up by the proxy), for a panel the shop's host cannot reach directly. Off: straight to the panel, and the proxy's fields are emptied. |
+| `proxy_host` | string | no | With `proxy_enabled`: the proxy's host name or IP address, without a scheme or a port (an IPv6 address may be in brackets); at most 255 characters. |
+| `proxy_port` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | With `proxy_enabled`: the proxy's port, 1 to 65535. |
+| `proxy_username` | string | no | With `proxy_enabled`: the proxy's username, at most 255 characters; blank for a proxy without a login. |
+| `proxy_password` | string | no | With `proxy_enabled`: the proxy's password, only with a username. Left out or blank: the stored password stays while the proxy's host and port stay (after a change it must be typed again). |
+| `clear_proxy_password` | boolean | no | True empties the stored proxy password. |
+| `capacity` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | How many active services it takes. Blank for no limit; 0 for full. |
+| `notes` | string | no | The owner's notes, at most 1000 characters. |
+| `is_active` | boolean | yes | Off: no new service is placed on it. |
+| `button_style` | string: ``, `primary`, `success`, `danger` | no | The colour of its button among a plan's locations in the bot: blue, green or red. Blank or left out: the client's default. |
+| `button_row` | string: `1`, `2`, `3` | no | How many location buttons share its row in the bot. Left out: a row of its own. |
 | `username` | string | no | For `password`: a panel admin's username. |
 | `password` | string | no | For `password`. Left out or blank: the stored password stays. |
 | `clear_password` | boolean | no | True empties the stored password. |
+
+**`ServerHmPanelRequest`** — A server on an HMPanel panel (2.5 and later): its `hmp_…` API key, the one way in.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `driver` | string: `hmpanel` | yes |  |
+| `name` | string | yes | The location's name, as customers see it in the bot; at most 100 characters. Never a premium emoji's tag: one is chosen in `emoji_id`. |
+| `emoji_id` | string | no | The premium emoji the bot draws for the name's leading emoji (a custom emoji id, digits): on its location button as the icon, in its texts in the emoji's place. The name must start with an emoji while one is set. Blank or left out: none. |
+| `base_url` | string | yes | The panel's address, including its path: http(s), without credentials, query or fragment, and not one of the panel's own pages (3X-UI's /panel, PasarGuard's /dashboard, HMPanel's /api or /dashboard). |
+| `auth_mode` | string: `token` | yes | How to sign in: HMPanel's API key, the one way its API takes. |
+| `api_token` | string | no | For `token`: the panel's API token (PasarGuard's whole `pg_key_…` key, HMPanel's whole `hmp_…` key). Left out or blank: the stored token stays. |
+| `clear_api_token` | boolean | no | True empties the stored token. |
 | `verify_tls` | boolean | yes | Whether to verify the panel's TLS certificate; off for a self-signed one. |
 | `timeout` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Request timeout in seconds, 5 to 120. |
 | `subscription_url` | string | no | A base address to use before the token in subscription links instead of the panel's own: a full address without credentials, query or fragment. Blank: the panel's. |
@@ -4587,7 +4930,7 @@ The latest moves of a server's services to another server («انتقال سرو
 
 ### POST /api/admin/servers/{id}/migrations
 
-Start moving the server's services, every shop's, to another server. It is queued; the page works it while open, the scheduler every minute. The report group hears when it starts and ends.
+Start moving the server's services, every shop's, to another server. It is queued; the page works it while open, the scheduler every minute by default («زمان‌بندی کارها»). The report group hears when it starts and ends.
 
 **Parameters**
 
@@ -4879,6 +5222,64 @@ The agency program's numbers. Also whether it is on and the credit a new agent s
 | Status | What it is | Body |
 |---|---|---|
 | `200` | OK | [AgencySummaryResponse](#agencysummaryresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### GET /api/admin/schedule
+
+«زمان‌بندی کارها»: every scheduled task — what it does, when it last ran and is due — with how often it runs and the times it decides by. One for the whole installation, the owner's.
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | OK | [ScheduleResponse](#scheduleresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### PUT /api/admin/schedule
+
+Save the schedule.
+
+**Body**, as JSON:
+
+Every task's fields, saved whole (a missing one is refused), each by its ScheduleField `name`. A value equal to its default is kept as none.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `auto_approve_receipts_minutes` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Minutes between two runs of `auto_approve_receipts`, 1 to 10080; 1 by default. |
+| `online_payments_minutes` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Minutes between two runs of `online_payments`, 1 to 10080; 1 by default. |
+| `resume_deliveries_minutes` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Minutes between two runs of `resume_deliveries`, 1 to 10080; 1 by default. |
+| `expire_orders_minutes` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Minutes between two runs of `expire_orders`, 1 to 10080; 10 by default. |
+| `send_broadcasts_minutes` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Minutes between two runs of `send_broadcasts`, 1 to 10080; 1 by default. |
+| `auto_renew_minutes` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Minutes between two runs of `auto_renew`, 1 to 10080; 30 by default. |
+| `next_period_minutes` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Minutes between two runs of `next_period`, 1 to 10080; 10 by default. |
+| `grants_minutes` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Minutes between two runs of `grants`, 1 to 10080; 1 by default. |
+| `migrations_minutes` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Minutes between two runs of `migrations`, 1 to 10080; 1 by default. |
+| `sync_subscriptions_minutes` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Minutes between two runs of `sync_subscriptions`, 1 to 10080; 15 by default. |
+| `send_reminders_minutes` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Minutes between two runs of `send_reminders`, 1 to 10080; 15 by default. |
+| `cleanup_services_minutes` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Minutes between two runs of `cleanup_services`, 1 to 10080; 15 by default. |
+| `agency_standing_minutes` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Minutes between two runs of `agency_standing`, 1 to 10080; 60 by default. |
+| `prune_updates_minutes` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Minutes between two runs of `prune_updates`, 1 to 10080; 60 by default. |
+| `prune_accounts_minutes` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Minutes between two runs of `prune_accounts`, 1 to 10080; 60 by default. |
+| `prune_tickets_minutes` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Minutes between two runs of `prune_tickets`, 1 to 10080; 60 by default. |
+| `nightly_draw_minutes` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Minutes between two runs of `nightly_draw`, 1 to 10080; 10 by default. |
+| `send_backups_minutes` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Minutes between two runs of `send_backups`, 1 to 10080; 1440 by default. |
+| `check_releases_minutes` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Minutes between two runs of `check_releases`, 1 to 10080; 1440 by default. |
+| `send_reports_minutes` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Minutes between two runs of `send_reports`, 1 to 10080; 1 by default. |
+| `expire_orders_hours` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Hours an unpaid order nobody touched waits before it is dropped (one whose money may be with support never is). 1 to 720; 48 by default. |
+| `online_payments_check_minutes` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Minutes between two asks to its gateway about an online payment whose page still takes money. 1 to 60; 3 by default. |
+| `online_payments_late_hours` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Hours after its page closed that an online payment is still asked about (a gateway may take money late). 0 to 72; 2 by default. |
+| `online_payments_late_check_minutes` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Minutes between two asks about an online payment whose page closed. 1 to 1440; 15 by default. |
+| `online_payments_review_hours` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Hours after its page closed that a payment its gateway holds money on, unsettled, is asked about before it is held for support; not less than `online_payments_late_hours`. 1 to 720; 48 by default. |
+| `notices_keep_days` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Days a customer's notice is kept in the website's feed. 1 to 3650; 180 by default. |
+| `ticket_pictures_keep_days` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Days the pictures uploaded to a ticket are kept after it closed. 1 to 3650; 30 by default. |
+| `reports_keep_days` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Days a report group's message, sent or given up on, is kept so a reply to it is known (a ticket still open keeps its own). 1 to 365; 7 by default. |
+| `reports_wait_hours` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Hours a report may wait in the queue before it is given up on. 1 to 168; 24 by default. |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | Saved | [ScheduleResponse](#scheduleresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
 ### GET /api/admin/agency/settings
@@ -5388,6 +5789,36 @@ Where to send the test email.
 | `200` | Sent | [MailTestResponse](#mailtestresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
+### POST /api/admin/settings/config/sms/test
+
+Send a test code by SMS with the saved SMS settings, through the approved pattern a sign-in code goes by. A 422 while no SMS can go out (no driver, or not its settings, saved) or on `to`; a 502 with the provider's reason when it refused the SMS.
+
+**Body**, as JSON:
+
+Where to send the test code.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `to` | string | yes | A mobile number: 09121234567, +989121234567, 0098… (Persian digits too). |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | Sent | [SmsTestResponse](#smstestresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### GET /api/admin/settings/config/sms/credit
+
+The SMS account's credit by the saved settings, asked of its provider (which also checks the key). A 422 while no SMS can go out; a 502 with the provider's reason when it could not be asked or refused the key.
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | OK | [SmsCreditResponse](#smscreditresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
 ### PUT /api/admin/settings/config/{group}
 
 Save one group of the config.php settings.
@@ -5467,6 +5898,29 @@ One of:
 | `clear_resend_key` | boolean | no | True empties the stored key. |
 | `from_address` | string | yes | An email address (stored in lower case). |
 | `from_name` | string | no | At most 64 characters; blank for the shop's name. |
+
+**`ConfigSmsRequest`** — The shop's SMS settings, saved whole: the driver and, for an SMS driver, its settings and whether agents' websites may send codes too. One closed shape per driver; the other drivers' stored settings are not changed.
+
+One of:
+
+**`SmsNoneRequest`** — No SMS. The drivers' stored settings, and whether agents may send codes, are kept, so they can be switched back on.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `driver` | string: `none` | yes |  |
+
+**`SmsIppanelRequest`** — IPPanel's pattern sending (its Edge API).
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `driver` | string: `ippanel` | yes |  |
+| `api_key` | string | no | IPPanel's access key (its panel's «توسعه‌دهندگان ← کلیدهای دسترسی»), sent as it is. Left out or blank: the stored key stays, as long as `api_url` stays on the same origin. A key is required. |
+| `clear_api_key` | boolean | no | True empties the stored key. |
+| `from` | string | yes | One of the account's lines: 3000505, +983000505, 0098… — stored in E.164 (+983000505). |
+| `pattern` | string | yes | The approved pattern's code, as IPPanel's panel shows it. |
+| `variable` | string | yes | The pattern's variable the code fills (`code` for %code%), with or without its %. |
+| `api_url` | string | yes | IPPanel's API address; https://edge.ippanel.com/v1 unless IPPanel gave another. |
+| `agents` | boolean | yes | Whether agents' websites may send sign-in codes too, on the owner's account. |
 
 **`ConfigAdvancedRequest`**
 
@@ -6044,6 +6498,81 @@ An AtlasPay method (atlaspay.space), an online gateway: the customer pays by car
 | `created_at` | string (date-time) or null | yes |  |
 | `updated_at` | string (date-time) or null | yes |  |
 
+### BackupInspection
+
+A backup file checked and described, waiting under `token` to be restored.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `token` | string | yes | What BackupRestoreRequest names. |
+| `scope` | string: `installation`, `shop` | yes |  |
+| `shop` | [BackupShop](#backupshop) or null | yes |  |
+| `made_at` | string | yes | When it was made (ISO 8601). |
+| `app_version` | string | yes | The AmoBot version that made it: this one or an older one (a restore of an older one then goes through the upgrades since). |
+| `tables` | list of object | yes |  |
+| `tables[].table` | string | yes |  |
+| `tables[].rows` | integer | yes |  |
+| `rows` | integer | yes | Every table's rows together. |
+| `warnings` | list of string | yes | What a restore leaves out or changes for what is gone since — a plan's entry on a server that is gone —, a sentence each. |
+| `expires_at` | string (date-time) | yes |  |
+
+### BackupInspectionResponse
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `inspection` | [BackupInspection](#backupinspection) | yes |  |
+
+### BackupKept
+
+A state kept from before a restore (the last 3 of this scope), to save.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `name` | string | yes |  |
+| `made_at` | string (date-time) | yes |  |
+| `size` | integer | yes | Bytes. |
+
+### BackupRestoreResponse
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `restore` | object | yes |  |
+| `restore.rows` | map of integer | yes | The rows put back, by table. |
+| `restore.kept` | string | yes | The state just before, kept: its BackupKept `name`. |
+
+### BackupShop
+
+The shop a backup is of.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `id` | integer | yes |  |
+| `username` | string or null | yes |  |
+| `title` | string or null | yes |  |
+
+### BackupsResponse
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `backups` | [BackupsStatus](#backupsstatus) | yes |  |
+
+### BackupsStatus
+
+«پشتیبان‌گیری» as this panel works it.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `scope` | string: `installation`, `shop` | yes | `installation`: every shop, the servers, the agents' terms — the owner's, in the main shop. `shop`: this shop's own rows alone, nothing of the owner's or of another shop. |
+| `shop` | [BackupShop](#backupshop) or null | yes | Null for the whole installation. |
+| `auto` | object | yes | The backup sent to the shop's report group's «پشتیبان‌گیری» topic. |
+| `auto.enabled` | boolean | yes | The topic's switch (`report_backups`). |
+| `auto.group` | boolean | yes | Whether a report group is connected. |
+| `auto.every_minutes` | integer | yes | How often it goes: the owner's «زمان‌بندی کارها» (`send_backups_minutes`), a day by default. |
+| `auto.last_sent_at` | string (date-time) or null | yes | When it last tried; null when it never did. |
+| `auto.last_problem` | string or null | yes | What kept that one from going (Telegram's words); null when it went. |
+| `kept` | list of [BackupKept](#backupkept) | yes | Newest first. |
+| `upload_max_bytes` | integer | yes | The largest file this host takes in one upload (PHP's smaller limit); 0 when it does not say. |
+
 ### BotChannelResponse
 
 | Field | Type | Required | What it is |
@@ -6108,7 +6637,7 @@ How a bot runs. The main bot's mode applies to the whole installation: every bot
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `hold_minutes` | integer | yes | «کدهای تخفیف»: how many minutes an order made with a discount code may stay unpaid. After that, if untouched and no receipt is with support, it is cancelled and the code's use is freed. 0: as long as any unpaid order (two days). |
+| `hold_minutes` | integer | yes | «کدهای تخفیف»: how many minutes an order made with a discount code may stay unpaid. After that, if untouched and no receipt is with support, it is cancelled and the code's use is freed. 0: as long as any unpaid order (two days by default). |
 | `enabled` | boolean | yes |  |
 | `phone_required` | boolean | yes |  |
 | `join_required` | boolean | yes |  |
@@ -6154,14 +6683,14 @@ How a bot runs. The main bot's mode applies to the whole installation: every bot
 | `expiry_reminder_days` | integer | yes |  |
 | `traffic_reminder` | boolean | yes | Remind the customer once `traffic_reminder_percent` of a service's quota is used. |
 | `traffic_reminder_percent` | integer | yes |  |
-| `expired_cleanup` | boolean | yes | «سرویس‌های منقضی‌شده»: an ended service — its time or traffic ran out, or its panel no longer has it — is removed from its panel and the shop by itself, `expired_cleanup_hours` after it ended (checked every 15 minutes), without a word to the customer; its orders stay. A service renewed meanwhile, switched off by support, or with an order still open (a renewal waiting for its receipt) is kept. Free test accounts go by their own rule (`test_cleanup`). Off by default. |
+| `expired_cleanup` | boolean | yes | «سرویس‌های منقضی‌شده»: an ended service — its time or traffic ran out, or its panel no longer has it — is removed from its panel and the shop by itself, `expired_cleanup_hours` after it ended (checked every 15 minutes by default, «زمان‌بندی کارها»), without a word to the customer; its orders stay. A service renewed meanwhile, switched off by support, or with an order still open (a renewal waiting for its receipt) is kept. Free test accounts go by their own rule (`test_cleanup`). Off by default. |
 | `expired_cleanup_hours` | integer | yes | How many hours an ended service is kept before it is removed; 0 at once. |
 | `test_enabled` | boolean | yes | «اکانت تست رایگان»: customers can take a free test account with the bot's «اکانت تست» button, on a server that gives tests. What a test gets is each server's (`PUT /api/admin/servers/{id}/test-account`); in an agent's shop its traffic comes from the agent's bot. |
 | `test_per_user` | integer | yes | How many tests a customer may take: for good, or within `test_period_days`. Bot admins have no quota. |
 | `test_period_days` | integer | yes | The window `test_per_user` counts over, in days; 0 for good. |
 | `test_daily_limit` | integer | yes | The most tests the shop gives in one day of its time zone; 0 for no cap. |
 | `test_newcomers_only` | boolean | yes | Only customers who never bought a service with a price can take one. |
-| `test_cleanup` | boolean | yes | Tests that ended are removed from their panels by themselves (checked every 15 minutes). A removed test still counts in the quota. |
+| `test_cleanup` | boolean | yes | Tests that ended are removed from their panels by themselves (checked every 15 minutes by default, «زمان‌بندی کارها»). A removed test still counts in the quota. |
 | `test_cleanup_hours` | integer | yes | How many hours an ended test is kept before it is removed; 0 at once. |
 | `test_unused_days` | integer | yes | While `test_cleanup` is on, after how many days a test that never connected is removed (its hours wait for the first connection); 0 never. |
 | `claim_enabled` | boolean | no | «افزودن سرویس با لینک», main shop only, always present there (an agent's shop has no such switch, nor the `service_claims` group): customers can add a client made by hand on a panel to their «سرویس‌های من» by sending the bot (or the website) its subscription link or one of its configs. The first to send it gets it, and each claim is reported in the report group's «خریدها» topic; a wrong one is fixed by deleting the service from the shop only (`leave_panel`), so the right customer can send it again. A claimed service (`SubscriptionRow.claimed_at`) has no plan until its first renewal, when the customer picks one sold on its server. Off by default. |
@@ -6195,6 +6724,8 @@ How a bot runs. The main bot's mode applies to the whole installation: every bot
 | `referral_alert_idle` | integer | yes | Raise an alert when a referrer has this many referrals and none of them bought, and again at each further multiple (0: never). While an alert stands, the referrer earns no start gift and no plan reward. |
 | `report_purchases` | boolean | yes | «گروه گزارش‌ها»: the `report_…` switches choose which report group topics get reports. All are on until switched off. |
 | `report_renewals` | boolean | yes |  |
+| `report_tests` | boolean | yes | Every free test taken — on the bot, the website or the mini app. |
+| `report_deletions` | boolean | yes | Every service support deletes or a refund takes back, and the ended services the clean-up removes (one report a run); a free test the clean-up removes is not reported. |
 | `report_wallet` | boolean | yes |  |
 | `report_receipts` | boolean | yes |  |
 | `report_users` | boolean | yes |  |
@@ -6202,6 +6733,7 @@ How a bot runs. The main bot's mode applies to the whole installation: every bot
 | `report_agency` | boolean | no | Main shop only: agency requests and traffic purchases are reported to the main shop's group, so an agent's bot has no such switch. |
 | `report_tickets` | boolean | yes | Support tickets and their messages (in every shop). |
 | `report_reviews` | boolean | yes | Reviews written on the website (in every shop). |
+| `report_backups` | boolean | yes | The shop's backup file, sent once a day by default (the owner's «زمان‌بندی کارها»): the main shop's group gets the whole installation's, an agent's group its own shop's. |
 | `gift_codes_enabled` | boolean | yes | «کد هدیه»: customers can redeem gift codes, with the bot's «🎁 کد هدیه» button or on the website. Codes can be created either way. |
 | `wheel_enabled` | boolean | yes | «گردونه شانس»: customers can spin the lucky wheel with the bot's «🎡 گردونه شانس» button. |
 | `wheel_cooldown_hours` | integer | yes | Hours a customer waits between two spins that gave a prize. |
@@ -6250,7 +6782,7 @@ String: `general`, `channels`, `wallet`, `wallet_transfers`, `payments`, `renewa
 
 ### BotTextKind
 
-Where a text is used: a `message` or the QR card's `caption` (Telegram HTML), a callback `popup` or a `button` (plain text), or a `part` included in other texts.
+Where a text is used: a `message` or the QR card's `caption` (Telegram HTML), a callback `popup` or a `button` (plain text, whose one tag is a premium emoji, `<tg-emoji emoji-id="…">👍</tg-emoji>`: a button's, at the start of its label, is its icon; a popup shows each as its plain emoji), or a `part` included in other texts.
 
 String: `message`, `caption`, `popup`, `button`, `part`.
 
@@ -6344,7 +6876,7 @@ A cashback rule («کش‌بک»): this percent of what a delivered order paid g
 
 ### ConfigGroup
 
-String: `app`, `database`, `telegram`, `mail`, `advanced`.
+String: `app`, `database`, `telegram`, `mail`, `sms`, `advanced`.
 
 ### ConfigMailSettings
 
@@ -6373,6 +6905,7 @@ The installation's configuration, read from config.php.
 | `groups.database` | [DatabaseSettings](#databasesettings) | yes |  |
 | `groups.telegram` | [ConfigTelegramSettings](#configtelegramsettings) | yes |  |
 | `groups.mail` | [ConfigMailSettings](#configmailsettings) | yes |  |
+| `groups.sms` | [ConfigSmsSettings](#configsmssettings) | yes |  |
 | `groups.advanced` | [ConfigAdvancedSettings](#configadvancedsettings) | yes |  |
 | `meta` | object | yes |  |
 | `meta.timezones` | list of object | yes | Windows-style groups: one IANA id per zone, labelled "(UTC+03:30) وقت ایران". |
@@ -6381,6 +6914,17 @@ The installation's configuration, read from config.php.
 | `meta.log_levels` | list of string | yes |  |
 | `meta.cron_url` | string or null | yes | The cron trigger address with its token masked; null without a token. The full address is at `GET /api/admin/settings/config/cron-url`. |
 | `meta.webhook_url` | string | yes | The main bot's webhook address, with its secret masked. |
+
+### ConfigSmsSettings
+
+The shop's SMS settings (SMS_* in config.php), used for the websites' sign-in codes by phone number: the driver, whether agents' websites may send codes too, and every SMS driver described with its settings.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `driver` | [SmsDriver](#smsdriver) | yes |  |
+| `agents` | boolean | yes | Whether agents' websites may send sign-in codes too. Every SMS is paid from the owner's one account. |
+| `drivers` | list of [DriverDescription](#driverdescription) | yes | Every SMS driver with its form. |
+| `values` | map of [DriverValues](#drivervalues) | yes | Each driver's settings, keyed by driver: the stored values, else the defaults. A secret is a SecretState. |
 
 ### ConfigTelegramSettings
 
@@ -6561,7 +7105,7 @@ One field of a driver's form, described for a generic form (`Field::describe()`)
 | `placeholder` | string or null | yes |  |
 | `required` | boolean | yes | The form is refused when it is empty. For a secret: a value must end up stored, and a blank one keeps the stored value. |
 | `secret` | boolean | yes | Never sent back (its value is a SecretState). Left blank or out, the stored value stays; `clear_<name>: true` empties it. |
-| `bound_to` | list of string | yes | For a secret: the fields it belongs with. When one of them changes, a blank secret is refused (with the `moved` message) and must be typed again or cleared. |
+| `bound_to` | list of string | yes | For a secret: the fields it belongs with. When one of them changes, a blank secret is refused (with the `moved` message) and must be typed again or cleared. For a premium emoji: the name field it is for. |
 | `moved` | string or null | yes | The server's message for a blank secret after a field it belongs with changed; show it as a hint before saving. |
 | `advanced` | boolean | yes | Drawn under «تنظیمات پیشرفته». |
 | `options` | list of object | yes | A choice's values and their labels, in order. |
@@ -6576,9 +7120,9 @@ One field of a driver's form, described for a generic form (`Field::describe()`)
 
 ### FieldType
 
-A field's kind, which decides how a generic form draws it: a line of text, a whole number, an amount of Toman, a short list of numbers typed as text, an on/off switch, one of a few values, a secret, an email address, a web address, a file path, a few lines of text, or a bank card number (drawn in groups of four and sent as digits).
+A field's kind, which decides how a generic form draws it: a line of text, a whole number, an amount of Toman, a short list of numbers typed as text, an on/off switch, one of a few values, a secret, an email address, a web address, a file path, a few lines of text, a bank card number (drawn in groups of four and sent as digits), or a premium emoji picked from the bot's list for the name field in its `bound_to` (sent as its id; picking one puts its plain emoji at that name's start).
 
-String: `text`, `number`, `amount`, `list`, `toggle`, `choice`, `secret`, `email`, `url`, `path`, `textarea`, `card`.
+String: `text`, `number`, `amount`, `list`, `toggle`, `choice`, `secret`, `email`, `url`, `path`, `textarea`, `card`, `premium_emoji`.
 
 ### GiftCodeBatch
 
@@ -6716,7 +7260,7 @@ An action a menu button can trigger.
 | `key` | string | yes |  |
 | `title` | string | yes |  |
 | `label` | string | yes | The default label (emoji and title). |
-| `screen` | string | yes | The `menu:*` callback data an inline button carries. |
+| `screen` | string | yes | The `menu:*` callback data an inline button carries. `app` (the shop's mini app) is shown only while the mini app is on and can be opened: inline, its button opens the app itself; on a reply keyboard, its tap opens this screen, with the button that opens the app. |
 
 ### KeyboardButtonInput
 
@@ -6964,6 +7508,46 @@ The mass gift card: the latest grants (including those made on servers' pages), 
 | `audience.groups[].running` | integer | yes |  |
 | `audience.groups[].unstarted` | integer | yes |  |
 
+### MiniAppPreviewResponse
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `preview` | object | yes |  |
+| `preview.token` | string | yes | The preview session's bearer token (64 hex characters), shown this once: the mini app takes it in its address's fragment as `tgWebAppPreview`. |
+| `preview.expires_at` | string (date-time) | yes | When the preview ends: 30 minutes after it opened. |
+| `preview.path` | string | yes | The mini app's address on this host, from its root (`/app/{key}/`, under APP_BASE_PATH when the shop is in a folder): the panel opens it beside itself. |
+
+### MiniAppSettings
+
+The shop's Telegram mini app, as the panel shows it.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `enabled` | boolean | yes | When off, the Store API answers 404 for the mini app's key and the bot shows no button for it. |
+| `url` | string | yes | Where it opens: APP_URL, then /app/ and its own store key — what @BotFather takes for the bot's Main Mini App. |
+| `secure` | boolean | yes | APP_URL is an https address: Telegram opens nothing else. Off, it cannot be switched on. |
+| `bot` | object or null | yes | The shop's bot; null while its username is unknown. |
+| `bot.username` | string | yes |  |
+| `bot.url` | string | yes |  |
+| `title` | string or null | yes | The name it shows; null for the shop's (`shop_name`). |
+| `shop_name` | string | yes | The shop's own name, which a blank title falls back to. |
+| `accent_color` | string or null | yes | Its colour, #rrggbb; null for the Telegram client's button colour. |
+| `logo` | boolean | yes | It has a logo (`GET /mini-app/logo`). |
+| `announcement` | string or null | yes | A word to every customer on its home screen; null for none. |
+| `announcement_url` | string or null | yes | Where the announcement leads; null for nowhere. |
+| `fullscreen` | boolean | yes | It opens full screen on a phone. |
+| `reviews_enabled` | boolean | yes | It shows the reviews support approved and takes new ones from its customers. |
+| `menu_button` | boolean | yes | The bot's menu button (beside the message box) opens it while it is on. |
+| `menu_button_text` | string or null | yes | That button's words; null for `menu_button_default`. |
+| `menu_button_default` | string | yes | The menu button's words while none are set. |
+
+### MiniAppSettingsResponse
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `mini_app` | [MiniAppSettings](#miniappsettings) | yes |  |
+| `menu_button_error` | string or null | yes | After a save: why the bot's menu button could not be set (Telegram out of reach or refusing; the save stands). Null otherwise. |
+
 ### NumbersInput
 
 A short list of whole numbers, such as the amounts a screen offers as buttons. A list, or text as the admin types it ("50, 100, 200", or separated by spaces; a comma between groups of three digits is a thousands separator, so "50,000, 100,000" is two numbers). Stored without repeats, smallest first.
@@ -6971,6 +7555,24 @@ A short list of whole numbers, such as the amounts a screen offers as buttons. A
 One of:
 - list of [WholeNumberInput](API-Schemas.md#wholenumberinput)
 - string
+
+### PanelFavoriteId
+
+A settings search entry's id: `page:/plans`, `section:/bot-settings/wallet`, `setting:/bot-settings/wallet#wallet_topup_min`.
+
+String matching `^(page|section|setting):/\S*$`.
+
+### PanelPreferences
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `favorites` | list of [PanelFavoriteId](#panelfavoriteid), at most 100 | yes | In the user's order; no id twice. |
+
+### PanelPreferencesResponse
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `preferences` | [PanelPreferences](#panelpreferences) | yes |  |
 
 ### PanelStatusInfo
 
@@ -7221,7 +7823,7 @@ A topic of the report group, in the group's order.
 
 ### ReportTopicKey
 
-String: `purchases`, `renewals`, `wallet`, `receipts`, `users`, `errors`, `agency`, `tickets`, `reviews`.
+String: `purchases`, `renewals`, `tests`, `deletions`, `wallet`, `receipts`, `users`, `errors`, `agency`, `tickets`, `reviews`, `backups`.
 
 ### RewardOrderRef
 
@@ -7258,6 +7860,50 @@ A timed sale («فروش ویژه»): a percent off the listed plans, for the li
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `sales` | list of [SaleRow](#salerow) | yes |  |
+
+### Schedule
+
+«زمان‌بندی کارها»: the owner's, for the whole installation — one scheduler runs every shop's work.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `tasks` | list of [ScheduleTask](#scheduletask) | yes |  |
+| `last_run_at` | string (date-time) or null | yes | When the scheduler last ran, whatever ran in it; null when it never did. |
+
+### ScheduleField
+
+One number a scheduled task is set by: its interval (its first field, `<task>_minutes`) or a time it decides by.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `name` | string | yes | What ScheduleRequest calls it. |
+| `label` | string | yes |  |
+| `hint` | string or null | yes | What it changes, in a sentence; null for an interval. |
+| `unit` | string | yes | «دقیقه», «ساعت» or «روز». |
+| `value` | integer | yes | What the shop runs with: the owner's, or the default. |
+| `default` | integer | yes | What the shop runs with while the owner set nothing; saving it keeps nothing, so a later version's default reaches the shop. |
+| `min` | integer | yes |  |
+| `max` | integer | yes |  |
+
+### ScheduleResponse
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `schedule` | [Schedule](#schedule) | yes |  |
+
+### ScheduleTask
+
+One scheduled task, in the order a run takes them.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `key` | string | yes | Its name, which its fields' names begin with. |
+| `title` | string | yes |  |
+| `description` | string | yes | What it does, in a sentence. |
+| `each_shop` | boolean | yes | It runs in every shop in turn — the main one's and each agent's —; otherwise once across all of them. |
+| `last_ran_at` | string (date-time) or null | yes | When it last ran; null when it never did. |
+| `next_run_at` | string (date-time) or null | yes | When it is due again: its last run and its interval. A moment past means at the scheduler's next tick (every minute); null when it never ran, which is due at once. |
+| `fields` | list of [ScheduleField](#schedulefield) | yes | Its interval first, then the times it decides by. |
 
 ### SecretState
 
@@ -7429,7 +8075,7 @@ What a move of the server's services would cover, from the stored data.
 
 ### ServerMigrationRow
 
-A move of a server's services, every shop's, to another server («انتقال سرویس‌ها»). It covers the services on the server when it started and goes one service at a time: the page works it while open, the scheduler every minute. Each customer gets the new link in their shop's bot, as for a single move.
+A move of a server's services, every shop's, to another server («انتقال سرویس‌ها»). It covers the services on the server when it started and goes one service at a time: the page works it while open, the scheduler every minute by default («زمان‌بندی کارها»). Each customer gets the new link in their shop's bot, as for a single move.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -7559,6 +8205,34 @@ A bot's shop: the main bot's, or an agent's.
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `shops` | list of [ShopRef](#shopref) | yes | Every shop the owner may open, the main bot's first. |
+
+### SmsCredit
+
+What the SMS account has left to send with, in its provider's unit.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `amount` | integer | yes | Whole units. |
+| `unit` | string | yes | The unit in Persian: «ریال» for IPPanel, which keeps credit in Rial. |
+
+### SmsCreditResponse
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `credit` | [SmsCredit](#smscredit) or null | yes | The account's credit by the saved settings; null when the driver tells none. |
+
+### SmsDriver
+
+How the shop sends one-time codes by SMS (a website's sign-in by phone number): `none`, or an SMS driver's key (`DriverDescription.key`): `ippanel`, IPPanel's pattern sending (an access key, one of the account's lines, and a pattern approved there whose one variable is the code).
+
+String: `none`, `ippanel`.
+
+### SmsTestResponse
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `sent` | boolean | yes | True: the provider accepted it. Whether it reaches the phone is up to the provider and the operator. |
+| `code` | string | yes | The test code sent, for the owner to match against the SMS. |
 
 ### SystemResponse
 
@@ -7836,9 +8510,12 @@ The website's settings, as the panel shows them. Secrets are never included, onl
 | `email` | object | yes |  |
 | `email.enabled` | boolean | yes | Customers can sign up with an email and a password. |
 | `email.mail_ready` | boolean | yes | Whether the installation can send email (the owner's «تنظیمات پنل › ایمیل»). Without it, email sign-up cannot be switched on and does not work. |
+| `phone` | object | yes |  |
+| `phone.enabled` | boolean | yes | Customers can sign in with a code texted to their mobile. Off by default. |
+| `phone.sms` | string: `ready`, `not_set_up`, `not_for_agents` | yes | Whether SMS goes out for this website: `ready`; `not_set_up` — the main shop's, and the owner has not set SMS up («تنظیمات پنل › پیامک»); `not_for_agents` — an agent's, and the owner does not text codes for agents' sites (they pay for every one). Until it is `ready`, sign-in by SMS cannot be switched on and does not work. |
 | `google` | object | yes |  |
 | `google.client_id` | string or null | yes | The site's OAuth client id in Google Cloud (….apps.googleusercontent.com); null when Google sign-in is off. |
-| `captcha` | object | yes | The captcha the website's forms use (sign-up, password sign-in, password reset, reviews, and the site's own forms through the Store API's `POST /captcha/verify`): the chosen driver, every captcha driver with its form, and each driver's stored values or defaults (a secret as a SecretState). |
+| `captcha` | object | yes | The captcha the website's forms use (sign-up, password sign-in, password reset, a code by SMS, reviews, and the site's own forms through the Store API's `POST /captcha/verify`): the chosen driver, every captcha driver with its form, and each driver's stored values or defaults (a secret as a SecretState). |
 | `captcha.driver` | string: `none`, `turnstile`, `altcha` | yes | The chosen captcha (a CaptchaDriver), or `none`. |
 | `captcha.drivers` | list of [DriverDescription](#driverdescription) | yes |  |
 | `captcha.values` | map of [DriverValues](#drivervalues) | yes | Each captcha driver's values, keyed by driver. |
@@ -7846,7 +8523,7 @@ The website's settings, as the panel shows them. Secrets are never included, onl
 | `reviews.enabled` | boolean | yes | The website shows approved reviews and accepts new ones (the Store API's `GET` and `POST /reviews`, which answer 404 while off). Guests can write only while a captcha is set. Off by default. |
 | `staff` | object | yes | Access for the shop's admins (customers whose role is admin) to the website's admin API, `/api/store/v1/{store}/admin/*`: the panels' daily-work operations. |
 | `staff.enabled` | boolean | yes | Admins can use the admin API. Off by default. |
-| `staff.strong_sign_in` | boolean | yes | Admins must sign in strongly: Telegram, Google, or a password with its second step. On by default. |
+| `staff.strong_sign_in` | boolean | yes | Admins must sign in strongly: Telegram, Google, a code to their mobile, or a password with its second step. On by default. |
 | `staff.grants` | list of [StaffGrant](API-Schemas.md#staffgrant) | yes | What admins may do beyond the daily work, in the grants' order. None by default. |
 
 ### WebsiteAltchaRequest
@@ -7891,12 +8568,6 @@ Cloudflare Turnstile: the widget's keys from the Cloudflare dashboard.
 | `secret_key` | string | no | Blank: the stored secret stays, as long as the site key stays the same. |
 | `clear_secret_key` | boolean | no | True empties the stored secret. |
 
-### WheelPrizeKind
-
-What a lucky wheel slice gives: `nothing` («پوچ»), Toman in the wallet (`wallet`), GB of `traffic` or `days` on one of the customer's running services, or a free service of a `plan`.
-
-String: `nothing`, `wallet`, `traffic`, `days`, `plan`.
-
 ### WheelPrizeResponse
 
 | Field | Type | Required | What it is |
@@ -7911,7 +8582,7 @@ A lucky wheel («گردونه شانس») slice. Its chance is its weight divide
 |---|---|---|---|
 | `id` | integer | yes |  |
 | `label` | string | yes | The text the wheel shows. |
-| `kind` | [WheelPrizeKind](#wheelprizekind) | yes |  |
+| `kind` | [WheelPrizeKind](API-Schemas.md#wheelprizekind) | yes |  |
 | `amount` | string or null | yes | Toman (wallet), GB (traffic) or days (days); null for nothing and plan. |
 | `plan` | [NamedRef](API-Schemas.md#namedref) or null | yes | For a plan slice: the plan; null once the plan is deleted (then nobody can win it). |
 | `weight` | integer | yes |  |
@@ -7933,7 +8604,7 @@ A lucky wheel spin: the slice it landed on (as the slice was then) and the resul
 | `id` | integer | yes |  |
 | `customer` | [UserRef](API-Schemas.md#userref) | yes |  |
 | `label` | string | yes |  |
-| `kind` | [WheelPrizeKind](#wheelprizekind) | yes |  |
+| `kind` | [WheelPrizeKind](API-Schemas.md#wheelprizekind) | yes |  |
 | `amount` | string or null | yes |  |
 | `given` | boolean | yes | The prize was given (for a plan: ordered). False when it could not be: the cost was refunded and the spin does not count for the cooldown. |
 | `outcome` | string or null | yes | Why it was not given; null when it was. |

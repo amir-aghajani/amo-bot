@@ -15,13 +15,14 @@ final class RequirementsTest extends TestCase
         $checks = array_column($this->service(Requirements::class)->check(), 'ok', 'name');
 
         self::assertSame(
-            ['php', 'ext-pdo_sqlite', 'ext-curl', 'ext-mbstring', 'ext-openssl', 'ext-bcmath', 'ext-fileinfo', 'memory_limit >= 64M', 'storage/ writable', 'config.php writable', 'ext-sodium', 'ext-zip', 'ext-gd'],
+            ['php', 'ext-pdo_sqlite', 'ext-curl', 'ext-mbstring', 'ext-openssl', 'ext-bcmath', 'ext-fileinfo', 'ext-zlib', 'memory_limit >= 64M', 'storage/ writable', 'config.php writable', 'ext-sodium', 'ext-zip', 'ext-gd'],
             array_keys($checks),
             'a PHP without its known security holes first; the suite runs on SQLite: its driver\'s extension',
         );
         self::assertTrue($checks['php'], 'the suite plays a host on a PHP without them');
         self::assertTrue($checks['ext-bcmath'], 'Money is bcmath');
         self::assertTrue($checks['ext-fileinfo'], 'the receipt endpoint sniffs the content type');
+        self::assertTrue($checks['ext-zlib'], 'the backups are gzip');
         self::assertTrue($checks['memory_limit >= 64M'], 'this machine runs the suite: it has the memory');
         self::assertTrue($checks['storage/ writable']);
         self::assertTrue($checks['config.php writable'], 'the config.php the app writes — the run\'s own here, not there yet: its folder takes it');

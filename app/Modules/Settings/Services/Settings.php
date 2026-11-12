@@ -80,9 +80,9 @@ final class Settings
         $this->cache[$bot][$key] = $value;
     }
 
-    public function forget(string $key): void
+    public function forget(string $key, ?int $bot = null): void
     {
-        $bot = CurrentBot::id();
+        $bot ??= CurrentBot::id();
         $this->load($bot);
         Setting::query()->where('bot_id', $bot)->where('key', $key)->delete();
         unset($this->cache[$bot][$key]);

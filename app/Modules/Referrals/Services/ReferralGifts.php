@@ -16,6 +16,7 @@ use App\Modules\Referrals\Models\ReferralReward;
 use App\Modules\Rewards\DTO\Reward;
 use App\Modules\Rewards\Exceptions\RewardUnavailableException;
 use App\Modules\Rewards\Services\Rewards;
+use App\Modules\Telegram\Texts\PremiumText;
 use App\Modules\Users\Models\User;
 use App\Support\Money;
 use Illuminate\Database\ConnectionInterface;
@@ -182,7 +183,7 @@ final class ReferralGifts
 
         $order = $given->order ?? throw new \LogicException('A plan given without its order.');
         $reward->update(['order_id' => $order->id]);
-        $this->notifier->referralRewarded($referrer, $plan->name, $milestone);
+        $this->notifier->referralRewarded($referrer, PremiumText::plan($plan), $milestone);
         $this->rewards->sendService($given);
     }
 

@@ -9,10 +9,12 @@ use App\Core\Logging\Redact;
 use App\Core\Support\Sleeper;
 use App\Modules\Bots\CurrentBot;
 use App\Modules\Telegram\Emoji\PremiumEmojiStatus;
+use App\Modules\Telegram\Texts\PlainWording;
 use GuzzleHttp\ClientInterface;
 use GuzzleHttp\Exception\GuzzleException;
 use GuzzleHttp\Promise\PromiseInterface;
 use Psr\Http\Message\ResponseInterface;
+use Psr\Http\Message\StreamInterface;
 
 /**
  * Thin client for the Telegram Bot API: one method per call the shop makes, refusals thrown as TelegramApiException.
@@ -222,7 +224,8 @@ final class BotApi
         try {
             $this->call('answerCallbackQuery', [
                 'callback_query_id' => $callbackQueryId,
-                'text' => $text === null ? null : Limits::cut($text, Limits::POPUP),
+                // A notice draws no premium emoji: each one's plain emoji (PlainWording).
+                'text' => $text === null ? null : Limits::cut(PlainWording::shown($text), Limits::POPUP),
                 'show_alert' => $alert,
             ]);
 
@@ -349,6 +352,18 @@ final class BotApi
     }
 
     /**
+     * A file sent as a document — its bytes, or a stream read as it uploads (a backup on disk, never whole in memory) —,
+     * uploaded as multipart; the caption is HTML like every text. Telegram takes at most 50 MB from a bot.
+     *
+     * @param array<string, mixed> $options sendDocument options (caption, message_thread_id…)
+     * @return array<string, mixed> The message sent
+     */
+    public function sendDocument(int|string $chatId, string|StreamInterface $bytes, string $filename, array $options = []): array
+    {
+        return (array) $this->call('sendDocument', ['chat_id' => $chatId, 'parse_mode' => 'HTML'] + $options, ['document' => [$bytes, $filename]]);
+    }
+
+    /**
      * A picture made on the fly (bytes, not a file on disk), uploaded as multipart; the caption is HTML
      * like every text.
      *
@@ -425,13 +440,36 @@ final class BotApi
     }
 
     /**
+     * The bot's menu button beside every private chat's message box: `{type: web_app, text, web_app: {url}}` opens a mini
+     * app, `{type: default}` gives Telegram's own back.
+     *
+     * @param array<string, mixed> $menuButton
+     */
+    public function setChatMenuButton(array $menuButton): void
+    {
+        $this->call('setChatMenuButton', ['menu_button' => $menuButton]);
+    }
+
+    /**
+     * The bot's menu button as private chats have it now, in setChatMenuButton()'s shape — `{type: commands}` too, which
+     * the shop may have set at @BotFather.
+     *
+     * @return array<string, mixed>
+     */
+    public function getChatMenuButton(): array
+    {
+        return (array) $this->call('getChatMenuButton');
+    }
+
+    /**
      * One Bot API call (arrays as JSON, multipart with files; a short flood wait honoured once). A message Telegram
      * refuses over its premium emoji — only allowed while the bot's owner has Telegram Premium — is sent again with plain
      * emoji and buttons without icons, so a customer never loses a message to an emoji; the "no" is remembered for a
-     * while (PremiumEmojiStatus) so later messages go plain at once.
+     * while (PremiumEmojiStatus) so later messages go plain at once. A button label's leading premium emoji (a bot text's,
+     * PlainWording) goes as the button's icon — plain, in the label, when the message goes plain.
      *
      * @param array<string, mixed> $params
-     * @param array<string, array{string, string}> $files Upload parts: field name => [bytes, filename]
+     * @param array<string, array{string|StreamInterface, string}> $files Upload parts: field name => [bytes or a stream, filename]
      * @throws TelegramApiException
      */
     private function call(string $method, array $params = [], array $files = []): mixed
@@ -442,7 +480,7 @@ final class BotApi
         }
 
         try {
-            return $this->request($method, $params, $files);
+            return $this->request($method, self::withIcons($params), $files);
         } catch (TelegramApiException $e) {
             if ($plain === null || !$e->is(Refusal::CustomEmoji)) {
                 throw $e;
@@ -459,7 +497,7 @@ final class BotApi
      * An edit to what the message shows already is done, not refused.
      *
      * @param array<string, mixed> $params
-     * @param array<string, array{string, string}> $files
+     * @param array<string, array{string|StreamInterface, string}> $files
      */
     private function edit(string $method, array $params, array $files = []): void
     {
@@ -473,8 +511,23 @@ final class BotApi
     }
 
     /**
-     * The parameters with every premium emoji replaced by its plain emoji and the icons taken off the buttons; null when
-     * they carry none.
+     * The parameters with each button label's leading premium emoji as the button's icon (PlainWording::icons()).
+     *
+     * @param array<string, mixed> $params
+     * @return array<string, mixed>
+     */
+    private static function withIcons(array $params): array
+    {
+        if (isset($params['reply_markup']) && is_array($params['reply_markup'])) {
+            $params['reply_markup'] = PlainWording::icons($params['reply_markup']) ?? $params['reply_markup'];
+        }
+
+        return $params;
+    }
+
+    /**
+     * The parameters with every premium emoji replaced by its plain emoji — a button label's too — and the icons taken off
+     * the buttons; null when they carry none.
      *
      * @param array<string, mixed> $params
      * @return array<string, mixed>|null
@@ -500,6 +553,11 @@ final class BotApi
             $params['media']['caption'] = $plain($params['media']['caption']);
         }
         if (isset($params['reply_markup']) && is_array($params['reply_markup'])) {
+            $labels = PlainWording::plainLabels($params['reply_markup']);
+            if ($labels !== null) {
+                $params['reply_markup'] = $labels;
+                $changed = true;
+            }
             foreach (['inline_keyboard', 'keyboard'] as $kind) {
                 foreach (is_array($params['reply_markup'][$kind] ?? null) ? $params['reply_markup'][$kind] : [] as $r => $row) {
                     foreach (is_array($row) ? $row : [] as $b => $button) {
@@ -519,7 +577,7 @@ final class BotApi
      * One request as asked, with its short flood wait.
      *
      * @param array<string, mixed> $params
-     * @param array<string, array{string, string}> $files
+     * @param array<string, array{string|StreamInterface, string}> $files
      * @throws TelegramApiException
      */
     private function request(string $method, array $params, array $files): mixed

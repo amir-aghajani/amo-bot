@@ -21,12 +21,17 @@ enum BotText: string
     case Tutorial = 'tutorial';
     case Cancel = 'cancel';
     case Back = 'back';
+    // «📱 اپلیکیشن فروشگاه» from a reply keyboard: the button that opens the shop's mini app
+    case AppScreen = 'app_screen';
+    case AppButton = 'app_button';
+    case AppUnavailable = 'app_unavailable';
 
     // gates: the phone number, the required channels
     case PhonePrompt = 'phone_prompt';
     case PhoneButton = 'phone_button';
     case PhoneNotYours = 'phone_not_yours';
     case PhoneVerified = 'phone_verified';
+    case PhoneNotNeeded = 'phone_not_needed';
     case JoinPrompt = 'join_prompt';
     case JoinButton = 'join_button';
     case JoinChannel = 'join_channel';

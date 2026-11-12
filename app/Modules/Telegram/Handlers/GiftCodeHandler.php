@@ -18,6 +18,7 @@ use App\Modules\Telegram\Keyboard\MainMenu;
 use App\Modules\Telegram\Messages;
 use App\Modules\Telegram\Texts\BotText;
 use App\Modules\Telegram\Texts\BotTexts;
+use App\Modules\Telegram\Texts\PremiumText;
 use App\Support\Money;
 
 /**
@@ -92,7 +93,8 @@ final class GiftCodeHandler implements Handler
             ]);
         }
 
-        $plan = (string) $redeemed->given->reward->plan?->name;
+        $given = $redeemed->given->reward->plan;
+        $plan = $given === null ? '' : PremiumText::plan($given);
 
         return $order->status === OrderStatus::Fulfilled
             ? $this->texts->render(BotText::GiftCodePlan, ['plan' => $plan])

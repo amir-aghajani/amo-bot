@@ -12,6 +12,7 @@ use App\Modules\Providers\Services\ServerService;
 use App\Modules\Subscriptions\Enums\SubscriptionStatus;
 use App\Modules\Subscriptions\Models\Subscription;
 use App\Modules\Telegram\Keyboard\KeyboardLayout;
+use App\Modules\Telegram\Texts\PremiumText;
 use App\Support\Validation;
 use GuzzleHttp\Exception\ConnectException;
 use GuzzleHttp\Psr7\Request;
@@ -39,13 +40,13 @@ final class AdminServersApiTest extends HttpTestCase
     {
         $data = $this->decode($this->get('/api/admin/servers/drivers'));
 
-        self::assertSame(['3x-ui', 'pasarguard'], array_column($data['drivers'], 'key'), 'in the order they are registered');
+        self::assertSame(['3x-ui', 'pasarguard', 'hmpanel'], array_column($data['drivers'], 'key'), 'in the order they are registered');
         $driver = $data['drivers'][0];
         self::assertSame(['key' => '3x-ui', 'label' => '3X-UI'], ['key' => $driver['key'], 'label' => $driver['label']]);
         self::assertSame(['mark' => '3X', 'vendor' => 'MHSanaei', 'docs_url' => 'https://github.com/MHSanaei/3x-ui', 'inbounds' => true, 'link_rotation' => true], $driver['traits'], 'what the picker draws it by, and what its panels can do');
         self::assertNotEmpty(array_filter($driver['notes'], static fn(string $note): bool => str_contains($note, 'نسخه 3')), 'the versions it needs');
         self::assertSame(
-            ['name', 'base_url', 'auth_mode', 'api_token', 'username', 'password', 'totp_secret', 'verify_tls', 'timeout', 'subscription_url', 'proxy_enabled', 'proxy_host', 'proxy_port', 'proxy_username', 'proxy_password', 'capacity', 'notes', 'is_active', 'button_style', 'button_row'],
+            ['name', 'emoji_id', 'base_url', 'auth_mode', 'api_token', 'username', 'password', 'totp_secret', 'verify_tls', 'timeout', 'subscription_url', 'proxy_enabled', 'proxy_host', 'proxy_port', 'proxy_username', 'proxy_password', 'capacity', 'notes', 'is_active', 'button_style', 'button_row'],
             array_column($driver['fields'], 'name'),
             'the server\'s name, the connector\'s connection, the server\'s own columns, its button in the bot',
         );
@@ -71,6 +72,26 @@ final class AdminServersApiTest extends HttpTestCase
             $this->decode($refused)['errors'] ?? null,
             'in the words a plan\'s button is refused with',
         );
+    }
+
+    public function testItsNamesLeadingEmojiMayBePremiumInTheBot(): void
+    {
+        $this->panelHttp()->healthyPanel();
+
+        $server = $this->decode($this->postJson('/api/admin/servers', ['name' => '🇩🇪 آلمان', 'emoji_id' => '5368324170671202286'] + self::tokenForm()))['server'];
+        self::assertSame(['🇩🇪 آلمان', '5368324170671202286'], [$server['name'], $server['form']['emoji_id']], 'the name plain, its premium emoji beside it');
+        self::assertSame('5368324170671202286', Server::query()->findOrFail($server['id'])->emojiId());
+
+        $refused = $this->postJson('/api/admin/servers', ['name' => 'آلمان', 'emoji_id' => '42'] + self::tokenForm());
+        self::assertSame(['emoji_id' => [PremiumText::NO_EMOJI]], $this->decode($refused)['errors'] ?? null);
+        $refused = $this->postJson('/api/admin/servers', ['name' => '🇩🇪 آلمان', 'emoji_id' => 'flag'] + self::tokenForm());
+        self::assertSame(['emoji_id' => [PremiumText::ID_REFUSED]], $this->decode($refused)['errors'] ?? null);
+        $refused = $this->postJson('/api/admin/servers', ['name' => '<tg-emoji emoji-id="42">🇩🇪</tg-emoji> آلمان'] + self::tokenForm());
+        self::assertSame(['name' => [PremiumText::TAG_IN_NAME]], $this->decode($refused)['errors'] ?? null);
+
+        $data = $this->decode($this->putJson("/api/admin/servers/{$server['id']}", ['name' => '🇩🇪 آلمان', 'emoji_id' => ''] + self::tokenForm()));
+        self::assertSame('', $data['server']['form']['emoji_id'], 'blank: none');
+        self::assertNull(Server::query()->findOrFail($server['id'])->emojiId());
     }
 
     public function testAServersFormReportsEveryRefusalAtOnce(): void
@@ -152,6 +173,7 @@ final class AdminServersApiTest extends HttpTestCase
         self::assertSame('DE-1', $data['server']['name']);
         self::assertSame([
             'name' => 'DE-1',
+            'emoji_id' => '',
             'base_url' => 'https://panel.example:2053/base',
             'auth_mode' => 'token',
             'api_token' => ['set' => true, 'hint' => '••••••••'],

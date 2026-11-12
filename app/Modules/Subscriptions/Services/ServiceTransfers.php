@@ -183,6 +183,8 @@ final class ServiceTransfers
         }
 
         $from = $service->user;
+        // As its previous owner knew it: their own name for it does not go with it (ProvisioningService::newOwner()).
+        $shown = $service->shownAs();
         // Held as every change of it on its panel holds it: one under way — a delivery that found it the giver's as it
         // began — ends before it changes hands, and one that begins after finds it the new owner's.
         $lease = Lease::take($service, self::HOLD_SECONDS) ?? throw ValidationException::on('status', self::BUSY);
@@ -221,7 +223,7 @@ final class ServiceTransfers
         $cancelled = $this->cancelLeftOrders($service, $from);
         // A customer who gave it away was answered where they did it (the bot, the website), as for every change of their own.
         if (!$by->isCustomer()) {
-            $this->notifier->serviceTransferred($service, $from, $cancelled);
+            $this->notifier->serviceTransferred($service, $from, $cancelled, $shown);
         }
         $this->notifier->serviceReceived($service, $this->provisioning->rotates($service));
         $this->provisioning->relabel($service);

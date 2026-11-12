@@ -27,6 +27,8 @@ export function SwitchRow({ label, hint, checked, onCheckedChange, error, held =
 
   return (
     <label
+      // The box the settings search marks on arriving at the setting (components/settings-search/arrival).
+      data-field=""
       className={cn(
         'flex items-center justify-between gap-4',
         held ? 'cursor-not-allowed' : 'cursor-pointer',

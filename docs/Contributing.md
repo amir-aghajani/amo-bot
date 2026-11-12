@@ -12,7 +12,8 @@ shop is reported privately instead: [Security](Security.md).
 ([Testing](Testing.md#ci)):
 
 - `composer check` — the code style, PHPStan (level 6, and dead code) and the PHP tests;
-- `pnpm check` when the panels changed — their API types current, the type check, oxlint, knip, Prettier and their tests;
+- `pnpm check` when the panels changed — their API types and the settings search's index current, the type check,
+  oxlint, knip, Prettier and their tests;
 - `php scripts/docs.php --check` — the documentation's generated pages current, and every link leading somewhere.
 
 ## The rules a change keeps

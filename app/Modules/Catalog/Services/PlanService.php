@@ -8,6 +8,7 @@ use App\Core\Database\Sorting;
 use App\Core\Exceptions\ValidationException;
 use App\Core\Forms\Fields\Field;
 use App\Modules\Bots\CurrentBot;
+use App\Modules\Catalog\Enums\PlanBadge;
 use App\Modules\Catalog\Exceptions\PlanInUseException;
 use App\Modules\Catalog\Models\Plan;
 use App\Modules\Catalog\Models\PlanCategory;
@@ -22,6 +23,7 @@ use App\Modules\Subscriptions\Models\Subscription;
 use App\Modules\Subscriptions\Services\ExtrasSettings;
 use App\Modules\Subscriptions\Services\ServiceTerms;
 use App\Modules\Telegram\Keyboard\KeyboardLayout;
+use App\Modules\Telegram\Texts\PremiumText;
 use App\Support\Input;
 use App\Support\Money;
 use App\Support\Persian;
@@ -39,7 +41,8 @@ use Illuminate\Database\Query\Builder as QueryBuilder;
  * A plan is sold on one or more servers (PlanServer): the whole server or chosen inbounds. The admin may attach any
  * server; what customers are not offered now says why (`unsellable_reason`, ServerSelector). Beside its price a plan may
  * have a first-purchase and an agent price (Orders\Services\Pricing decides who pays which), its own extras prices, a
- * checkout note and its button's look in the bot.
+ * checkout note, its button's look in the bot, the premium emoji the bot draws for its name's leading emoji (PremiumText)
+ * and the badge its card wears in the mini app and on the website.
  *
  * In an agent's shop the owner may keep a plan from sale (`hidden_by_owner`) and servers from the shop: only the owner's
  * agents screen sets them (AgentRestrictions) — nothing here does, and a copy of a plan stays kept —,
@@ -64,6 +67,9 @@ final class PlanService
     private const MAX_HOURS = self::MAX_DAYS * ServiceTerms::HOURS_A_DAY;
     private const MAX_GB = 100000;
     private const MAX_DEVICES = 1000;
+
+    /** A badge that is none of PlanBadge's, in the labels the form offers. */
+    private const BADGE_REFUSED = 'برچسب را از میان «پرفروش‌ترین»، «پیشنهاد ما» و «VIP» انتخاب کنید، یا بدون برچسب بگذارید.';
 
     /** What the plans list and the form read along with a plan. */
     private const RELATIONS = ['category', 'servers.inbounds'];
@@ -220,6 +226,7 @@ final class PlanService
             'id' => $plan->id,
             'category' => $plan->category === null ? null : ['id' => $plan->category->id, 'name' => $plan->category->name, 'is_active' => $plan->category->is_active],
             'name' => $plan->name,
+            'emoji_id' => $plan->emoji_id,
             'description' => $plan->description,
             'checkout_note' => $plan->checkout_note,
             'price' => $plan->price,
@@ -232,6 +239,7 @@ final class PlanService
             'extras' => self::presentExtras($plan),
             'button_style' => $plan->button_style,
             'button_row' => $plan->button_row,
+            'badge' => $plan->badge?->value,
             'servers' => $plan->servers->map($this->presentEntry(...))->values()->all(),
             'unsellable_reason' => $unsellable,
             'is_active' => $plan->is_active,
@@ -307,6 +315,7 @@ final class PlanService
         } elseif (mb_strlen($name) > self::NAME_MAX) {
             $errors['name'][] = Validation::tooLong('نام پلن', self::NAME_MAX);
         }
+        $emoji = PremiumText::nameEmoji($input, $name, $existing?->emoji_id, $errors);
 
         $description = Input::text($input, 'description');
         if (mb_strlen($description) > self::DESCRIPTION_MAX) {
@@ -350,12 +359,14 @@ final class PlanService
         $agentPrice = self::otherPrice($input, 'agent_price', $existing?->agent_price, $price, $errors, 'قیمت نماینده', 'برای نماینده رایگان 0 بگذارید');
         $note = self::checkoutNote($input, $existing, $errors);
         [$style, $row] = self::button($input, $existing, $errors);
+        $badge = self::badge($input, $existing, $errors);
 
         ValidationException::ifAny($errors);
 
         return [[
             'category_id' => $categoryId > 0 ? $categoryId : null,
             'name' => $name,
+            'emoji_id' => $emoji,
             'description' => $description !== '' ? $description : null,
             'checkout_note' => $note,
             'price' => Money::normalize((int) $price),
@@ -367,6 +378,7 @@ final class PlanService
             'agent_price' => $agentPrice,
             'button_style' => $style,
             'button_row' => $row,
+            'badge' => $badge,
             'is_active' => Input::active($input, $existing?->is_active),
         ], $entries];
     }
@@ -448,6 +460,27 @@ final class PlanService
         }
 
         return [$style, $row];
+    }
+
+    /**
+     * The label the plan's card wears in the mini app and on the website (PlanBadge), blank or null for none; left out,
+     * the plan keeps its own (a new one has none).
+     *
+     * @param array<string, mixed> $input
+     * @param array<string, list<string>> $errors
+     */
+    private static function badge(array $input, ?Plan $existing, array &$errors): ?PlanBadge
+    {
+        if (!array_key_exists('badge', $input)) {
+            return $existing?->badge;
+        }
+        $typed = Input::text($input, 'badge');
+        $badge = PlanBadge::tryFrom($typed);
+        if ($typed !== '' && $badge === null) {
+            $errors['badge'][] = self::BADGE_REFUSED;
+        }
+
+        return $badge;
     }
 
     /**

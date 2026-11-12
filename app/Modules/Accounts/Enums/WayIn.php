@@ -5,14 +5,16 @@ declare(strict_types=1);
 namespace App\Modules\Accounts\Enums;
 
 /**
- * A kind of way into a customer's account: a Telegram account, a Google account, an email (with its password). An account
- * has at most one of each, in its own column of `users`.
+ * A kind of way into a customer's account: a Telegram account, a Google account, an email (with its password), a mobile
+ * number (a code by SMS: the one the customer shared with the bot, or proved on the website). An account has at most one
+ * of each, in its own column of `users`.
  */
 enum WayIn: string
 {
     case Telegram = 'telegram';
     case Google = 'google';
     case Email = 'email';
+    case Phone = 'phone';
 
     /** The column of `users` that holds it. */
     public function column(): string
@@ -21,6 +23,7 @@ enum WayIn: string
             self::Telegram => 'telegram_id',
             self::Google => 'google_sub',
             self::Email => 'email',
+            self::Phone => 'phone',
         };
     }
 
@@ -31,6 +34,7 @@ enum WayIn: string
             self::Telegram => 'تلگرام',
             self::Google => 'گوگل',
             self::Email => 'ایمیل',
+            self::Phone => 'شماره موبایل',
         };
     }
 

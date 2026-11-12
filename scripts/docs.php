@@ -141,14 +141,14 @@ function bootApplication(string $root): Application
 /**
  * docs/Config-Reference.md: every setting config.php may hold, by section, as the file lists them (ConfigKeys::SECTIONS)
  * — its default and its description —, and after the setting that names a driver, each driver's own settings as its form
- * describes them (the database's DB_*, the mail's MAIL_*).
+ * describes them (the database's DB_*, the mail's MAIL_*, the SMS's SMS_*).
  *
  * @return array<string, string>
  */
 function configReference(Container $container): array
 {
     // The registries whose drivers keep their settings in config.php, by the setting that names the driver.
-    $drivers = ['DB_CONNECTION' => 'database.drivers', 'MAIL_TRANSPORT' => 'mail.drivers'];
+    $drivers = ['DB_CONNECTION' => 'database.drivers', 'MAIL_TRANSPORT' => 'mail.drivers', 'SMS_DRIVER' => 'sms.drivers'];
 
     $lines = [
         generatedNotice('App\Core\Config\ConfigKeys::SECTIONS and the forms of the drivers registered in bootstrap/container.php'),
@@ -156,7 +156,7 @@ function configReference(Container $container): array
         '',
         'Every setting `config.php` can hold, by section, in the order the file lists them: its default (used while the file',
         'does not set it) and what it is for (the same text the file shows above the setting). After a setting that picks a',
-        'driver (`DB_CONNECTION`, `MAIL_TRANSPORT`) come each driver\'s own settings, as the panel shows them.',
+        'driver (`DB_CONNECTION`, `MAIL_TRANSPORT`, `SMS_DRIVER`) come each driver\'s own settings, as the panel shows them.',
         '[Configuration](Configuration.md) explains how the file is created, edited and protected.',
     ];
 
@@ -270,7 +270,8 @@ function botTextsReference(): array
         '## Kinds',
         '',
         'A text\'s kind decides what it may contain: Telegram HTML (and premium emoji) in a message, a caption or a part; plain',
-        'text in a popup or a button. Length is counted as Telegram counts it: the visible text, without tags.',
+        'text in a popup or a button, whose one tag is a premium emoji — a button\'s, at the start of its label, is its icon; a',
+        'popup shows each as its plain emoji. Length is counted as Telegram counts it: the visible text, without tags.',
         '',
         '| Kind | Where it is used | Telegram HTML | Maximum length |',
         '|---|---|---|---|',
@@ -427,9 +428,11 @@ function apiPages(array $api): array
             'title' => 'Store API reference',
             'intro' => [
                 'Every operation of the Store API, the API of a shop\'s website: who may call it, its parameters, its body field',
-                'by field and its answers, followed by the schemas its answers use. How to use it (signing in, buying,',
-                'idempotency keys, which errors to handle) is explained on the [Store API](Store-API.md) pages; the operations',
-                'for the shop\'s admins are in the [admin API reference](Store-Admin-API-Reference.md). The source is',
+                'by field and its answers, followed by the schemas its answers use. The shop\'s Telegram mini app calls the same',
+                'API under a store key of its own; an operation only one of the two has says so (**Door**, `x-door` in the',
+                'description). How to use it (signing in, buying, idempotency keys, which errors to handle) is explained on the',
+                '[Store API](Store-API.md) pages; the operations for the shop\'s admins are in the',
+                '[admin API reference](Store-Admin-API-Reference.md). The source is',
                 '`resources/api/openapi.yaml`; the same description as one JSON file, for Swagger UI, Redoc or a client',
                 'generator, is `docs/openapi.json` ([on GitHub](https://github.com/amir-aghajani/amo-bot/blob/main/docs/openapi.json)).',
                 '',
@@ -641,6 +644,14 @@ function apiOperation(array $api, array $operation, \Closure $link, array $inlin
     ][$operation['section']] ?? null;
     if ($who !== null) {
         $facts[] = '- **Who:** ' . $who;
+    }
+    // An operation only one door of the Store API has: under the other's key it is no route at all.
+    $door = [
+        'website' => 'the website\'s only: under the mini app\'s key it is a `404`.',
+        'mini_app' => 'the mini app\'s only: under a website\'s key it is a `404`.',
+    ][$op['x-door'] ?? ''] ?? null;
+    if ($door !== null) {
+        $facts[] = '- **Door:** ' . $door;
     }
     if ($operation['section'] === 'admin') {
         $heading = strtoupper($operation['method']) . ' ' . ApiDescription::PANELS . substr($operation['path'], strlen(ApiDescription::STAFF));

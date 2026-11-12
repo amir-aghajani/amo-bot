@@ -16,7 +16,7 @@ use App\Modules\Providers\Models\Server;
  * The way into a panel, as every connector takes it: an API token, or an admin's username and password, kept in
  * `servers.api_token`, `servers.username` and `servers.password` (secrets encrypted). A server keeps one way at a time;
  * which credentials it has is its way in (of()). Every connector's form uses the same fields (fields()); a connector
- * may add fields to the password way (WITH_PASSWORD: 3x-ui's two-factor secret). A secret left blank keeps the stored
+ * may add fields to the password way (WITH_PASSWORD: 3x-ui's two-factor secret), or offer the token alone. A secret left blank keeps the stored
  * one only while the panel's address stays on its host, and its proxy and TLS check as they were (PanelConnection::bound()).
  */
 final class PanelCredentials
@@ -48,20 +48,22 @@ final class PanelCredentials
     /**
      * The form's fields of the way in: which way; the API token, worded by the connector (`$token`: «توکن API»,
      * «کلید API»; `$tokenHint`: where on the panel it is made) and held to its shape (`$tokenPattern`, refused with
-     * `$tokenMismatch`); or an admin's username and password (`$loginHint`: whose).
+     * `$tokenMismatch`); or an admin's username and password (`$loginHint`: whose). A panel whose API takes its token
+     * alone (`$loginHint` null: HMPanel's key API) offers that one way, and no username or password.
      *
      * @return list<Field<mixed>>
      */
-    public static function fields(string $token, string $tokenHint, string $tokenPattern, string $tokenMismatch, string $loginHint): array
+    public static function fields(string $token, string $tokenHint, string $tokenPattern, string $tokenMismatch, ?string $loginHint): array
     {
-        return [
+        $ways = [AuthMode::Token->value => $token] + ($loginHint !== null ? [AuthMode::Password->value => 'نام کاربری و رمز'] : []);
+        $fields = [
             new Choice(
                 self::MODE,
                 self::MODE,
                 AuthMode::Token->value,
-                array_column(AuthMode::cases(), 'value'),
+                array_keys($ways),
                 refusal: 'روش احراز هویت نامعتبر است.',
-                spec: new FieldSpec('احراز هویت', options: [AuthMode::Token->value => $token, AuthMode::Password->value => 'نام کاربری و رمز']),
+                spec: new FieldSpec('احراز هویت', options: $ways),
             ),
             new Secret(
                 'api_token',
@@ -74,6 +76,13 @@ final class PanelCredentials
                 moved: PanelConnection::MOVED . "{$token} را دوباره وارد کنید.",
                 spec: new FieldSpec($token, hint: $tokenHint, when: [self::MODE => [AuthMode::Token->value]]),
             ),
+        ];
+        if ($loginHint === null) {
+            return $fields;
+        }
+
+        return [
+            ...$fields,
             new Text('username', 'username', '', label: 'نام کاربری', max: self::USERNAME_MAX, required: true, spec: new FieldSpec('نام کاربری', hint: $loginHint, when: self::WITH_PASSWORD, ltr: true)),
             // A password is no token: its hint gives none of it away.
             new Secret(

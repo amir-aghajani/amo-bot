@@ -4,8 +4,8 @@
 
 «پشتیبانی», in both panels, right under the dashboard: the customers' support conversations. A ticket is a subject, the
 service it is about (or none), and messages — words, each with at most one picture. Customers open them in the bot
-(«☎️ پشتیبانی» › «📨 تیکت جدید», or a service's «⚠️ ارسال گزارش اختلال») or on the shop's website; you answer from either
-panel or from the report group.
+(«☎️ پشتیبانی» › «📨 تیکت جدید», or a service's «⚠️ ارسال گزارش اختلال»), in the shop's [mini app](Mini-App.md) or on its
+website; you answer from either panel or from the report group.
 
 | Status | Means |
 |---|---|
@@ -52,6 +52,14 @@ handle or number. Anyone but you reads your login as «پشتیبانی» alone;
 «🎧 پشتیبانی» to them. The bot's admins may answer, close and open tickets from the shop's website too, while it lets
 them in ([Website](Website.md#the-shops-admins)).
 
+## Read ticks
+
+The [mini app](Mini-App.md) shows each of the customer's messages with one tick once it is sent and two once support has
+read it; the shop's website may show the same. **Support has read a message** once the ticket's page is opened after it
+was written — in either panel, or by a bot admin on the website —, or once the ticket is answered after it, from
+anywhere: a reply in the report group too. A report reaching the group is no reading. The customer is never told of a
+reading: only the ticks change.
+
 ## From the report group
 
 The group's «تیکت‌ها» topic hears every ticket, while a group is connected and the topic is on: a new one with its
@@ -62,8 +70,8 @@ the one before. While the ticket is open, the latest carries **«🔒 بستن �
 **A bot admin's reply to any of a ticket's reports is the answer**, sent to the customer: words, or a photo with a
 caption. The bot says under it «✅ پاسخ برای مشتری فرستاده شد.», or why not — not a bot admin, written anonymously
 (turn "Remain anonymous" off in the group), a photo without a caption, a voice or a file. A ticket's reports are kept
-while it is open, however old; a closed one's go a week after they were sent — reply to a newer one, or answer from the
-panel ([Report group](Telegram-Group.md)).
+while it is open, however old; a closed one's go a week after they were sent by default — reply to a newer one, or
+answer from the panel ([Report group](Telegram-Group.md), [the task schedule](Running-In-Production.md#the-task-schedule)).
 
 ## Limits
 
@@ -72,12 +80,14 @@ panel ([Report group](Telegram-Group.md)).
   hour — receipts and tickets' together —, and a ticket takes 20 pictures uploaded by them. You are never held.
 - A picture is taken while the server's disk has 200 MB free, and up to a gigabyte of pictures a day for the shop;
   past either, «… تصویری پذیرفته نمی‌شود» — send the words alone.
-- **A closed ticket's uploaded pictures are deleted 30 days after it closed**; the message keeps its text and says it had
-  one. Pictures sent in the bot are Telegram's.
+- **A closed ticket's uploaded pictures are deleted 30 days after it closed** by default; the message keeps its text
+  and says it had one ([«زمان‌بندی کارها»](Running-In-Production.md#the-task-schedule)). Pictures sent in the bot are
+  Telegram's.
 
 ## Watch out for
 
-- **Reading a ticket in the panel changes nothing**: the customer is not told you read it, and the ticket stays «در
-  انتظار پاسخ» until you answer — the answer is what tells them.
+- **Opening a ticket shows the customer you read it** — two ticks under their messages in the mini app
+  ([read ticks](#read-ticks)) —, but tells them nothing, and the ticket stays «در انتظار پاسخ» until you answer: the
+  answer is what tells them.
 - **A ticket opened while no group was connected**, or the topic off, is never reported later: answer it from the panel.
 - **An answer cannot be taken back** — it reached the customer as it was sent.

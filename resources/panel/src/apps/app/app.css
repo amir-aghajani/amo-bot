@@ -1,0 +1,233 @@
+@import 'tailwindcss' source(none);
+@source './';
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * The mini app's look: Telegram's own. Its colours are the user's Telegram theme — the --tg-theme-* properties
+ * telegram-web-app.js keeps on <html> and updates when the theme changes —, with a light and a dark fallback for a client
+ * that sends fewer (or a browser). The shop's colour, when it set one, is the accent (--app-brand), with the text on it
+ * (--app-brand-on) and its shade that reads as text or an icon on the page (--app-brand-text), all three worked out by
+ * telegram/theme. Pages are grouped sections on the secondary background, as Telegram's settings are; status colours are
+ * mixed into soft backgrounds over whatever is beneath them, so they hold in both schemes.
+ */
+:root {
+  --app-page: var(--tg-theme-secondary-bg-color, #efeff4);
+  --app-section: var(--tg-theme-section-bg-color, var(--tg-theme-bg-color, #ffffff));
+  --app-text: var(--tg-theme-text-color, #000000);
+  --app-hint: var(--tg-theme-hint-color, #8e8e93);
+  --app-section-header: var(--tg-theme-section-header-text-color, var(--app-hint));
+  --app-link: var(--tg-theme-link-color, #2481cc);
+  --app-accent: var(--app-brand, var(--tg-theme-button-color, #2481cc));
+  --app-on-accent: var(--app-brand-on, var(--tg-theme-button-text-color, #ffffff));
+  --app-accent-text: var(--app-brand-text, var(--tg-theme-accent-text-color, var(--app-link)));
+  --app-danger: var(--tg-theme-destructive-text-color, #e53935);
+  --app-separator: var(--tg-theme-section-separator-color, rgb(0 0 0 / 9%));
+  --app-success: #31a24c;
+  --app-warning: #e8930c;
+  --app-fill: color-mix(in srgb, var(--app-text) 6%, transparent);
+  --app-fill-strong: color-mix(in srgb, var(--app-text) 11%, transparent);
+  /* A card's lift off the page: a soft shadow on a light page; on a dark one, a hairline edge instead. */
+  --app-elevation: 0 1px 2px rgb(0 0 0 / 4%), 0 6px 20px -10px rgb(0 0 0 / 14%);
+
+  /* Telegram's header and controls over a full-screen app, and the phone's own edges. */
+  --app-top: calc(var(--tg-safe-area-inset-top, 0px) + var(--tg-content-safe-area-inset-top, 0px));
+  --app-bottom: var(--tg-safe-area-inset-bottom, env(safe-area-inset-bottom, 0px));
+}
+
+.dark {
+  --app-page: var(--tg-theme-secondary-bg-color, #0f0f0f);
+  --app-section: var(--tg-theme-section-bg-color, var(--tg-theme-bg-color, #1c1c1d));
+  --app-text: var(--tg-theme-text-color, #ffffff);
+  --app-hint: var(--tg-theme-hint-color, #8e8e93);
+  --app-separator: var(--tg-theme-section-separator-color, rgb(255 255 255 / 9%));
+  --app-success: #4cd964;
+  --app-warning: #ffb340;
+  --app-elevation: inset 0 0 0 1px rgb(255 255 255 / 5%);
+}
+
+@theme inline {
+  --font-sans: Vazirmatn, ui-sans-serif, system-ui, sans-serif;
+
+  --color-page: var(--app-page);
+  --color-section: var(--app-section);
+  --color-text: var(--app-text);
+  --color-hint: var(--app-hint);
+  --color-section-header: var(--app-section-header);
+  --color-link: var(--app-link);
+  --color-accent: var(--app-accent);
+  --color-on-accent: var(--app-on-accent);
+  --color-accent-text: var(--app-accent-text);
+  --color-danger: var(--app-danger);
+  --color-success: var(--app-success);
+  --color-warning: var(--app-warning);
+  --color-separator: var(--app-separator);
+  --color-fill: var(--app-fill);
+  --color-fill-strong: var(--app-fill-strong);
+
+  /*
+   * Whole pixels only — sizes, line heights, radii —: a box or a line of a fraction of a pixel draws its edges unevenly on
+   * a phone's screen, and what sits in it looks off its centre though the numbers say it is not. Cards 20px round,
+   * controls (fields, buttons) 14px; an icon's square takes its radius from its size (ui/visuals IconTile).
+   */
+  --radius-card: 1.25rem;
+  --radius-control: 0.875rem;
+
+  --text-micro: 0.6875rem;
+  --text-micro--line-height: 0.875rem;
+  --text-caption: 0.75rem;
+  --text-caption--line-height: 1.125rem;
+  --text-footnote: 0.8125rem;
+  --text-footnote--line-height: 1.25rem;
+  --text-body: 0.9375rem;
+  --text-body--line-height: 1.5rem;
+  --text-heading: 1.0625rem;
+  --text-heading--line-height: 1.625rem;
+  --text-title: 1.5rem;
+  --text-title--line-height: 2rem;
+  --text-display: 2rem;
+  --text-display--line-height: 2.5rem;
+
+  --shadow-card: var(--app-elevation);
+
+  --animate-rise: rise 0.28s cubic-bezier(0.2, 0.8, 0.2, 1);
+  --animate-fade: fade 0.2s ease-out;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-feature-settings: 'ss01';
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    margin: 0;
+    min-height: var(--tg-viewport-height, 100vh);
+    background: var(--app-page);
+    color: var(--app-text);
+    font-family: var(--font-sans);
+    font-size: var(--text-body);
+    line-height: var(--text-body--line-height);
+    overscroll-behavior-y: none;
+  }
+
+  /* Latin runs (links, codes, card numbers) read left to right inside Persian text. */
+  .ltr {
+    direction: ltr;
+    unicode-bidi: isolate;
+  }
+
+  button {
+    cursor: pointer;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--app-accent);
+    outline-offset: 2px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 1ms !important;
+      transition-duration: 1ms !important;
+    }
+  }
+}
+
+/*
+ * No -webkit-backdrop-filter line beside it: the build's minifier takes the two for one property and keeps the last, which
+ * left Chrome's webviews (Telegram on Android and desktop) no blur at all. The build adds Safari's prefix by itself.
+ */
+@utility glass {
+  background: color-mix(in srgb, var(--app-section) 62%, transparent);
+  backdrop-filter: blur(18px) saturate(1.4);
+}
+
+@utility press {
+  transition:
+    transform 0.16s cubic-bezier(0.2, 0.8, 0.2, 1),
+    opacity 0.16s ease;
+  &:active {
+    transform: scale(0.98);
+    opacity: 0.88;
+  }
+}
+
+/* A card on the page: the section's colour, 20px round, lifted as the scheme lifts things (--app-elevation). */
+@utility card {
+  background: var(--app-section);
+  border-radius: var(--radius-card);
+  box-shadow: var(--app-elevation);
+}
+
+/*
+ * A row of a grouped list, its hairline under it as Telegram draws one: from where its words start (--row-inset: past
+ * its icon, 1rem without one) to the card's edge, none under the last row.
+ */
+@utility list-row {
+  position: relative;
+  &:not(:last-child)::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    inset-inline-start: var(--row-inset, 1rem);
+    inset-inline-end: 0;
+    height: 1px;
+    transform: scaleY(0.5);
+    transform-origin: bottom;
+    background: var(--app-separator);
+    pointer-events: none;
+  }
+}
+
+/*
+ * A control drawn smaller than a finger (a 36px button, a 32px pill): its tap area reaches 44px each way, unseen and
+ * centred on it, so its look and the layout stay as they are. The control is positioned itself (relative, or absolute),
+ * so the area is its own.
+ */
+@utility tap-target {
+  &::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: max(100%, 44px);
+    height: max(100%, 44px);
+    transform: translate(-50%, -50%);
+  }
+}
+
+/*
+ * Small controls side by side (a carousel's dots), where 44px squares would overlap and the last one would take its
+ * neighbours' taps: each tap area reaches 44px up and down and keeps to its own width — the row's spacing, at least 24px
+ * each — so every tap lands on the control it was meant for.
+ */
+@utility tap-row {
+  &::before {
+    content: '';
+    position: absolute;
+    inset-inline: 0;
+    top: 50%;
+    height: max(100%, 44px);
+    transform: translateY(-50%);
+  }
+}

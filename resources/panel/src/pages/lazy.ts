@@ -38,6 +38,10 @@ export const LoyaltyPage = lazyPage(
   () => import('@/pages/loyalty'),
   (module) => module.LoyaltyPage,
 )
+export const MiniAppSettingsPage = lazyPage(
+  () => import('@/pages/mini-app-settings'),
+  (module) => module.MiniAppSettingsPage,
+)
 export const OrdersPage = lazyPage(
   () => import('@/pages/orders'),
   (module) => module.OrdersPage,

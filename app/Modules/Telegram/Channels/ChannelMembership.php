@@ -10,6 +10,7 @@ use App\Modules\Telegram\Api\TelegramApiException;
 use App\Modules\Telegram\BotSettings;
 use App\Modules\Telegram\Context;
 use App\Modules\Telegram\Models\BotChannel;
+use App\Modules\Users\Models\User;
 use Illuminate\Database\Eloquent\Collection;
 use Psr\Log\LoggerInterface;
 
@@ -46,17 +47,48 @@ final class ChannelMembership
             return [];
         }
 
-        $channels = BotChannel::ordered()->get()->filter(static fn(BotChannel $channel): bool => $channel->link() !== null)->values();
+        $channels = self::joinable();
         if ($channels->isEmpty() || (!$fresh && $this->clearedRecently($ctx, $channels))) {
             return [];
         }
 
-        $missing = array_values(array_filter($channels->all(), fn(BotChannel $channel): bool => !$this->isMember($channel, $ctx->user->telegram_id)));
+        $missing = $this->unjoined($channels, $ctx->user->telegram_id);
         if ($missing === []) {
             $ctx->session->put(self::SESSION_KEY, ['list' => self::listKey($channels), 'at' => now()->getTimestamp()]);
         }
 
         return $missing;
+    }
+
+    /**
+     * The channels a customer outside the chat has still to join (the Store API: the website, the mini app), asked of
+     * Telegram now — none while the rule is off, for a bot admin, or for a customer without a Telegram account (whom the
+     * rule cannot hold).
+     *
+     * @return list<BotChannel>
+     */
+    public function missingFor(User $user): array
+    {
+        if (!$this->settings->joinRequired() || $user->isAdmin() || $user->telegram_id === null) {
+            return [];
+        }
+
+        return $this->unjoined(self::joinable(), $user->telegram_id);
+    }
+
+    /** @return Collection<int, BotChannel> The required channels someone can join, in their order. */
+    private static function joinable(): Collection
+    {
+        return BotChannel::ordered()->get()->filter(static fn(BotChannel $channel): bool => $channel->link() !== null)->values();
+    }
+
+    /**
+     * @param Collection<int, BotChannel> $channels
+     * @return list<BotChannel>
+     */
+    private function unjoined(Collection $channels, int $telegramId): array
+    {
+        return array_values(array_filter($channels->all(), fn(BotChannel $channel): bool => !$this->isMember($channel, $telegramId)));
     }
 
     /**

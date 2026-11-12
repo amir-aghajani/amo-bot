@@ -5,7 +5,8 @@
 For the developer of a shop's own website: a landing page and a customer dashboard, in Next.js or anything else that
 speaks HTTPS and JSON. AmoBot is the shop — its Telegram bot, its panels and this API share one database and one set of
 rules — so whatever a customer does on the website (signing in, buying, renewing, paying by card, reading notices,
-writing to support) is what the bot and the support panel see. The site renders; AmoBot decides.
+writing to support) is what the bot and the support panel see. The site renders; AmoBot decides. The shop's own
+Telegram mini app, which AmoBot ships, calls the same API under a key of its own ([two doors](#two-doors)).
 
 The contract is [`resources/api/openapi.yaml`](https://github.com/amir-aghajani/amo-bot/blob/main/resources/api/openapi.yaml):
 every operation under `/api/store/v1/{store}`, its parameters, its request body and its answers. The server's own
@@ -25,12 +26,12 @@ recognising), [signing in](Store-API-Sign-In.md), [the account](Store-API-Accoun
 
 ## How the shop sees it
 
-- **One shop, three doors.** The bot, the panels and the website are surfaces over the same services. A business rule
-  — who may renew, what a checkout charges, when an order is payable, what a refund gives back — lives in one domain
-  service that every surface calls; no surface keeps a copy of it.
+- **One shop, many doors.** The bot, the panels, the website and the shop's Telegram mini app are surfaces over the
+  same services. A business rule — who may renew, what a checkout charges, when an order is payable, what a refund
+  gives back — lives in one domain service that every surface calls; no surface keeps a copy of it.
 - **A customer is a customer.** One account per person per shop, whichever door they came through: a Telegram account,
-  an email address and a Google account are all ways into the same account. Orders, services, the wallet, tickets and
-  notices belong to the account, never to a way of signing in.
+  an email address, a Google account and a mobile number are all ways into the same account. Orders, services, the
+  wallet, tickets and notices belong to the account, never to a way of signing in.
 - **Merging, not refusing.** A person who signs up on the website and later adds the Telegram account that already has
   services gets one account: the newer merges into the older, everything it owned moving with it
   ([the merge offer](Store-API-Account.md#the-merge-offer)).
@@ -40,12 +41,49 @@ recognising), [signing in](Store-API-Sign-In.md), [the account](Store-API-Accoun
 - **No shell and no build step for the owner.** Everything is set up from the panel; the shop's email goes over the
   host's SMTP account, PHP's own mail or Resend's API; no queue worker is needed.
 
+## Two doors
+
+The store key in the address opens the API through one of two doors, each with a key of its own:
+
+- **The shop's website** — the key of «تنظیمات وب‌سایت › اتصال» ([the base address](#the-base-address)). These pages are
+  written for it.
+- **The shop's Telegram mini app** — the customer side of the shop inside Telegram, which AmoBot itself ships and serves
+  at `{APP_URL}/app/{its key}/`. The owner switches it on in «مینی‌اپ تلگرام»; the key is in the app's address there.
+
+Both doors are the same shop: the same customers, sessions, catalogue, prices and rules. A token one door signed in
+opens the other door's customer endpoints too. What differs:
+
+| | The website's key | The mini app's key |
+|---|---|---|
+| Signing in | Telegram, Google, an email and a password, a code by SMS ([signing in](Store-API-Sign-In.md)) | Telegram's launch data alone, `POST /auth/mini-app` ([the mini app](Store-API-Sign-In.md#the-mini-app)) |
+| `GET /` | `sign_in.mini_app` `false`, `app` `null` | `sign_in.mini_app` `true`, the website's ways in off, and `app`: how it looks ([what the site asks first](Store-API-Shop.md#what-the-site-asks-first)) |
+| CORS | the website's origins ([calling from the browser](#calling-from-the-browser)) | none: the app is on the shop's own address |
+| The captcha | while the website asks one | none |
+| Reviews | the website's switch | the mini app's own switch |
+| The admin API | `/admin/*`, while the website lets admins in | none: `GET /me`'s `staff` is `null` |
+
+What only one door has is no route at all under the other's key: the router's own `404` (`صفحه مورد نظر پیدا نشد.`),
+before a token is read — only a `POST`, `PUT` or `PATCH` whose body is not JSON is answered first, with the `415` every
+path gives it ([messages worth recognising](#messages-worth-recognising)). The website's alone: its ways in
+(`POST /auth/nonce`, `/auth/telegram*`, `/auth/google`, `/auth/register*`, `/auth/login*`, `/auth/password/*`,
+`POST /auth/phone` and `/auth/phone/verify`), its captcha (`/captcha/*`), `POST /me/telegram/authorize`,
+`POST /me/identities/telegram`, `POST /me/identities/google`, `POST /me/identities/phone` and `…/phone/verify`,
+`POST /me/reauthenticate/phone`, and `/admin/*`. The mini app's alone: `POST /auth/mini-app`, its logo (`GET /app/logo`)
+and the fingerprint secret (`PUT` and `DELETE /me/biometric`). The contract marks each of them `x-door`
+([the reference](Store-API-Reference.md) says **Door**) but `/admin/*`, the website's without a mark.
+`POST /me/reauthenticate` is at both doors, but its `mini_app` and `biometric` are the mini app's: through a website's
+key, a `422` on `method`. A customer in the mini app adds an email to their account
+([ways in](Store-API-Account.md#ways-in-adding-and-removing)), never Google — Google refuses its sign-in inside an
+embedded browser —, and does not take their Telegram account off there (a `422` on `kind`): the app knows them by it.
+The admin API refuses a session the mini app's launch data signed in (a `403`), though its token comes through the
+website's key: the mini app is the customer side only.
+
 ## What the API covers
 
 | Access | What |
 |---|---|
-| **Public** (the store key alone) | the shop (`GET /`), what it sells (`GET /plans`, `GET /plans/{id}` — a signed-in customer's token optional, read as theirs: [read signed in](Store-API-Shop.md#read-signed-in)), what a customer may build (`GET /custom-services`), how its servers stand (`GET /status`), the reviews it shows and a review written, while the website takes them (`/reviews` — a signed-in customer's token optional, a guest's review behind the captcha), every way to sign in (`/auth/*`, but `POST /auth/logout`), and the website's captcha (`/captcha/*`) |
-| **A customer's own** (their bearer token) | their account (`/me/*`); their services (`/subscriptions/*`), one added by its link or handed to another customer among them; buying (`/payment-methods`, `/orders`, a service they build, renewals, extra traffic, time and devices, wallet top-ups, discount codes checked, receipts, online payments asked about); their orders and payments; the wallet, its ledger, money sent to another customer and gift codes; the referral program; every notice the shop sent them; and their support tickets (`/tickets/*`) |
+| **Public** (the store key alone) | the shop (`GET /`), what it sells (`GET /plans`, `GET /plans/{id}` — a signed-in customer's token optional, read as theirs: [read signed in](Store-API-Shop.md#read-signed-in)), the timed sales running (`GET /sales`), what a customer may build (`GET /custom-services`), how its servers stand (`GET /status`), its tutorial (`GET /tutorial`), the reviews it shows and a review written, while the website takes them (`/reviews` — a signed-in customer's token optional, a guest's review behind the captcha), every way to sign in (`/auth/*`, but `POST /auth/logout`), the website's captcha (`/captcha/*`) and the mini app's logo (`GET /app/logo`) |
+| **A customer's own** (their bearer token) | their account (`/me/*`); their services (`/subscriptions/*` — their own name for one and its QR card among them), one added by its link or handed to another customer among them; buying (`/payment-methods`, `/orders`, a service they build, renewals, extra traffic, time and devices, wallet top-ups, discount codes checked, receipts, online payments asked about); their orders and payments; the wallet, its ledger, money sent to another customer and gift codes; a free test account (`/test-account`), the lucky wheel (`/wheel`) and the nightly draw (`GET /lottery`); the referral program; every notice the shop sent them; and their support tickets (`/tickets/*`) |
 | **The shop's admins** (an admin's bearer token, while the website lets them in) | the shop's daily work as its panels do it — receipts and payments, orders, services, customers, tickets, reviews, plans, referrals, broadcasts — under `/admin/*` ([the shop's admins](Store-API-Admins.md)) |
 
 Not covered: the site's own content (blog, FAQ, app downloads). Every way the shop takes money goes through this API:
@@ -77,6 +115,11 @@ The calls a typical shop website makes, in the order it needs them. Each step li
 8. **An admin area**, if you build one: the shop's daily work for its admins
    ([the shop's admins](Store-API-Admins.md)).
 
+**A Telegram mini app** needs no building: the shop has its own, on the same API under its own key
+([two doors](#two-doors)), and its bot opens it — from the menu button beside the message box and from the main
+menu's «📱 اپلیکیشن فروشگاه». A website that wants its customers in Telegram links to the bot (`GET /`'s `shop.bot`). The mini app's key
+signs nobody in but by Telegram's launch data and answers no other origin, so it is no key for a website.
+
 The rest of this page is what every call shares: the address, CORS, the conventions, the errors, a minimal client, and
 the messages worth recognising.
 
@@ -94,10 +137,11 @@ https://panel.example.com/api/store/v1/c4859b5b660377ef517299cf
 - Paths on these pages are relative to the base: `GET /plans` is `GET {base}/plans`, and `GET /` is the base itself,
   without a trailing slash.
 - A website starts switched off. Until the owner switches it on with the site's address — and after the key is
-  replaced, or when an agent's shop closes — every endpoint answers `404` with `این فروشگاه وب‌سایت فعالی ندارد.` It
+  replaced, or when an agent's shop closes — every endpoint answers `404` with `این فروشگاه فعلا در دسترس نیست.` It
   allows no origin then, so a page's `fetch` sees no answer at all (a `TypeError`, [below](#calling-from-the-browser));
-  only a call from your server reads the `404`. An address that is no endpoint — a key that is not 24 lower-case hex
-  characters, a path with a trailing slash — is the router's own `404` (`صفحه مورد نظر پیدا نشد.`). An endpoint called
+  only a call from your server reads the `404`. The mini app's key answers the same while the mini app is off. An
+  address that is no endpoint — a key that is not 24 lower-case hex characters, a path with a trailing slash, an
+  endpoint only the other door has ([two doors](#two-doors)) — is the router's own `404` (`صفحه مورد نظر پیدا نشد.`). An endpoint called
   with a method it does not take is `405` (`این روش درخواست پشتیبانی نمی‌شود.`), its `Allow` header naming the methods
   it does take (readable from your server: CORS does not expose it).
 
@@ -170,8 +214,8 @@ the visitor's address to `X-Forwarded-For` and pass their `User-Agent` on.
 - **A term** is `duration_hours`, exactly: a plan may be sold by the hour (a one-hour test, say). Beside it,
   `duration_days` is the same term in whole days, rounded up (a one-hour plan says `1`), kept for sites made before
   hourly plans: word a term from its hours.
-- **Times** are ISO 8601 in UTC: `"2026-10-07T12:00:00+00:00"`. Show them in the shop's zone — the API does not say
-  it: ask the owner (it is `APP_TIMEZONE`, «تنظیمات پنل › برنامه») —, e.g.
+- **Times** are ISO 8601 in UTC: `"2026-10-07T12:00:00+00:00"`. Show them in the shop's zone — a website's key does not say
+  it (the mini app's does: `GET /`'s `app.time_zone`): ask the owner (it is `APP_TIMEZONE`, «تنظیمات پنل › برنامه») —, e.g.
   `new Intl.DateTimeFormat('fa-IR-u-ca-persian', { timeZone: 'Asia/Tehran', dateStyle: 'medium' })` for Jalali dates in
   Iran's time. A row's `created_at` or `updated_at` is null when the row was written outside AmoBot without it
   (imported, or added by hand in the database): show it as unknown.
@@ -220,7 +264,8 @@ Every refusal and failure has one shape:
 - `errors` — only when the refusal concerns request fields: each field's messages. Show them under their inputs. Some
   fields are not inputs the customer types — `status`, `plan_id`, `server_id`, `method_id`, `for`, `idempotency_key`,
   `expected_amount`, `panel`, `captcha`, `ids`, a provider's proof and its parts (`id_token`, `nonce`, a redirect's `code`, `state`,
-  `code_verifier`, `code_challenge`, `redirect_uri`), and the captcha check's `token` and `action` — so show those as the
+  `code_verifier`, `code_challenge`, `redirect_uri`), the mini app's `init_data` and fingerprint `token`, and the
+  captcha check's `token` and `action` — so show those as the
   form's message. A refusal of the request as a whole has no `errors`.
 - `request_id` — 16 hex characters, also in the `X-Request-Id` header of every answer (readable cross-origin). With a
   5xx, show it as «کد پیگیری» so support can find the request in the shop's log.
@@ -228,21 +273,21 @@ Every refusal and failure has one shape:
 | Status | In this API | The site |
 |---|---|---|
 | `200` | Done | — |
-| `201` | Made: a ticket opened ([opening one](Store-API-Support-Tickets.md#opening-one)), a review written ([writing one](Store-API-Reviews.md#writing-one)), or a service added by its link ([adding a service by its link](Store-API-After-Buying.md#adding-a-service-by-its-link)) | — |
-| `202` | Taken, one more step: a code was emailed, the account asks its second step, or a merge is offered | follow the answer's shape |
+| `201` | Made: a ticket opened ([opening one](Store-API-Support-Tickets.md#opening-one)), a review written ([writing one](Store-API-Reviews.md#writing-one)), a service added by its link ([adding a service by its link](Store-API-After-Buying.md#adding-a-service-by-its-link)), or a free test account taken ([test accounts](Store-API-After-Buying.md#test-accounts)) | — |
+| `202` | Taken, one more step: a code was emailed or texted, the account asks its second step, or a merge is offered | follow the answer's shape |
 | `204` | Done, no body: signed out, a session ended | — |
 | `401` | On a customer endpoint: no token, or its session ended — and on `GET /plans`, `GET /plans/{id}` and `POST /reviews`, a token sent whose session ended ([tokens and sessions](Store-API-Sign-In.md#tokens-and-sessions)) — the only meaning it has there, and the only `401` with `WWW-Authenticate: Bearer`. On `/auth/*`: the sign-in's proof did not hold (no such header) | forget the token and show the sign-in; on `/auth/*`, let them try again |
 | `403` | The customer is banned (`حساب کاربری شما مسدود شده است.`) — or, on a change of how the account is signed in to or on handing a service or money to another customer, a sign-in not recent enough: `WWW-Authenticate: Bearer error="insufficient_user_authentication", max_age=900` ([a recent sign-in](Store-API-Account.md#a-recent-sign-in)). On `POST /reviews`: a guest's review while the website asks no captcha. On `/admin/*`: the admin API's door, or a decision no admin makes ([the shop's admins](Store-API-Admins.md#refusals)) | show the message and the support link; or prove a way in again, then retry |
-| `404` | The store key opens no website (seen from a server only: a browser gets no answer); a row that is not this customer's, or no longer exists; a plan not on sale now; the reviews while the website shows none; a captcha challenge asked of a website whose captcha takes none from the shop; an address no route has | — |
+| `404` | The store key opens no website and no mini app (seen from a server only: a browser gets no answer); a row that is not this customer's, or no longer exists; a plan not on sale now; the reviews while the website (or the mini app) shows none; a captcha challenge asked of a website whose captcha takes none from the shop; the test accounts or the nightly draw while the shop runs none; the mini app's logo while it has none; an address no route has — one only the other door has among them ([two doors](#two-doors)) | — |
 | `405` | An endpoint called with a method it does not take | — |
 | `409` | Something changed in the same moment: the address took an account, the order was paid or closed elsewhere, the service is being changed — or an ordering request made again finds its order cancelled since ([the Idempotency-Key](Store-API-Buying.md#the-idempotency-key)), or an ordering request's price is no longer the `expected_amount` it was sent with ([the price shown](Store-API-Buying.md#the-price-shown)). On `POST /auth/google`: the address is an account's that Google's word alone may not open ([Google](Store-API-Sign-In.md#google)). On `POST /subscriptions/claim`: the service is in another customer's account. On `POST /captcha/verify`: the website asks no captcha | read again, show the new state |
 | `413` | A JSON body over 1 MiB, or a form over what the host's PHP takes for a whole request ([conventions](#conventions)) | a form: shrink its picture |
 | `415` | A body that is not JSON — nor, where a picture goes, a form ([conventions](#conventions)) | send `Content-Type: application/json` |
-| `422` | Refused: fields under `errors` — on `/me/*` a Telegram or Google proof that did not hold too —, a state under `errors.status`, or the request as a whole (a way in switched off, a nonce asked while neither Telegram nor Google sign-in is on) | show the messages |
-| `429` | Too many tries ([limits and lifetimes](Store-API-Sign-In.md#limits-and-lifetimes)), or past one of the customer's own caps ([the Idempotency-Key](Store-API-Buying.md#the-idempotency-key), [the receipt](Store-API-Buying.md#card-transfer-and-the-receipt), [an online payment asked about](Store-API-Buying.md#paying-online), [reading a service now](Store-API-After-Buying.md#reading-a-service-now), [a new link](Store-API-After-Buying.md#a-new-link), [sending money](Store-API-After-Buying.md#sending-money-to-another-customer), [the tickets' limits](Store-API-Support-Tickets.md#limits)) — or the admins' work on the VPN panels ([the shop's admins](Store-API-Admins.md#refusals)); wait the seconds `Retry-After` says | hold the action that long |
+| `422` | Refused: fields under `errors` — on `/me/*` a Telegram or Google proof that did not hold too, and the mini app's launch data or fingerprint secret —, a state under `errors.status`, or the request as a whole (a way in switched off, a nonce asked while neither Telegram nor Google sign-in is on) | show the messages |
+| `429` | Too many tries ([limits and lifetimes](Store-API-Sign-In.md#limits-and-lifetimes)), or past one of the customer's own caps ([the Idempotency-Key](Store-API-Buying.md#the-idempotency-key), [the receipt](Store-API-Buying.md#card-transfer-and-the-receipt), [an online payment asked about](Store-API-Buying.md#paying-online), [reading a service now](Store-API-After-Buying.md#reading-a-service-now), [a new link](Store-API-After-Buying.md#a-new-link), [the QR card](Store-API-After-Buying.md#the-qr-card), [sending money](Store-API-After-Buying.md#sending-money-to-another-customer), [the tickets' limits](Store-API-Support-Tickets.md#limits)) — or the admins' work on the VPN panels ([the shop's admins](Store-API-Admins.md#refusals)); wait the seconds `Retry-After` says | hold the action that long |
 | `500` | The server failed (logged under `request_id`) | message and «کد پیگیری» |
-| `502` | Something the shop relies on did not answer: Telegram, Google, a VPN server's panel, the mail server | try again later |
-| `503` | The shop's email does not go out — or its budget of sign-in emails is spent for now —, the captcha could not be judged, an online payment's gateway could not be asked, the server's disk is too full to take a picture or the shop took its pictures for the day, the shop takes no orders now (its bot switched off — or, an agent's shop, its selling suspended by the main shop, where a receipt is still taken and what only prices an order answers a `422` on `status`: [buying](Store-API-Buying.md#the-flow)), the shop keeps as many sign-ins begun — or reviews waiting on support — as it takes, the shop's database cannot be reached, or the shop is not installed | another way in, or later |
+| `502` | Something the shop relies on did not answer: Telegram, Google, a VPN server's panel, the mail server, the SMS provider | try again later |
+| `503` | The shop's email does not go out — or its budget of sign-in emails is spent for now —, its budget of SMS is spent for now, the captcha could not be judged, an online payment's gateway could not be asked, the server's disk is too full to take a picture or the shop took its pictures for the day, the shop takes no orders now (its bot switched off — or, an agent's shop, its selling suspended by the main shop, where a receipt is still taken and what only prices an order answers a `422` on `status`: [buying](Store-API-Buying.md#the-flow)), the shop keeps as many sign-ins begun — or reviews waiting on support — as it takes, a service's QR card the server cannot draw ([the QR card](Store-API-After-Buying.md#the-qr-card)), the shop's database cannot be reached, or the shop is not installed | another way in, or later |
 
 ## Versioning
 
@@ -371,7 +416,7 @@ a site may want to tell apart, or explain better.
 
 | Status | Message | Where, and what it means |
 |---|---|---|
-| 404 | `این فروشگاه وب‌سایت فعالی ندارد.` | every endpoint, read from a server: the store key opens no website — switched off, the key replaced, or an agent's shop closed |
+| 404 | `این فروشگاه فعلا در دسترس نیست.` | every endpoint, read from a server: the store key opens no website — switched off, the key replaced, or an agent's shop closed — and no mini app |
 | 404 | `صفحه مورد نظر پیدا نشد.` | an address that is no endpoint (a mistyped key or path, a trailing slash) |
 | 405 | `این روش درخواست پشتیبانی نمی‌شود.` | an endpoint called with another method |
 | 401 | `برای دسترسی باید وارد شوید.` | a customer endpoint: no token, or the session ended — the only 401 there, the only one with `WWW-Authenticate: Bearer` |
@@ -387,17 +432,23 @@ a site may want to tell apart, or explain better.
 | 401 | `این ورود برای این وب‌سایت صادر نشده است؛ Client ID وب‌سایت را بررسی کنید.` | a token made for another Client ID — the site's configuration |
 | 401 | `تلگرام شناسه حساب را نفرستاد؛ ورود باید دسترسی profile را بخواهد.` | the popup did not ask the `profile` scope — the site's code |
 | 401 | `تلگرام کد ورود را نپذیرفت؛ دوباره وارد شوید.` | the redirect's code refused by Telegram: start again |
+| 401 | `ورود از مینی‌اپ تایید نشد؛ مینی‌اپ را ببندید و دوباره از ربات باز کنید.` | `POST /auth/mini-app`: the launch data is not this bot's, was changed, or is over a day old — on `POST /me/reauthenticate` a 422 on `init_data`, over 15 minutes old there ([the mini app](Store-API-Sign-In.md#the-mini-app)) |
+| 422 | `تایید با اثر انگشت یا چهره درست نبود؛ مینی‌اپ را ببندید و دوباره از ربات باز کنید.` | `POST /me/reauthenticate` with `biometric`: not the secret this session keeps (`errors.token`) |
+| 422 | `این روش تایید فقط در مینی‌اپ فروشگاه کار می‌کند؛ با روش ورود دیگری تایید کنید.` | `POST /me/reauthenticate` with `mini_app` or `biometric` through a website's key (`errors.method`) |
 | 422 | `این ورود مال حساب دیگری است؛ با یکی از روش‌های ورود همین حساب تایید کنید.` | `POST /me/reauthenticate`: a proof of another account |
 | 422 | `این حساب با رمز عبور وارد نمی‌شود؛ با روش ورود دیگری تایید کنید.` | `POST /me/reauthenticate`: the account has no password |
-| 422 | `ورود با تلگرام برای این وب‌سایت فعال نیست.` / `ورود با Google برای این وب‌سایت فعال نیست.` / `ثبت‌نام با ایمیل برای این وب‌سایت فعال نیست.` | a way in switched off since `GET /` was read |
+| 422 | `ورود با تلگرام برای این وب‌سایت فعال نیست.` / `ورود با Google برای این وب‌سایت فعال نیست.` / `ثبت‌نام با ایمیل برای این وب‌سایت فعال نیست.` / `ورود با شماره موبایل برای این وب‌سایت فعال نیست.` | a way in switched off since `GET /` was read — sign-in by SMS also while no SMS goes out for the site |
 | 422 | `ورود با تلگرام و Google برای این وب‌سایت فعال نیست.` | `POST /auth/nonce` while neither Telegram nor Google sign-in is on: no sign-in would take the nonce, so show neither button |
-| 422 | `کد درست نیست یا منقضی شده است.` | an emailed code (`errors.code`) |
+| 422 | `کد درست نیست یا منقضی شده است.` | an emailed or texted code (`errors.code`) |
+| 422 | `شماره موبایل درست نیست؛ یک شماره موبایل ایران را مثل 09121234567 بنویسید.` | `POST /auth/phone` and the other phone forms: not an Iranian mobile (`errors.phone`) |
 | 422 | `کد درست نیست؛ کد شش‌رقمی برنامه احراز هویت یا یکی از کدهای بازیابی را وارد کنید.` | `POST /auth/login/2fa` (`errors.code`) |
 | 422 | `تایید امنیتی انجام نشد؛ دوباره تلاش کنید.` | the captcha (`errors.captcha`): reset the widget |
 | 503 | `تایید امنیتی در دسترس نیست؛ کمی بعد دوباره تلاش کنید.` | the captcha could not be judged now (Cloudflare out of reach) |
 | 503 | `فعلا ایمیلی از این فروشگاه فرستاده نمی‌شود؛ کمی بعد دوباره امتحان کنید یا از راه دیگری وارد شوید.` | the shop's email does not go out, or its budget of sign-in emails is spent for now: offer another way in |
 | 503 | `ورود به وب‌سایت این فروشگاه الان شلوغ است؛ چند دقیقه دیگر دوباره امتحان کنید.` | the shop keeps as many sign-ins begun (nonces, redirect states) as it takes: later |
 | 502 | `ایمیل فرستاده نشد؛ کمی بعد دوباره امتحان کنید.` | this email did not go |
+| 502 | `پیامک فرستاده نشد؛ کمی بعد دوباره امتحان کنید.` | this SMS did not go: ask again at once ([a code by SMS](Store-API-Sign-In.md#a-code-by-sms)) |
+| 503 | `فعلا پیامکی از این فروشگاه فرستاده نمی‌شود؛ کمی بعد دوباره امتحان کنید یا از راه دیگری وارد شوید.` | the shop's or the installation's budget of codes by SMS is spent for now: offer another way in |
 | 502 | `تلگرام در دسترس نبود؛ چند لحظه بعد دوباره امتحان کنید.` / `Google در دسترس نبود؛ چند لحظه بعد دوباره امتحان کنید.` | the provider out of reach |
 | 409 | `با این ایمیل همین حالا حسابی ساخته شد؛ با ایمیل و رمز عبور وارد شوید.` | `POST /auth/register/verify`: sign in instead |
 | 429 | `تلاش‌های ناموفق زیاد بود؛ ۵ دقیقه دیگر دوباره امتحان کنید.` | too many failed sign-ins (the minutes vary; `Retry-After` has the seconds) |
@@ -446,6 +497,13 @@ a site may want to tell apart, or explain better.
 | 503 | `فضای ذخیره سرور پر شده و فعلا تصویری پذیرفته نمی‌شود؛ کمی بعد دوباره امتحان کنید.` | a receipt or a ticket's picture while the server's disk is too full: try again later |
 | 503 | `امروز بیش از این تصویری پذیرفته نمی‌شود؛ چند ساعت دیگر دوباره بفرستید.` | a receipt or a ticket's picture once the shop took 1 GB of pictures in a day: try again in a few hours |
 | 502 | `اطلاعات این سرویس الان از سرور خوانده نشد؛ کمی بعد دوباره تلاش کنید.` | `POST /subscriptions/{id}/refresh` |
+| 422 | `چیزی برای تغییر فرستاده نشد؛ تمدید خودکار یا نام دلخواه سرویس را بفرستید.` | `PATCH /subscriptions/{id}` with neither `auto_renew` nor `label` |
+| 503 | `تصویر QR این سرویس الان ساخته نشد؛ لینک اشتراک را کپی کنید.` | `GET /subscriptions/{id}/qr`: the server cannot draw the card — show the link to copy |
+| 429 | `تصویر QR سرویس را زیاد خواسته‌اید؛ …` | `GET /subscriptions/{id}/qr`: 30 cards a minute |
+| 404 | `این فروشگاه فعلا اکانت تست نمی‌دهد.` / `این فروشگاه فعلا قرعه‌کشی شبانه ندارد.` | `/test-account` or `GET /lottery` while the shop runs none (`GET /`'s `shop.programs`) |
+| 404 | `این مینی‌اپ لوگویی ندارد.` | `GET /app/logo` while the mini app has none (`app.logo_url` is `null`) |
+| 422 | `این بخش برای حساب‌هایی است که به تلگرام وصل‌اند؛ …` / `اول در ربات فروشگاه شماره موبایل خود را تایید کنید و بعد دوباره امتحان کنید.` / `اول در «…» عضو شوید و بعد دوباره امتحان کنید.` | `POST /test-account` and `POST /wheel/spin` (`errors.status`; `GET /test-account`'s `refusal`): what the bot asks before anything free — a Telegram account, the customer's own number, the shop's channels joined ([test accounts](Store-API-After-Buying.md#test-accounts)) |
+| 422 | `حساب تلگرام از داخل مینی‌اپ جدا نمی‌شود؛ …` | `DELETE /me/identities/telegram` through the mini app's key (`errors.kind`): the website removes it |
 | 409 | `این سرویس همین حالا در حال تغییر است؛ چند لحظه بعد دوباره تلاش کنید.` | the service is being changed: try again shortly |
 | 422 | `این تیکت بسته شده است.` | `POST /tickets/{id}/close` on a closed ticket (`errors.status`) |
 | 422 | `امتیاز را پس از بسته شدن تیکت می‌توانید ثبت کنید.` | `POST /tickets/{id}/rating` on a ticket not closed (`errors.status`) |

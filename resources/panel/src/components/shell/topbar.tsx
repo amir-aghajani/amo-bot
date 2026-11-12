@@ -2,6 +2,7 @@ import { Menu } from 'lucide-react'
 import { useLocation } from 'react-router'
 import { IconButton } from '@/components/icon-button'
 import { NOT_FOUND_TITLE } from '@/components/not-found'
+import { SearchTrigger } from '@/components/settings-search/launcher'
 import { HeaderActions } from '@/components/shell/header-actions'
 import { MOBILE_MENU } from '@/components/shell/mobile-drawer'
 import { pageTitle } from '@/components/shell/nav'
@@ -9,8 +10,8 @@ import { useShell } from '@/components/shell/shell-context'
 
 /**
  * The bar above every page, stuck to the top while the page scrolls: the page's name (on a phone, after the menu button
- * that opens the drawer — a finger's 44px; on a desktop, quietly, beside the sidebar), then the header's actions
- * (HeaderActions).
+ * that opens the drawer — a finger's 44px; on a desktop, quietly, beside the sidebar), the settings search's trigger,
+ * then the header's actions (HeaderActions).
  */
 export function Topbar() {
   const { pathname } = useLocation()
@@ -22,6 +23,7 @@ export function Topbar() {
         <Menu className="size-[18px]" aria-hidden />
       </IconButton>
       <span className="min-w-0 flex-1 truncate text-heading font-medium md:text-body md:font-normal md:text-muted-foreground">{pageTitle(panel.nav, pathname) ?? NOT_FOUND_TITLE}</span>
+      <SearchTrigger />
       <HeaderActions />
     </header>
   )

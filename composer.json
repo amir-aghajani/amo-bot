@@ -27,6 +27,7 @@
         "ext-openssl": "*",
         "ext-pdo": "*",
         "ext-pdo_mysql": "*",
+        "ext-zlib": "*",
         "chillerlan/php-qrcode": "^5.0",
         "firebase/php-jwt": "^7.2",
         "guzzlehttp/guzzle": "^8.2",

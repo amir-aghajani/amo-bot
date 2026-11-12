@@ -11,6 +11,7 @@ use App\Modules\Telegram\Handler;
 use App\Modules\Telegram\Session\SessionStore;
 use App\Modules\Telegram\Texts\BotText;
 use App\Modules\Telegram\Texts\BotTexts;
+use App\Modules\Telegram\Texts\PlainWording;
 use App\Modules\Telegram\UserResolver;
 use Invoker\InvokerInterface;
 use Psr\Container\ContainerInterface;
@@ -24,7 +25,7 @@ use Psr\Log\LoggerInterface;
  * chat for the update that gets through), then takes the first route that matches:
  *   1. /command             (navigation)
  *   2. reply-keyboard label (navigation)
- *   3. contact card         (navigation)
+ *   3. contact card         (its handler leaves the flow when it opens the menu)
  *   4. callback prefix      (longest prefix wins; navigation where registered so; an unknown one goes to the fallback)
  *   5. conversation state   (longest prefix: "topup" takes "topup.amount")
  *   6. text pattern         (a text message one matches — a link sent outside any step: navigation)
@@ -145,10 +146,14 @@ final class Dispatcher
         return $this;
     }
 
-    /** @param class-string<Handler> $handler The handler of a shared contact card that passed the gates */
+    /**
+     * @param class-string<Handler> $handler The handler of a shared contact card that passed the gates. It is no
+     *                                       navigation: the mini app shares the customer's number while the chat may be
+     *                                       at any step, and the handler leaves the flow only when it opens the menu.
+     */
     public function contact(string $handler): self
     {
-        $this->contact = new Route($handler, navigation: true);
+        $this->contact = new Route($handler);
 
         return $this;
     }
@@ -366,7 +371,8 @@ final class Dispatcher
                 return;
             }
 
-            $this->api->sendText($chatId, $text);
+            // A popup's words, shown as written (nothing to parse that could fail), each premium emoji as its plain one.
+            $this->api->sendText($chatId, PlainWording::shown($text));
         } catch (\Throwable $e) {
             $this->logger->warning('Could not report a failure to chat {chat}: {message}', ['chat' => $chatId, 'message' => $e->getMessage()]);
         }

@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Core\Database\ChangeFeed;
 use App\Modules\Auth\PrincipalKind;
 use App\Modules\Bots\CurrentBot;
 use App\Modules\Support\DTO\Attachment;
+use App\Modules\Support\Enums\TicketChannel;
 use App\Modules\Support\Enums\TicketStatus;
 use App\Modules\Support\Models\Ticket;
 use App\Modules\Support\Models\TicketMessage;
@@ -15,6 +17,7 @@ use App\Modules\Telegram\Models\ReportMessage;
 use App\Modules\Telegram\Texts\BotText;
 use App\Modules\Users\Models\User;
 use GuzzleHttp\Psr7\Response;
+use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Support\Carbon;
 use Tests\HttpTestCase;
 
@@ -22,7 +25,8 @@ use Tests\HttpTestCase;
  * The tickets screen (both panels): the list (latest activity first, by status, customer and search, the open ones
  * counted), one ticket with its conversation (who of support wrote each message — the owner's login reads «پشتیبانی» in an
  * agent's shop — and where), and support's operations: answer (JSON, or a form with a picture; the customer told, the
- * report group hears it), close (the customer told), reopen. Each shop sees its own.
+ * report group hears it), close (the customer told), reopen. Opening or answering a ticket reads what the customer wrote
+ * (their second tick). Each shop sees its own.
  */
 final class AdminTicketsApiTest extends HttpTestCase
 {
@@ -162,6 +166,96 @@ final class AdminTicketsApiTest extends HttpTestCase
         $empty = $this->postJson("/api/admin/tickets/{$ticket->id}/messages", ['body' => ' ']);
         self::assertSame([422, ['متن پیام را بنویسید.']], [$empty->getStatusCode(), $this->decode($empty)['errors']['body'] ?? null]);
         self::assertSame(3, TicketMessage::query()->where('ticket_id', $ticket->id)->count());
+    }
+
+    public function testSupportOpeningATicketReadsWhatTheCustomerWroteQuietlyAndOnlyWhenTheyWroteSince(): void
+    {
+        $ticket = $this->ticket($this->ali, 'قطعی اتصال', 'سلام');
+        $seen = $this->customersTicks($ticket);
+        $feed = fn(): int => $this->service(ChangeFeed::class)->versions()['tickets'] ?? 0;
+        self::assertSame([false], $seen(), 'not read yet: one tick');
+
+        Carbon::setTestNow('2026-10-08 12:05:00');
+        $before = $feed();
+        self::assertSame(1, $this->ticketWrites(fn() => $this->get("/api/admin/tickets/{$ticket->id}")));
+        self::assertSame('2026-10-08 12:05:00', $this->readAt($ticket));
+        self::assertSame($before, $feed(), 'quietly: the panel\'s own poll reads nothing again for it');
+        self::assertSame([true], $seen());
+
+        Carbon::setTestNow('2026-10-08 12:10:00');
+        self::assertSame(0, $this->ticketWrites(fn() => $this->get("/api/admin/tickets/{$ticket->id}")), 'nothing came since: nothing written');
+        self::assertSame('2026-10-08 12:05:00', $this->readAt($ticket));
+
+        Carbon::setTestNow('2026-10-08 12:15:00');
+        $this->service(Tickets::class)->write($ticket, ['body' => 'هنوز وصل نمی‌شود.'], null, TicketChannel::Web);
+        self::assertSame([true, false], $seen(), 'their new message waits on support');
+
+        Carbon::setTestNow('2026-10-08 12:20:00');
+        $this->get("/api/admin/tickets/{$ticket->id}");
+        self::assertSame('2026-10-08 12:20:00', $this->readAt($ticket));
+        self::assertSame([true, true], $seen());
+    }
+
+    public function testAnsweringATicketReadsItWhereverSupportAnswersFrom(): void
+    {
+        $ticket = $this->ticket($this->ali, 'قطعی اتصال', 'سلام');
+        $seen = $this->customersTicks($ticket);
+
+        Carbon::setTestNow('2026-10-08 12:03:00');
+        $this->service(Tickets::class)->answer($ticket, $this->groupAdminActor(), ['body' => 'از گروه پاسخ داده شد'], null);
+
+        self::assertSame('2026-10-08 12:03:00', $this->readAt($ticket), 'the report group\'s answer reads it too');
+        self::assertSame([true, null], $seen(), 'support\'s own message has no tick');
+        Carbon::setTestNow('2026-10-08 12:04:00');
+        self::assertSame(0, $this->ticketWrites(fn() => $this->get("/api/admin/tickets/{$ticket->id}")), 'read with the answer: opening it writes nothing');
+
+        Carbon::setTestNow('2026-10-08 12:06:00');
+        $this->service(Tickets::class)->write($ticket->refresh(), ['body' => 'ممنون، درست شد.'], null, TicketChannel::Web);
+        Carbon::setTestNow('2026-10-08 12:09:00');
+        $this->postJson("/api/admin/tickets/{$ticket->id}/messages", ['body' => 'خواهش می‌کنم.']);
+
+        self::assertSame('2026-10-08 12:09:00', $this->readAt($ticket), 'a panel\'s answer too');
+        self::assertSame([true, null, true, null], $seen());
+    }
+
+    /**
+     * The ticks on the customer's own messages in their ticket, as their website reads it (`seen`; null for support's).
+     *
+     * @return \Closure(): list<bool|null>
+     */
+    private function customersTicks(Ticket $ticket): \Closure
+    {
+        $website = $this->website();
+        $token = $this->customerSession($this->ali);
+
+        return function () use ($website, $token, $ticket): array {
+            $this->bearer($token);
+            $detail = $this->decode($this->get($this->storeApi($website, "/tickets/{$ticket->id}")))['ticket'];
+            $this->bearer(null);
+
+            return array_column($detail['messages'], 'seen');
+        };
+    }
+
+    /** When support last read the ticket, as kept now; null for never. */
+    private function readAt(Ticket $ticket): ?string
+    {
+        return $ticket->refresh()->support_read_at?->toDateTimeString();
+    }
+
+    /**
+     * How many statements `$work` sent that write the tickets table.
+     *
+     * @param \Closure(): mixed $work
+     */
+    private function ticketWrites(\Closure $work): int
+    {
+        $writes = 0;
+        $this->whileListening(QueryExecuted::class, static function (QueryExecuted $query) use (&$writes): void {
+            $writes += str_starts_with($query->sql, 'update ' . self::sqlTable('tickets')) ? 1 : 0;
+        }, $work);
+
+        return $writes;
     }
 
     public function testClosingTellsTheCustomerAndAClosedTicketOpensAgainOnlyOnce(): void

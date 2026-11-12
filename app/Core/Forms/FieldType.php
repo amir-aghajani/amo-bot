@@ -6,7 +6,8 @@ namespace App\Core\Forms;
 
 /**
  * What a field holds, which decides how a generic form draws it. `List` is numbers typed as text; `Card` is a bank
- * card's number, drawn in groups of four and typed on a phone's number pad.
+ * card's number, drawn in groups of four and typed on a phone's number pad; `PremiumEmoji` is a premium emoji picked
+ * from the bot's list for a name of the form (Telegram\Emoji\PremiumEmojiField).
  */
 enum FieldType: string
 {
@@ -22,4 +23,5 @@ enum FieldType: string
     case Path = 'path';
     case Textarea = 'textarea';
     case Card = 'card';
+    case PremiumEmoji = 'premium_emoji';
 }

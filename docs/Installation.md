@@ -12,7 +12,7 @@ shop up to sell.
 - **A domain with HTTPS.** Telegram sends webhooks only to `https://` addresses, and the panels' session cookie is
   marked secure over HTTPS.
 - **PHP 8.3.36, 8.4.27 or 8.5.12, or a later release of the same branch**, with the extensions `pdo_mysql`, `curl`,
-  `mbstring`, `openssl`, `bcmath` and `fileinfo`, and a `memory_limit` of 64M or more. These releases closed PHP's
+  `mbstring`, `openssl`, `bcmath`, `fileinfo` and `zlib`, and a `memory_limit` of 64M or more. These releases closed PHP's
   latest known security holes, among them two critical ones that let anyone who can reach a site run their own code
   there (CVE-2026-109618 and CVE-2026-109619, closed on 21 October 2026). The installer stops on an older release and
   names the one to move to; below 8.3.36, AmoBot does not start at all. PHP 8.2 is not supported.

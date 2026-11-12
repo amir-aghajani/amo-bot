@@ -2,12 +2,14 @@ import { useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react
 import { Bold, Check, Code, EyeOff, Italic, Link2, Quote, RotateCcw, Sparkles, Strikethrough, TriangleAlert, Underline, type LucideIcon } from 'lucide-react'
 import { flushSync } from 'react-dom'
 import { toast } from 'sonner'
+import { iconPrefix, withButtonIcon, withoutButtonIcon } from '@/components/bot-texts/button-icon'
 import { KIND_LABELS } from '@/components/bot-texts/kinds'
 import { PremiumEmojiPicker, premiumEmojiTag } from '@/components/bot-texts/premium-emoji-picker'
+import { PremiumIconField } from '@/components/bot-texts/premium-icon-field'
 import { fillSamples, visibleLength } from '@/components/bot-texts/telegram-html'
 import { TextPreview } from '@/components/bot-texts/text-preview'
 import { WithTokens } from '@/components/bot-texts/tokens'
-import { blankWording, keptWording, wordingProblem } from '@/components/bot-texts/wording-problem'
+import { blankWording, keptWording, leadingPremium, plainShown, wordingProblem } from '@/components/bot-texts/wording-problem'
 import { Field } from '@/components/field'
 import { FormActions, FormError } from '@/components/form-footer'
 import { IconButton } from '@/components/icon-button'
@@ -68,8 +70,9 @@ const HINTS: Record<BotTextKind, ReactNode> = {
     </>
   ),
   caption: 'متن زیر عکس کد QR لینک؛ قالب‌بندی مثل پیام. تلگرام زیر عکس متن کوتاه‌تری از یک پیام جا می‌دهد؛ اگر متن با مقدارهای واقعی (مثلا یک لینک بلند) از آن بیشتر شود، بدون عکس فرستاده می‌شود.',
-  popup: 'اعلان کوتاه تلگرام روی دکمه‌ای که مشتری زده است؛ قالب‌بندی ندارد و همان‌طور که نوشته شود نشان داده می‌شود.',
-  button: 'متن روی دکمه؛ یک خط و بدون قالب‌بندی.',
+  popup:
+    'اعلان کوتاه تلگرام روی دکمه‌ای که مشتری زده است؛ قالب‌بندی ندارد و همان‌طور که نوشته شود نشان داده می‌شود. تلگرام در اعلان ایموجی پرمیوم نشان نمی‌دهد و ایموجی معمولی آن دیده می‌شود؛ جاهایی که همین متن به صورت پیام فرستاده می‌شود، خود ایموجی پرمیوم.',
+  button: 'متن روی دکمه؛ یک خط و بدون قالب‌بندی. ایموجی پرمیوم را با «آیکون دکمه» بگذارید: تلگرام آن را پیش از متن دکمه نشان می‌دهد.',
   part: <>این بخش داخل متن دیگری می‌نشیند؛ خط‌های خالی اولش فاصله آن با متن بالایی است. قالب‌بندی مثل پیام؛ اگر متغیر لازمی ندارد، خالی بگذارید تا نشان داده نشود.</>,
 }
 
@@ -84,7 +87,15 @@ function TextForm({ text, onCancel, onSaved }: { text: BotTextRow; onCancel: () 
   // customer sees — a tag's markup, a premium emoji's long one above all, costs nothing — in the wording the server
   // would keep (a space at its end is none). A blank one — a no-break space alone — is none: the save refuses it as empty.
   const kept = keptWording(text.kind, values.value)
-  const length = blankWording(text, kept) ? 0 : text.html ? visibleLength(kept) : kept.length
+  const length = blankWording(text, kept) ? 0 : text.html ? visibleLength(kept) : plainShown(kept).length
+  // A popup takes premium emoji anywhere (its notice shows their plain ones); a button one, as its icon (ButtonIcon) —
+  // kept out of the field, which holds the label after it.
+  const inserts = text.html || text.kind === 'popup'
+  const icon = text.kind === 'button' ? iconPrefix(values.value) : ''
+  const typed = values.value.slice(icon.length)
+  const write = (value: string) => set('value', icon + value)
+  // What the count leaves out (a tag's markup) or takes in (the icon's plain emoji, shown when Telegram draws no icon).
+  const counted = text.html || (text.kind === 'popup' && plainShown(kept) !== kept) ? '، بدون تگ‌ها' : icon !== '' ? '، با ایموجی آیکون' : ''
   const tooLong = length > text.limit
   // What the save would refuse, as it is typed; once a save is refused, its own word stands until the next edit. Either
   // says tags: each kept whole and as typed in the Persian sentence (isolateMarkup — bare, «</b>» would read «<b/>»).
@@ -97,12 +108,12 @@ function TextForm({ text, onCancel, onSaved }: { text: BotTextRow; onCancel: () 
    */
   const replaceSelection = (open: string, close = '', replace = false) => {
     const textarea = field.current
-    const value = values.value
+    const value = typed
     const start = textarea?.selectionStart ?? value.length
     const end = textarea?.selectionEnd ?? value.length
     const selected = replace ? '' : value.slice(start, end)
     // Drawn at once, so the caret is set in the wording as it now is.
-    flushSync(() => set('value', value.slice(0, start) + open + selected + close + value.slice(end)))
+    flushSync(() => write(value.slice(0, start) + open + selected + close + value.slice(end)))
     textarea?.focus()
     textarea?.setSelectionRange(start + open.length, start + open.length + selected.length)
   }
@@ -134,13 +145,14 @@ function TextForm({ text, onCancel, onSaved }: { text: BotTextRow; onCancel: () 
           >
             {(control) => (
               <div className="grid gap-1.5">
-                {text.html && (
-                  <div className="flex flex-wrap items-center gap-0.5 rounded-lg border border-border p-0.5" role="toolbar" aria-label="قالب‌بندی">
-                    {FORMATS.map(({ icon: Icon, label, open, close }) => (
-                      <IconButton key={label} aria-label={label} title={label} className="size-7 max-md:size-11" onClick={() => replaceSelection(open, close)}>
-                        <Icon className="size-3.5" aria-hidden />
-                      </IconButton>
-                    ))}
+                {inserts && (
+                  <div className="flex flex-wrap items-center gap-0.5 rounded-lg border border-border p-0.5" role="toolbar" aria-label={text.html ? 'قالب‌بندی' : 'ایموجی'}>
+                    {text.html &&
+                      FORMATS.map(({ icon: Icon, label, open, close }) => (
+                        <IconButton key={label} aria-label={label} title={label} className="size-7 max-md:size-11" onClick={() => replaceSelection(open, close)}>
+                          <Icon className="size-3.5" aria-hidden />
+                        </IconButton>
+                      ))}
                     <Button
                       type="button"
                       variant={emojiOpen ? 'secondary' : 'ghost'}
@@ -155,7 +167,7 @@ function TextForm({ text, onCancel, onSaved }: { text: BotTextRow; onCancel: () 
                     </Button>
                   </div>
                 )}
-                {text.html && emojiOpen && (
+                {inserts && emojiOpen && (
                   <div id="premium_emoji_picker">
                     <PremiumEmojiPicker onPick={(emoji) => insert(premiumEmojiTag(emoji))} />
                   </div>
@@ -164,18 +176,18 @@ function TextForm({ text, onCancel, onSaved }: { text: BotTextRow; onCancel: () 
                   {...control}
                   ref={field}
                   dir="rtl"
-                  value={values.value}
-                  onChange={(event) => set('value', event.target.value)}
+                  value={typed}
+                  onChange={(event) => write(event.target.value)}
                   // Grows with its lines. Fixed sizing: sized by its content, the field would claim its longest line as
                   // its narrowest width and push a phone-wide modal sideways.
-                  rows={Math.min(18, Math.max(text.kind === 'button' || text.kind === 'popup' ? 2 : 4, values.value.split('\n').length + 1))}
+                  rows={Math.min(18, Math.max(text.kind === 'button' || text.kind === 'popup' ? 2 : 4, typed.split('\n').length + 1))}
                   // Each line takes the direction of its first letter, so one that starts with a tag reads left to
                   // right instead of scattering its brackets; every line still hugs the right edge.
                   className="field-sizing-fixed min-h-0 text-right leading-relaxed [unicode-bidi:plaintext]"
                 />
                 {/* An HTML wording counts what the customer sees: its tags cost nothing — said beside the count. */}
                 <p className={cn('text-end text-caption tabular', tooLong ? 'text-danger' : 'text-muted-foreground')}>
-                  {formatNumber(length)} از {formatNumber(text.limit)} کاراکتر{text.html && '، بدون تگ‌ها'}
+                  {formatNumber(length)} از {formatNumber(text.limit)} کاراکتر{counted}
                 </p>
                 {problem && !refused && (
                   <p className="flex items-start gap-1.5 text-footnote text-warning">
@@ -190,6 +202,7 @@ function TextForm({ text, onCancel, onSaved }: { text: BotTextRow; onCancel: () 
             )}
           </Field>
 
+          {text.kind === 'button' && <ButtonIcon value={values.value} onChange={(value) => set('value', value)} />}
           <Variables text={text} value={values.value} onPick={insert} />
           <FormError message={formError} />
         </div>
@@ -217,6 +230,29 @@ function TextForm({ text, onCancel, onSaved }: { text: BotTextRow; onCancel: () 
         }
       />
     </form>
+  )
+}
+
+/**
+ * A button text's premium emoji icon, as the keyboards' buttons have one: kept at the start of its wording (the bot sends
+ * it as the button's icon), picked in place of the label's own emoji; taken off, that plain emoji comes back.
+ */
+function ButtonIcon({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  return (
+    <PremiumIconField
+      id="bot_text_icon_picker"
+      legend="آیکون دکمه"
+      icon={leadingPremium(value)}
+      onPick={(emoji) => onChange(withButtonIcon(value, emoji))}
+      onRemove={() => onChange(withoutButtonIcon(value))}
+      chosen="پیش از متن دکمه نشان داده می‌شود."
+      none="اختیاری: یک ایموجی پرمیوم پیش از متن دکمه، به جای ایموجی اول آن."
+      note={
+        <>
+          فقط وقتی دیده می‌شود که حسابی که ربات را در <bdi dir="ltr">@BotFather</bdi> ساخته تلگرام پرمیوم داشته باشد؛ وگرنه ایموجی معمولی آن اول متن دکمه می‌نشیند.
+        </>
+      }
+    />
   )
 }
 

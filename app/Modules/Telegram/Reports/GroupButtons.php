@@ -125,6 +125,31 @@ final class GroupButtons
     }
 
     /**
+     * Rewrite the pressed message — the bot's own HTML — with these buttons under it. Words and buttons already as asked
+     * are fine; a refusal is logged.
+     *
+     * @param list<list<array<string, mixed>>> $rows
+     */
+    public function rewrite(Update $update, string $html, array $rows): void
+    {
+        $this->rewriteMessage((int) $update->chatId(), (int) $update->messageId(), $html, $rows);
+    }
+
+    /**
+     * Rewrite a message of the bot's — its own HTML — with these buttons under it, as rewrite() does.
+     *
+     * @param list<list<array<string, mixed>>> $rows
+     */
+    public function rewriteMessage(int $chatId, int $messageId, string $html, array $rows): void
+    {
+        try {
+            $this->api->editMessageText($chatId, $messageId, $html, ['reply_markup' => ['inline_keyboard' => $rows]]);
+        } catch (TelegramApiException $e) {
+            $this->logger->info('Message {message} in chat {chat} was not rewritten: {error}', ['message' => $messageId, 'chat' => $chatId, 'error' => $e->getMessage()]);
+        }
+    }
+
+    /**
      * Set a message's buttons; null takes them off. Buttons already as asked are fine.
      *
      * @param list<list<array<string, mixed>>>|null $rows
@@ -139,12 +164,12 @@ final class GroupButtons
     }
 
     /**
-     * The bot's words (plain text) as a reply to `$replyTo` in topic `$thread`; the message's id, or null when Telegram
-     * refused it.
+     * The bot's words (plain text — or the bot's own HTML when `$html`) as a reply to `$replyTo` in topic `$thread`; the
+     * message's id, or null when Telegram refused it.
      *
      * @param array<string, mixed>|null $markup
      */
-    public function say(int $chatId, int $replyTo, ?int $thread, string $text, ?array $markup = null): ?int
+    public function say(int $chatId, int $replyTo, ?int $thread, string $text, ?array $markup = null, bool $html = false): ?int
     {
         $options = ['reply_parameters' => ['message_id' => $replyTo, 'allow_sending_without_reply' => true]];
         if ($thread !== null && $thread > 0) {
@@ -155,7 +180,9 @@ final class GroupButtons
         }
 
         try {
-            return (int) ($this->api->sendText($chatId, $text, $options)['message_id'] ?? 0);
+            $sent = $html ? $this->api->sendMessage($chatId, $text, $options) : $this->api->sendText($chatId, $text, $options);
+
+            return (int) ($sent['message_id'] ?? 0);
         } catch (TelegramApiException $e) {
             $this->logger->warning('Could not write in group {chat}: {message}', ['chat' => $chatId, 'message' => $e->getMessage()]);
 

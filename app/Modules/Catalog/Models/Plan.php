@@ -6,6 +6,7 @@ namespace App\Modules\Catalog\Models;
 
 use App\Modules\Bots\Models\Concerns\BelongsToBot;
 use App\Modules\Catalog\DTO\Package;
+use App\Modules\Catalog\Enums\PlanBadge;
 use App\Support\Money;
 use App\Support\Traffic;
 use Illuminate\Database\Eloquent\Builder;
@@ -22,6 +23,8 @@ use Illuminate\Support\Carbon;
  * @property int $id
  * @property int|null $category_id
  * @property string $name
+ * @property string|null $emoji_id The premium emoji the bot draws for the name's leading emoji (Telegram\Texts\PremiumText);
+ *                                 null for none
  * @property string|null $description
  * @property string|null $checkout_note What the bot's checkout of it says under it («یادداشت پیش‌فاکتور»): its purchase's
  *                                      and its renewal's; null — none
@@ -39,6 +42,7 @@ use Illuminate\Support\Carbon;
  * @property string|null $button_style Its button's colour in the bot's plan list, one of Telegram's
  *                                     (KeyboardLayout::STYLES); null — the client's own
  * @property int $button_row How many buttons share its button's row there: 1 — a row of its own, 2 or 3
+ * @property PlanBadge|null $badge The label its card wears in the mini app and on the website; null for none
  * @property bool $is_active
  * @property bool $hidden_by_owner An agent's plan the owner keeps from sale («پنهان‌شده توسط پشتیبانی»): never offered,
  *                                 whatever its own switch says; only the owner's agents screen changes it
@@ -57,6 +61,7 @@ class Plan extends Model
     protected $fillable = [
         'category_id',
         'name',
+        'emoji_id',
         'description',
         'checkout_note',
         'price',
@@ -68,6 +73,7 @@ class Plan extends Model
         'extras',
         'button_style',
         'button_row',
+        'badge',
         'is_active',
         'sort',
     ];
@@ -83,6 +89,7 @@ class Plan extends Model
         'ip_limit' => 'integer',
         'extras' => 'array',
         'button_row' => 'integer',
+        'badge' => PlanBadge::class,
         'is_active' => 'boolean',
         'hidden_by_owner' => 'boolean',
         'sort' => 'integer',

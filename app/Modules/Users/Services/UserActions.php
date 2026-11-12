@@ -23,10 +23,12 @@ use App\Support\Money;
 use Psr\Log\LoggerInterface;
 
 /**
- * Support's decisions about a customer's account, from the panels or the website's admin side: ban, the admin role
- * (panels only), their groups, a wallet adjustment, turning two-factor sign-in off, signing out everywhere. An admin
- * never adjusts their own wallet, and from the website never touches an admin's or an agent's account. Each is logged
- * with who did it.
+ * Support's decisions about a customer's account, from the panels, the website's admin side or the report group: ban,
+ * the admin role (the panels and the report group), their groups, a wallet adjustment, turning two-factor sign-in off,
+ * signing out everywhere. An admin never adjusts their own wallet; from the website never touches an admin's or an
+ * agent's account; from the report group never their own account nor an agent's, never bans an admin (the role goes
+ * first), never puts one in a «همکار» group (its agent prices would be theirs) nor makes an admin of someone in one or
+ * with their own discount, never touches another admin's website sign-in. Each is logged with who did it.
  */
 final class UserActions
 {
@@ -42,13 +44,17 @@ final class UserActions
      * Bans the customer or lifts the ban.
      *
      * @param array<string, mixed> $input {status}
-     * @throws ActorRefusedException 403 from the website, an admin's account or an agent's
+     * @throws ActorRefusedException 403 from the website, an admin's account or an agent's; from the report group, their
+     *                               own account, an agent's, or an admin banned
      * @throws ValidationException 422 on `status`
      */
     public function setStatus(User $user, Actor $actor, array $input): User
     {
         $status = UserStatus::tryFrom(Input::text($input, 'status')) ?? throw ValidationException::on('status', 'وضعیت باید «فعال» یا «مسدود» باشد.');
         $this->mayTouch($user, $actor);
+        if ($actor->isGroupAdmin() && $status === UserStatus::Banned && $user->isAdmin()) {
+            throw ActorRefusedException::adminBanned();
+        }
 
         $user->forceFill(['status' => $status])->save();
         $this->logger->info('Customer #{customer} made {status} by {reviewer}', ['customer' => $user->id, 'status' => $status->value, 'reviewer' => $actor->reviewer]);
@@ -57,14 +63,22 @@ final class UserActions
     }
 
     /**
-     * Gives or takes the admin role (UserRole).
+     * Gives or takes the admin role (UserRole). From the report group, never to someone with their own discount or in a
+     * «همکار» group: an admin's prices are the panel's to set (PersonalDiscounts, assignGroups()), and the role taken
+     * off, either set and the role given back would go round that.
      *
      * @param array<string, mixed> $input {role}
+     * @throws ActorRefusedException 403 from the report group, their own account or an agent's, or made an admin with
+     *                               their own discount or in a «همکار» group
      * @throws ValidationException 422 on `role`
      */
     public function setRole(User $user, Actor $actor, array $input): User
     {
         $role = UserRole::tryFrom(Input::text($input, 'role')) ?? throw ValidationException::on('role', 'نقش باید «مشتری» یا «مدیر» باشد.');
+        $this->mayTouch($user, $actor);
+        if ($actor->isGroupAdmin() && $role === UserRole::Admin && !$user->isAdmin() && ($user->discount_percent > 0 || $user->paysAgentPrices())) {
+            throw ActorRefusedException::adminWithOwnPrices();
+        }
 
         $user->forceFill(['role' => $role])->save();
         $this->logger->info('Customer #{customer} made {role} by {reviewer}', ['customer' => $user->id, 'role' => $role->value, 'reviewer' => $actor->reviewer]);
@@ -78,7 +92,7 @@ final class UserActions
      * answered by the line it wrote (`wasRecentlyCreated` false), never made twice.
      *
      * @param array<string, mixed> $input {type: credit|debit, amount, description?}
-     * @throws ActorRefusedException 403 one of the shop's admins' own wallet
+     * @throws ActorRefusedException 403 one of the shop's admins' own wallet; from the report group, an agent's
      * @throws ValidationException
      * @throws KeyReusedException 422 on `idempotency_key`: the key wrote another line
      */
@@ -108,6 +122,10 @@ final class UserActions
         if ($actor->is($user->id)) {
             throw ActorRefusedException::ownWallet();
         }
+        // An agent's wallet carries their credit and their bot's traffic buying: the panel's, never the report group's.
+        if ($actor->isGroupAdmin() && $user->isAgent()) {
+            throw ActorRefusedException::agentAccount();
+        }
 
         if ($type === WalletTransactionType::Credit) {
             return $this->wallet->credit($user, $amount, $note ?? WalletService::LINE_CREDIT_BY_SUPPORT, $actor->reviewer, $key);
@@ -125,14 +143,37 @@ final class UserActions
      *
      * @param mixed $ids The `group_ids` the panel sent
      * @throws ActorRefusedException 403 from the website, an admin's account or an agent's — or a «همکار» group added
-     *                               without the `catalog` grant
+     *                               without the `catalog` grant; from the report group, their own account, an
+     *                               agent's, or an admin put in a «همکار» group
      * @throws ValidationException 422 on `group_ids` when one is not a group
      */
     public function assignGroups(User $user, Actor $actor, mixed $ids): void
     {
         $this->mayTouch($user, $actor);
+        if ($actor->isGroupAdmin() && $user->isAdmin() && is_array($ids) && $this->groups->addsAgentPricing($user, $ids)) {
+            throw ActorRefusedException::adminToAgentGroup();
+        }
 
         $groups = $this->groups->assign($user, $actor, $ids);
+        $this->logger->info('Customer #{customer} put in groups {groups} by {reviewer}', ['customer' => $user->id, 'groups' => $groups, 'reviewer' => $actor->reviewer]);
+    }
+
+    /**
+     * Puts the customer in one group (`$in`) or takes them out of it, their other groups as they are — the report group's
+     * switch, which names the group and the state it asks for, so it stands however often it is pressed and whoever
+     * switches another group meanwhile (CustomerGroups::join(), leave()). By assignGroups()'s rules, and logged as it is.
+     *
+     * @throws ActorRefusedException 403 as assignGroups()
+     * @throws ValidationException 422 on `group_ids` when it is not a group
+     */
+    public function switchGroup(User $user, Actor $actor, int $groupId, bool $in): void
+    {
+        $this->mayTouch($user, $actor);
+        if ($in && $actor->isGroupAdmin() && $user->isAdmin() && $this->groups->addsAgentPricing($user, [$groupId])) {
+            throw ActorRefusedException::adminToAgentGroup();
+        }
+
+        $groups = $in ? $this->groups->join($user, $actor, $groupId) : $this->groups->leave($user, $groupId);
         $this->logger->info('Customer #{customer} put in groups {groups} by {reviewer}', ['customer' => $user->id, 'groups' => $groups, 'reviewer' => $actor->reviewer]);
     }
 
@@ -145,6 +186,7 @@ final class UserActions
     public function disableTwoFactor(User $user, Actor $actor): void
     {
         $this->mayTouch($user, $actor);
+        $this->notAnAdminsSignIn($user, $actor);
         $this->twoFactor->turnOff($user, $actor);
     }
 
@@ -156,16 +198,41 @@ final class UserActions
     public function endSessions(User $user, Actor $actor): void
     {
         $this->mayTouch($user, $actor);
+        $this->notAnAdminsSignIn($user, $actor);
         $this->sessions->signOutEverywhere($user, $actor);
     }
 
     /**
-     * From the website, an admin's or an agent's account is off limits (the panels' to change).
+     * From the report group, another admin's website sign-in — their two-factor, their devices — is the panel's: an
+     * admin's sign-in opens the website's admin side.
+     *
+     * @throws ActorRefusedException 403
+     */
+    private function notAnAdminsSignIn(User $user, Actor $actor): void
+    {
+        if ($actor->isGroupAdmin() && $user->isAdmin()) {
+            throw ActorRefusedException::adminAccount();
+        }
+    }
+
+    /**
+     * From the website, an admin's or an agent's account is off limits (the panels' to change); from the report group, the
+     * admin's own account and an agent's.
      *
      * @throws ActorRefusedException 403
      */
     private function mayTouch(User $user, Actor $actor): void
     {
+        if ($actor->isGroupAdmin()) {
+            if ($actor->is($user->id)) {
+                throw ActorRefusedException::ownAccount();
+            }
+            if ($user->isAgent()) {
+                throw ActorRefusedException::agentAccount();
+            }
+
+            return;
+        }
         if (!$actor->isStaff()) {
             return;
         }

@@ -67,14 +67,14 @@ The sidebar, top to bottom:
 |---|---|
 | «داشبورد» | The shop at a glance ([the dashboard](#the-dashboard)) |
 | «پشتیبانی» | Support tickets, with the number waiting on an answer ([Support tickets](Support-Tickets.md)) |
-| «نظرات» | Customers' reviews from the shop's website, with the number waiting on you ([Reviews](Reviews.md)) |
+| «نظرات» | Customers' reviews from the shop's website and mini app, with the number waiting on you ([Reviews](Reviews.md)) |
 | «سرورها» — the owner's | The VPN panels the shop sells on ([Servers](Servers.md)) |
 | «حساب نمایندگی» — an agent's | Their account with the main bot ([below](#an-agents-account)) |
 | «فروشگاه» | «پلن‌ها», «اکانت تست», the main shop's «سرویس دلخواه», «دسته‌بندی‌ها», «روش‌های پرداخت» ([Plans](Plans.md), [Test accounts](Test-Accounts.md), [Custom services](Custom-Services.md), [Payment methods](Payment-Methods.md)) |
 | «فروش» | «کاربران», «سفارش‌ها» (stuck orders counted), «پرداخت‌ها» (receipts to review counted), «اشتراک‌ها», «زیرمجموعه‌گیری» — and the owner's «نمایندگان» ([Customers](Customers.md), [Orders and payments](Orders-And-Payments.md), [Services](Services.md), [Referrals](Referrals.md), [Agency](Agency.md)) |
 | «تخفیف و جوایز» | «کدهای تخفیف», «فروش ویژه», «سطوح وفاداری», «کش‌بک», «کدهای هدیه», «گردونه شانس», «قرعه‌کشی» ([Discounts](Discounts.md), [Loyalty, cashback and draws](Loyalty-Cashback-And-Draws.md), [Gift codes and the lucky wheel](Gift-Codes-And-Lucky-Wheel.md)) |
 | «ربات» | «کیبوردها», «متن‌های ربات», «ارسال همگانی» ([Bot texts and keyboards](Bot-Texts-And-Keyboards.md), [Broadcasts](Broadcasts.md)) |
-| «تنظیمات» (at the foot) | «تنظیمات ربات», «تنظیمات وب‌سایت» and «تنظیمات پنل» ([Bot settings](Bot-Settings.md), [Website](Website.md), [Panel settings](Panel-Settings.md)) |
+| «تنظیمات» (at the foot) | «تنظیمات ربات», «تنظیمات وب‌سایت», «مینی‌اپ تلگرام» and «تنظیمات پنل» ([Bot settings](Bot-Settings.md), [Website](Website.md), [Mini app](Mini-App.md), [Panel settings](Panel-Settings.md)) |
 
 The counts beside «پشتیبانی», «نظرات», «سفارش‌ها» and «پرداخت‌ها» are read again whenever those lists move, and every minute; a
 folded group, or the icon rail, shows a dot for the most pressing one instead. A group folds when its heading is
@@ -91,17 +91,39 @@ typed in each.
 **The icon rail**: the sidebar folds to icons with «جمع کردن سایدبار» or Ctrl+B (⌘+B on a Mac); a group's pages open
 from its icon. The browser remembers the choice; until one is made, a window narrower than a tablet's shows the rail.
 
-**The top bar** stays at the top of every page while it scrolls: the page's name, and the dark/light switch («تم روشن» /
-«تم تاریک»). The sign-in screens and the installer have it too, with the switch alone. **On a phone** there is no
+**The top bar** stays at the top of every page while it scrolls: the page's name, the search («جستجوی تنظیمات», [below](#searching-the-settings)) and the
+dark/light switch («تم روشن» / «تم تاریک»). The sign-in screens and the installer have it too, with the switch alone. **On a phone** there is no
 sidebar: «باز کردن منو» in the top bar opens it as a drawer. Dialogs open as a full-width sheet from the bottom of the
 screen, without the keyboard: you see the whole sheet first, and the keyboard comes when you tap a field. Only the bot
-text editor, where writing is the whole point, opens with its field ready to type. The sheet keeps only its title and ✕
+text editor and the settings search, where writing is the whole point, open with their field ready to type. The sheet keeps only its title and ✕
 at its top — its description scrolls with the rest —, and a form's buttons, like a receipt review's decisions, stay at
 its foot.
 
 **A PHP with security holes**: while the host runs a PHP release older than its branch's in
 [what you need](Installation.md#what-you-need), a strip over every page of the owner's panel says so and names the
 release to move to; until then the panel's update installs no release.
+
+## Searching the settings
+
+«جستجوی تنظیمات» finds any setting of the panel by its words and takes you to it. Open it from the top bar, from the top
+of the settings' column, or with Ctrl+K (⌘+K on a Mac) on any page — or «/» while no field has the cursor. Both work
+with the keyboard in Persian too.
+
+- **What it finds**: every page of the menu, every section, and each setting in the settings' sections — a field, a
+  switch, a card — by its label, its hint, where it sits, and the words owners use for it: «بک آپ» finds «پشتیبان‌گیری»,
+  «کرون» «زمان‌بندی کارها», `smtp` «ایمیل». ی and ي, ک and ك, a half-space or a space, Persian or Latin digits are the
+  same to it; a word typed with the keyboard in the other language is found (`;dt` is «کیف»), and so is one with a
+  letter wrong. A panel finds only what it has: an agent's never the owner's settings, an agent's shop never the main
+  shop's own sections.
+- **Opening one**: a setting opens its section, unfolds «تنظیمات پیشرفته» or any fold it sits in, scrolls to it, puts
+  the cursor in it and marks it for a moment. ↑ and ↓ move along the list, Enter opens, Esc closes.
+- **«اخیر»**: with nothing typed, «همه» shows the last five you opened — remembered in this browser —, then a map of
+  every settings page and its sections.
+- **«علاقه‌مندی‌ها»**: the star beside a row — or Ctrl+D on the active one — adds it to the «علاقه‌مندی‌ها» tab. There
+  they stay in your order («بالا بردن» and «پایین بردن», or Alt+↑ and Alt+↓), and what you type narrows them. They are
+  kept on the server, so they follow you to every browser and phone: the owner's are one list whatever shop is open — a
+  main-shop section starred there is hidden on an agent's shop's tab, and back on the main shop's —, each agent has a
+  list of their own. A list keeps up to 100.
 
 ## The dashboard
 

@@ -116,6 +116,17 @@ class Server extends Model
         return is_string($style) && $style !== '' ? $style : null;
     }
 
+    /**
+     * The premium emoji the bot draws for its name's leading emoji (the form's `emoji_id` kept in `meta`,
+     * Telegram\Texts\PremiumText); null for none.
+     */
+    public function emojiId(): ?string
+    {
+        $id = $this->meta['emoji_id'] ?? null;
+
+        return is_string($id) && preg_match('/^\d{1,20}$/D', $id) === 1 ? $id : null;
+    }
+
     /** How many location buttons share its button's row in the bot (the server form's `button_row`): 1, 2 or 3. */
     public function buttonRow(): int
     {

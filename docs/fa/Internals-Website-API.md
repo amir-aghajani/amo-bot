@@ -4,21 +4,24 @@
 
 # ساختار داخلی: API وب‌سایت
 
-رابط Store API که وب‌سایت خود فروشگاه با آن حرف می‌زند، حساب‌های کاربران روی آن، مدیران سایت که از آن کار فروشگاه را انجام
-می‌دهند، و کنترلرهای پنل‌ها — <code dir="ltr">app/Modules/{Store,Accounts,Admin}</code>. این صفحه می‌گوید این‌ها چطور کنار هم
-قرار می‌گیرند و چرا؛ آنچه توسعه‌دهنده یک وب‌سایت می‌بیند در [رابط Store API](Store-API.md) و صفحه‌های آن است، و آنچه مالک
-فروشگاه می‌بیند در [وب‌سایت](Website.md).
+رابط Store API که وب‌سایت خود فروشگاه و مینی‌اپ تلگرام آن با آن حرف می‌زنند، حساب‌های کاربران روی آن‌ها، مدیران سایت که از
+وب‌سایت کار فروشگاه را انجام می‌دهند، و کنترلرهای پنل‌ها — <code dir="ltr">app/Modules/{Store,Accounts,Admin}</code>. این صفحه
+می‌گوید این‌ها چطور کنار هم قرار می‌گیرند و چرا؛ آنچه توسعه‌دهنده یک وب‌سایت می‌بیند در [رابط Store API](Store-API.md) و
+صفحه‌های آن است، و آنچه مالک فروشگاه می‌بیند در [وب‌سایت](Website.md). کد خود مینی‌اپ در
+[ساختار داخلی: مینی‌اپ](Internals-Mini-App.md) است.
 
 ## ماژول‌ها
 
 | ماژول | آنچه در اختیار دارد | اول این‌ها را باز کنید |
 | --- | --- | --- |
-| Store | ورودی Store API و CORS، ردیف وب‌سایت و تنظیماتش، هر کاری که کاربر واردشده در سایت می‌کند، ورودی مدیران | `Http\StoreMiddleware`، `Http\StaffMiddleware`، `Services\Websites`، `Services\CustomerCheckout` |
-| Accounts | ورود کاربران در یک وب‌سایت: Sessionها، چالش‌های یک‌بارمصرف، ارائه‌دهندگان OpenID، ایمیل و رمز عبور، ورود دومرحله‌ای، راه‌های ورود، ادغام‌ها | `Services\ProviderSignIn`، `Services\EmailSignIn`، `Services\CustomerSessions`، `Services\AuthChallenges` |
+| Store | دو در Store API و CORS، ردیف‌های وب‌سایت و مینی‌اپ و تنظیماتشان، هر کاری که کاربر واردشده از راه آن‌ها می‌کند، ورودی مدیران | `Http\StoreMiddleware`، `Contracts\Door`، `Http\StaffMiddleware`، `Services\Websites`، `Services\MiniApps`، `Services\CustomerCheckout` |
+| Accounts | ورود کاربران در یک وب‌سایت یا مینی‌اپ: Sessionها، چالش‌های یک‌بارمصرف، ارائه‌دهندگان OpenID، ایمیل و رمز عبور، کد پیامکی، ورود دومرحله‌ای، داده راه‌اندازی مینی‌اپ، راه‌های ورود، ادغام‌ها | `Services\ProviderSignIn`، `Services\EmailSignIn`، `Services\PhoneSignIn`، `Services\MiniAppSignIn`، `Services\CustomerSessions`، `Services\AuthChallenges` |
 | Admin | کنترلرهای API پنل‌ها و سرویس‌های مخصوص پنل (داشبورد، صف‌ها، صفحه کاربر، خطاهای کلاینت، وضعیت سیستم) | `Api\*Controller`، `Services\DashboardStats` |
 
 **ماژول Store به Accounts تکیه می‌کند، هرگز برعکس.** آنچه ورود از یک وب‌سایت لازم دارد رابط خود Accounts است،
-`Contracts\SignInSite`، که `Store\Models\Website` پیاده‌اش می‌کند؛ هیچ فایلی در Accounts نام کلاسی از Store را نمی‌برد.
+`Contracts\SignInSite`، که `Contracts\Door` در Store آن را گسترش می‌دهد و هم `Store\Models\Website` و هم
+`Store\Models\MiniApp` پیاده‌اش می‌کنند (راه‌های ورود مینی‌اپ همه خاموش‌اند: نه Client ID، نه ثبت‌نام با ایمیل، نه کپچا، نه
+origin)؛ هیچ فایلی در Accounts نام کلاسی از Store را نمی‌برد.
 `tests/Unit/Core/LayersTest` این را، و نگاشت ماژول‌ها را در کل، نگه می‌دارد.
 
 **کنترلرها نازک‌اند**: ردیف را بارگذاری می‌کنند، یک سرویس را صدا می‌زنند، پاسخ را نمایش می‌دهند
@@ -37,21 +40,41 @@ routes/api.php دو خانواده مسیر را سوار می‌کند:
 /api/admin, /api/agent ── Session · CSRF header · PanelAuthMiddleware (owner or agent)
     $operations       the shop's daily work (lists, payments, orders, tickets, …)
     $configuration    the shop's settings (methods, bot settings, texts, the website, …)
-/api/store/v1/{store} ── StoreMiddleware (the key opens a website; the request runs in its shop) · JsonBodies
-    public            GET /, the catalogue, the reviews, /auth/*
+/api/store/v1/{store} ── StoreMiddleware (the key opens a website or a mini app; the request runs in its shop) · JsonBodies
+    public            GET /, the catalogue, the sales, the tutorial, the reviews
+    website only      WebsiteOnlyMiddleware → the website's ways in (/auth/*, /auth/phone and /auth/phone/verify among
+                      them), its captcha
+    mini app only     MiniAppOnlyMiddleware → POST /auth/mini-app, GET /app/logo
     customer          CustomerAuthMiddleware (bearer token) — and RecentSignInMiddleware on what changes the ways in
-                      or gives a service away
-    /admin            CustomerAuthMiddleware · StaffMiddleware → $operations again, never $configuration
+                      or gives a service or money away
+    website only      WebsiteOnlyMiddleware · CustomerAuthMiddleware → /me/telegram/authorize, /me/reauthenticate/phone,
+                      /me/identities/{telegram,google,phone}, /me/identities/phone/verify
+    mini app only     MiniAppOnlyMiddleware · CustomerAuthMiddleware → PUT and DELETE /me/biometric
+    /admin            WebsiteOnlyMiddleware · CustomerAuthMiddleware · StaffMiddleware → $operations again, never $configuration
 ```
 
-- **ورودی.** `StoreMiddleware` کلید فروشگاه ۲۴ کاراکتری هگز را می‌خواند، وب‌سایت باز را در میان فروشگاه‌ها پیدا می‌کند
-  (<code dir="ltr">Websites::open()</code>: روشن، با رباتی در حال اجرا) و درخواست را در آن فروشگاه اجرا می‌کند
-  (`CurrentBot::run`). هر کلید دیگری همان 404 است، مسیر زیرش هر چه باشد.
+- **درها.** `StoreMiddleware` کلید فروشگاه ۲۴ کاراکتری هگز را می‌خواند، وب‌سایت باز (<code dir="ltr">Websites::open()</code>)
+  یا در غیر این صورت مینی‌اپ باز (<code dir="ltr">MiniApps::open()</code>) را در میان فروشگاه‌ها پیدا می‌کند — روشن، با رباتی
+  در حال اجرا —، درخواست را در آن فروشگاه اجرا می‌کند (`CurrentBot::run`) و در را روی درخواست می‌گذارد:
+  <code dir="ltr">StoreMiddleware::door()</code> آن را به‌شکل یک `Contracts\Door` می‌خواند (<code dir="ltr">storeKey()</code>،
+  <code dir="ltr">showsReviews()</code> و جواب‌های سایت ورود)، و <code dir="ltr">website()</code> و <code dir="ltr">miniApp()</code>
+  به‌شکل تنها دری که یک گروه مسیر اجازه می‌دهد. هر کلید دیگری همان 404 است، مسیر زیرش هر چه باشد. آنچه فقط یک در دارد گروه
+  مسیری است که بیرونی‌ترین نگهبانش `WebsiteOnlyMiddleware` یا `MiniAppOnlyMiddleware` است: از راه در دیگر پیش از آنکه توکنی
+  خوانده شود 404 خود روتر را جواب می‌دهد، پس در دیگر چیزی از آن نشان نمی‌دهد. پیش از آن نگهبان فقط middlewareهای خود گروه Store
+  اجرا می‌شوند، و `JsonBodiesMiddleware` یکی از آن‌هاست: درخواست POST، PUT یا PATCH که بدنه‌اش JSON نیست، اول 415 آن را
+  می‌گیرد. توصیف API این عملیات‌ها را با `x-door` علامت می‌زند ([قرارداد API](API-Contract.md#آنچه-توصیف-در-بر-دارد))، و `ApiDescriptionTest` و
+  `MiniAppDoorTest` مسیرها و علامت‌ها را با هم جور نگه می‌دارند. مینی‌اپ خاموش هم برای پیش‌نمایش یک پنل باز می‌شود: کلیدی
+  که هیچ در بازی ندارد به‌عنوان مینی‌اپ خاموش امتحان می‌شود (<code dir="ltr">MiniApps::previewable()</code>)، و درخواستی که
+  توکن یک Session پیش‌نمایش زنده همان فروشگاه را دارد آن را انگار روشن است پیدا می‌کند — هر درخواستی که پیش‌نمایش می‌فرستد،
+  از جمله <code dir="ltr">GET /</code> —، تا مالک پیش از کاربران مینی‌اپ را امتحان کند؛ درخواستی که پیش‌نمایش نمی‌تواند
+  بفرستد (<code dir="ltr">CustomerAuthMiddleware::previewMayAsk()</code>) آنجا همان 403 با `PREVIEW` است، مسیر هر چه باشد،
+  و هر کس دیگری همچنان `CLOSED` را می‌گیرد.
 - **فقط JSON.** `JsonBodiesMiddleware` به بدنه‌ای که JSON نیست 415 جواب می‌دهد، جز multipart روی چند مسیری که `UPLOAD` علامت
   خورده‌اند (یک رسید، تصویر یک تیکت). بدنه فرم یا متن یک «simple request» در CORS است که هر سایتی می‌تواند مرورگر را بدون
   preflight وادار به فرستادنش کند؛ رد کردنش یعنی درخواست ورودی که از سایت دیگری پست شود همیشه به preflight نیاز دارد.
 - **قاعده CORS** همان `Store\Http\WebsiteCorsPolicy` زیر `CorsMiddleware` در Core است: فقط مسیرهای Store API، فقط آدرسی (origin)
-  که وب‌سایت باز فهرست کرده؛ API پنل‌ها هرگز به هیچ originی جواب نمی‌دهد.
+  که وب‌سایت باز فهرست کرده (<code dir="ltr">allowsOrigin()</code>)؛ مینی‌اپ، که روی آدرس خود فروشگاه است، هیچ originی را اجازه
+  نمی‌دهد — حتی وب‌کلاینت تلگرام را، که صفحه را در frame نشان می‌دهد نه API را؛ API پنل‌ها هرگز به هیچ originی جواب نمی‌دهد.
 - **ورود اختیاری.** `OptionalCustomerMiddleware` (قیمت‌های کاتالوگ، یک نظر) درخواست بدون توکن را به‌عنوان مهمان راه می‌دهد،
   ولی درخواستی با توکن را به‌طور کامل از ورودی کاربر می‌گذراند — توکن بد یک 401 است، هرگز بی‌صدا یک مهمان.
 
@@ -75,15 +98,53 @@ routes/api.php دو خانواده مسیر را سوار می‌کند:
   Workspace)، وگرنه آدرسی که امروز مال کس دیگری است می‌توانست یک حساب را تصاحب کند.
 - **ایمیل و رمز عبور** (`EmailSignIn`) هرگز نمی‌گویند یک آدرس حساب دارد یا نه: ثبت‌نام و بازنشانی رمز یک جواب می‌دهند و ایمیل
   متفاوتی می‌فرستند؛ آدرس اشتباه در برابر یک hash ساختگی با همان هزینه hash واقعی بررسی می‌شود.
-- **ورود دومرحله‌ای** (`TwoFactor`) مرحله دوم ورود با رمز عبور است (TOTP، و ده کد بازیابی که به شکل hash کلیددار نگه داشته
+- **کد پیامکی** (`PhoneSignIn`، تا وقتی <code dir="ltr">SignInSite::allowsPhoneSignIn()</code>: کلید سایت، در دسترس بودن
+  `Core\Sms\Sms`، و سایت فروشگاه اصلی یا <code dir="ltr">Sms::forAgents()</code> — `Store\Services\Websites` به هر
+  وب‌سایتی که می‌خواند می‌گوید برایش پیامک فرستاده می‌شود یا نه، <code dir="ltr">Website::smsOpen()</code>) کدی شش رقمی
+  (<code dir="ltr">AuthChallenges::issueCode()</code>، hash کلیددار، پنج دقیقه، پنج بار امتحان) به یک موبایل ایران با قالب
+  E.164 (`Support\Mobile`) پیامک می‌کند، چه حساب داشته باشد چه نه. کدی که برمی‌گردد کاربری را که `users.phone` او همین است
+  وارد می‌کند — از دو حساب، آن که تلگرام دارد، بعد آن که دیرتر دیده شده (<code dir="ltr">holderOf()</code>)، و بقیه کنار
+  توکن برای ادغام پیشنهاد می‌شوند (<code dir="ltr">mergeOffer()</code>، <code dir="ltr">SignedIn::$merge</code>؛ شماره برای
+  همه ثابت شده، و هرگز بی پرسیدن ادغام نمی‌شود) — یا تازه‌واردی را با همین شماره ثبت می‌کند
+  (<code dir="ltr">Customers::byPhone()</code>)، با `SignInMethod::Phone`. کد پیامکی از ارائه‌دهنده‌ها ضعیف‌تر است (سیم‌کارت
+  تعویض‌شده، شماره دست به دست شده): حسابی که ورود دومرحله‌ای دارد challenge مرحله دوم را می‌گیرد
+  (<code dir="ltr">TwoFactor::signIn()</code> بعد `PhoneAndCode` باز می‌کند)، <code dir="ltr">SignInMethod::strong()</code>
+  روش `Phone` را کنار می‌گذارد، و شماره چنین حسابی را دوباره ثابت نمی‌کند. هر پیامک پیش از رفتن در سهمیه‌هایش شمرده
+  می‌شود و اگر سرویس آن را نپذیرد پس داده می‌شود (<code dir="ltr">SignInThrottle::texting()</code>؛ کد تازه فقط وقتی سرویس
+  آن را پذیرفت جای قبلی را می‌گیرد، <code dir="ltr">$deliver</code> در <code dir="ltr">AuthChallenges::issueCode()</code>)، و هر کد شش رقمی در
+  سهمیه کدهای اشتباه شماره (<code dir="ltr">textedCode()</code>) فقط وقتی کدی منتظر است
+  (<code dir="ltr">AuthChallenges::liveCode()</code>) — حدس کورکورانه کسی را بیرون نمی‌گذارد، و کدهای اشتباه هرگز جلوی رفتن
+  کد را نمی‌گیرند. شماره موبایل یک `WayIn` هم هست: با کد اضافه می‌شود (اگر حساب دیگری آن را داشته باشد، ادغام پیشنهاد
+  می‌شود، و از مرحله دوم آن حساب رد نمی‌شود)، تا وقتی روش دیگری می‌ماند حذف می‌شود — و شماره فقط جایی روش ورود حساب می‌شود
+  که ورود با پیامک همین حساب را با آن باز کند —، و با کدی که به Session درخواست‌کننده بسته است دوباره ثابت می‌شود
+  (<code dir="ltr">sendReauthCode()</code>).
+- **ورود دومرحله‌ای** (`TwoFactor`) مرحله دوم ورود با رمز عبور است، و ورود با پیامک (TOTP، و ده کد بازیابی که به شکل hash کلیددار نگه داشته
   می‌شوند). بازنشانی رمز عبور آن را روشن می‌گذارد و رمز تازه را در challenge مرحله دوم نگه می‌دارد، چون ایمیل به‌تنهایی نباید
   از آن بگذرد.
+- **داده راه‌اندازی مینی‌اپ** (`MiniAppSignIn`، `POST /auth/mini-app`): <code dir="ltr">Support\LaunchData::read()</code> مقدار
+  `Telegram.WebApp.initData` را همان‌طور که مستندات تلگرام می‌گوید می‌سنجد — همه فیلدها جز `hash`، مرتب‌شده، به‌شکل سطرهای
+  `name=value`، زیر HMAC-SHA256 با کلیدی که HMAC-SHA256 توکن ربات و `WebAppData` است؛ فیلد دوباره، نبودن حساب، یا `auth_date`ی
+  قدیمی‌تر از حد مجاز یا بیش از ۶۰ ثانیه جلوتر از ساعت فروشگاه رد می‌شود — و یک `DTO\MiniAppLaunch` برمی‌گرداند: شناسه تلگرام،
+  پروفایلش، و زمانی که تلگرام آن را ساخته. ورود داده‌ای تا یک روز قدیمی را می‌پذیرد (`MAX_AGE_SECONDS`)، تازه‌وارد را دقیقا مثل
+  ربات ثبت می‌کند (<code dir="ltr">Customers::byTelegram()</code>، با کد دعوت)، و Session را از راه
+  <code dir="ltr">ProviderSignIn::open()</code> با `SignInMethod::MiniApp` (قوی) باز می‌کند، با `authenticated_at` برابر زمان
+  داده راه‌اندازی، نه حالا: داده قدیمی وارد می‌کند، ولی چیزی را که ورود تازه می‌خواهد ثابت نمی‌کند. هر اثبات زیر محدودیت تلاش‌های
+  وب‌سایت برای آن آدرس اجرا می‌شود و شکستش شمرده می‌شود؛ رد در ورود یک 401 است و برای کاربر واردشده یک 422 روی `init_data`
+  (<code dir="ltr">$signedIn</code> در <code dir="ltr">launch()</code>).
 
 **نشست‌ها (Session)** (`CustomerSessions`): برای هر دستگاه یک توکن Bearer، که فقط sha256 آن نگه داشته می‌شود، برای هر فروشگاه،
 که بعد از ۳۰ روز بی‌کاری از کار می‌افتد و بعد از ۱۸۰ روز تمام می‌شود. `authenticated_at` زمانی است که آخرین بار یک راه ورود
 اثبات شده: تغییر راه‌های ورود، رمز عبور، ورود دومرحله‌ای یا یک ادغام، و سپردن سرویس به کاربر دیگر، به آن در ۱۵ دقیقه اخیر نیاز
-دارند (`RecentSignInMiddleware`، یک 403 با challenge مطابق RFC 9470)، و `POST /me/reauthenticate` دوباره یکی را اثبات می‌کند.
-پس یک توکن لورفته به‌تنهایی هیچ حسابی را تصاحب نمی‌کند و هیچ سرویسی را واگذار نمی‌کند.
+دارند (`RecentSignInMiddleware`، یک 403 با challenge مطابق RFC 9470)، و `POST /me/reauthenticate` دوباره یکی را اثبات می‌کند
+(`Reauthentication`). پس یک توکن لورفته به‌تنهایی هیچ حسابی را تصاحب نمی‌کند و هیچ سرویسی را واگذار نمی‌کند. `GET /me` می‌گوید
+Session کجا ایستاده (`session`: روش ورودش، اینکه رمز اثر انگشت نگه می‌دارد یا نه، و `recent_until` از
+<code dir="ltr">CustomerSessions::provenUntil()</code>).
+
+هر Session مال فروشگاه است، نه مال درش: توکنی که هر کدام از دو در با آن وارد شده، مسیرهای کاربر در دیگری را هم باز می‌کند.
+مینی‌اپ دو راه خودش را برای اثبات دوباره یک روش ورود دارد:
+
+- **داده راه‌اندازی تازه** (`mini_app`): <code dir="ltr">MiniAppSignIn::launch()</code> با `RECENT_SECONDS` به‌عنوان حد سن؛ Session از `auth_date` همان داده تازه حساب می‌شود (<code dir="ltr">$provenAt</code> در <code dir="ltr">CustomerSessions::reauthenticated()</code>)، هرگز کمتر از آنچه بود، و اگر فقط با رمز عبور وارد شده بود به `mini_app` ارتقا می‌یابد.
+- **رمز اثر انگشت** (`biometric`): `PUT /me/biometric` (که خودش پشت `RecentSignInMiddleware` است) ۳۲ بایت تصادفی می‌سازد تا `BiometricManager` تلگرام آن را پشت اثر انگشت یا چهره دستگاه نگه دارد، و فقط sha256 آن را روی Session نگه می‌دارد (`customer_sessions.biometric_hash`، <code dir="ltr">CustomerSessions::setBiometric()</code>)؛ <code dir="ltr">holdsBiometric()</code> در زمان ثابت مقایسه می‌کند. وقتی ثابت شد، Session از همین حالا تازه است و روش ورودش را نگه می‌دارد — صاحب Session را ثابت می‌کند، نه یک روش ورود را؛ `DELETE /me/biometric` آن را فراموش می‌کند. شکستش یک ورود ناموفق شمرده می‌شود.
 
 **چالش‌ها** (`AuthChallenges`) همه رازهای کوتاه‌عمر هستند: یک راز تصادفی که sha256 آن همراه یک payload رمزنگاری‌شده نگه داشته
 می‌شود، و یک بار با یک DELETE شرطی خرج می‌شود. کدهای ایمیل‌شده شش رقمی‌اند، پس به شکل یک HMAC زیر کلیدی که از APP_KEY مشتق
@@ -122,9 +183,13 @@ routes/api.php دو خانواده مسیر را سوار می‌کند:
 
 ## فروشگاه در وب‌سایت
 
-هر کاری که کاربر در سایت می‌کند از سرویس‌هایی می‌گذرد که ربات به کار می‌برد؛ سرویس‌های Store فقط شکل و محدودیت‌های وب‌سایت را
-اضافه می‌کنند.
+هر کاری که کاربر در سایت — یا در مینی‌اپ — می‌کند از سرویس‌هایی می‌گذرد که ربات به کار می‌برد؛ سرویس‌های Store فقط شکل و
+محدودیت‌های API را اضافه می‌کنند.
 
+- **ویترین** (<code dir="ltr">Storefront::present()</code>، <code dir="ltr">GET /</code>) در را می‌گیرد: از راه مینی‌اپ
+  `sign_in.mini_app` و `app` (ظاهرش، آدرس لوگویش که با `updated_at` ردیف نسخه می‌خورد، منطقه زمانی فروشگاه)، و از راه وب‌سایت
+  `null`؛ `programs`، کلیدهای برنامه‌های فروشگاه همان‌طور که ربات می‌خواند؛ `phone_required`، دروازه شماره تلفن ربات. آموزش
+  (<code dir="ltr">StoreController::tutorial()</code>) همان متن خود ربات است (`BotText::Tutorial`).
 - **کاتالوگ** (`StoreCatalog`): دقیقا همان «خرید اشتراک» ربات (<code dir="ltr">PlanCategoryService::catalogue()</code>)، که
   `Pricing` برای خواننده قیمت‌گذاری می‌کند، با چند کوئری، هر چند پلن که باشد.
 - **پیش‌فاکتور** (`CustomerCheckout`) همان پیش‌فاکتور ربات است (`Payments\Services\Checkout`) با قاعده‌های ربات. هر درخواست
@@ -147,6 +212,23 @@ routes/api.php دو خانواده مسیر را سوار می‌کند:
   می‌کند.
 - **سرویس‌ها** (`CustomerSubscriptions`): اینکه هر کدام چه کاری می‌تواند بکند برای یک صفحه کامل یکجا سنجیده می‌شود؛ خواندن از
   پنل و لینک‌های تازه برای هر کاربر محدودیت تعداد دارند، و شکست پنل به شکل خلاصه‌اش گفته می‌شود، هرگز تشخیص مالک فروشگاه.
+  <code dir="ltr">update()</code> مقدار `auto_renew` و `label` (نام دلخواه کاربر برای سرویس، `subscriptions.label`) را با هم
+  می‌سنجد، و نام فقط تا وقتی سرویس هنوز مال اوست نوشته می‌شود — <code dir="ltr">ProvisioningService::newOwner()</code> وقتی
+  سرویس دست به دست می‌شود آن را پاک می‌کند —؛ <code dir="ltr">qrCard()</code> کارت QR ربات را می‌کشد (`Telegram\Qr\QrCard`)،
+  ۳۰ تا در دقیقه، و وقتی نمی‌تواند یک 503 (`QrCardUnavailableException`).
+- **فروش‌های ویژه** (`StoreSales`): فروش‌های ویژه در جریان (<code dir="ltr">Sale::running()</code>)، برای یک بنر؛ قیمت‌ها از
+  قبل آن‌ها را دارند.
+- **برنامه‌ها**: `CustomerTestAccounts` یک تست رایگان را از راه `Subscriptions\Services\TestAccounts` و زیر سهمیه ربات می‌دهد؛
+  `CustomerWheel` گردونه `Rewards\Services\LuckyWheel` را با `tell: false` می‌چرخاند و جایی را که ایستاده برای پویانمایی صفحه
+  برمی‌گرداند (سرور انتخاب می‌کند؛ صفحه فقط نشان می‌دهد)؛ `Rewards\Services\LotteryBoard` قرعه‌کشی شبانه را برای یک کاربر
+  می‌خواند و سهم‌هایش را همان‌طور می‌شمارد که <code dir="ltr">Lottery::entries()</code> خواهد شمرد. تست رایگان و چرخش
+  گردونه اول همان چیزی را می‌پرسند که گیت‌های ربات پیش از هر چیز رایگانی می‌پرسند (`CustomerGates`: حساب تلگرام، شماره خود
+  کاربر تا وقتی فروشگاه آن را می‌خواهد، عضویت در کانال‌های اجباری — <code dir="ltr">ChannelMembership::missingFor()</code> —؛
+  مدیران فروشگاه می‌گذرند). از راه مینی‌اپ، که بخشی از خود ربات است، سفارش، کد هدیه و سرویسی که با لینکش گرفته می‌شود هم شماره
+  و کانال‌ها را می‌پرسند (<code dir="ltr">CustomerGates::holdBack()</code>، از کنترلرهایشان، که وب‌سایت یا مینی‌اپ بودن را از
+  درخواست می‌دانند). برنامه خاموش یک 404 است
+  (`ProgramOffException`) — ردهای گردونه، با کلمه‌های ربات، یک 422 روی `status`. هیچ‌کدام از این‌ها در تلگرام فرستاده
+  نمی‌شود: صفحه نشانش می‌دهد.
 - **رسیدها** (`CustomerReceipts`) همان‌طور که ربات می‌گیرد گرفته می‌شوند، ولی رسید آپلودشده هرگز خودکار تایید نمی‌شود: حساب
   پشت آن ممکن است ایمیلی باشد که یک دقیقه پیش ساخته شده.
 - **پرداخت‌های آنلاین** (`CustomerOnlinePayments`): پیش‌فاکتوری با یک درگاه آنلاین صفحه آن را جواب می‌دهد (`link`، که با
@@ -163,7 +245,12 @@ routes/api.php دو خانواده مسیر را سوار می‌کند:
   می‌شود (<code dir="ltr">transferById()</code>)، هرگز انتقال دوم ([ساختار داخلی: فروش](Internals-Commerce.md#انتقال-موجودی)).
   گیرنده پول یا سرویس فقط با `Presenters\RecipientPresenter` نشان داده می‌شود: نام و یوزرنیم تلگرامش، و هیچ چیز دیگری از حسابش.
 - **اعلان‌ها، تیکت‌ها، نظرات، کدهای هدیه، زیرمجموعه‌گیری**: لایه‌های نازکی روی Notifications، Support، Reviews، Rewards و
-  Referrals ([ساختار داخلی: سرویس‌ها](Internals-Services.md) و [ساختار داخلی: فروش](Internals-Commerce.md) را ببینید).
+  Referrals ([ساختار داخلی: سرویس‌ها](Internals-Services.md) و [ساختار داخلی: فروش](Internals-Commerce.md) را ببینید). پیام‌های
+  یک تیکت `seen` را از `tickets.support_read_at` می‌گویند، که خواندن پشتیبانی آن را می‌نویسد
+  (<code dir="ltr">Tickets::readBySupport()</code>، بی‌صدا، وقتی پنل‌ها یا API مدیران وب‌سایت تیکت را باز می‌کنند) و پاسخ هم؛
+  نظرات از کلید خود همان در پیروی می‌کنند (<code dir="ltr">Door::showsReviews()</code>، `shop.programs.reviews`). کاربر از
+  راه مینی‌اپ حساب تلگرامش را جدا نمی‌کند (`IdentitiesController::TELEGRAM_STAYS`، یک 422 روی `kind`): مینی‌اپ و ربات او را با
+  همان حساب می‌شناسند.
 
 ردیف‌های یک کاربر همیشه از راه کوئری خود او خوانده می‌شوند (<code dir="ltr">where('user_id', …)</code>)، پس شناسه کاربر دیگر
 یک 404 است، مثل ردیفی که هرگز وجود نداشته.
@@ -172,8 +259,9 @@ routes/api.php دو خانواده مسیر را سوار می‌کند:
 
 کاربرانی که نقش ادمین ربات را دارند می‌توانند کار فروشگاه را از وب‌سایتش انجام دهند: <code dir="ltr">/admin/\*</code> همان
 <code dir="ltr">$operations</code> پنل‌ها را دوباره پشت `StaffMiddleware` سوار می‌کند، که بررسی‌هایش به ترتیبی ثابت اجرا
-می‌شوند (ادمین بودن؛ اینکه وب‌سایت مدیران را راه بدهد؛ ورود قوی وقتی خواسته شده؛ ورودی در یک روز کاری اخیر؛ مجوز آن عملیات؛ ورود
-تازه برای عملیاتی که مجوز دارد یا برای تایید یک پرداخت). برای همین توکن لورفته یک مدیر سایت ساعت‌ها کار می‌کند، نه ماه‌ها. هر
+می‌شوند (ادمین بودن؛ اینکه وب‌سایت مدیران را راه بدهد؛ Sessionی که مال مینی‌اپ نباشد — <code dir="ltr">CustomerSessions::isMiniApp()</code>،
+که Session داده باز شدن مینی‌اپ تا آخر عمرش همین می‌ماند: مینی‌اپ فقط طرف کاربر است؛ ورود قوی وقتی خواسته شده؛
+ورودی در یک روز کاری اخیر؛ مجوز آن عملیات؛ ورود تازه برای عملیاتی که مجوز دارد یا برای تایید یک پرداخت). برای همین توکن لورفته یک مدیر سایت ساعت‌ها کار می‌کند، نه ماه‌ها. هر
 عملیاتی که مجوز لازم دارد آن را روی مسیرش (`Auth\StaffGrant::ARGUMENT`) و در توصیف API (`x-staff`) نام می‌برد؛
 `ApiDescriptionTest` این دو را با هم جور نگه می‌دارد. بعد درخواست `Principal` کارکنان را با خود می‌برد — با مجوزهای وب‌سایت فقط
 تا وقتی ورود تازه است — و هر تغییری که بخواهد با نام آن‌ها در خط لاگ ثبت می‌شود، تغییر ردشده هم، حتی یک 404. تصمیم‌ها یک
@@ -205,6 +293,42 @@ routes/api.php دو خانواده مسیر را سوار می‌کند:
 می‌شوند (`Core\Forms\Fields\Ruled`) و کپچا که با فرم درایورش بررسی می‌شود ([درایورها](Drivers.md) را ببینید). مقدارهای محرمانه
 هرگز پس فرستاده نمی‌شوند، فقط اینکه آیا یکی نگه داشته شده یا نه.
 
+## تنظیمات مینی‌اپ
+
+کلاس `Store\Services\MiniApps` مینی‌اپ یک فروشگاه را نگه می‌دارد (`mini_apps`، یک ردیف برای هر ربات)، که اولین باری که یک پنل
+بپرسد خاموش و با یک کلید تصادفی ساخته می‌شود (<code dir="ltr">current()</code>). «مینی‌اپ تلگرام» هر دو پنل
+(`Admin\Api\MiniAppController`، `GET|PATCH /api/{panel}/mini-app`، بخشی از <code dir="ltr">$configuration</code>: مدیران وب‌سایت
+هرگز آن را ندارند) از راه <code dir="ltr">update()</code> ذخیره می‌کند، یک ذخیره جزئی روی موتور فیلدها؛ روشن کردنش `APP_URL` با
+https می‌خواهد (<code dir="ltr">secure()</code>)، چون تلگرام مینی‌اپ را از هیچ آدرس دیگری باز نمی‌کند.
+<code dir="ltr">address()</code> همان <code dir="ltr">{APP_URL}/app/{key}/</code> است؛ <code dir="ltr">url()</code> همان آدرس
+است تا وقتی مینی‌اپ روشن و امن است — `Telegram\Contracts\MiniAppAddress`، که در `bootstrap/container.php` به `MiniApps` بسته
+شده، و دکمه‌های ربات از همین راه آن را پیدا می‌کنند ([ساختار داخلی: ربات تلگرام](Internals-Telegram-Bot.md#مینی‌اپ)).
+
+هر ذخیره دکمه منوی ربات را همان‌طور که مینی‌اپ حالا هست تنظیم می‌کند (<code dir="ltr">applyMenuButton()</code>،
+`BotApi::setChatMenuButton`): دکمه مینی‌اپ، با متن خودش، تا وقتی روشن و امن است و دکمه‌اش را نگه می‌دارد. وگرنه از تلگرام
+می‌پرسد دکمه الان چیست (<code dir="ltr">BotApi::getChatMenuButton()</code>) و دکمه خود تلگرام را فقط وقتی برمی‌گرداند که آن دکمه
+همین مینی‌اپ را باز کند — زیر هر `APP_URL`ی که فروشگاه داشته، با کلیدش —، پس دکمه‌ای که فروشگاه خودش در @BotFather گذاشته دست
+نمی‌خورد. رد کردن تلگرام یا در دسترس نبودنش هرگز ذخیره را برنمی‌گرداند: `menu_button_error` در پاسخ می‌گوید چرا دکمه تنظیم نشد.
+
+لوگو (`GET|POST|DELETE /api/{panel}/mini-app/logo`) تصویری است که از روی بایت‌هایش سنجیده می‌شود (PNG، JPEG یا WebP، حداکثر
+۲ مگابایت)، و جایی که هاست GD دارد حداکثر ۵۱۲ پیکسل در هر ضلع و بدون metadata دوباره نوشته می‌شود، در فایل خود فروشگاه زیر
+`storage/uploads/logos` (`miniapp.logos`)؛ Store API آن را در `GET /app/logo` جواب می‌دهد، فقط از راه کلید مینی‌اپ
+(`MiniAppLogoController`، پنج دقیقه در هر کشی).
+
+«پیش‌نمایش» پنل‌ها (`POST /api/{panel}/mini-app/preview`، <code dir="ltr">MiniAppController::preview()</code>) مینی‌اپ را
+همان‌طور باز می‌کند که یکی از کاربران فروشگاه می‌بیند: <code dir="ltr">Store\Services\MiniAppPreviews::open()</code> هر کسی را
+که کاربر این فروشگاه نیست، یا مسدود است، رد می‌کند (`422` روی `user_id`)، یک Session پیش‌نمایش برایش باز می‌کند
+(<code dir="ltr">CustomerSessions::openPreview()</code>، با `method` برابر `preview`، به مدت `PREVIEW_MINUTES` — ۳۰ دقیقه — و
+هرگز بیشتر)، در لاگ می‌نویسد چه کسی و از چشم چه کسی نگاه کرد، و توکنش را یک بار همراه آدرس مینی‌اپ روی همین هاست جواب
+می‌دهد (<code dir="ltr">MiniApps::path()</code>، زیر پوشه‌ای که درخواست پنل از آن آمده)؛ پنل توکن را در fragment آدرس به
+مینی‌اپ می‌دهد ([ساختار داخلی: مینی‌اپ](Internals-Mini-App.md#پیش‌نمایش)). به کاربر چیزی گفته نمی‌شود.
+`CustomerAuthMiddleware` چنین Sessionی را فقط از راه کلید مینی‌اپ راه می‌دهد — زیر کلید وب‌سایت چیزی باز نمی‌کند — و فقط
+برای خواندن: هر درخواستی جز GET، HEAD یا OPTIONS پیش از اجرای هر چیزی یک 403 با `PREVIEW` است («این پیش‌نمایش است؛ در
+آن چیزی ذخیره یا فرستاده نمی‌شود.»)، جز مسیری که `PREVIEW_READS` علامت خورده و فقط چیزی را حساب می‌کند —
+`POST /custom-services/quote`، که مقدارش فیلدی را نام می‌برد (`discount_code`) که اگر فرستاده شود آن را دوباره نوشتن
+می‌کند. از پیش‌نمایش چیزی ثبت نمی‌شود: نه استفاده از Session و نه بازدید کاربر؛ هیچ‌کدام از دستگاه‌های او نیست
+(<code dir="ltr">CustomerSessions::isPreview()</code>) و هرگز ورود تازه حساب نمی‌شود.
+
 ## کنترلرهای پنل‌ها
 
 پوشه `app/Modules/Admin/Api` کنترلرهای هر دو پنل را در خود دارد؛ مالک فروشگاه و نماینده بیشترشان را شریک‌اند چون مسیرهایشان
@@ -230,14 +354,18 @@ routes/api.php دو خانواده مسیر را سوار می‌کند:
 <code dir="ltr">website()</code>، <code dir="ltr">webCustomer()</code>، <code dir="ltr">customerSession()</code> و
 <code dir="ltr">bearer()</code> برای کاربر واردشده، <code dir="ltr">loginAsStaff()</code> برای API مدیران،
 <code dir="ltr">telegramLogin()</code>، <code dir="ltr">googleLogin()</code>، <code dir="ltr">turnstile()</code> و
-<code dir="ltr">mail()</code> برای سرویس‌های بیرونی، و trait `WebsiteSignIns` برای nonceها و stateهای ریدایرکت.
-تست `RouteGuardsTest` همه مسیرها را با ردیف‌های یک فروشگاه دیگر، و همه مسیرهای API مدیران را از هر مرحله بررسی ورودی، امتحان می‌کند.
+<code dir="ltr">mail()</code> برای سرویس‌های بیرونی، و trait `WebsiteSignIns` برای nonceها و stateهای ریدایرکت. helperهای
+مینی‌اپ: <code dir="ltr">miniApp()</code> (مینی‌اپ فروشگاه، روشن، با کلید خودش)، <code dir="ltr">launchData()</code> (داده
+راه‌اندازی امضاشده، `Tests\Support\TelegramLaunch`) و <code dir="ltr">storeApi($door, $path)</code> برای هر دو در.
+تست `RouteGuardsTest` همه مسیرها را با ردیف‌های یک فروشگاه دیگر، و همه مسیرهای API مدیران را از هر مرحله بررسی ورودی، امتحان می‌کند؛
+`MiniAppDoorTest` همه مسیرهای Store API را زیر کلید هر دو در می‌پرسد.
 [تست](Testing.md) را ببینید.
 
 ## از کجا شروع کنیم
 
 - مسیر تازه برای کاربر: کنترلرش در `Store\Api`، سرویسش در `Store\Services`، مسیر در routes/api.php (داخل گروه کاربر، و گروه
-  ورود تازه اگر شیوه ورود به حساب را تغییر می‌دهد)، و عملیاتش در openapi.yaml.
+  ورود تازه اگر شیوه ورود به حساب را تغییر می‌دهد)، و عملیاتش در openapi.yaml. مسیری که فقط یک در دارد در گروه همان در
+  می‌رود، و عملیاتش `x-door` علامت می‌خورد.
 - راه ورود تازه: یک متد اثبات که از راه <code dir="ltr">ProviderSignIn::prove()</code> یک DTO حساب برمی‌گرداند، یک case در
   `WayIn` (با ستونش روی `users`)، و اینکه ادغام چطور آن را منتقل می‌کند (<code dir="ltr">AccountMerger::takeOn()</code>).
 - عملیات تازه در API مدیران: آن را به <code dir="ltr">$operations</code> اضافه کنید و `x-staff` علامتش بزنید (با مجوزش وقتی

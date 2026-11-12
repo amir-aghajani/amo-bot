@@ -31,7 +31,7 @@ Rough order of work. Items marked ✅ exist in the code today; `[ ]` are open.
 - ✅ Wallet: balance + ledger, top-up by preset or typed amount through the checkout; support's credit/debit from the users table
 - ✅ Notifications: payment settled / rejected / refunded, an online payment that came after its order closed gone to the wallet, a service ending soon or its traffic running low («یادآوری»), a service granted, moved, switched off or deleted, an automatic renewal
 - ✅ Referrals («زیرمجموعه‌گیری») and agency («نمایندگی»): invite links and commissions; agents' requests, levels, prepaid traffic and a bot of their own
-- ✅ Support tickets: opened and answered in the bot, on the website, from both panels and from the report group
+- ✅ Support tickets: opened and answered in the bot, in the mini app, on the website, from both panels and from the report group
 - ✅ «آموزش»: a short guide the shop ships, which the owner rewords
 - ✅ Extra traffic and time for a service («حجم و زمان اضافه»), hourly plans, first-purchase and agent prices
 - ✅ Discounts and rewards: discount codes, timed sales, a customer's own discount, loyalty tiers, cashback, gift codes,
@@ -62,6 +62,12 @@ Rough order of work. Items marked ✅ exist in the code today; `[ ]` are open.
 - [ ] An AI support assistant
 - The site's own content (blog, FAQ, app downloads) stays the site's.
 
+## The Telegram mini app
+- ✅ The shop's customer side inside Telegram, shipped with AmoBot and served on the shop's own address (`{APP_URL}/app/{key}/`) as a third door of the Store API: the same account, services, wallet and rules as the bot and the website; every shop its own (each agent's too), switched on and styled in «مینی‌اپ تلگرام» — its name, colour, logo, announcement, full screen and reviews
+- ✅ Signed in by the launch data Telegram signs with the bot's token, no password; what moves a service or money away asks a recent sign-in — the launch's first 15 minutes, or the device's fingerprint or face
+- ✅ Home (services, wallet, banners, shortcuts, notifications); buying (categories, locations, the plans' labels, discount codes, the custom builder, the free test); paying by the wallet, a card receipt or an online gateway; services (the QR card, quick connect to v2rayNG, Happ, Hiddify and Streisand, renewals, extras, a name of the customer's own, handing over, adding by link); the wallet (top-ups, history, invoices kept as pictures, gift codes, transfers); the club (loyalty, cashback, the lucky wheel, the nightly draw, referrals); support as a chat with read ticks and ratings; the tutorial with connection guides; reviews; the account (an email added, the fingerprint, sessions, the phone number)
+- ✅ The bot opens it: its menu button beside the message box, and «📱 اپلیکیشن فروشگاه» in its menu
+
 ## Panels
 - ✅ Two panels from one React project: the owner's (`/admin/`, each tab in the shop its address names) and an agent's (`/agent/`, their shop only, signed in by a one-time link from the main bot) — the Claude Console's design language, light and dark
 - ✅ Live: lists, counts, the dashboard and open detail modals follow changes within seconds (the change feed) — the owner's panel every shop's, an agent's panel and the website's admins their own shop's
@@ -70,7 +76,7 @@ Rough order of work. Items marked ✅ exist in the code today; `[ ]` are open.
 - ✅ A customer's page: their services, payments, orders and tickets, wallet, referrals, groups, agency, website account
 - ✅ Extend one service: days and traffic on top of what it has (an agent's GB from their traffic)
 - ✅ Bot: keyboards editor (premium-emoji icons), bot texts editor (Telegram HTML checked as Telegram reads it, live preview), settings (master switch, phone, required channels, wallet, wallet transfers («انتقال موجودی»), card-to-card payments («پرداخت کارت به کارت»), renewal, extras, reminders, the removal of ended services, client usernames, services added by their link, service transfers, QR card), report group with topics and buttons, broadcasts («پیام همگانی», «هدیه همگانی»)
-- ✅ Settings: the panel's own configuration in `config.php` (application, database, Telegram, email, advanced), the cron line for cPanel's Cron Jobs ready to copy, the bots' webhooks set or removed, the owner's login changed and recovered without a shell; the website's settings in both panels
+- ✅ Settings: the panel's own configuration in `config.php` (application, database, Telegram, email, advanced), the cron line for cPanel's Cron Jobs ready to copy, the bots' webhooks set or removed, the owner's login changed and recovered without a shell; the website's and the mini app's settings in both panels
 - ✅ Failures drawn one way (what failed, why, what to do, the request's id), offline and stale-build handling
 - ✅ «تخفیف و جوایز»: discount codes, sales, loyalty tiers, cashback, gift codes, the lucky wheel and the nightly draw;
   a customer's own discount on their page; several plans' prices changed at once
@@ -85,7 +91,8 @@ Rough order of work. Items marked ✅ exist in the code today; `[ ]` are open.
 - [ ] Activity log
 
 ## Scheduled tasks
-- ✅ Auto-approval of unreviewed receipts, paid orders a dying process left undelivered resumed, walked-away checkouts dropped, broadcasts in batches, automatic renewal, the next renewed period, grants, the periodic sync of every running service, reminders, the removal of ended services and free tests, the moves of servers' services and the clients they left on panels that answer again, the online gateways' unpaid payments asked about, the agents' terms of selling checked every hour, the report groups' queue, the housekeeping — one run's time shared over them
+- ✅ Auto-approval of unreviewed receipts, paid orders a dying process left undelivered resumed, walked-away checkouts dropped, broadcasts in batches, automatic renewal, the next renewed period, grants, the periodic sync of every running service, reminders, the removal of ended services and free tests, the moves of servers' services and the clients they left on panels that answer again, the online gateways' unpaid payments asked about, the agents' terms of selling checked every hour by default, the report groups' queue, the housekeeping — one run's time shared over them
+- ✅ «زمان‌بندی کارها»: how often each task runs, and the times a few of them decide by (an unpaid order's hours, the online gateways' asking, how long notices, tickets' pictures and the report groups' messages are kept), the owner's for the whole installation — the old fixed values the defaults
 
 ## More connectors and gateways
 - [ ] Panels: Marzban, Hiddify, WireGuard-based panels
@@ -103,5 +110,6 @@ Rough order of work. Items marked ✅ exist in the code today; `[ ]` are open.
 - ✅ Web installer at `/admin/install` (install key → requirements → database → tables → panel login → site and bot → finish) over `/api/install`: the one way to install, no shell needed
 - ✅ Release zips with `vendor/` and the built panels bundled (`scripts/release.php`, a GitHub release per tag)
 - ✅ The owner's one-press update («تنظیمات پنل › به‌روزرسانی»): only a release signed with the key built into the shop, a step a request, the shop held a moment, taken back by itself when it fails; database upgrades from the first release on ([Upgrading](Upgrading.md))
-- [ ] Backup/restore (the database, `config.php` and the uploads) for moving between hosts
+- ✅ Backups in both panels («تنظیمات پنل › پشتیبان‌گیری»): the owner's in the main shop the whole installation's, any other panel its shop's alone; downloaded, sent to the report group once a day, and restored from the panel — only a file this installation signed, all or nothing, the state before kept ([Backups](Backups.md))
+- [ ] The uploads (`storage/uploads/`) in a backup too, for moving between hosts in one step
 - [ ] Docker compose for development

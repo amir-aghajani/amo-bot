@@ -17,6 +17,7 @@ use App\Modules\Auth\Services\SignInThrottle;
 use App\Modules\Users\Models\User;
 use App\Modules\Users\Services\Customers;
 use App\Support\Input;
+use Illuminate\Support\Carbon;
 use Psr\Http\Message\ServerRequestInterface;
 use Psr\Log\LoggerInterface;
 
@@ -27,6 +28,9 @@ use Psr\Log\LoggerInterface;
  */
 final class ProviderSignIn
 {
+    /** The longest invite code a sign-in reads: a code is eight characters. */
+    public const REFERRAL_MAX = 32;
+
     public function __construct(
         private readonly IdTokenVerifier $verifier,
         private readonly AuthChallenges $challenges,
@@ -60,6 +64,18 @@ final class ProviderSignIn
         }
 
         return $claims;
+    }
+
+    /**
+     * The invite code a sign-in carries for a newcomer (`referral_code`), cut to REFERRAL_MAX; null for none.
+     *
+     * @param array<string, mixed> $input
+     */
+    public static function referralCode(array $input): ?string
+    {
+        $code = mb_substr(Input::text($input, 'referral_code'), 0, self::REFERRAL_MAX);
+
+        return $code === '' ? null : $code;
     }
 
     /**
@@ -111,11 +127,11 @@ final class ProviderSignIn
 
     /**
      * A session for the customer a provider proved, on the device the request came from — refused for a banned one; a
-     * returning customer's visit is recorded.
+     * returning customer's visit is recorded. `$provenAt` is when the proof was made, if not now (a mini app's launch).
      *
      * @throws SignInRefusedException 403 banned
      */
-    public function open(User $user, ServerRequestInterface $request, SignInMethod $method): SignedIn
+    public function open(User $user, ServerRequestInterface $request, SignInMethod $method, ?Carbon $provenAt = null): SignedIn
     {
         if ($user->isBanned()) {
             throw SignInRefusedException::banned();
@@ -124,6 +140,6 @@ final class ProviderSignIn
             $this->customers->seen($user);
         }
 
-        return $this->sessions->open($user, $request, $method);
+        return $this->sessions->open($user, $request, $method, $provenAt);
     }
 }

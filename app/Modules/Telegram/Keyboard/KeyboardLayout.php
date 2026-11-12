@@ -90,16 +90,22 @@ final class KeyboardLayout
     }
 
     /**
-     * The `reply_markup` for a message. Inline buttons carry the action's callback (MainMenu::ACTIONS).
+     * The `reply_markup` for a message. Inline buttons carry the action's callback (MainMenu::ACTIONS), or open the web
+     * app `$opens` gives their action — the shop's mini app, which Telegram signs the customer in to from an inline
+     * button alone; a reply keyboard's button is its label, whatever it stands for.
      *
+     * @param array<string, string> $opens action => the address of the web app its inline button opens
      * @return array<string, mixed>
      */
-    public function markup(): array
+    public function markup(array $opens = []): array
     {
         if ($this->isInline()) {
+            $button = static fn(array $b): array => isset($opens[$b['action']])
+                ? InlineKeyboard::webApp($b['label'], $opens[$b['action']], $b['style'], $b['icon'])
+                : InlineKeyboard::callback($b['label'], MainMenu::callbackFor($b['action']), $b['style'], $b['icon']);
             $keyboard = InlineKeyboard::make();
             foreach ($this->rows as $row) {
-                $keyboard->row(...array_map(static fn(array $b): array => InlineKeyboard::callback($b['label'], MainMenu::callbackFor($b['action']), $b['style'], $b['icon']), array_reverse($row)));
+                $keyboard->row(...array_map($button, array_reverse($row)));
             }
 
             return $keyboard->build();

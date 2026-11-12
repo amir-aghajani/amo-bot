@@ -48,7 +48,7 @@ final class WebRootTest extends TestCase
         $rules = self::read('public/.htaccess');
 
         self::assertMatchesRegularExpression('/<Files "error_log">\s*<IfModule mod_authz_core\.c>\s*Require all denied/', $rules);
-        self::assertStringContainsString('RewriteRule ^assets/ - [R=404,L]', $rules, 'a tab from before an upgrade asks for the old build\'s files');
+        self::assertStringContainsString('RewriteRule ^(app/)?assets/ - [R=404,L]', $rules, 'a tab from before an upgrade asks for the old build\'s files — the panels\' or the mini app\'s');
     }
 
     private static function read(string $file): string

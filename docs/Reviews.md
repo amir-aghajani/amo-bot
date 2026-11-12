@@ -2,11 +2,13 @@
 
 # Reviews
 
-«نظرات», in both panels, right after «پشتیبانی»: what customers write about the shop on its website. A review is a name,
-1 to 5 stars, a few words and — optionally — where they use the service from; the website shows it only once you
-approve it. Every shop has its own, the main one and each agent's — for a shop with a website
-([Website](Website.md)): reviews are written there, never in the bot, and only while «تنظیمات وب‌سایت › نظرات» has
-**«نظرات در وب‌سایت»** on ([Website](Website.md#reviews)) — off, as a website starts, the site shows none and takes none.
+«نظرات», in both panels, right after «پشتیبانی»: what customers write about the shop on its website and in its
+[mini app](Mini-App.md). A review is a name, 1 to 5 stars, a few words and — optionally — where they use the service
+from; it shows only once you approve it. Every shop has its own, the main one and each agent's. Reviews are written on
+the website while «تنظیمات وب‌سایت › نظرات» has **«نظرات در وب‌سایت»** on ([Website](Website.md#reviews)), and in the
+mini app while «مینی‌اپ تلگرام › ظاهر» has **«نظرات در مینی‌اپ»** on ([Mini app](Mini-App.md#appearance)) — never in
+the bot. Each switch starts off, and off, its door shows none and takes none; an approved review shows through every
+door that shows reviews.
 
 | Status | Means |
 |---|---|
@@ -16,8 +18,9 @@ approve it. Every shop has its own, the main one and each agent's — for a shop
 
 ## How one arrives
 
-A customer signed in on the website may write one — linked to their account then —, and so may a guest while the website
-asks a captcha («تنظیمات وب‌سایت › ورود با ایمیل» › «تایید امنیتی»): with none, guests write no review. It waits
+A customer in the mini app — always signed in there — or signed in on the website may write one, linked to their
+account then; on the website, so may a guest while it asks a captcha («تنظیمات وب‌سایت › ورود با ایمیل» ›
+«تایید امنیتی»): with none, guests write no review. It waits
 «در انتظار بررسی», counted beside «نظرات» in the menu and on the dashboard's «نیازمند توجه»
 («نظرات در انتظار بررسی»), and the report group's «نظرات» topic hears it: the number, the name it is signed with, the
 stars, where they use the service from, who wrote it — the customer, or «مهمان، بدون ورود به حساب» —, and the words,
@@ -57,4 +60,5 @@ What the website's developer builds — the list, the average, the form: [Store 
   edited — reject it, or delete it.
 - **A guest's name is whatever they typed**: only a signed-in writer is a known customer.
 - **A full queue stops new reviews**: decide the waiting ones, or the website's form refuses everyone.
-- **A website starts with reviews off**: until «نظرات در وب‌سایت» is on, the site shows none of those you approved.
+- **A website and a mini app start with reviews off**: until «نظرات در وب‌سایت» — or the app's «نظرات در مینی‌اپ» — is
+  on, it shows none of those you approved.

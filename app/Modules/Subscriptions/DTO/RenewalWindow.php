@@ -26,7 +26,7 @@ final class RenewalWindow
 
     /**
      * From when it may be renewed, worded to stand in «تمدید این سرویس … ممکن است»: «از ۲۵ مهر ۱۴۰۵، ۱۴:۳۰», «از ۳ روز
-     * مانده به پایان آن», «وقتی ٪۲۰ از حجم یا کمتر مانده باشد» — those that apply, joined by «یا» —, else «پس از پایان آن».
+     * مانده به پایان آن», «وقتی ۲۰٪ از حجم یا کمتر مانده باشد» — those that apply, joined by «یا» —, else «پس از پایان آن».
      * Empty while it is open.
      */
     public function when(): string
@@ -37,7 +37,7 @@ final class RenewalWindow
         $ways = array_filter([
             $this->opensAt === null ? '' : 'از ' . Persian::date($this->opensAt, withTime: true),
             $this->daysBefore === null ? '' : 'از ' . Persian::digits($this->daysBefore) . ' روز مانده به پایان آن',
-            $this->percent === null ? '' : 'وقتی ٪' . Persian::digits($this->percent) . ' از حجم یا کمتر مانده باشد',
+            $this->percent === null ? '' : 'وقتی ' . Persian::digits($this->percent) . '٪ از حجم یا کمتر مانده باشد',
         ]);
 
         return $ways === [] ? 'پس از پایان آن' : implode(' یا ', $ways);

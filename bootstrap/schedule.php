@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Core\Scheduling\Scheduler;
 use App\Modules\Accounts\Tasks\PruneAccountsTask;
 use App\Modules\Agency\Tasks\AgencyStandingTask;
+use App\Modules\Backups\Tasks\SendBackupsTask;
 use App\Modules\Orders\Tasks\ExpireOrdersTask;
 use App\Modules\Orders\Tasks\ResumeDeliveriesTask;
 use App\Modules\Payments\Tasks\AutoApproveReceiptsTask;
@@ -70,6 +71,9 @@ return static function (Scheduler $schedule): void {
     $schedule->everyMinutes(60, PruneTicketsTask::class, eachBot: true);
     // «قرعه‌کشی شبانه», each shop's: once its clock passed the hour of the draw, the day's draw among its buyers, once.
     $schedule->everyMinutes(10, NightlyDrawTask::class, eachBot: true);
+    // Each shop's backup to its report group's «پشتیبان‌گیری» topic: the main shop's group the whole installation's, an
+    // agent's group its own shop's alone.
+    $schedule->everyMinutes(24 * 60, SendBackupsTask::class, eachBot: true);
     // AmoBot's newest release read from GitHub once a day, so the owner's dashboard says when one is out.
     $schedule->everyMinutes(24 * 60, CheckReleasesTask::class);
     // The report groups: what the panel and the tasks above queued, at Telegram's pace. Last, so a tick's own reports go in them.

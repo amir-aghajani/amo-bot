@@ -11,12 +11,14 @@ use App\Modules\Catalog\Models\Plan;
 use App\Modules\Catalog\Models\PlanCategory;
 use App\Modules\Providers\Models\Server;
 use App\Modules\Providers\Models\ServerInbound;
+use App\Modules\Telegram\Texts\PremiumText;
 use App\Support\Input;
 use App\Support\Validation;
 use Illuminate\Database\Eloquent\Collection;
 
 /**
- * Plan categories as the panels keep them (a name unique in the shop), and the catalogue customers browse: the active
+ * Plan categories as the panels keep them (a name unique in the shop, and the premium emoji the bot draws for its leading
+ * emoji — PremiumText), and the catalogue customers browse: the active
  * categories with their sellable plans, then an «سایر پلن‌ها» group for the rest (groups(), catalogue(); group() files any
  * plans so).
  */
@@ -150,6 +152,7 @@ final class PlanCategoryService
         return [
             'id' => $category->id,
             'name' => $category->name,
+            'emoji_id' => $category->emoji_id,
             'is_active' => $category->is_active,
             'sort' => $category->sort,
             'counts' => ['plans' => (int) $category->getAttribute('plans_count')],
@@ -160,7 +163,7 @@ final class PlanCategoryService
 
     /**
      * @param array<string, mixed> $input
-     * @return array{name: string, is_active: bool}
+     * @return array{name: string, emoji_id: string|null, is_active: bool}
      * @throws ValidationException
      */
     private static function validate(array $input, PlanCategory $category): array
@@ -172,10 +175,10 @@ final class PlanCategoryService
             UniqueName::taken($category, $name) => self::TAKEN,
             default => null,
         };
-        if ($refusal !== null) {
-            throw ValidationException::on('name', $refusal);
-        }
+        $errors = $refusal === null ? [] : ['name' => [$refusal]];
+        $emoji = PremiumText::nameEmoji($input, $name, $category->emoji_id, $errors);
+        ValidationException::ifAny($errors);
 
-        return ['name' => $name, 'is_active' => Input::active($input, $category->exists ? $category->is_active : null)];
+        return ['name' => $name, 'emoji_id' => $emoji, 'is_active' => Input::active($input, $category->exists ? $category->is_active : null)];
     }
 }

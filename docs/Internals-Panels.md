@@ -7,16 +7,20 @@ TypeScript, Tailwind 4, shadcn/ui on Radix, react-query and react-router. They a
 PHP only through the JSON API. This page is the map of the shared foundation — the build, the data layer, failures,
 the shell and the component kit — then of the screens built on it ([The screens](#the-screens)). What the panels look
 like to an owner is in [The panels](Panels.md); the API they call is described in [API contract](API-Contract.md).
+The same project builds a third page apart — the shops' Telegram mini app, on the Store API; its own map is
+[Internals: mini app](Internals-Mini-App.md).
 
 ## The source tree
 
 ```
 resources/panel/
   admin/index.html, agent/index.html   each panel's page (entry: src/apps/<panel>/main.tsx)
+  app/index.html, app/open.html        the mini app's page and its bridge to a VPN app (built apart)
   src/
     root.tsx        mount(routes): providers, router, error net — what both panels stand on
     apps/admin/     the owner's routes (app.tsx), menu (nav.ts), shell config, sign-in, owner-only pages
     apps/agent/     an agent's routes, menu, sign-in and account page
+    apps/app/       the mini app: its own routes, screens, kit and Telegram bridge (Internals-Mini-App)
     pages/          the shop's pages both panels have, each its own chunk (pages/lazy.ts)
     components/     the generic kit at the top level; domain folders (plans/, orders/…) beside it
     components/shell/  sidebar, rail, drawer, topbar, the nav tree
@@ -45,7 +49,9 @@ references the owner's own code. The build also writes each page's Content-Secur
 allowed by its hash), a brotli copy beside every script and stylesheet, and `assets/.htaccess`, which serves those
 copies as they are with long caching and the right `Content-Type` (LiteSpeed would otherwise send `.js.br` as
 `application/octet-stream`). Built paths are relative, and each page's inline script sets `<base>` to its own folder,
-so one build works from any sub-folder and any deep link.
+so one build works from any sub-folder and any deep link. The mini app is built apart, `vite build --mode app` (the
+second step of `pnpm build`), into `public/app` with hashed files of its own: a customer's phone loads none of the
+panels' code, and the panels none of its.
 
 `lib/config` reads everything else off the page once: which panel it is, its API base, the router basename and the
 **shop the tab shows**. The owner's tab keeps the shop in its address (`/admin/…` is the main shop, `/admin/s/7/…` agent
@@ -290,7 +296,8 @@ A typed price is read as the server reads money: `tomanOf()` takes «هزار»,
   effect — oxlint enforces it, and there is no lint-disable comment in the tree.
 - A `Button` is `type="button"` unless it says `type="submit"`.
 - Browser storage is for conveniences only, through `lib/storage` (it may refuse).
-- `pnpm check` must be green: the API types current, `tsc`, oxlint, knip (nothing unused), Prettier, the tests.
+- `pnpm check` must be green: the API types and the settings search's index current (`pnpm settings:index`), `tsc`,
+  oxlint, knip (nothing unused), Prettier, the tests.
 
 ## Tests
 
@@ -362,7 +369,9 @@ agency.
 Plans, categories, payment methods and customer groups are admin-ordered lists. `PlanForm` keeps its four tabs in one
 grid cell, the hidden ones `inert` and invisible, so the dialog never changes height under the pointer, and a refused
 save jumps to the first tab with an error. Its `reads` compares prices by their digits and the term in hours, so `dirty`
-is only true when the server would store something else. The bulk price change (`BulkPricesModal`) must be previewed,
+is only true when the server would store something else. Its details tab sets the plan's badge, the label its card
+wears in the mini app and on a website (`components/plans/plan-badge`: the words each shows, as `PlanBadge::label()`).
+The bulk price change (`BulkPricesModal`) must be previewed,
 and applies exactly the request it previewed. A payment method is added through a `PickerModal` of the drivers'
 descriptions; its form (`MethodForm`) is drawn with `DriverFields`.
 
@@ -429,6 +438,29 @@ bot whose traffic covers no plan shows `TrafficShortageNotice` on the dashboard 
 
 Each website-settings card saves only its own fields with a PATCH (`useWebsiteGroup`), and `dirty` is whatever that PATCH
 would change; the answer (the whole website) replaces the page's single read, so another card's draft is left alone.
+
+«مینی‌اپ تلگرام» (`pages/mini-app-settings.tsx`, both panels) is a sectioned page of three sections
+(`MINI_APP_SETTINGS_SECTIONS`): the connection — the switch, the app's address, the bot's menu button —, how it looks,
+the logo among it (`components/mini-app`), and «پیش‌نمایش», the app itself as a customer sees it. One read
+(`miniAppQuery`, `GET /mini-app`) feeds every card; each card saves its own fields with a PATCH (`useMiniAppGroup`),
+whose answer replaces the read, and a `menu_button_error` in it — the save stood, Telegram did not take the menu button
+— is said above the cards. The owner's app passes `appSettings`, the page where `APP_URL` is set: switching the app on
+needs it on https.
+
+The preview (`components/mini-app/preview`) draws Telegram around the real app. `preview-section` picks a customer
+(`customer-picker`, the users list's own search), opens a read-only session for them (`POST /mini-app/preview`: 30
+minutes, even while the app is off) and opens the app's address in a frame on the same site, its fragment carrying what
+Telegram hands a launch — `tgWebAppPreview` (the session's token, in place of launch data), the Bot API version, the
+platform and the theme picked ([Internals: mini app](Internals-Mini-App.md#the-preview)). `telegram-phone` draws the
+phone — the status bar, Telegram's header and back button, the main and secondary buttons, full screen with Telegram's
+floating controls, popups, the fingerprint prompt — in a light or dark theme and two sizes (`telegram.ts`: Telegram's
+themes, the phones, the heights of what Telegram draws), and `use-web-app-bridge` is Telegram's half of
+telegram-web-app.js's frame protocol: the app posts `{eventType, eventData}` to its parent window, the hook keeps what
+Telegram would draw as its state and answers as Telegram does, and ignores a message from any other window. The frame
+opens again — the same session — when the theme, the phone or a card's save changes; «باز کردن دوباره» opens a new
+session, and once one ends a cover over the phone says so. A panel's page may frame the site's own pages alone, and the
+mini app's folder lets the site frame it (`vite.config.ts`, held by `frame-policy.test.ts`).
+
 The panel settings (`apps/admin/settings`) edit config.php's groups through `useConfigGroup`; the update section drives
 an update one step per request until the page reloads on the new build. The web installer (`apps/admin/install`) talks
 to `/api/install` with the install key the owner read off the host (`X-Install-Key`, kept for the tab), and opens on the

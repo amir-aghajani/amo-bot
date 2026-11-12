@@ -30,8 +30,10 @@ use App\Modules\Subscriptions\Enums\ExtraKind;
 use App\Modules\Subscriptions\Enums\MigrationMode;
 use App\Modules\Subscriptions\Enums\MigrationStatus;
 use App\Modules\Subscriptions\Enums\RenewalMethod;
+use App\Modules\Subscriptions\Enums\SubscriptionStatus;
 use App\Modules\Subscriptions\Models\ServerMigration;
 use App\Modules\Subscriptions\Models\Subscription;
+use App\Modules\Subscriptions\Models\TestAccount;
 use App\Modules\Support\Enums\TicketAuthor;
 use App\Modules\Support\Models\Ticket;
 use App\Modules\Support\Models\TicketMessage;
@@ -47,12 +49,14 @@ use App\Support\Money;
 use App\Support\Persian;
 use App\Support\Text;
 use Illuminate\Database\ConnectionInterface;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\QueryException;
 use Psr\Log\LoggerInterface;
 
 /**
- * Queues what the shop tells its admins' report group (report_messages, sent by ReportSender): sales, renewals,
- * top-ups and wallet transfers, receipts and their verdicts, newcomers, agency requests and agents' selling suspended
+ * Queues what the shop tells its admins' report group (report_messages, sent by ReportSender): sales, renewals, free
+ * tests taken, services deleted (by support, by a refund, by the clean-up of ended ones), top-ups and wallet transfers,
+ * receipts and their verdicts, newcomers, agency requests and agents' selling suspended
  * or resumed, failed deliveries, online payments held for support, panels down and up, servers' services moved, ticket
  * conversations and reviews. Each goes to the group of the bot it happened in (servers and the agency to the main
  * bot's), only while a group is connected and the admin wants the topic. Who of support did something is named as
@@ -117,7 +121,8 @@ final class ShopReports
                 $lines[] = '👥 معرف: ' . self::customer($referrer);
             }
 
-            return ['text' => implode("\n", $lines)];
+            // «⚙️ مدیریت کاربر»: their card, to manage them right here (UserManagement).
+            return ['text' => implode("\n", $lines), 'keyboard' => UserManagement::buttons($user->id)];
         });
     }
 
@@ -371,6 +376,87 @@ final class ShopReports
             '💳 مبلغ: ' . Money::format($transfer->amount),
             sprintf('👛 موجودی فرستنده: %s · گیرنده: %s', Money::format($transfer->sender->balance()), Money::format($transfer->recipient->balance())),
         ])]);
+    }
+
+    /**
+     * A free test taken (Subscriptions\Services\TestAccounts) — from the bot, the website or the mini app: whose, which
+     * client and where, its traffic and term, and how many tests the customer has taken in the shop with it, so one taking
+     * test after test is noticed.
+     */
+    public function testTaken(Subscription $subscription): void
+    {
+        $this->report($subscription->shop(), Topic::Tests, static fn(): array => ['text' => implode("\n", [
+            sprintf("🧪 <b>اکانت تست ساخته شد</b> · اشتراک \u{200E}#%d", $subscription->id),
+            '👤 ' . self::customer($subscription->user),
+            ...self::heldService($subscription),
+            '📦 حجم: ' . Messages::traffic($subscription->traffic_limit_bytes) . ' · 📅 پایان: ' . Messages::expiry($subscription->expires_at, $subscription->duration_hours),
+            '🔢 تست‌های این مشتری تا حالا: ' . Persian::number(TestAccount::query()->where('user_id', $subscription->user_id)->whereNotNull('issued_at')->count()),
+        ])]);
+    }
+
+    /**
+     * Support deleted a service (SubscriptionActions::delete()), or a refund of its purchase took it back (`$refunded`):
+     * whose, which client and where, what it still had, who of support (bySupport()) and their note — and a client left
+     * on its panel (`$leftOnPanel`), for support to remove there.
+     */
+    public function serviceDeleted(Subscription $subscription, Actor $by, ?string $note, ?Order $refunded, bool $leftOnPanel): void
+    {
+        $this->report($subscription->shop(), Topic::Deletions, fn(): array => ['text' => implode("\n", [
+            sprintf("🗑 <b>%s</b> · اشتراک \u{200E}#%d", $refunded === null ? 'سرویس حذف شد' : 'سرویس خرید برگشتی حذف شد', $subscription->id),
+            '👤 ' . self::customer($subscription->user),
+            self::service($subscription, self::name($subscription->is_test ? 'اکانت تست' : $subscription->plan->name ?? '—')),
+            self::location($subscription->server),
+            self::leftover($subscription),
+            // Before its money goes back (Payments\Services\PaymentActions::refund()): «for», not «refunded».
+            ...($refunded === null ? [] : [sprintf("💸 برای برگشت مبلغ سفارش \u{200E}#%d", $refunded->id)]),
+            $this->bySupport($by->reviewer),
+            ...self::note(self::SUPPORT_NOTE, $note),
+            ...($leftOnPanel ? ['⚠️ کلاینتش روی پنل سرور ماند؛ آن را از خود پنل حذف کنید.'] : []),
+        ])]);
+    }
+
+    /**
+     * The ended services the current shop's clean-up removed in one run (Subscriptions\Tasks\CleanupServicesTask, «حذف
+     * خودکار سرویس‌های منقضی‌شده»), in one report: each by its client, customer and location, as many as fit a message,
+     * then how many more. Free tests are left out: their taking was reported, their end is no news.
+     *
+     * @param list<Subscription> $services
+     */
+    public function servicesCleanedUp(array $services): void
+    {
+        if ($services === []) {
+            return;
+        }
+
+        $this->report(CurrentBot::id(), Topic::Deletions, static function () use ($services): array {
+            (new Collection($services))->load(['user', 'server']);
+            $head = sprintf('🧹 <b>%s سرویس منقضی‌شده خودکار حذف شد</b>', Persian::number(count($services)));
+            $more = static fn(int $left): string => sprintf('… و %s سرویس دیگر', Persian::number($left));
+            $room = Limits::MESSAGE - self::ROOM - TelegramHtml::visibleLength($head . "\n" . $more(count($services)));
+            $lines = [];
+            foreach ($services as $service) {
+                $line = sprintf('🔖 <code>%s</code> · %s · %s', htmlspecialchars($service->remote_name), self::who($service->user), self::name($service->server->name ?? '—'));
+                $room -= TelegramHtml::visibleLength($line) + 1;
+                if ($room < 0) {
+                    break;
+                }
+                $lines[] = $line;
+            }
+            $left = count($services) - count($lines);
+
+            return ['text' => implode("\n", [$head, ...$lines, ...($left > 0 ? [$more($left)] : [])])];
+        });
+    }
+
+    /** What a deleted service still had: its traffic left and its end — or that its panel had lost its client already. */
+    private static function leftover(Subscription $subscription): string
+    {
+        if ($subscription->status === SubscriptionStatus::Deleted) {
+            return '🔎 کلاینتش از قبل روی پنل نبود.';
+        }
+        $remaining = $subscription->remainingBytes();
+
+        return '📥 حجم باقی‌مانده: ' . ($remaining === null ? Messages::UNLIMITED : Messages::bytes($remaining)) . ' · 📅 پایان: ' . Messages::expiry($subscription->expires_at, $subscription->duration_hours);
     }
 
     /**
@@ -915,18 +1001,34 @@ final class ShopReports
 
     /**
      * A customer as the group reads them: the name (a profile link), the handle and the Telegram id side by side. One
-     * without Telegram shows the name, their email and their number in the shop («#12»). The handle comes after the name,
+     * without Telegram shows the name, their email (else their mobile) and their number in the shop («#12»). The handle comes after the name,
      * a left-to-right mark before it as before the number: after a Persian name «@sara» would read «sara@».
      */
-    private static function customer(User $user): string
+    public static function customer(User $user): string
     {
         $name = self::name($user->name() ?? 'بدون نام');
         if ($user->telegram_id === null) {
-            return sprintf("%s · %s · \u{200E}<code>#%d</code>", $name, $user->email !== null ? htmlspecialchars($user->email) : 'بدون ایمیل', $user->id);
+            return sprintf("%s · %s · \u{200E}<code>#%d</code>", $name, match (true) {
+                $user->email !== null => htmlspecialchars($user->email),
+                // One who signed in by SMS alone: their mobile, after a left-to-right mark as the number is.
+                $user->phone !== null => "\u{200E}" . htmlspecialchars($user->phone),
+                default => 'بدون ایمیل',
+            }, $user->id);
         }
         $handle = $user->handle() === null ? 'بدون نام کاربری' : "\u{200E}@" . htmlspecialchars($user->handle());
 
         return sprintf('<a href="tg://user?id=%d">%s</a> · %s · <code>%d</code>', $user->telegram_id, $name, $handle, $user->telegram_id);
+    }
+
+    /**
+     * A customer on a line shared with more (servicesCleanedUp()): the name — a profile link for one with Telegram, with
+     * their number in the shop («#12») for one without.
+     */
+    private static function who(User $user): string
+    {
+        $name = self::name($user->name() ?? 'بدون نام');
+
+        return $user->telegram_id === null ? sprintf("%s \u{200E}<code>#%d</code>", $name, $user->id) : sprintf('<a href="tg://user?id=%d">%s</a>', $user->telegram_id, $name);
     }
 
     /** The service the order delivered or renewed, read afresh: delivery has just written it. */

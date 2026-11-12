@@ -7,17 +7,22 @@ namespace App\Modules\Store\Api;
 use App\Core\Http\ApiController;
 use App\Modules\Accounts\Http\Customer;
 use App\Modules\Store\Services\StoreCatalog;
+use App\Modules\Store\Services\StoreSales;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 
 /**
- * What the shop sells, to anyone (Store\Services\StoreCatalog): the plans as its bot offers them now, one plan, and how
- * their servers stand. A bearer token, when sent (OptionalCustomerMiddleware), prices the plans for that customer.
+ * What the shop sells, to anyone (Store\Services\StoreCatalog): the plans as its bot offers them now, one plan, how their
+ * servers stand, and the timed sales running (StoreSales). A bearer token, when sent (OptionalCustomerMiddleware), prices
+ * the plans for that customer.
  */
 final class CatalogController extends ApiController
 {
-    public function __construct(private readonly StoreCatalog $catalog) {}
+    public function __construct(
+        private readonly StoreCatalog $catalog,
+        private readonly StoreSales $sales,
+    ) {}
 
     /** GET /plans — the categories in the bot's order, each with its plans; the rest last, under none. */
     public function plans(Request $request, Response $response): Response
@@ -40,5 +45,11 @@ final class CatalogController extends ApiController
     public function status(Request $request, Response $response): Response
     {
         return $this->json($response, ['servers' => $this->catalog->status()]);
+    }
+
+    /** GET /sales — the timed sales running now, the soonest to end first. */
+    public function sales(Request $request, Response $response): Response
+    {
+        return $this->json($response, ['sales' => $this->sales->running()]);
     }
 }

@@ -29,6 +29,7 @@ use App\Modules\Telegram\Messages;
 use App\Modules\Telegram\Texts\BotText;
 use App\Modules\Telegram\Texts\BotTexts;
 use App\Modules\Telegram\Texts\Html;
+use App\Modules\Telegram\Texts\PremiumText;
 use App\Modules\Telegram\Update\CallbackData;
 use App\Support\Money;
 use App\Support\Persian;
@@ -287,7 +288,7 @@ final class CustomServiceHandler implements Handler, RedrawableCheckout
             'duration' => self::dayWords($days),
             'days_price' => Money::format($price->time),
             'devices' => Messages::devices($this->custom->devices()),
-            'server' => $server->name,
+            'server' => PremiumText::server($server),
             'amount' => Money::format($quote->amount()),
         ]);
         $this->screen->show(
@@ -507,7 +508,7 @@ final class CustomServiceHandler implements Handler, RedrawableCheckout
      */
     private function stepText(BotText $buying, BotText $renewal, ?Subscription $renewing, array $values): string
     {
-        return $renewing === null ? $this->texts->render($buying, $values) : $this->texts->render($renewal, $values + ['client' => $renewing->remote_name]);
+        return $renewing === null ? $this->texts->render($buying, $values) : $this->texts->render($renewal, $values + ['client' => $renewing->shownAs()]);
     }
 
     /**

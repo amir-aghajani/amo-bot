@@ -4,7 +4,7 @@
 
 Every setting `config.php` can hold, by section, in the order the file lists them: its default (used while the file
 does not set it) and what it is for (the same text the file shows above the setting). After a setting that picks a
-driver (`DB_CONNECTION`, `MAIL_TRANSPORT`) come each driver's own settings, as the panel shows them.
+driver (`DB_CONNECTION`, `MAIL_TRANSPORT`, `SMS_DRIVER`) come each driver's own settings, as the panel shows them.
 [Configuration](Configuration.md) explains how the file is created, edited and protected.
 
 ## The shop
@@ -94,6 +94,25 @@ It has no settings of its own.
 | Setting | Default | In the panel |
 |---|---|---|
 | `MAIL_RESEND_API_KEY` | `''` | «کلید API» — «در resend.com › API Keys بسازید؛ با re_ شروع می‌شود.»; required; a secret: the panel never shows it, and leaving it blank keeps the stored value. |
+
+## SMS
+
+| Setting | Default | What it is |
+|---|---|---|
+| `SMS_DRIVER` | `'none'` | How the shop sends one-time codes by SMS — a website's sign-in by phone number: none, or an SMS driver — ippanel, IPPanel's pattern sending (ippanel.com: an access key, one of the account's lines and a pattern approved there whose one variable is the code). A driver's own SMS_* settings end this section, as the panel's settings write them. |
+| `SMS_AGENTS` | `false` | Whether agents' websites may send sign-in codes by SMS too. Every SMS is paid from this one account, whichever shop's website asked for it. |
+
+### The ippanel driver
+
+`'SMS_DRIVER' => 'ippanel'` — «IPPanel (ای‌پی پنل)»: «سامانه پیامک IPPanel: کد ورود با یک الگوی (پترن) تاییدشده در پنل IPPanel فرستاده می‌شود؛ پیامک الگو از خط خدماتی می‌رود و به شماره‌هایی که پیامک تبلیغاتی را بسته‌اند هم می‌رسد.» («الگو باید در پنل IPPanel تایید شده باشد و فقط یک متغیر، برای کد ورود، داشته باشد.»؛ «شماره فرستنده باید یکی از خط‌های همان حساب IPPanel باشد.»؛ «هزینه هر پیامک از اعتبار همین حساب IPPanel کم می‌شود.»)
+
+| Setting | Default | In the panel |
+|---|---|---|
+| `SMS_IPPANEL_API_KEY` | `''` | «کلید دسترسی» — «در پنل IPPanel، «توسعه‌دهندگان ← کلیدهای دسترسی» یک کلید بسازید.»; required; a secret: the panel never shows it, and leaving it blank keeps the stored value. |
+| `SMS_IPPANEL_FROM` | `''` | «شماره فرستنده» — «یکی از خط‌های همین حساب IPPanel؛ مثل 3000505 یا +983000505.»; required. |
+| `SMS_IPPANEL_PATTERN` | `''` | «کد الگو» — «کد الگوی تاییدشده در پنل IPPanel؛ متن پیامک همان متن الگوست.»; required. |
+| `SMS_IPPANEL_VARIABLE` | `'code'` | «نام متغیر کد» — «متغیری از الگو که کد ورود جای آن می‌نشیند؛ برای %code% در متن الگو، code.»; required. |
+| `SMS_IPPANEL_URL` | `'https://edge.ippanel.com/v1'` | «آدرس API» — «فقط اگر IPPanel آدرس دیگری داده باشد؛ پیش‌فرض https://edge.ippanel.com/v1.»; required; under «تنظیمات پیشرفته». |
 
 ## Keys and secrets
 

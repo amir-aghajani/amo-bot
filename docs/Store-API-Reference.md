@@ -3,9 +3,11 @@
 # Store API reference
 
 Every operation of the Store API, the API of a shop's website: who may call it, its parameters, its body field
-by field and its answers, followed by the schemas its answers use. How to use it (signing in, buying,
-idempotency keys, which errors to handle) is explained on the [Store API](Store-API.md) pages; the operations
-for the shop's admins are in the [admin API reference](Store-Admin-API-Reference.md). The source is
+by field and its answers, followed by the schemas its answers use. The shop's Telegram mini app calls the same
+API under a store key of its own; an operation only one of the two has says so (**Door**, `x-door` in the
+description). How to use it (signing in, buying, idempotency keys, which errors to handle) is explained on the
+[Store API](Store-API.md) pages; the operations for the shop's admins are in the
+[admin API reference](Store-Admin-API-Reference.md). The source is
 `resources/api/openapi.yaml`; the same description as one JSON file, for Swagger UI, Redoc or a client
 generator, is `docs/openapi.json` ([on GitHub](https://github.com/amir-aghajani/amo-bot/blob/main/docs/openapi.json)).
 
@@ -14,14 +16,14 @@ Paths are relative to the website's base address, `{APP_URL}/api/store/v1/{store
 
 | Parameter | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `store` | path | string matching `^[0-9a-f]{24}$` | yes | The website's store key, which names the shop. Not a secret; the panel shows it with the base address and can replace it |
+| `store` | path | string matching `^[0-9a-f]{24}$` | yes | The store key of the shop's website, or of its Telegram mini app (each has a key of its own), which names the shop. Not a secret; the panel shows the website's with the base address and can replace it |
 
 Every operation may also return the common error shape ([errors](Store-API.md#errors)). Objects are closed
 ([API schemas](API-Schemas.md)).
 
 ## The customer scheme
 
-A website customer's session: `Authorization: Bearer <token>`, with the token from their sign-in (64 hex characters), one per device. Once the session ends, every request with its token is a 401 with `WWW-Authenticate: Bearer`, and the customer signs in again. A session ends when the customer signs that device out (`POST /auth/logout`) or ends it from another device (`DELETE /me/sessions/{id}`); when their password is changed (`PUT /me/password`, or set by a merge: every session except the one that changed it) or reset (`POST /auth/password/reset` or its second step: every session); when support signs them out of every device from a panel; when a 21st session opens (the oldest ends: at most 20 per customer); after 30 days unused; and 180 days after the sign-in. A banned customer's token gets a 403. Changing how the account signs in, and handing a service to another customer (`POST /subscriptions/{id}/transfer`), also need a recent sign-in: within 15 minutes, or a way in proven again since (`POST /me/reauthenticate`). Otherwise the answer is a 403 whose `WWW-Authenticate` says so (`Bearer error="insufficient_user_authentication", max_age=900`).
+A website customer's session: `Authorization: Bearer <token>`, with the token from their sign-in (64 hex characters), one per device. Once the session ends, every request with its token is a 401 with `WWW-Authenticate: Bearer`, and the customer signs in again. A session ends when the customer signs that device out (`POST /auth/logout`) or ends it from another device (`DELETE /me/sessions/{id}`); when their password is changed (`PUT /me/password`, or set by a merge: every session except the one that changed it) or reset (`POST /auth/password/reset` or its second step: every session); when support signs them out of every device from a panel; when a 21st session opens (the oldest ends: at most 20 per customer); after 30 days unused; and 180 days after the sign-in. A banned customer's token gets a 403. Changing how the account signs in, and handing a service to another customer (`POST /subscriptions/{id}/transfer`), also need a recent sign-in: within 15 minutes, or a way in proven again since (`POST /me/reauthenticate`). Otherwise the answer is a 403 whose `WWW-Authenticate` says so (`Bearer error="insufficient_user_authentication", max_age=900`). A panel's preview of the mini app (`session.method` `preview`) is a session of a customer's that ends 30 minutes after it opened, whatever its use; it works through the mini app's key alone (a 401 under a website's, or a guest's request where a guest may ask) and only reads: any other request is a 403 («این پیش‌نمایش است؛ در آن چیزی ذخیره یا فرستاده نمی‌شود.»), but for a built service's price (`POST /custom-services/quote` without a `discount_code`).
 
 ## Public
 
@@ -37,14 +39,20 @@ Anyone can call these; only the store key is needed.
 | [`POST /auth/register`](#post-authregister) | Sign up with an email |
 | [`POST /auth/register/verify`](#post-authregisterverify) | Finish signing up with the emailed code |
 | [`POST /auth/login`](#post-authlogin) | Sign in with an email and password |
-| [`POST /auth/login/2fa`](#post-authlogin2fa) | Finish a password sign-in with its second step |
+| [`POST /auth/login/2fa`](#post-authlogin2fa) | Finish a password sign-in, or a sign-in by SMS, with its second step |
 | [`POST /auth/password/forgot`](#post-authpasswordforgot) | Start a password reset |
 | [`POST /auth/password/reset`](#post-authpasswordreset) | Set a new password with the code from `POST /auth/password/forgot` |
+| [`POST /auth/phone`](#post-authphone) | Start a sign-in by SMS |
+| [`POST /auth/phone/verify`](#post-authphoneverify) | Finish a sign-in by SMS with the texted code |
 | [`GET /captcha/challenge`](#get-captchachallenge) | Get a challenge for the captcha widget |
 | [`POST /captcha/verify`](#post-captchaverify) | Check a captcha token for the site's own backend |
+| [`POST /auth/mini-app`](#post-authmini-app) | Sign in on the shop's Telegram mini app |
+| [`GET /app/logo`](#get-applogo) | The mini app's logo, as bytes (`app.logo_url` of `GET /`) |
 | [`GET /plans`](#get-plans) | What the shop sells now, as the bot's «خرید اشتراک» offers it |
 | [`GET /plans/{id}`](#get-plansid) | One plan, as `GET /plans` shows it |
 | [`GET /status`](#get-status) | Server status |
+| [`GET /sales`](#get-sales) | The timed sales running now («فروش ویژه») |
+| [`GET /tutorial`](#get-tutorial) | The shop's tutorial («آموزش») |
 | [`GET /custom-services`](#get-custom-services) | «سرویس دلخواه» |
 | [`GET /reviews`](#get-reviews) | The approved reviews, newest first, a page at a time |
 | [`POST /reviews`](#post-reviews) | Write a review |
@@ -67,6 +75,7 @@ The shop's public profile. Its name and bot, support contact, sign-in options an
 Get a nonce for an id_token sign-in. For Telegram's popup or Google, when signing in, adding a way in or proving one again: the site opens the provider's sign-in with the nonce and sends it back once, with the token. A 422 while neither Telegram nor Google sign-in is on for the website («ورود با تلگرام و Google برای این وب‌سایت فعال نیست.»): no sign-in would take it. A 429 once this address network asked for 120 nonces, states and codes in 10 minutes (one address can be many customers on a mobile network). A 503 while the shop already holds its maximum of open sign-ins (5000 nonces, each valid for half an hour).
 
 - **Who:** anyone.
+- **Door:** the website's only: under the mini app's key it is a `404`.
 
 **Body:** none.
 
@@ -82,6 +91,7 @@ Get a nonce for an id_token sign-in. For Telegram's popup or Google, when signin
 Start a Telegram sign-in by redirect. Returns the address to send the browser to. The site makes the PKCE verifier, keeps it in this browser and sends only its challenge; the shop makes the state (which keeps the challenge) and the nonce. Only `POST /auth/telegram` accepts this state back, together with the verifier (a signed-in customer uses `POST /me/telegram/authorize` instead). A 422 while the website has no client secret, or on `redirect_uri` or `code_challenge`; a 429 once this address network asked for 120 nonces, states and codes in 10 minutes; a 503 while the shop holds its maximum of open sign-ins.
 
 - **Who:** anyone.
+- **Door:** the website's only: under the mini app's key it is a `404`.
 
 **Body**, as JSON:
 
@@ -104,6 +114,7 @@ Start a redirect sign-in in this browser: where Telegram sends the browser back 
 Sign in with Telegram. Send the popup's id_token, or the redirect's code with the state from `POST /auth/telegram/authorize` and the verifier of its challenge. A signed-in customer's state, or a code and state brought back to another browser, signs nobody in. Signs in the shop's customer with that Telegram account, or registers a new customer as the bot does. A 401 when the proof does not hold; a 403 when banned; a 422 when Telegram sign-in is off or a field is missing; a 429 after too many failures from this address network (30 in 15 minutes); a 502 when Telegram cannot be reached.
 
 - **Who:** anyone.
+- **Door:** the website's only: under the mini app's key it is a `404`.
 
 **Body**, as JSON:
 
@@ -140,6 +151,7 @@ One of:
 Sign in with Google. Send the id_token Google Identity Services gave the page, with the nonce it was requested with. Signs in the customer with that Google account; else the customer with the email address Google vouches for (that account can sign in with Google from then on, and the customer is notified); else registers a new customer. Google vouches for an address only when `email_verified` is true and it is an @gmail.com or Google Workspace (`hd`) address; any other address is ignored. A 401 when the proof does not hold; a 403 when banned; a 409 when the address belongs to an account that cannot be linked this way (two-factor sign-in is on, or another Google account is linked): the customer signs in their usual way and adds Google from their account. A 422 when Google sign-in is off; a 429 after too many failures from this address network; a 502 when Google cannot be reached.
 
 - **Who:** anyone.
+- **Door:** the website's only: under the mini app's key it is a `404`.
 
 **Body**, as JSON:
 
@@ -163,6 +175,7 @@ A Google sign-in: the id_token Google Identity Services gave the page (its `cred
 Sign up with an email. Emails a six-digit code to the address (finish with `POST /auth/register/verify`); if the address already has an account, the email says so instead. The answer is the same either way. Asking again sends a new code that replaces the last one. A 422 when email sign-up is off or a field (the captcha included) is invalid. A 429 when a code went to the address in the last minute, the address got its 10 emails today (counted across all shops), this address network sent its 20 an hour or asked too often, or the address is locked after failed codes (10 wrong an hour, 20 a day). A 502 when the email could not be sent. A 503 when the shop sends no email, the shop's or the installation's email budget is spent (60 an hour and 300 a day per shop), or the captcha could not be checked.
 
 - **Who:** anyone.
+- **Door:** the website's only: under the mini app's key it is a `404`.
 - **Captcha:** the website's captcha, for the action `sign_up`: send the widget's token in `captcha` ([the captcha](Store-API-Sign-In.md#the-captcha)).
 
 **Body**, as JSON:
@@ -190,6 +203,7 @@ The first step of signing up. Every refusal is returned at once, under its field
 Finish signing up with the emailed code. Creates the account and signs it in; the referrer, if any, is notified. A 409 when the address got an account meanwhile; a 422 when the code is wrong, expired, used or tried five times (or email sign-up is off); a 429 after too many failures, or when the address's budget of wrong codes is spent (10 an hour, 20 a day, each counted before it is checked).
 
 - **Who:** anyone.
+- **Door:** the website's only: under the mini app's key it is a `404`.
 
 **Body**, as JSON:
 
@@ -212,6 +226,7 @@ The last step of signing up: the emailed code.
 Sign in with an email and password. If the account has two-factor sign-in on, the answer is a 202 with a challenge instead (finish with `POST /auth/login/2fa`). A 401 for a wrong email or password (one answer for both, so it never reveals which addresses have an account); a 403 when banned; a 422 on an invalid field (the captcha included); a 429 after too many failures from this address network (30 in 15 minutes) or on this account (50, from all addresses); a 503 when the captcha could not be checked.
 
 - **Who:** anyone.
+- **Door:** the website's only: under the mini app's key it is a `404`.
 - **Captcha:** the website's captcha, for the action `sign_in`: send the widget's token in `captcha` ([the captcha](Store-API-Sign-In.md#the-captcha)).
 
 **Body**, as JSON:
@@ -232,17 +247,18 @@ Sign in with an email and password. If the account has two-factor sign-in on, th
 
 ### POST /auth/login/2fa
 
-Finish a password sign-in with its second step. Send the challenge with the six-digit code from the account's authenticator app (Persian digits accepted; each code works once) or one of its recovery codes (used up). If the challenge came from a password reset, the new password is set now and every other session of the account ends. A 401 when the challenge is no longer valid (expired, five wrong codes, or two-factor turned off since): sign in again. A 403 when banned; a 422 when a field is missing or the code is wrong. A 429 after too many failures from this address network or on this account, or when the account's second-step budget is spent: 10 codes an hour and 20 a day, counted before each is checked, whoever tries them (the customer is notified once a day).
+Finish a password sign-in, or a sign-in by SMS, with its second step. Send the challenge with the six-digit code from the account's authenticator app (Persian digits accepted; each code works once) or one of its recovery codes (used up). If the challenge came from a password reset, the new password is set now and every other session of the account ends; if it came from a sign-in by SMS, the session is `phone_2fa` and carries the merge offer `POST /auth/phone/verify` would have. A 401 when the challenge is no longer valid (expired, five wrong codes, or two-factor turned off since): sign in again. A 403 when banned; a 422 when a field is missing or the code is wrong. A 429 after too many failures from this address network or on this account, or when the account's second-step budget is spent: 10 codes an hour and 20 a day, counted before each is checked, whoever tries them (the customer is notified once a day).
 
 - **Who:** anyone.
+- **Door:** the website's only: under the mini app's key it is a `404`.
 
 **Body**, as JSON:
 
-The second step of a password sign-in.
+The second step of a password sign-in, or of a sign-in by SMS.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `challenge` | string | yes | The challenge from `POST /auth/login` (or `/auth/password/reset`). |
+| `challenge` | string | yes | The challenge from `POST /auth/login` (or `/auth/password/reset`, `/auth/phone/verify`). |
 | `code` | string | yes | The current six-digit code from the account's authenticator app (Persian digits and spaces accepted), or one of its recovery codes (any case, dashes and spaces accepted). |
 
 **Answers**
@@ -257,6 +273,7 @@ The second step of a password sign-in.
 Start a password reset. Emails a six-digit code when the address has an account; an address without one gets an email saying so, at most once a day (a second request that day sends nothing). The answer is the same either way. A 422 on the address or the captcha. A 429 when a code went to the address in the last minute, the address got its 10 emails today (counted across all shops), this address network sent its 20 an hour or asked too often, or the address is locked after failed codes (10 wrong an hour, 20 a day). A 502 when the email could not be sent. A 503 when the shop sends no email, the shop's or the installation's email budget is spent, or the captcha could not be checked.
 
 - **Who:** anyone.
+- **Door:** the website's only: under the mini app's key it is a `404`.
 - **Captcha:** the website's captcha, for the action `password_reset`: send the widget's token in `captcha` ([the captcha](Store-API-Sign-In.md#the-captcha)).
 
 **Body**, as JSON:
@@ -278,6 +295,7 @@ Start a password reset. Emails a six-digit code when the address has an account;
 Set a new password with the code from `POST /auth/password/forgot`. The password is saved, every session of the account ends, this device is signed in and the customer is notified. If two-factor sign-in is on (a reset does not turn it off), the answer is a 202 with a challenge and nothing changes yet: `POST /auth/login/2fa` sets the new password. A 403 when banned; a 422 on an invalid field, or a code that is wrong, expired, used or tried five times; a 429 after too many failures, or when the address's budget of wrong codes is spent (10 an hour, 20 a day, each counted before it is checked; the account is notified once a day).
 
 - **Who:** anyone.
+- **Door:** the website's only: under the mini app's key it is a `404`.
 
 **Body**, as JSON:
 
@@ -295,11 +313,61 @@ Set a new password with the code from `POST /auth/password/forgot`. The password
 | `202` | The code is right; the account needs its authenticator app's code, which sets the new password and signs in. Nothing changed yet | [StoreTwoFactorResponse](#storetwofactorresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
+### POST /auth/phone
+
+Start a sign-in by SMS. Texts a six-digit code to an Iranian mobile number (finish with `POST /auth/phone/verify`), whether or not the number has an account: the answer is the same either way. The code works for 5 minutes and allows five tries; asking again (not before `resend_in` seconds) texts a new code that replaces the last. A 422 while the website does not sign in by SMS («ورود با شماره موبایل برای این وب‌سایت فعال نیست.»: switched off, or no SMS goes out for it — `sign_in.phone` of `GET /` says so), on `phone` when it is no Iranian mobile, or on `captcha`. A 429 when a code went to the number in the last minute, the number got its 5 codes this hour or 10 today (counted across all shops), this address network asked for its 20 an hour or asked too often. Wrong codes never stop a code going: they stop the number's codes being tried (`POST /auth/phone/verify`). A 502 when the SMS provider did not take it (the message says only that it did not go: try again in a moment; the code texted before, if any, still works). A 503 when the shop's or the installation's SMS budget is spent (60 an hour and 300 a day per shop), or the captcha could not be checked.
+
+- **Who:** anyone.
+- **Door:** the website's only: under the mini app's key it is a `404`.
+- **Captcha:** the website's captcha, for the action `phone_sign_in`: send the widget's token in `captcha` ([the captcha](Store-API-Sign-In.md#the-captcha)).
+
+**Body**, as JSON:
+
+The first step of a sign-in by SMS.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `phone` | string | yes | An Iranian mobile number as the customer types it: 09121234567, 9121234567, +989121234567 or 00989121234567, Persian or Arabic digits, spaces and dashes accepted. Kept in E.164 (+989121234567). |
+| `captcha` | string | no | The captcha widget's token, while the website uses a captcha (`GET /` says which and how to draw it), solved for the operation's action (its `x-captcha`). |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `202` | A code was texted | [StoreSmsSentResponse](#storesmssentresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### POST /auth/phone/verify
+
+Finish a sign-in by SMS with the texted code. Signs in the shop's customer whose verified mobile it is — the number they shared with the bot, or proved on the website (of two holding it, the one with a Telegram account, then the one seen last) —, or registers a new customer with the number alone (with `referral_code`; the referrer, if any, is notified). When another account of the shop holds the number too, the answer carries a merge offer (`merge`, as adding a way in offers one: `POST /me/merge` with the new token takes it), unless the merge is not allowed or that account has two-factor sign-in on. A code by SMS is weaker than Telegram or Google (a SIM swapped, or a number the carrier gave someone else, reads it): if the account has two-factor sign-in on, the answer is a 202 with a challenge instead (finish with `POST /auth/login/2fa`, as after a password), and a session signed in by SMS alone (`session.method` `phone`) is no strong sign-in for the admin API. A 403 when banned; a 422 while the website does not sign in by SMS, on `phone`, or on `code` when it is wrong, expired, used or tried five times; a 429 after too many failures from this address network (30 in 15 minutes), or when the number's budget of wrong codes is spent (10 an hour, 20 a day, each counted before it is checked — only while a code waits for the number: a guess with none waiting costs the number nothing).
+
+- **Who:** anyone.
+- **Door:** the website's only: under the mini app's key it is a `404`.
+
+**Body**, as JSON:
+
+The last step of a sign-in by SMS: the texted code.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `phone` | string | yes | An Iranian mobile number as the customer types it: 09121234567, 9121234567, +989121234567 or 00989121234567, Persian or Arabic digits, spaces and dashes accepted. Kept in E.164 (+989121234567). |
+| `code` | string | yes | The six-digit texted code (Persian digits accepted). |
+| `referral_code` | string | no | The invite code the visitor came with: a new customer becomes its owner's referral. Ignored for an existing customer. |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | Signed in; the bearer token is shown only this once — with a merge offer when another account holds the number too | [StoreSignInResponse](#storesigninresponse) |
+| `202` | The code is right; the account needs its authenticator app's code. No session yet | [StoreTwoFactorResponse](#storetwofactorresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
 ### GET /captcha/challenge
 
 Get a challenge for the captcha widget. For a widget that fetches its challenge from the shop: ALTCHA's `challengeurl`. A new challenge every time, never cached; it is solved and sent once, within 15 minutes. `action` binds it to a form, so its solution passes no form of another action. A 404 while the website asks for no captcha, or for one whose widget makes its own challenge (Turnstile); a 422 on `action`.
 
 - **Who:** anyone.
+- **Door:** the website's only: under the mini app's key it is a `404`.
 
 **Parameters**
 
@@ -319,6 +387,7 @@ Get a challenge for the captcha widget. For a widget that fetches its challenge 
 Check a captcha token for the site's own backend. For the site's own forms (a contact form): the shop holds the captcha's secret and says whether the token passed for the action the backend names, where it was solved (Turnstile reports the host, which must be the website's address or one of its origins) and why it failed. Call it server to server: a browser's claim that it passed proves nothing. Each token is accepted once (an ALTCHA solution, for the 15 minutes its challenge lives). A 200 whether or not it passed; a 409 while the website asks for no captcha; a 422 on `token`, `action` or `remoteip`. A 429 past the website's 3000 checks in 10 minutes (the backend is one address for all its visitors), or past 120 refused tokens in that time from the visitor's network: the one `remoteip` names, else the backend's own. So pass the visitor's address, and a bot behind the site's forms uses up only its own network's allowance. This budget is separate from sign-ins. A 503 when the token could not be checked (Cloudflare cannot be reached).
 
 - **Who:** anyone.
+- **Door:** the website's only: under the mini app's key it is a `404`.
 
 **Body**, as JSON:
 
@@ -335,6 +404,47 @@ A captcha token from one of the site's own forms, which the site's backend asks 
 | Status | What it is | Body |
 |---|---|---|
 | `200` | Checked | [StoreCaptchaVerdict](#storecaptchaverdict) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### POST /auth/mini-app
+
+Sign in on the shop's Telegram mini app: send the launch data Telegram handed the app (`Telegram.WebApp.initData`), which Telegram signs with the shop's bot's token. Signs in the shop's customer with that Telegram account, or registers a new customer as the bot does (with `referral_code`, the code a referral link opened the app with). The data signs in for a day after the app opened; the session counts as signed in when the app opened, so a sign-in with data older than 15 minutes changes nothing that asks a recent sign-in until a way in is proven again (`POST /me/reauthenticate`). Only through the mini app's key (a website's: 404). A 401 when the data does not hold (another bot's, tampered with, or older than a day); a 403 when banned; a 422 on `init_data` when none is sent; a 429 after too many failures from this address network (30 in 15 minutes).
+
+- **Who:** anyone.
+- **Door:** the mini app's only: under a website's key it is a `404`.
+
+**Body**, as JSON:
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `init_data` | string | yes | `Telegram.WebApp.initData`, exactly as Telegram handed it to the app. |
+| `referral_code` | string | no | A new customer's invite code: what follows `ref_` in the start parameter a referral link opened the app with (`initDataUnsafe.start_param`). Ignored for a customer who already has an account. |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | Signed in; the bearer token is shown only this once | [StoreSignInResponse](#storesigninresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### GET /app/logo
+
+The mini app's logo, as bytes (`app.logo_url` of `GET /`). Only through the mini app's key (a website's: 404); a 404 while it has none.
+
+- **Who:** anyone.
+- **Door:** the mini app's only: under a website's key it is a `404`.
+
+**Parameters**
+
+| Name | In | Type | Required | What it is |
+|---|---|---|---|---|
+| `v` | query | string | no | What `app.logo_url` adds to tell a replaced logo from the one a phone kept: the shop ignores it. |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | [Picture](API-Schemas.md#response-picture) | the bytes, as `image/jpeg`, `image/png`, `image/webp` |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
 ### GET /plans
@@ -382,6 +492,32 @@ Server status. The servers of the plans on sale, in order: whether each takes ne
 | Status | What it is | Body |
 |---|---|---|
 | `200` | OK | [StoreStatusResponse](#storestatusresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### GET /sales
+
+The timed sales running now («فروش ویژه»): each one's name, percent, end and what it holds for, the soonest to end first — for a banner. Each plan's own price already carries the largest of them that holds for its reader (`StorePlan.discount`).
+
+- **Who:** anyone.
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | OK | [StoreSalesResponse](#storesalesresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### GET /tutorial
+
+The shop's tutorial («آموزش»): the very text the bot shows under its «آموزش» button, in Telegram's HTML.
+
+- **Who:** anyone.
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | OK | [StoreTutorialResponse](#storetutorialresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
 ### GET /custom-services
@@ -454,6 +590,9 @@ For the signed-in customer, with their bearer token ([the customer scheme](#the-
 | [`GET /me`](#get-me) | The signed-in customer's account, with their unread notification count |
 | [`PATCH /me`](#patch-me) | Change the customer's names |
 | [`POST /me/reauthenticate`](#post-mereauthenticate) | Prove a way into this account again |
+| [`POST /me/reauthenticate/phone`](#post-mereauthenticatephone) | Text a code to the account's own mobile, to prove it again |
+| [`PUT /me/biometric`](#put-mebiometric) | A new secret for the mini app to keep behind the device's fingerprint or face (Telegram's `BiometricManager.updateBiometricToken`) |
+| [`DELETE /me/biometric`](#delete-mebiometric) | Forget this session's fingerprint secret |
 | [`POST /me/telegram/authorize`](#post-metelegramauthorize) | Start a Telegram redirect for the signed-in customer |
 | [`PUT /me/password`](#put-mepassword) | Set or change the customer's password |
 | [`GET /me/sessions`](#get-mesessions) | The devices the customer is signed in on, newest first |
@@ -463,6 +602,8 @@ For the signed-in customer, with their bearer token ([the customer scheme](#the-
 | [`POST /me/2fa/disable`](#post-me2fadisable) | Turn two-factor sign-in off |
 | [`POST /me/identities/telegram`](#post-meidentitiestelegram) | Add a Telegram account to the customer's account |
 | [`POST /me/identities/google`](#post-meidentitiesgoogle) | Add a Google account to the customer's account |
+| [`POST /me/identities/phone`](#post-meidentitiesphone) | Add a mobile number to the customer's account |
+| [`POST /me/identities/phone/verify`](#post-meidentitiesphoneverify) | Finish adding a mobile number with the texted code |
 | [`POST /me/identities/email`](#post-meidentitiesemail) | Add an email and password to the customer's account |
 | [`POST /me/identities/email/verify`](#post-meidentitiesemailverify) | Finish adding an email with the emailed code |
 | [`DELETE /me/identities/{kind}`](#delete-meidentitieskind) | Remove a way in from the customer's account |
@@ -472,9 +613,10 @@ For the signed-in customer, with their bearer token ([the customer scheme](#the-
 | [`GET /subscriptions`](#get-subscriptions) | The customer's services, newest first |
 | [`POST /subscriptions/claim`](#post-subscriptionsclaim) | Add a service to the customer's account by its link («افزودن سرویس با لینک»), as the bot does |
 | [`GET /subscriptions/{id}`](#get-subscriptionsid) | One of the customer's services, as last read from its panel (`synced_at`) |
-| [`PATCH /subscriptions/{id}`](#patch-subscriptionsid) | Switch the service's auto-renewal («تمدید خودکار») on or off |
+| [`PATCH /subscriptions/{id}`](#patch-subscriptionsid) | Switch the service's auto-renewal («تمدید خودکار») on or off, give it the customer's own name («نام دلخواه», `label`), or both |
 | [`POST /subscriptions/{id}/refresh`](#post-subscriptionsidrefresh) | Read the service from its panel now, with whether it is connected (`presence`) |
 | [`POST /subscriptions/{id}/rotate-link`](#post-subscriptionsidrotate-link) | Change the service's subscription link (`link_rotation`) |
+| [`GET /subscriptions/{id}/qr`](#get-subscriptionsidqr) | The service's QR card, the one the bot draws for a delivery (whether or not the shop's bot sends it |
 | [`GET /subscriptions/{id}/transfer`](#get-subscriptionsidtransfer) | «انتقال سرویس», before it is done |
 | [`POST /subscriptions/{id}/transfer`](#post-subscriptionsidtransfer) | «انتقال سرویس» |
 | [`GET /subscriptions/{id}/renewal`](#get-subscriptionsidrenewal) | Preview a service's renewal |
@@ -498,6 +640,11 @@ For the signed-in customer, with their bearer token ([the customer scheme](#the-
 | [`POST /discount-codes/check`](#post-discount-codescheck) | Check a discount code before paying |
 | [`POST /gift-codes/redeem`](#post-gift-codesredeem) | Redeem a gift code, as the bot's «🎁 کد هدیه» does |
 | [`GET /referral`](#get-referral) | The customer's referral details |
+| [`GET /test-account`](#get-test-account) | The free test accounts («اکانت تست») the customer can take now |
+| [`POST /test-account`](#post-test-account) | Take a free test account on one of the servers `GET /test-account` offers |
+| [`GET /wheel`](#get-wheel) | The lucky wheel («گردونه شانس») as the customer finds it |
+| [`POST /wheel/spin`](#post-wheelspin) | Spin the lucky wheel |
+| [`GET /lottery`](#get-lottery) | The nightly draw («قرعه‌کشی شبانه») |
 | [`GET /notifications`](#get-notifications) | The customer's notifications, newest first |
 | [`POST /notifications/read`](#post-notificationsread) | Mark notifications as read |
 | [`GET /tickets`](#get-tickets) | The customer's support tickets, latest activity first |
@@ -564,13 +711,13 @@ The customer's names. Only the fields sent change. An account with Telegram take
 
 ### POST /me/reauthenticate
 
-Prove a way into this account again. Changing how the account signs in needs a sign-in from the last 15 minutes; an older session gets a 403 and calls this first. Prove the account's password (with the authenticator app's code or a recovery code while two-factor sign-in is on), its Telegram account (the popup's id_token with a nonce from `POST /auth/nonce`, or the redirect's code with the state from `POST /me/telegram/authorize` for this session and the verifier of its challenge), or its Google account. The session may then change the account's ways in for 15 minutes. A 422 on `method` for anything but password, telegram or google; a 422 (no field) while the website has that sign-in method off; a 422 on `password` for an account without a password (prove another way); a 422 on the field when it is missing, the proof does not hold (`password`, `code` or `id_token`) or it proves another account. A 429 after too many failures (counted like sign-ins; a code also counts against the account's second-step budget); a 502 when the provider cannot be reached.
+Prove a way into this account again. Changing how the account signs in needs a sign-in from the last 15 minutes; an older session gets a 403 and calls this first. Prove the account's password (with the authenticator app's code or a recovery code while two-factor sign-in is on), its Telegram account (the popup's id_token with a nonce from `POST /auth/nonce`, or the redirect's code with the state from `POST /me/telegram/authorize` for this session and the verifier of its challenge), its Google account, or its mobile (`phone` with the code `POST /me/reauthenticate/phone` texted for this very session, on a website that signs in by SMS, for an account without two-factor sign-in) — or, in the mini app, the launch data Telegram handed it (`mini_app` with `init_data` made in the last 15 minutes: the session is recent from when it was made, never less recent than it was) or this session's fingerprint secret (`biometric` with the `token` from `PUT /me/biometric`). The session may then change the account's ways in for 15 minutes; a session signed in with a password or a code by SMS alone becomes a strong one when Telegram, Google, the mini app or the password with its second step is proven (a code by SMS makes none strong). A 422 on `method` for anything but password, telegram, google, phone, mini_app or biometric, for phone on an account without an Iranian mobile or with two-factor sign-in on («این حساب ورود دو مرحله‌ای دارد؛ با رمز عبور و کد برنامه احراز هویت تایید کنید.»), and for mini_app or biometric through a website's key («این روش تایید فقط در مینی‌اپ فروشگاه کار می‌کند؛ با روش ورود دیگری تایید کنید.»); a 422 (no field) while the website has that sign-in method off; a 422 on `password` for an account without a password (prove another way); a 422 on the field when it is missing, the proof does not hold (`password`, `code`, `id_token`, `init_data` or `token`; a texted code that is wrong, expired, used, tried five times or another session's) or it proves another account. A 429 after too many failures (counted like sign-ins; a code also counts against the account's second-step budget); a 502 when the provider cannot be reached.
 
 - **Who:** the signed-in customer ([the customer scheme](#the-customer-scheme)).
 
 **Body**, as JSON:
 
-Proof of a way into this account: its password (with the second step's code while two-factor sign-in is on), its Telegram account (popup or redirect), or its Google account.
+Proof of a way into this account: its password (with the second step's code while two-factor sign-in is on), its Telegram account (popup or redirect), its Google account, or a code texted to its mobile (on a website that signs in by SMS) — or, in the mini app (through its key alone), its launch data (made in the last 15 minutes) or this session's fingerprint secret.
 
 One of:
 
@@ -607,6 +754,27 @@ One of:
 | `id_token` | string | yes | The id_token Google gave the page. |
 | `nonce` | string | yes | The nonce from `POST /auth/nonce`. |
 
+**`StoreReauthenticatePhoneRequest`**
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `method` | string: `phone` | yes |  |
+| `code` | string | yes | The six-digit code `POST /me/reauthenticate/phone` texted to the account's mobile for this session (Persian digits accepted). |
+
+**`StoreReauthenticateMiniAppRequest`**
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `method` | string: `mini_app` | yes |  |
+| `init_data` | string | yes | `Telegram.WebApp.initData` of the mini app's launch, made at most 15 minutes ago; the session counts as signed in from when it was made. Older: open the mini app again, or prove the fingerprint secret. |
+
+**`StoreReauthenticateBiometricRequest`**
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `method` | string: `biometric` | yes |  |
+| `token` | string | yes | The secret `PUT /me/biometric` gave this session, as Telegram's `BiometricManager.authenticate` hands it back once the fingerprint or face matched. |
+
 **Answers**
 
 | Status | What it is | Body |
@@ -615,11 +783,62 @@ One of:
 | `401` | [SignedOut](API-Schemas.md#response-signedout) | [ErrorResponse](API-Schemas.md#errorresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
+### POST /me/reauthenticate/phone
+
+Text a code to the account's own mobile, to prove it again: `POST /me/reauthenticate` with `phone` and the code then makes this session recent. The code is this session's alone (another device of the customer's proves nothing by it), works for 5 minutes and allows five tries; asking again (not before `resend_in` seconds) texts a new one that replaces it. Only through a website's key (the mini app's: 404). A 422 while the website does not sign in by SMS, or on `method` when the account has no Iranian mobile, or has two-factor sign-in on (prove another way: the password with its code). A 429 when a code went to the number in the last minute, the number got its 5 codes this hour or 10 today (counted across all shops), or this address network asked for its 20 an hour or asked too often. Also a 429 once this account asked for 10 codes today (numbers added and proven again together). A 502 when the SMS provider did not take it; a 503 when the shop's or the installation's SMS budget is spent.
+
+- **Who:** the signed-in customer ([the customer scheme](#the-customer-scheme)).
+- **Door:** the website's only: under the mini app's key it is a `404`.
+
+**Body:** none.
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `202` | A code was texted to the account's mobile | [StoreSmsSentResponse](#storesmssentresponse) |
+| `401` | [SignedOut](API-Schemas.md#response-signedout) | [ErrorResponse](API-Schemas.md#errorresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### PUT /me/biometric
+
+A new secret for the mini app to keep behind the device's fingerprint or face (Telegram's `BiometricManager.updateBiometricToken`). Proving it again (`POST /me/reauthenticate` with `biometric`) makes this session recent; it is this session's alone, and a secret set before is replaced. Shown only this once. Only through the mini app's key (a website's: 404 — it has no fingerprint to keep the secret behind), and only on a session the mini app signed in (`GET /me`'s `session.method` `mini_app`; another session's token is a 422). Needs a recent sign-in (a 403 with `WWW-Authenticate` otherwise).
+
+- **Who:** the signed-in customer ([the customer scheme](#the-customer-scheme)).
+- **Door:** the mini app's only: under a website's key it is a `404`.
+
+**Body:** none.
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | Made | [StoreBiometricResponse](#storebiometricresponse) |
+| `401` | [SignedOut](API-Schemas.md#response-signedout) | [ErrorResponse](API-Schemas.md#errorresponse) |
+| `403` | [SignInAgain](API-Schemas.md#response-signinagain) | [ErrorResponse](API-Schemas.md#errorresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### DELETE /me/biometric
+
+Forget this session's fingerprint secret: proving it again proves nothing (`GET /me`'s `session.biometric` turns false). Only through the mini app's key (a website's: 404).
+
+- **Who:** the signed-in customer ([the customer scheme](#the-customer-scheme)).
+- **Door:** the mini app's only: under a website's key it is a `404`.
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `204` | [NoContent](API-Schemas.md#response-nocontent) | none |
+| `401` | [SignedOut](API-Schemas.md#response-signedout) | [ErrorResponse](API-Schemas.md#errorresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
 ### POST /me/telegram/authorize
 
 Start a Telegram redirect for the signed-in customer. Used to add their Telegram account (`POST /me/identities/telegram`) or prove it again (`POST /me/reauthenticate`). Returns the address to send the browser to. The site makes the PKCE verifier, keeps it and sends only its challenge. The state belongs to this session alone: a sign-in, another customer or another device of theirs cannot use it, and nothing can without the verifier. A 422 while the website has no client secret, or on `redirect_uri` or `code_challenge`; a 429 once this address network asked for 120 nonces, states and codes in 10 minutes; a 503 while the shop holds its maximum of open sign-ins.
 
 - **Who:** the signed-in customer ([the customer scheme](#the-customer-scheme)).
+- **Door:** the website's only: under the mini app's key it is a `404`.
 
 **Body**, as JSON:
 
@@ -758,6 +977,7 @@ Turn two-factor sign-in off. Needs the account's password; the customer is notif
 Add a Telegram account to the customer's account. Prove it as a Telegram sign-in does: the popup's id_token with its nonce, or the redirect's code with the state from `POST /me/telegram/authorize` for this customer and the verifier of its challenge (a sign-in's state or another customer's proves nothing here). If the Telegram account is already this account's or nobody's, the answer is the account (a new link takes its handle and names from Telegram, and the customer is notified). If another account of the shop has it, a merge is offered (202). A 403 when the session's sign-in is not recent; a 422 when the proof does not hold (on `id_token` or the redirect's `code`), the account already has another Telegram account, the merge is not allowed, or Telegram sign-in is off; a 429 after too many failures; a 502 when Telegram cannot be reached.
 
 - **Who:** the signed-in customer ([the customer scheme](#the-customer-scheme)).
+- **Door:** the website's only: under the mini app's key it is a `404`.
 
 **Body**, as JSON:
 
@@ -795,6 +1015,7 @@ One of:
 Add a Google account to the customer's account. Send the id_token Google Identity Services gave the page, with its nonce. If the Google account is already this account's or nobody's, the answer is the account; a new link also takes the email address Google vouches for (an @gmail.com or Workspace address) when the account has no email and no other account has it, and the customer is notified. If another account of the shop has the Google account or that address, a merge is offered (202). A 403 when the session's sign-in is not recent; a 422 when the proof does not hold (on `id_token`), the account already has another Google account, the merge is not allowed, or Google sign-in is off; a 429 after too many failures; a 502 when Google cannot be reached.
 
 - **Who:** the signed-in customer ([the customer scheme](#the-customer-scheme)).
+- **Door:** the website's only: under the mini app's key it is a `404`.
 
 **Body**, as JSON:
 
@@ -810,6 +1031,54 @@ Proof of a Google account, as for a sign-in: the id_token Google Identity Servic
 | Status | What it is | Body |
 |---|---|---|
 | `200` | The account, with the Google account linked | [StoreMeResponse](#storemeresponse) |
+| `202` | Another account has it; a merge is offered | [StoreMergeOfferResponse](#storemergeofferresponse) |
+| `401` | [SignedOut](API-Schemas.md#response-signedout) | [ErrorResponse](API-Schemas.md#errorresponse) |
+| `403` | [SignInAgain](API-Schemas.md#response-signinagain) | [ErrorResponse](API-Schemas.md#errorresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### POST /me/identities/phone
+
+Add a mobile number to the customer's account. Texts a six-digit code to it (finish with `POST /me/identities/phone/verify`), whether or not another account has the number: it is proven first. Only while the website signs in by SMS. A 403 when the session's sign-in is not recent; a 422 while the website does not sign in by SMS, when the account already has a number (remove it first), or on `phone` when it is no Iranian mobile. A 429 when a code went to the number in the last minute, the number got its 5 codes this hour or 10 today (counted across all shops), or this address network asked for its 20 an hour or asked too often. Also a 429 once this account asked for 10 codes today. A 502 when the SMS provider did not take it; a 503 when the shop's or the installation's SMS budget is spent.
+
+- **Who:** the signed-in customer ([the customer scheme](#the-customer-scheme)).
+- **Door:** the website's only: under the mini app's key it is a `404`.
+
+**Body**, as JSON:
+
+A mobile number to add to the account.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `phone` | string | yes | An Iranian mobile number as the customer types it: 09121234567, 9121234567, +989121234567 or 00989121234567, Persian or Arabic digits, spaces and dashes accepted. Kept in E.164 (+989121234567). |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `202` | A code was texted | [StoreSmsSentResponse](#storesmssentresponse) |
+| `401` | [SignedOut](API-Schemas.md#response-signedout) | [ErrorResponse](API-Schemas.md#errorresponse) |
+| `403` | [SignInAgain](API-Schemas.md#response-signinagain) | [ErrorResponse](API-Schemas.md#errorresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### POST /me/identities/phone/verify
+
+Finish adding a mobile number with the texted code. Only the account the code was sent for can use it. The number becomes this account's — it signs in by SMS from then on — and the customer is notified. If another account of the shop has the number, a merge is offered (202); the remaining account keeps a number of its own, else takes this one. A 403 when the session's sign-in is not recent; a 422 while the website does not sign in by SMS, when the account already has a number, the merge is not allowed (the other account has two-factor sign-in on among others: the number alone does not get past its second step), or on `code` when it is wrong, expired, used, tried five times or another account's; a 429 after too many failures, or when the budget of wrong codes for the number or this account is spent (10 an hour, 20 a day).
+
+- **Who:** the signed-in customer ([the customer scheme](#the-customer-scheme)).
+- **Door:** the website's only: under the mini app's key it is a `404`.
+
+**Body**, as JSON:
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `phone` | string | yes | An Iranian mobile number as the customer types it: 09121234567, 9121234567, +989121234567 or 00989121234567, Persian or Arabic digits, spaces and dashes accepted. Kept in E.164 (+989121234567). |
+| `code` | string | yes | The six-digit texted code (Persian digits accepted). |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | The account, with the mobile number added | [StoreMeResponse](#storemeresponse) |
 | `202` | Another account has it; a merge is offered | [StoreMergeOfferResponse](#storemergeofferresponse) |
 | `401` | [SignedOut](API-Schemas.md#response-signedout) | [ErrorResponse](API-Schemas.md#errorresponse) |
 | `403` | [SignInAgain](API-Schemas.md#response-signinagain) | [ErrorResponse](API-Schemas.md#errorresponse) |
@@ -864,7 +1133,7 @@ Finish adding an email with the emailed code. Only the account the code was sent
 
 ### DELETE /me/identities/{kind}
 
-Remove a way in from the customer's account. Never the last one. Removing the email also removes the password and two-factor sign-in, and the address gets an email saying so; removing Telegram also removes the handle. The customer is notified. A 403 when the session's sign-in is not recent; a 422 when the account has no way in of that kind, or it is the last one.
+Remove a way in from the customer's account. Never the last one — and a mobile number counts as a way in that stays only where a sign-in by SMS opens this very account by it: through a website's key while it signs in by SMS, an Iranian mobile, and of the accounts holding the number the one such a sign-in opens. Removing the email also removes the password and two-factor sign-in, and the address gets an email saying so; removing Telegram also removes the handle; removing the mobile number in a shop whose bot asks every customer's number (`shop.phone_required`) has the bot ask it again. The customer is notified. A 403 when the session's sign-in is not recent; a 422 when the account has no way in of that kind, or it is the last one — and on `kind` for the Telegram account through the mini app's key (the app and the bot know the customer by it).
 
 - **Who:** the signed-in customer ([the customer scheme](#the-customer-scheme)).
 
@@ -906,7 +1175,7 @@ Accept a merge offer (the 202 of a `POST /me/identities/…`). The two accounts 
 
 ### POST /custom-services/quote
 
-What a service the customer builds would cost them, nothing ordered: the GB's price and the days' price by their tiers, their sum (`base`), the customer's automatic discount and — with `discount_code` — the code's, as lines, and what is left. Only a sale of every plan reaches a built service, and a code limited to certain plans never does; a code limited to certain servers holds once `server_id` is picked. A 422 on `status` while nothing may be built (`offered` of `GET /custom-services`); on `gb` or `days` for an amount that is no whole number or outside its bounds (the message says them); on `server_id` for a server not on offer now; on `discount_code` when it does not apply. Each code that does not apply uses one of the customer's 20 tries an hour (shared with the checkout's), then a 429 with `Retry-After`.
+What a service the customer builds would cost them, nothing ordered: the GB's price and the days' price by their tiers, their sum (`base`), the customer's automatic discount and — with `discount_code` — the code's, as lines, and what is left. Only a sale of every plan reaches a built service, and a code limited to certain plans never does; a code limited to certain servers holds once `server_id` is picked. A 422 on `status` while nothing may be built (`offered` of `GET /custom-services`); on `gb` or `days` for an amount that is no whole number or outside its bounds (the message says them); on `server_id` for a server not on offer now; on `discount_code` when it does not apply. Each code that does not apply uses one of the customer's 20 tries an hour (shared with the checkout's), then a 429 with `Retry-After`. A panel's preview of the mini app may ask it, as the builder does by itself — but not with a `discount_code` (a 403: those tries are the customer's).
 
 - **Who:** the signed-in customer ([the customer scheme](#the-customer-scheme)).
 
@@ -1029,7 +1298,7 @@ One of the customer's services, as last read from its panel (`synced_at`). Anoth
 
 ### PATCH /subscriptions/{id}
 
-Switch the service's auto-renewal («تمدید خودکار») on or off. When on, the service is renewed from the wallet before it ends. A 422 on `auto_renew` while auto-renewal is not offered (`auto_renew.offered`), or for anything but a boolean.
+Switch the service's auto-renewal («تمدید خودکار») on or off, give it the customer's own name («نام دلخواه», `label`), or both — both judged before either changes. When on, the service is renewed from the wallet before it ends. The name is trimmed and cleared when blank or null; the bot shows it beside the service's name. A 422 when neither is sent; on `auto_renew` while auto-renewal is not offered (`auto_renew.offered`), or for anything but a boolean; on `label` for a name over 32 characters, anything but text, or one holding a line break or another control character.
 
 - **Who:** the signed-in customer ([the customer scheme](#the-customer-scheme)).
 
@@ -1041,9 +1310,12 @@ Switch the service's auto-renewal («تمدید خودکار») on or off. When 
 
 **Body**, as JSON:
 
+What to change of the service: its auto-renewal, its own name, or both.
+
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `auto_renew` | boolean | yes | Auto-renewal («تمدید خودکار») on or off. |
+| `auto_renew` | boolean | no | Auto-renewal («تمدید خودکار») on or off. |
+| `label` | string or null | no | The customer's own name for it, at most 32 characters; blank or null for none. |
 
 **Answers**
 
@@ -1094,6 +1366,26 @@ Change the service's subscription link (`link_rotation`). Every device on the ol
 | Status | What it is | Body |
 |---|---|---|
 | `200` | The service, with its new link | [StoreSubscriptionResponse](#storesubscriptionresponse) |
+| `401` | [SignedOut](API-Schemas.md#response-signedout) | [ErrorResponse](API-Schemas.md#errorresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### GET /subscriptions/{id}/qr
+
+The service's QR card, the one the bot draws for a delivery (whether or not the shop's bot sends it: that switch governs the bot's messages alone): its subscription link as a QR code on the shop's background picture, a JPEG (`Cache-Control: private, no-cache` — a new link draws a new card). A 404 for another customer's service, or one without a link (deleted); a 503 when the server cannot draw it (no GD, or a background it cannot read): show the link to copy instead. At most 30 cards a minute per customer, then a 429 with `Retry-After`.
+
+- **Who:** the signed-in customer ([the customer scheme](#the-customer-scheme)).
+
+**Parameters**
+
+| Name | In | Type | Required | What it is |
+|---|---|---|---|---|
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | The card | the bytes, as `image/jpeg` |
 | `401` | [SignedOut](API-Schemas.md#response-signedout) | [ErrorResponse](API-Schemas.md#errorresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
@@ -1470,7 +1762,7 @@ A card transfer's receipt, as a browser form uploads it.
 
 ### POST /payments/{id}/check
 
-Ask an online payment's gateway what came of it now — when the customer comes back from the gateway's page, or presses a «I paid» button. The gateway tells the shop by itself as well, and the shop asks it every few minutes until its page has been closed a while: this only makes it sooner. A payment the gateway says was paid is settled at once — its order paid and delivered (or, its order closed meanwhile, the money put in the wallet) — and the customer gets the notice of it; one whose page closed unpaid fails, its order left open to pay again. Answers what the gateway said, the order as it stands now and, once delivered, its service. A 404 for another customer's payment; a 422 on `status` for a payment that is not an online one (a card transfer, the wallet), and for one held for support and still waiting, before or by this very ask — the gateway's answer did not fit it (another order or amount), it kept money on it unsettled for two days, or it closed it after saying money had come in on it —, the message naming its order: tell the customer not to pay again but to write to support. A 503 while the gateway cannot be asked, saying so (nothing changed: if they paid, ask again a little later). At most 10 a minute per customer, then a 429 with `Retry-After`.
+Ask an online payment's gateway what came of it now — when the customer comes back from the gateway's page, or presses a «I paid» button. The gateway tells the shop by itself as well, and the shop asks it every few minutes until its page has been closed a while (by default; «زمان‌بندی کارها»): this only makes it sooner. A payment the gateway says was paid is settled at once — its order paid and delivered (or, its order closed meanwhile, the money put in the wallet) — and the customer gets the notice of it; one whose page closed unpaid fails, its order left open to pay again. Answers what the gateway said, the order as it stands now and, once delivered, its service. A 404 for another customer's payment; a 422 on `status` for a payment that is not an online one (a card transfer, the wallet), and for one held for support and still waiting, before or by this very ask — the gateway's answer did not fit it (another order or amount), it kept money on it unsettled for two days by default, or it closed it after saying money had come in on it —, the message naming its order: tell the customer not to pay again but to write to support. A 503 while the gateway cannot be asked, saying so (nothing changed: if they paid, ask again a little later). At most 10 a minute per customer, then a 429 with `Retry-After`.
 
 - **Who:** the signed-in customer ([the customer scheme](#the-customer-scheme)).
 
@@ -1667,9 +1959,87 @@ The customer's referral details. The program's terms, their invite code (created
 | `401` | [SignedOut](API-Schemas.md#response-signedout) | [ErrorResponse](API-Schemas.md#errorresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
+### GET /test-account
+
+The free test accounts («اکانت تست») the customer can take now: each server giving one, with its traffic and term — or, when they can take none, why (`refusal`): what the bot asks first — a Telegram account linked, their own number while the shop asks it (`shop.phone_required`), the shop's channels joined — not met, or their quota spent. A 404 while the shop gives none.
+
+- **Who:** the signed-in customer ([the customer scheme](#the-customer-scheme)).
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | OK | [StoreTestAccountResponse](#storetestaccountresponse) |
+| `401` | [SignedOut](API-Schemas.md#response-signedout) | [ErrorResponse](API-Schemas.md#errorresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### POST /test-account
+
+Take a free test account on one of the servers `GET /test-account` offers: the service, made at once, counts against the customer's quota as the bot's does. A 404 while the shop gives none; a 422 on `server_id` for a server not giving one now, or on `status` when what the bot asks first — a Telegram account linked, their own number while the shop asks it (`shop.phone_required`), the shop's channels joined — is not met or the quota refuses (its words say why); a 502 when the server's panel failed (nothing counted).
+
+- **Who:** the signed-in customer ([the customer scheme](#the-customer-scheme)).
+
+**Body**, as JSON:
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `server_id` | integer | yes | One of `GET /test-account`'s offers. |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `201` | Made | [StoreSubscriptionResponse](#storesubscriptionresponse) |
+| `401` | [SignedOut](API-Schemas.md#response-signedout) | [ErrorResponse](API-Schemas.md#errorresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### GET /wheel
+
+The lucky wheel («گردونه شانس») as the customer finds it: its slices in order, a spin's cost and cooldown, and when they may spin next. A 422 on `status` while it is off, or for buyers only and they have bought nothing (its words say which).
+
+- **Who:** the signed-in customer ([the customer scheme](#the-customer-scheme)).
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | OK | [StoreWheelResponse](#storewheelresponse) |
+| `401` | [SignedOut](API-Schemas.md#response-signedout) | [ErrorResponse](API-Schemas.md#errorresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### POST /wheel/spin
+
+Spin the lucky wheel: the cost comes off the wallet, a slice is drawn among those that can reach the customer now, and its prize is given at once — as the bot's «بچرخان» does. Where it landed (`landed`, an index into `slices`) is for the wheel's animation. A prize that could not be given gives the cost back and starts no cooldown (`failure`). A 422 on `status` when what the bot asks first — a Telegram account linked, their own number while the shop asks it (`shop.phone_required`), the shop's channels joined — is not met, while off, for buyers only, too soon (the words say until when) or with no slice that can reach them, nothing spent; a 422 on `status` when the wallet is short.
+
+- **Who:** the signed-in customer ([the customer scheme](#the-customer-scheme)).
+
+**Body:** none.
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | Spun | [StoreWheelSpinResponse](#storewheelspinresponse) |
+| `401` | [SignedOut](API-Schemas.md#response-signedout) | [ErrorResponse](API-Schemas.md#errorresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### GET /lottery
+
+The nightly draw («قرعه‌کشی شبانه»): when the next one is, how many win and what, the customer's own entries in it so far, and the last draw's winners (their first names, the rest hidden). A 404 while the shop runs none.
+
+- **Who:** the signed-in customer ([the customer scheme](#the-customer-scheme)).
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | OK | [StoreLotteryResponse](#storelotteryresponse) |
+| `401` | [SignedOut](API-Schemas.md#response-signedout) | [ErrorResponse](API-Schemas.md#errorresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
 ### GET /notifications
 
-The customer's notifications, newest first. Every notice the bot sends them (a payment approved, a service ending soon, a gift…), kept for 180 days whether it reached them in Telegram, by email or not at all; as plain text and as safe HTML. `meta.unread` counts the unread ones.
+The customer's notifications, newest first. Every notice the bot sends them (a payment approved, a service ending soon, a gift…), kept for 180 days by default («زمان‌بندی کارها») whether it reached them in Telegram, by email or not at all; as plain text and as safe HTML. `meta.unread` counts the unread ones.
 
 - **Who:** the signed-in customer ([the customer scheme](#the-customer-scheme)).
 
@@ -1921,7 +2291,7 @@ The customer's rating of a closed ticket. It replaces any earlier rating.
 
 ### CaptchaAction
 
-The action a captcha widget names for a form: the shop's `sign_up`, `sign_in`, `password_reset` and `review` (each operation's `x-captcha`), or the site's own (such as `contact`). A token solved for one action does not pass a form of another. 1 to 32 of A-Z, a-z, 0-9, - and _ (Turnstile's data-action).
+The action a captcha widget names for a form: the shop's `sign_up`, `sign_in`, `password_reset`, `phone_sign_in` and `review` (each operation's `x-captcha`), or the site's own (such as `contact`). A token solved for one action does not pass a form of another. 1 to 32 of A-Z, a-z, 0-9, - and _ (Turnstile's data-action).
 
 String matching `^[A-Za-z0-9_-]{1,32}$`.
 
@@ -1939,20 +2309,30 @@ String: `sequential`, `random`, `custom`.
 
 ### StoreAccountResponse
 
-The answer of `GET /me` and `PATCH /me`: the account, the unread notification count (for a bell icon), what the admin API allows them (for an admin of the shop), and their loyalty standing.
+The answer of `GET /me` and `PATCH /me`: the account, the unread notification count (for a bell icon), what the admin API allows them (for an admin of the shop), their loyalty standing, and this session.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `customer` | [StoreCustomer](#storecustomer) | yes |  |
 | `unread_notifications` | integer | yes | How many of their notifications are unread (`GET /notifications`). |
-| `staff` | [StoreStaff](#storestaff) or null | yes | Null for a customer who is not an admin of the shop, and while the website lets no admins in. |
+| `staff` | [StoreStaff](#storestaff) or null | yes | Null for a customer who is not an admin of the shop, while the website lets no admins in, through the mini app's key (it has no admin API), and for a session the mini app signed in (`session.method` mini_app), which the admin API refuses through the website's key too. |
 | `loyalty` | [LoyaltyStanding](API-Schemas.md#loyaltystanding) | yes | Their loyalty tier («سطح وفاداری»), what they spent and the next tier. The tier's discount applies at checkout and its cashback adds to the shop's. In a shop with no tiers, `tier` and `next` are null. |
+| `session` | object | yes | This session: how it was signed in, whether the mini app keeps a fingerprint secret for it (`PUT /me/biometric`), and until when it counts as recently signed in. |
+| `session.method` | string: `telegram`, `mini_app`, `google`, `phone`, `phone_2fa`, `password`, `password_2fa`, `preview` | yes | How it was signed in, or the stronger way proven on it since: `phone` a code by SMS alone, `phone_2fa` and `password_2fa` with the authenticator app's code. `preview`: a panel's look at the mini app as this customer (`POST /api/{panel}/mini-app/preview`) — read only, through the mini app's key alone, for 30 minutes. |
+| `session.biometric` | boolean | yes | A fingerprint secret is kept for it: `POST /me/reauthenticate` with `biometric` can prove a way in again. |
+| `session.recent_until` | string (date-time) or null | yes | Until when it counts as recently signed in — what changing how the account signs in, handing a service or money to another customer, and setting a fingerprint secret need. Null: prove a way in again first (`POST /me/reauthenticate`). |
 
 ### StoreAuthorizeResponse
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `url` | string | yes | Telegram's authorization address to send the browser to, with client_id, redirect_uri, scope, state, the PKCE challenge (S256) and a nonce. |
+
+### StoreBiometricResponse
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `token` | string | yes | The secret for `BiometricManager.updateBiometricToken`, shown only this once. |
 
 ### StoreCaptchaChallengeResponse
 
@@ -2078,7 +2458,7 @@ The signed-in customer's account.
 | `google` | boolean | yes | They can sign in with a Google account. |
 | `has_password` | boolean | yes | They can sign in with their email and a password. |
 | `two_factor` | boolean | yes | Password sign-in also asks for their authenticator app's code (or a recovery code). |
-| `phone` | string or null | yes | The number they shared with the bot, in E.164 form (+98912…). |
+| `phone` | string or null | yes | Their verified mobile number in E.164 form (+98912…): the one they shared with the bot, or proved by a texted code on the website. While the website signs in by SMS it is a way in; null if none. |
 | `balance` | string | yes | Their wallet balance in Toman, as a decimal string ('120000.00'). Below zero is an agent's debt. |
 | `created_at` | string (date-time) or null | yes | When they became a customer of the shop. |
 
@@ -2128,9 +2508,24 @@ What a service can buy of one extra: the preset amounts with their prices and, w
 
 ### StoreIdentityKind
 
-A way to sign in: a Telegram account, a Google account, or an email (with its password).
+A way to sign in: a Telegram account, a Google account, an email (with its password), or a mobile number (a code by SMS).
 
-String: `telegram`, `google`, `email`.
+String: `telegram`, `google`, `email`, `phone`.
+
+### StoreLotteryResponse
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `next_draw_at` | string (date-time) | yes | When the next draw is: the shop's hour today, or tomorrow once today's is drawn. |
+| `winners` | integer | yes | How many customers each draw picks. |
+| `prize` | string or null | yes | Each winner's prize, as the customer reads it: «۵۰٬۰۰۰ تومان شارژ کیف پول», «۱۰ گیگابایت حجم»; null while none is set. |
+| `per_buyer` | boolean | yes | One entry per customer who bought since the last draw; false: one per paid order. |
+| `entries` | integer | yes | The customer's entries in the next draw so far: their paid orders since the last draw (at most 1 while `per_buyer`). |
+| `last_draw` | object or null | yes | The last draw's winners; null before the first. |
+| `last_draw.drawn_at` | string (date-time) | yes | When it was drawn (a draw written outside AmoBot without a time: the shop's draw hour on its day). |
+| `last_draw.winners` | list of object | yes |  |
+| `last_draw.winners[].name` | string | yes | The winner's first name with the rest hidden: «علی ر***», «کاربر ***». |
+| `last_draw.winners[].me` | boolean | yes | The winner is this customer. |
 
 ### StoreMeResponse
 
@@ -2138,25 +2533,33 @@ String: `telegram`, `google`, `email`.
 |---|---|---|---|
 | `customer` | [StoreCustomer](#storecustomer) | yes |  |
 
+### StoreMergeOffer
+
+A merge offered: the other account, which of the two would remain, and the ticket that merges them (`POST /me/merge`).
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `token` | string | yes | The merge ticket, usable once and only by this account. |
+| `expires_in` | integer | yes | Seconds until it expires. |
+| `account` | object | yes | The other account. |
+| `account.name` | string or null | yes | "first last"; null if none. |
+| `account.created_at` | string (date-time) or null | yes | When it became a customer of the shop. |
+| `account.services` | integer | yes | Its active services. |
+| `account.orders` | integer | yes |  |
+| `account.balance` | string | yes | Its wallet balance, in Toman. |
+| `account.telegram` | boolean | yes | It can sign in with Telegram. |
+| `account.email` | boolean | yes | It can sign in with an email. |
+| `account.google` | boolean | yes | It can sign in with Google. |
+| `account.phone` | boolean | yes | It has a verified mobile number (which signs in by SMS while the website takes it). |
+| `keeps` | string: `this`, `other` | yes | The account that remains, the older one: `this` or the `other`. It takes over everything the other owns, and the other's ways in fill its empty slots. |
+
 ### StoreMergeOfferResponse
 
 The way in being added belongs to another account of the shop. Shows that account (so the customer can confirm it is theirs too), which of the two would remain, and the ticket that merges them (`POST /me/merge`).
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `merge` | object | yes |  |
-| `merge.token` | string | yes | The merge ticket, usable once and only by this account. |
-| `merge.expires_in` | integer | yes | Seconds until it expires. |
-| `merge.account` | object | yes | The other account. |
-| `merge.account.name` | string or null | yes | "first last"; null if none. |
-| `merge.account.created_at` | string (date-time) or null | yes | When it became a customer of the shop. |
-| `merge.account.services` | integer | yes | Its active services. |
-| `merge.account.orders` | integer | yes |  |
-| `merge.account.balance` | string | yes | Its wallet balance, in Toman. |
-| `merge.account.telegram` | boolean | yes | It can sign in with Telegram. |
-| `merge.account.email` | boolean | yes | It can sign in with an email. |
-| `merge.account.google` | boolean | yes | It can sign in with Google. |
-| `merge.keeps` | string: `this`, `other` | yes | The account that remains, the older one: `this` or the `other`. It takes over everything the other owns, and the other's ways in fill its empty slots. |
+| `merge` | [StoreMergeOffer](#storemergeoffer) | yes |  |
 
 ### StoreNameModeInput
 
@@ -2285,6 +2688,8 @@ A payment attempt for an order.
 | `receipt` | object or null | yes | The receipt the customer sent for it, in the bot or on the website; null if none was sent. |
 | `receipt.sent_at` | string (date-time) | yes |  |
 | `note` | string or null | yes | The note on its latest decision, as the bot shows it to the customer: support's (a rejection's reason, or a cancellation or refund note) or the shop's own (the order paid another way, left unpaid, or its service handed to another customer; an online payment whose page closed unpaid, or that came in once its order had closed and went to the wallet; for one held for support, whatever its status, that it is with support and not to be paid again — in place of the shop's words to support on why); null if none. |
+| `reference` | string or null | yes | An online payment's tracking code at its gateway, as the gateway gave it — its invoice once opened, or what settled it (Zarinpal's ref_id, AtlasPay's tracking code): what the customer quotes to the gateway or to support. Null for every other payment, and before its page is opened. |
+| `held` | boolean | yes | An online payment held for support and still waiting (its `note` says so): its order is paid no more meanwhile — send the customer to support. False otherwise. |
 | `link` | [StorePayLink](#storepaylink) or null | yes | An online payment still waiting on its gateway (`pending`), while its page takes money: where to pay it, as the checkout gave it. Null for any other payment, once `expires_at` has passed, and for one held for support (`POST /payments/{id}/check` says so): its order is paid no more meanwhile. |
 
 ### StorePaymentCheck
@@ -2330,6 +2735,7 @@ A plan on sale now: what it gives and costs, its category, and the servers a cus
 | `id` | integer | yes |  |
 | `name` | string | yes |  |
 | `description` | string or null | yes |  |
+| `badge` | [PlanBadge](API-Schemas.md#planbadge) or null | yes | The label its card wears, as the shop set it on the plan; null for none. |
 | `price` | string | yes | Toman, as a decimal string ('120000.00'). |
 | `first_purchase_price` | string or null | yes | The price of a customer's first purchase in the shop («قیمت خرید اول»), in Toman, below `price` ('0.00' makes it free). `POST /orders` charges it while the customer has bought no service. Null when there is none, or (with a customer's token) when that customer has already bought. Renewals are at `price`. |
 | `agent_price` | string or null | yes | The price for the shop's agents and members of groups with agent prices («قیمت نماینده»), in Toman, below `price`, for purchases and renewals. Null when there is none, or when the reader is a guest or a customer who gets no agent price. The checkout charges the customer's lowest price. |
@@ -2490,17 +2896,27 @@ A plan a service can be renewed on: what a renewal on it gives, its price, and w
 
 ### StoreResponse
 
-The Store API's `GET /`: the shop's public profile, which a website asks for first.
+The Store API's `GET /`: the shop's public profile, which a website or the mini app asks for first.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `shop` | object | yes |  |
 | `shop.name` | string | yes | The main shop's name (APP_NAME); for an agent's shop, their bot's title (else its username). |
 | `shop.taking_orders` | boolean | yes | Whether the shop takes orders now: its bot is switched on, and — an agent's shop — the main shop has not suspended its selling. When false, purchases, renewals, extras and top-ups are refused (503) — receipts too while the bot is off, but not while the selling is suspended (an order made before is still paid) —, and while the selling is suspended a renewal's preview and a discount code's check for a renewal or an extra are a 422 on `status`; the catalogue can still be read (an agent's suspended shop offers no plan) and customers can still sign in. |
+| `shop.phone_required` | boolean | yes | Whether the shop's bot asks every customer to share their own phone number first («تایید شماره»). A Telegram customer without one (`GET /me`'s `phone` null) shares it from the mini app with Telegram's `requestContact`, which sends their contact to the bot; until then the mini app takes no order, gift code or service added by its link from them (422 on `status`). |
 | `shop.service_claims` | boolean | yes | Whether a customer can add a service to their account by its link now (`POST /subscriptions/claim`, «افزودن سرویس با لینک»): the main shop's alone, while its admin switches it on (off by default). Always false in an agent's shop. |
 | `shop.service_transfers` | boolean | yes | Whether a customer can hand one of their services to another customer of the shop now (`POST /subscriptions/{id}/transfer`, «انتقال سرویس»): while the shop's admin switches it on (off by default), in any shop. |
 | `shop.custom_services` | boolean | yes | Whether a customer can build a service of the traffic and days they choose now («سرویس دلخواه», `GET /custom-services`): the main shop's alone, while its admin switches it on (off by default), both price lists sell and one of its servers can take a new client. Always false in an agent's shop. |
 | `shop.name_modes` | list of [ClientNameMode](#clientnamemode) | yes | The ways a buyer may name their new service (`name_mode` of `POST /orders`), `sequential` (the shop's pattern) first and always; `random` and `custom` while the shop's admin offers them. Just `sequential`: ask nothing. |
+| `shop.programs` | object | yes | Which of the shop's programs run now, as its bot shows their buttons: free test accounts (`GET /test-account`), the lucky wheel (`GET /wheel`), the nightly draw (`GET /lottery`), gift codes (`POST /gift-codes/redeem`), loyalty tiers (the shop has at least one: `GET /me`'s `loyalty`), cashback, money sent to another customer (`POST /wallet/transfer`) — and, this door's own, the reviews. |
+| `shop.programs.test_accounts` | boolean | yes |  |
+| `shop.programs.wheel` | boolean | yes |  |
+| `shop.programs.lottery` | boolean | yes |  |
+| `shop.programs.gift_codes` | boolean | yes |  |
+| `shop.programs.loyalty` | boolean | yes |  |
+| `shop.programs.cashback` | boolean | yes |  |
+| `shop.programs.wallet_transfers` | boolean | yes |  |
+| `shop.programs.reviews` | boolean | yes | Whether this door shows the reviews support approved and takes new ones (`GET` and `POST /reviews`): the website's switch through its key, the mini app's through its own. |
 | `shop.bot` | object or null | yes | The shop's Telegram bot; null while its username is unknown. |
 | `shop.bot.username` | string | yes | Without the @. |
 | `shop.bot.url` | string | yes | https://t.me/ and the username. |
@@ -2513,6 +2929,8 @@ The Store API's `GET /`: the shop's public profile, which a website asks for fir
 | `sign_in.google` | object or null | yes | Google sign-in while it is on; null when it is off. |
 | `sign_in.google.client_id` | string | yes | The OAuth client id for the site's sign-in (Google Identity Services' client_id). |
 | `sign_in.email` | boolean | yes | Email sign-up is on and the shop can send email (so the codes reach the customer). Customers who already signed up can sign in with their password either way. |
+| `sign_in.phone` | boolean | yes | Sign-in by SMS is on (`POST /auth/phone`): the website's switch, and SMS goes out for it — the installation sends it, and an agent's site only while the owner lets it. Draw the mobile number form only while true. |
+| `sign_in.mini_app` | boolean | yes | True through the mini app's key: its customers sign in by the launch data Telegram hands the app (`POST /auth/mini-app`), and the website's ways in above are all off there. False through a website's key. |
 | `captcha` | object or null | yes | The website's captcha, for drawing the widget; null when none is set. Sign-up, password sign-in, password reset and reviews send its token in `captcha`, solved for the operation's action (`x-captcha`: Turnstile's data-action, or ALTCHA's challenge requested with ?action=). For the site's own forms, its backend checks the token with `POST /captcha/verify`. |
 | `captcha.driver` | [CaptchaDriver](#captchadriver) | yes |  |
 | `captcha.site_key` | string or null | yes | The widget's public key (Turnstile's site key); null for ALTCHA, which has none. |
@@ -2521,6 +2939,15 @@ The Store API's `GET /`: the shop's public profile, which a website asks for fir
 | `referral.enabled` | boolean | yes |  |
 | `referral.rate` | integer | yes | The share of a referred customer's payment, in percent. |
 | `referral.first_only` | boolean | yes | Only each referred customer's first payment earns a share. |
+| `app` | object or null | yes | Through the mini app's key: how it looks and its announcement, as the shop set them. Null through a website's key. |
+| `app.title` | string | yes | The name it shows: the one the shop set, else the shop's name. |
+| `app.accent_color` | string matching `^#[0-9a-f]{6}$` or null | yes | Its colour, #rrggbb; null for the Telegram client's own button colour. |
+| `app.logo_url` | string or null | yes | Its logo's address (`GET /app/logo`); null while it has none. |
+| `app.announcement` | object or null | yes | A word to every customer on its home screen; null for none. |
+| `app.announcement.text` | string | yes | Plain text with line breaks kept, at most 500 characters. |
+| `app.announcement.url` | string or null | yes | Where it leads (an https address); null for nowhere. |
+| `app.fullscreen` | boolean | yes | Whether it opens full screen on a phone. |
+| `app.time_zone` | string | yes | The shop's time zone (APP_TIMEZONE, such as Asia/Tehran), which it shows every date in. |
 
 ### StoreReview
 
@@ -2557,6 +2984,25 @@ An approved review, as the website shows it: the writer's text and choices as pl
 | `meta.summary` | object | yes | Totals over all approved reviews, regardless of the page. |
 | `meta.summary.count` | integer | yes |  |
 | `meta.summary.average` | number or null | yes | The average rating, to two decimals; null while there are no reviews. |
+
+### StoreSale
+
+A timed sale running now («فروش ویژه»): its name, its percent off, when it ends (null: until support stops it), and what it holds for — the plans named (null: every plan) and the kinds of order (null: every kind).
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `id` | integer | yes |  |
+| `name` | string | yes | What the customer reads: «فروش ویژه نوروز». |
+| `percent` | integer | yes |  |
+| `ends_at` | string (date-time) or null | yes |  |
+| `plan_ids` | list of integer or null | yes |  |
+| `order_types` | list of [OwnOrderType](API-Schemas.md#ownordertype) or null | yes |  |
+
+### StoreSalesResponse
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `sales` | list of [StoreSale](#storesale) | yes |  |
 
 ### StoreServiceTerm
 
@@ -2605,6 +3051,15 @@ A device the customer is signed in on.
 |---|---|---|---|
 | `token` | string | yes | The customer's bearer token for this device, shown only this once. The site keeps it and sends it as `Authorization: Bearer …`. |
 | `customer` | [StoreCustomer](#storecustomer) | yes |  |
+| `merge` | [StoreMergeOffer](#storemergeoffer) | no | Only after a sign-in by SMS (`POST /auth/phone/verify`, or its second step): another account of the shop holds the number too, and the code proved it for both. Show that account and ask whether it is the customer's too; `POST /me/merge` with the new bearer token takes the offer. Absent otherwise. |
+
+### StoreSmsSentResponse
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `sent` | boolean: `true` | yes | The code went to the provider (always true: a code that did not go is a 502). |
+| `expires_in` | integer | yes | Seconds until the code expires (5 minutes; it allows five tries). |
+| `resend_in` | integer | yes | Seconds before the same number may be texted another code (60): the site's resend timer. Asked sooner, a 429 with `Retry-After`. |
 
 ### StoreStaff
 
@@ -2613,7 +3068,7 @@ What the website's admin API (`/admin/*`, the panel operations marked `x-staff`)
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `grants` | list of [StaffGrant](API-Schemas.md#staffgrant) | yes | What the website lets admins do beyond the daily work. An operation that needs a grant works only while the grant is listed here. |
-| `strong_sign_in` | boolean | yes | The website requires admins to sign in strongly: Telegram, Google, or a password with its second step. |
+| `strong_sign_in` | boolean | yes | The website requires admins to sign in strongly: Telegram, Google, a code to their mobile, or a password with its second step. |
 | `signed_in_strongly` | boolean | yes | This session was signed in strongly, or a strong way in was proven on it since (`POST /me/reauthenticate`). |
 | `signed_in_until` | string (date-time) or null | yes | Until when this session may use the admin API at all: 12 hours after a way in was last proven on it. Null: prove a way in again first (`POST /me/reauthenticate`). |
 | `recent_until` | string (date-time) or null | yes | Until when this session's sign-in counts as recent, which granted operations and payment approval (`x-staff-recent`) also need. Null: prove a way in again first (`POST /me/reauthenticate`). |
@@ -2636,6 +3091,7 @@ One of the customer's services, as last read from its panel (`synced_at`), with 
 |---|---|---|---|
 | `id` | integer | yes |  |
 | `name` | string | yes | Its name on the panel ("amir_2", "USER_7"). |
+| `label` | string or null | yes | The customer's own name for it («نام دلخواه», `PATCH`), shown beside `name` in the bot too; null for none. |
 | `status` | [SubscriptionStatus](API-Schemas.md#subscriptionstatus) | yes |  |
 | `is_test` | boolean | yes | A free test account («اکانت تست»), taken in the bot: it has no plan and can be neither renewed nor bought extras (`extras`); the shop may remove it some time after it ends, or some days after it was made while never connected (`removes_at`). |
 | `claimed_at` | string (date-time) or null | yes | When the customer added it to their account by its link (`POST /subscriptions/claim`, or in the bot): a service support made on the panel by hand, not sold by the shop. It has no plan until a renewal on a plan the customer picks (`GET …/renewal-plans`; a renewal with a package built leaves it without). Null for every other service. |
@@ -2645,7 +3101,7 @@ One of the customer's services, as last read from its panel (`synced_at`), with 
 | `traffic` | [StoreServiceTraffic](#storeservicetraffic) | yes |  |
 | `term` | [StoreServiceTerm](#storeserviceterm) | yes |  |
 | `ended_at` | string (date-time) or null | yes | When it ended: its end date passed, its traffic ran out, or its panel no longer has it. Null while it runs, and after its end date until the shop next reads its panel (`term.expires_at` says when). |
-| `removes_at` | string (date-time) or null | yes | When the shop will remove it by itself — from its panel and from the customer's services —, by the shop's rules now; null when it will not. Set only for a service that ended (or a test account never connected) in a shop that removes such services: renewing it or adding to it before then keeps it, and the moment can move when the shop changes its rules. A moment already past: it goes at the shop's next check (every 15 minutes). A service switched off by support, or with an order still open (a renewal waiting for its receipt), is not removed. |
+| `removes_at` | string (date-time) or null | yes | When the shop will remove it by itself — from its panel and from the customer's services —, by the shop's rules now; null when it will not. Set only for a service that ended (or a test account never connected) in a shop that removes such services: renewing it or adding to it before then keeps it, and the moment can move when the shop changes its rules. A moment already past: it goes at the shop's next check (every 15 minutes by default). A service switched off by support, or with an order still open (a renewal waiting for its receipt), is not removed. |
 | `auto_renew` | object | yes | Auto-renewal («تمدید خودکار»): the service is renewed from the wallet before it ends, on its plan at the plan's price. |
 | `auto_renew.on` | boolean | yes | The customer's switch. |
 | `auto_renew.offered` | boolean | yes | The switch can be set (`PATCH`): the service is active, has an end date and still has its plan, and the wallet payment method is on and takes the customer's renewal price (within its least and most amount; a service whose renewal it does not take is renewed by hand). |
@@ -2683,6 +3139,17 @@ One of the customer's services, as last read from its panel (`synced_at`), with 
 |---|---|---|---|
 | `subscriptions` | list of [StoreSubscription](#storesubscription) | yes |  |
 | `meta` | [PageMeta](API-Schemas.md#pagemeta) | yes |  |
+
+### StoreTestAccountResponse
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `offers` | list of object | yes | The servers giving a test now, in the shop's order: each one's traffic and term. |
+| `offers[].server` | [NamedRef](API-Schemas.md#namedref) | yes |  |
+| `offers[].traffic_mb` | integer | yes | Megabytes; 0 for no limit. |
+| `offers[].duration_hours` | integer | yes | Hours; 0 for no limit. |
+| `offers[].on_hold` | boolean | yes | The hours count from the first connection; false: from when it is taken. |
+| `refusal` | string or null | yes | Why the customer can take none now, as the bot says it (their quota is spent, the day's tests are given out, tests are for newcomers…); null when they can. |
 
 ### StoreTicket
 
@@ -2729,6 +3196,7 @@ A message in their ticket, from them or from support (the support person is neve
 | `body` | string | yes | Its text as plain text, with line breaks kept. |
 | `attachment` | [TicketAttachment](API-Schemas.md#ticketattachment) or null | yes | Its picture (`GET /tickets/{id}/messages/{message}/attachment`); null for none. |
 | `created_at` | string (date-time) or null | yes |  |
+| `seen` | boolean or null | yes | The customer's own message: whether support has read it (opened the ticket since, or answered after it) — the second tick. Null for support's messages. |
 
 ### StoreTicketResponse
 
@@ -2756,9 +3224,15 @@ A message in their ticket, from them or from support (the support person is neve
 |---|---|---|---|
 | `recipient` | [StoreRecipient](#storerecipient) | yes |  |
 
+### StoreTutorialResponse
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `text` | string | yes | The tutorial in Telegram's HTML (`<b>`, `<i>`, `<u>`, `<s>`, `<a href>`, `<code>`, `<pre>`, `<blockquote>`, `<tg-spoiler>`, `<tg-emoji>`), as the bot sends it: render only those tags and escape the rest. |
+
 ### StoreTwoFactorResponse
 
-The password is right, but the account needs a second step: the challenge to send with the code (`POST /auth/login/2fa`). No session is opened yet.
+The first step is right — the password, or the code texted by SMS —, but the account needs a second step: the challenge to send with the code (`POST /auth/login/2fa`). No session is opened yet.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -2832,3 +3306,34 @@ A line of the customer's wallet ledger.
 | `transfer.recipient` | [StoreRecipient](#storerecipient) | yes |  |
 | `transfer.created_at` | string (date-time) or null | yes |  |
 | `wallet` | [StoreWalletResponse](#storewalletresponse) | yes |  |
+
+### StoreWheelResponse
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `slices` | list of [StoreWheelSlice](#storewheelslice) | yes | The enabled slices, in the order the wheel draws them. |
+| `cost` | string | yes | A spin's cost in Toman, from the wallet; '0.00' for a free one. |
+| `cooldown_hours` | integer | yes | Hours between two spins. |
+| `next_spin_at` | string (date-time) or null | yes | When they may spin next; null: now. |
+
+### StoreWheelSlice
+
+A slice of the lucky wheel: its words and what kind of prize it is.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `label` | string | yes |  |
+| `kind` | [WheelPrizeKind](API-Schemas.md#wheelprizekind) | yes |  |
+
+### StoreWheelSpinResponse
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `slices` | list of [StoreWheelSlice](#storewheelslice) | yes |  |
+| `landed` | integer | yes | The index in `slices` the wheel stopped at. |
+| `given` | boolean | yes | Its prize was given (a «پوچ» slice gives nothing, and says so). |
+| `words` | string | yes | What came of it, as the customer reads it: the prize given, nothing won, or why it was not given. |
+| `failure` | string or null | yes | Why the prize could not be given; null when it was (or the slice gives nothing). |
+| `refunded` | boolean | yes | The spin's cost went back to the wallet: its prize could not be given. |
+| `next_spin_at` | string (date-time) or null | yes | When they may spin next; null: now (a spin whose prize was not given starts no cooldown). |
+| `balance` | string | yes | Their wallet balance in Toman after the spin. |

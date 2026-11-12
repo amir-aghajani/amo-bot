@@ -10,7 +10,7 @@ import { json, refusal, server } from '@/test/server'
 /*
  * A plan's form (plan-form, server-entries, plan-extras): its four tabs and where a refusal lands, the servers section
  * when there is nothing to pick, the term in days or hours, the first-purchase and agent prices, the extras' price
- * list, the checkout note and the bot button — and `dirty` reading every field as the server would.
+ * list, the checkout note, the bot button and the badge — and `dirty` reading every field as the server would.
  */
 
 const OPTIONS: PlanOptions = {
@@ -39,6 +39,32 @@ async function openServers() {
 }
 
 describe('a plan’s form', () => {
+  it('takes a premium emoji for its name: its plain one leads the name, its id goes beside it, and either can be taken off', async () => {
+    server().on('GET', '/api/admin/bot/custom-emojis', json({ emojis: [{ id: '41', emoji: '🔥', format: 'static', repaint: false, updated_at: '2026-10-06T09:00:00Z' }], status: null }))
+    server().on('POST', '/api/admin/plans', refusal(422, 'Refused.', { price: ['قیمت را وارد کنید.'] }))
+    showForm()
+    const name = await screen.findByLabelText<HTMLInputElement>('نام پلن')
+    fireEvent.change(name, { target: { value: '⭐ طلایی' } })
+
+    fireEvent.click(screen.getByRole('button', { name: 'انتخاب' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'ایموجی پرمیوم 🔥' }))
+    expect(name.value, 'in place of the emoji it led with').toBe('🔥 طلایی')
+
+    fireEvent.click(screen.getByRole('button', { name: 'افزودن پلن' }))
+    await until(() => expect(server().sent('POST', '/api/admin/plans')).toHaveLength(1))
+    expect(server().sent('POST', '/api/admin/plans')[0]?.body).toMatchObject({ name: '🔥 طلایی', emoji_id: '41' })
+
+    fireEvent.click(screen.getByRole('tab', { name: /مشخصات/ }))
+    fireEvent.change(name, { target: { value: 'طلایی' } })
+    expect(screen.getByText(/ایموجی پرمیوم جای ایموجی اول نام می‌نشیند/)).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'برداشتن' }))
+    expect(screen.queryByText(/ایموجی پرمیوم جای ایموجی اول نام می‌نشیند/)).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'افزودن پلن' }))
+    await until(() => expect(server().sent('POST', '/api/admin/plans')).toHaveLength(2))
+    expect(server().sent('POST', '/api/admin/plans')[1]?.body).toMatchObject({ name: 'طلایی', emoji_id: null })
+  })
+
   it('keeps every section, its drafts with it, but lays out only the one shown — each tab as long as its own', async () => {
     showForm()
     await screen.findByRole('tab', { name: /مشخصات/ })
@@ -810,9 +836,72 @@ describe('its button in the bot', () => {
   })
 })
 
+/** The badge picked in its select, by the words the card shows. */
+function pickBadge(label: string) {
+  fireEvent.keyDown(screen.getByRole('combobox', { name: /^برچسب/ }), { key: 'Enter' })
+  fireEvent.click(screen.getByRole('option', { name: label }))
+}
+
+const pickedBadge = () => screen.getByRole('combobox', { name: /^برچسب/ }).textContent
+
+describe('its badge', () => {
+  it('of a new plan is none, sent as none — and offers the shop’s labels', async () => {
+    server().on('POST', '/api/admin/plans', json({ plan: planRow() }))
+    showForm()
+    await screen.findByRole('tab', { name: /مشخصات/ })
+
+    expect(pickedBadge()).toBe('بدون برچسب')
+    fireEvent.keyDown(screen.getByRole('combobox', { name: /^برچسب/ }), { key: 'Enter' })
+    expect(screen.getAllByRole('option').map((option) => option.textContent)).toEqual(['بدون برچسب', 'پرفروش‌ترین', 'پیشنهاد ما', 'VIP'])
+    fireEvent.keyDown(screen.getByRole('listbox'), { key: 'Escape' })
+    fireEvent.click(screen.getByRole('button', { name: 'افزودن پلن' }))
+
+    await until(() => expect(server().sent('POST', '/api/admin/plans')).toHaveLength(1))
+    expect(sentPlan('POST', '/api/admin/plans')).toMatchObject({ badge: null })
+  })
+
+  it('picked, goes as the plan keeps it', async () => {
+    server().on('PUT', '/api/admin/plans/3', json({ plan: planRow({ badge: 'bestseller' }) }))
+    showPlan(planRow())
+    await screen.findByRole('tab', { name: /مشخصات/ })
+
+    pickBadge('پرفروش‌ترین')
+    fireEvent.click(screen.getByRole('button', { name: 'ذخیره تغییرات' }))
+
+    await until(() => expect(server().sent('PUT', '/api/admin/plans/3')).toHaveLength(1))
+    expect(sentPlan('PUT', '/api/admin/plans/3')).toMatchObject({ badge: 'bestseller' })
+  })
+
+  it('kept, opens as it is, and none picked again goes as none', async () => {
+    server().on('PUT', '/api/admin/plans/3', json({ plan: planRow() }))
+    showPlan(planRow({ badge: 'vip' }))
+    await screen.findByRole('tab', { name: /مشخصات/ })
+
+    expect(pickedBadge()).toBe('VIP')
+    pickBadge('بدون برچسب')
+    fireEvent.click(screen.getByRole('button', { name: 'ذخیره تغییرات' }))
+
+    await until(() => expect(server().sent('PUT', '/api/admin/plans/3')).toHaveLength(1))
+    expect(sentPlan('PUT', '/api/admin/plans/3')).toMatchObject({ badge: null })
+  })
+
+  it('refused, opens its section and says why under it', async () => {
+    const words = 'برچسب را از میان «پرفروش‌ترین»، «پیشنهاد ما» و «VIP» انتخاب کنید، یا بدون برچسب بگذارید.'
+    server().on('POST', '/api/admin/plans', refusal(422, words, { badge: [words] }))
+    showForm()
+    await openQuota()
+
+    fireEvent.click(screen.getByRole('button', { name: 'افزودن پلن' }))
+
+    await until(() => expect(screen.getByRole('tab', { name: /مشخصات/ }).getAttribute('aria-selected')).toBe('true'))
+    expect(screen.getByText(words)).toBeTruthy()
+    expect(screen.getByRole('combobox', { name: /^برچسب/ }).getAttribute('aria-invalid')).toBe('true')
+  })
+})
+
 describe('a saved plan opened again', () => {
-  it('is no change, whatever it holds — its agent price, its checkout note, its button', async () => {
-    showPlan(planRow({ first_purchase_price: '0.00', agent_price: '90000.00', checkout_note: 'تحویل فوری', button_style: 'primary', button_row: 2, extras: OWN }))
+  it('is no change, whatever it holds — its agent price, its checkout note, its button, its badge', async () => {
+    showPlan(planRow({ first_purchase_price: '0.00', agent_price: '90000.00', checkout_note: 'تحویل فوری', button_style: 'primary', button_row: 2, badge: 'recommended', extras: OWN }))
     await screen.findByRole('tab', { name: /مشخصات/ })
 
     expect(screen.getByRole('button', { name: 'ذخیره تغییرات' }).getAttribute('aria-disabled')).toBe('true')

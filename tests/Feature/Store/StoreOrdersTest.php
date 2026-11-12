@@ -91,6 +91,8 @@ final class StoreOrdersTest extends HttpTestCase
                 'paid_at' => '2026-10-07T12:00:00+00:00',
                 'receipt' => ['sent_at' => '2026-10-07T12:00:00+00:00'],
                 'note' => null,
+                'reference' => null,
+                'held' => false,
                 'link' => null,
             ]],
         ], $answer['orders'][1]);
@@ -123,6 +125,8 @@ final class StoreOrdersTest extends HttpTestCase
                 'paid_at' => null,
                 'receipt' => null,
                 'note' => null,
+                'reference' => null,
+                'held' => false,
                 'link' => null,
             ]],
         ], $this->decode($this->get($this->storeApi($this->website, "/orders/{$topUp->id}")))['order']);
@@ -187,6 +191,8 @@ final class StoreOrdersTest extends HttpTestCase
 
         self::assertSame(['renewal', ['id' => $this->server->id, 'name' => 'Berlin'], ['id' => $subscription->id, 'name' => $subscription->remote_name]], [$row['type'], $row['server'], $row['subscription']], 'a renewal names no server of its own: its service\'s');
         self::assertSame(['id' => $this->walletMethod()->id, 'label' => $this->walletMethod()->label, 'kind' => 'instant', 'min_amount' => null, 'max_amount' => null], $row['payments'][0]['method']);
+        self::assertStringStartsWith('wallet-tx-', (string) $renewal->payments()->value('reference'), 'the shop keeps its own reference of the wallet line');
+        self::assertNull($row['payments'][0]['reference'], 'which is no gateway\'s tracking code to quote');
     }
 
     public function testTheListIsNarrowedToAStateAndAKind(): void

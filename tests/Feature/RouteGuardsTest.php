@@ -14,6 +14,7 @@ use App\Modules\Accounts\Services\CustomerSessions;
 use App\Modules\Auth\PanelAuthMiddleware;
 use App\Modules\Auth\StaffGrant;
 use App\Modules\Bots\CurrentBot;
+use App\Modules\Store\Contracts\Door;
 use App\Modules\Store\Http\StaffMiddleware;
 use App\Modules\Store\Http\StoreMiddleware;
 use App\Modules\Store\Models\Website;
@@ -32,9 +33,9 @@ use Tests\HttpTestCase;
  * them too: a panel's API needs that panel's session (the owner's and an agent's are apart) and nothing else opens one,
  * a change needs the CSRF header, a fresh shop answers nothing but its installer and what tells a panel to open it, and
  * an installed shop has no installer. A row of one shop is no other's: a route of the shop's screens that names a row
- * finds it only in its own shop, whoever asks from another. The websites' API answers only under the key of a website
- * that is on, a customer's own only to their bearer token — no panel's session, no CSRF header —, and what changes how
- * their account is signed in to only to a token whose sign-in is recent. The router decides what a request is, so an
+ * finds it only in its own shop, whoever asks from another. The Store API answers only under the key of a website or a
+ * mini app that is on, a customer's own only to their bearer token — no panel's session, no CSRF header —, and what
+ * changes how their account is signed in to only to a token whose sign-in is recent. The router decides what a request is, so an
  * address spelled another way — encoded, under a sub-folder — is the same route behind the same guards.
  */
 final class RouteGuardsTest extends HttpTestCase
@@ -91,17 +92,21 @@ final class RouteGuardsTest extends HttpTestCase
     private const STORE = '/api/store/v1';
 
     /**
-     * What a website answers its visitor before they sign in, under its base address: the shop, what it sells (read as a
-     * customer's own when their token comes with it), its reviews — one written too (a customer's own when their token
-     * comes with it) —, and the ways in.
+     * What a website or the mini app answers its visitor before they sign in, under its base address: the shop, what it
+     * sells (read as a customer's own when their token comes with it) and on sale now, its guide, its reviews — one
+     * written too (a customer's own when their token comes with it) —, the ways in, and the mini app's logo.
      */
     private const STORE_PUBLIC = [
         '',
         '/plans',
         '/plans/1',
         '/status',
+        '/sales',
+        '/tutorial',
         '/custom-services',
         '/reviews',
+        '/auth/mini-app',
+        '/app/logo',
         '/auth/nonce',
         '/auth/telegram/authorize',
         '/auth/telegram',
@@ -112,16 +117,31 @@ final class RouteGuardsTest extends HttpTestCase
         '/auth/login/2fa',
         '/auth/password/forgot',
         '/auth/password/reset',
+        '/auth/phone',
+        '/auth/phone/verify',
         '/captcha/challenge',
         '/captcha/verify',
     ];
 
     /**
-     * What changes how a website customer's account is signed in to, and a service or money handed away — a recent
-     * sign-in's alone (Accounts\Http\RecentSignInMiddleware).
+     * What a signed-in customer has only on a website (`x-door: website`): under the mini app's key, no route at all
+     * (MiniAppDoorTest walks every door's).
+     */
+    private const STORE_WEBSITE_ONLY = ['POST /me/telegram/authorize', 'POST /me/reauthenticate/phone', 'POST /me/identities/telegram', 'POST /me/identities/google', 'POST /me/identities/phone', 'POST /me/identities/phone/verify'];
+
+    /**
+     * What a signed-in customer has only in the mini app (`x-door: mini_app`) — the secret it keeps behind the device's
+     * fingerprint or face —: under a website's key, no route at all.
+     */
+    private const STORE_MINI_APP_ONLY = ['PUT /me/biometric', 'DELETE /me/biometric'];
+
+    /**
+     * What changes how a customer's account is signed in to — a fingerprint secret set in the mini app among it —, and a
+     * service or money handed away: a recent sign-in's alone (Accounts\Http\RecentSignInMiddleware).
      */
     private const STORE_CREDENTIALS = [
         'PUT /me/password',
+        'PUT /me/biometric',
         'POST /me/2fa/setup',
         'POST /me/2fa/enable',
         'POST /me/2fa/disable',
@@ -129,6 +149,8 @@ final class RouteGuardsTest extends HttpTestCase
         'POST /me/identities/google',
         'POST /me/identities/email',
         'POST /me/identities/email/verify',
+        'POST /me/identities/phone',
+        'POST /me/identities/phone/verify',
         'DELETE /me/identities/telegram',
         'POST /me/merge',
         'POST /wallet/transfer',
@@ -273,11 +295,12 @@ final class RouteGuardsTest extends HttpTestCase
         }
     }
 
-    public function testTheStoreApiAnswersOnlyUnderTheKeyOfAWebsiteThatIsOn(): void
+    public function testTheStoreApiAnswersOnlyUnderTheKeyOfAWebsiteOrAMiniAppThatIsOn(): void
     {
         $off = $this->website(['enabled' => false]);
+        $offApp = $this->miniApp(['enabled' => false]);
 
-        foreach ([str_repeat('0', 24), $off->key] as $key) {
+        foreach ([str_repeat('0', 24), $off->key, $offApp->key] as $key) {
             foreach ($this->routes(self::STORE, $key) as [$method, $path]) {
                 $response = $this->ask($method, $path);
 
@@ -286,52 +309,49 @@ final class RouteGuardsTest extends HttpTestCase
         }
     }
 
-    public function testAWebsiteCustomersOwnNeedTheirSignInAndNoPanelsSessionIsOne(): void
+    /** A customer's own need their sign-in through either door — under the mini app's key, what is there of them. */
+    public function testACustomersOwnNeedTheirSignInAndNoPanelsSessionIsOne(): void
     {
-        $website = $this->website();
-        $base = $this->storeApi($website);
+        $doors = [$this->website(), $this->miniApp()];
 
         foreach ([false, true] as $panelSession) {
             if ($panelSession) {
                 $this->loginAsAdmin();
             }
-            foreach ($this->routes(self::STORE, $website->key) as [$method, $path]) {
-                if (in_array(substr($path, strlen($base)), self::STORE_PUBLIC, true)) {
-                    continue;
-                }
-                $response = $this->ask($method, $path);
+            foreach ($doors as $door) {
+                foreach ($this->customersOwn($door) as [$method, $path]) {
+                    $response = $this->ask($method, $path);
 
-                self::assertSame([401, CustomerAuthMiddleware::SIGNED_OUT], [$response->getStatusCode(), $this->decode($response)['message']], "{$method} {$path}");
+                    self::assertSame([401, CustomerAuthMiddleware::SIGNED_OUT], [$response->getStatusCode(), $this->decode($response)['message']], "{$method} {$path}");
+                }
             }
         }
     }
 
-    public function testWhatChangesAWebsiteCustomersWaysInAsksARecentSignInAndNothingElseDoes(): void
+    public function testWhatChangesACustomersWaysInAsksARecentSignInAndNothingElseDoes(): void
     {
-        $website = $this->website();
-        $base = $this->storeApi($website);
         $sara = $this->webCustomer();
 
-        foreach ($this->routes(self::STORE, $website->key) as [$method, $path]) {
-            $route = substr($path, strlen($base));
-            if (in_array($route, self::STORE_PUBLIC, true)) {
-                continue;
-            }
-            // A session of her own each — a walked route may end one —, signed in long ago: a token that leaked.
-            $this->bearer($this->customerSession($sara, ['authenticated_at' => now()->subSeconds(CustomerSessions::RECENT_SECONDS + 1)]));
-            $response = $this->ask($method, $path);
+        foreach ([$this->website(), $this->miniApp()] as $door) {
+            $base = $this->storeApi($door);
+            foreach ($this->customersOwn($door) as [$method, $path]) {
+                // A session of her own each — a walked route may end one —, signed in long ago: a token that leaked.
+                $this->bearer($this->customerSession($sara, ['authenticated_at' => now()->subSeconds(CustomerSessions::RECENT_SECONDS + 1)]));
+                $response = $this->ask($method, $path);
 
-            $asked = $response->getStatusCode() === 403 && $response->getHeaderLine('WWW-Authenticate') === RecentSignInMiddleware::CHALLENGE;
-            self::assertSame(in_array("{$method} {$route}", self::STORE_CREDENTIALS, true), $asked, "{$method} {$path}");
+                $asked = $response->getStatusCode() === 403 && $response->getHeaderLine('WWW-Authenticate') === RecentSignInMiddleware::CHALLENGE;
+                self::assertSame(in_array($method . ' ' . substr($path, strlen($base)), self::STORE_CREDENTIALS, true), $asked, "{$method} {$path}");
+            }
         }
     }
 
     /**
      * The website's admin API is the shop's admins' alone, every route of it, each refusal at its door: a customer who is
-     * no admin of the shop; an admin while the website lets none in; a session signed in with a password alone while the
-     * website asks a strong sign-in (the challenge naming the strong ways); a session whose sign-in is older than a
-     * working day; a route that names a grant the website has not given; a granted one — or approving a payment — whose
-     * sign-in is not recent — a 403 each, before anything reads the request.
+     * no admin of the shop; an admin while the website lets none in; a session the mini app signed in, however recent;
+     * a session signed in with a password alone while the website asks a strong sign-in (the challenge naming the
+     * strong ways); a session whose sign-in is older than a working day; a route that names a grant the website has not
+     * given; a granted one — or approving a payment — whose sign-in is not recent — a 403 each, before anything reads
+     * the request.
      */
     public function testTheWebsitesAdminApiIsTheShopsAdminsAloneEveryRouteOfIt(): void
     {
@@ -353,6 +373,9 @@ final class RouteGuardsTest extends HttpTestCase
         $refused(StaffMiddleware::STAFF_OFF);
 
         $website->forceFill(['staff_enabled' => true])->save();
+        $this->bearer($this->customerSession($sara, ['method' => SignInMethod::MiniApp]));
+        $refused(StaffMiddleware::MINI_APP_SESSION);
+
         $this->bearer($this->customerSession($sara));
         $refused(StaffMiddleware::SIGN_IN_STRONGLY, StaffMiddleware::STRONG_CHALLENGE);
 
@@ -527,6 +550,29 @@ final class RouteGuardsTest extends HttpTestCase
         self::assertGreaterThan(50, count($routes));
 
         return $routes;
+    }
+
+    /**
+     * A door's routes that are a signed-in customer's own, as requests (routes()): all but what anyone may ask
+     * (STORE_PUBLIC) — under the mini app's key, but what only a website has too (STORE_WEBSITE_ONLY, its admin API);
+     * under a website's, but what only the mini app has (STORE_MINI_APP_ONLY).
+     *
+     * @return list<array{string, string, string}>
+     */
+    private function customersOwn(Door $door): array
+    {
+        $base = $this->storeApi($door);
+        $own = [];
+        foreach ($this->routes(self::STORE, $door->storeKey()) as $route) {
+            $relative = substr($route[1], strlen($base));
+            $websites = in_array("{$route[0]} {$relative}", self::STORE_WEBSITE_ONLY, true) || str_starts_with($relative, '/admin/');
+            $miniApps = in_array("{$route[0]} {$relative}", self::STORE_MINI_APP_ONLY, true);
+            if (!in_array($relative, self::STORE_PUBLIC, true) && ($door instanceof Website ? !$miniApps : !$websites)) {
+                $own[] = $route;
+            }
+        }
+
+        return $own;
     }
 
     /**

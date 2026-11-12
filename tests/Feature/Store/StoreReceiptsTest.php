@@ -16,6 +16,7 @@ use App\Modules\Payments\Services\PaymentActions;
 use App\Modules\Payments\Services\PaymentService;
 use App\Modules\Payments\Tasks\AutoApproveReceiptsTask;
 use App\Modules\Providers\Models\Server;
+use App\Modules\Settings\Services\ScheduleSettings;
 use App\Modules\Store\Models\Website;
 use App\Modules\Store\Services\CustomerReceipts;
 use App\Modules\Telegram\Models\ReportMessage;
@@ -291,7 +292,7 @@ final class StoreReceiptsTest extends HttpTestCase
         $path = $this->receipts() . '/' . $payment->receipt_path;
         self::assertFileExists($path, 'a refused receipt stays: the customer may pay again');
 
-        Carbon::setTestNow(now()->addHours(ExpireOrdersTask::EXPIRE_HOURS)->addMinute());
+        Carbon::setTestNow(now()->addHours(ScheduleSettings::ORDER_HOURS)->addMinute());
         $this->service(ExpireOrdersTask::class)->run();
 
         self::assertSame([PaymentStatus::Cancelled, 'ناخوانا'], [$payment->refresh()->status, $payment->note], 'its refusal\'s reason kept');

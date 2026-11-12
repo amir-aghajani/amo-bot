@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="theme-color" content="#ffffff" />
+    <meta name="format-detection" content="telephone=no" />
+    <script>
+      // The mini app's folder (…/app/, wherever the shop is installed) is the page's base, so every relative address —
+      // the built scripts and styles, the API beside the app — reads against it from any of its pages. Its address is
+      // app/{the shop's store key}/…: src/apps/app/config reads the key after it.
+      ;(function () {
+        var match = location.pathname.match(/^(.*\/app)(?:\/|$)/)
+        var base = document.createElement('base')
+        // One leading slash: "//app/" would be read as another host.
+        base.href = (match ? match[1].replace(/^\/+/, '/') : '/app') + '/'
+        document.head.appendChild(base)
+      })()
+    </script>
+    <title>فروشگاه</title>
+    <link rel="icon" type="image/svg+xml" href="../favicon.svg" />
+  </head>
+  <body>
+    <noscript>
+      <p style="font-family: Vazirmatn, sans-serif; text-align: center; margin-top: 4rem">این صفحه بدون JavaScript کار نمی‌کند.</p>
+    </noscript>
+    <div id="root">
+      <!-- What the app draws while it loads; the script takes its place. -->
+      <div style="display: flex; min-height: 100vh; align-items: center; justify-content: center" role="status" aria-label="در حال بارگذاری">
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="28"
+          height="28"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          style="opacity: 0.4; animation: spin 0.8s linear infinite"
+          aria-hidden="true"
+        >
+          <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+        </svg>
+        <style>
+          @keyframes spin {
+            to {
+              transform: rotate(360deg);
+            }
+          }
+        </style>
+      </div>
+    </div>
+    <script type="module" src="/src/apps/app/main.tsx"></script>
+  </body>
+</html>

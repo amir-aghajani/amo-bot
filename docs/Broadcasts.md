@@ -38,9 +38,10 @@ neither counted nor reached. One who blocked the bot is counted («مسدود»)
 پین» unpins it in every chat, with a progress card of its own.
 
 **The pace**: 20 messages a second at most (a pin is one more). The first 50 go as you press «ارسال»; the rest go with
-the scheduler, up to 600 a minute — **without the cron or the poller running, a broadcast stops at its first 50**
-([Running in production](Running-In-Production.md)). When the scheduler finishes a run, the admin who sent it gets a
-summary.
+the scheduler, up to 600 a run, and a run every minute by default
+([«زمان‌بندی کارها»](Running-In-Production.md#the-task-schedule)) — **without the cron or the poller running, a broadcast
+stops at its first 50** ([Running in production](Running-In-Production.md)). When the scheduler finishes a run, the
+admin who sent it gets a summary.
 
 ### The runs in the panel
 
@@ -65,8 +66,8 @@ From the panel, «ادامه» leaves the next batch to the scheduler. An agent'
 deciding at each one's turn, exactly as a server's «افزودن زمان و حجم» (a service the days would end after
 [the last day](Services.md#watch-out-for) is passed by): a panel out of reach holds its own server's part only, and the
 rest go on. It reaches the services of every shop that existed as you gave it — never a free test —, and
-each customer is told by their own shop's bot. The card works it while open, the scheduler every minute otherwise;
-«لغو» stops every part still going («لغوشده») — what was given stays given.
+each customer is told by their own shop's bot. The card works it while open, the scheduler every minute (by default)
+otherwise; «لغو» stops every part still going («لغوشده») — what was given stays given.
 
 «هدیه جدید» waits while a gift on the list is running, and a server already running one refuses a new gift that would
 reach it. The list shows the latest ten gifts — a server's own among them —, each server's part on that server's page

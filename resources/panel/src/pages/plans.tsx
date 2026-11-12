@@ -8,6 +8,7 @@ import { Dash, ListView, PhoneFacts, RowTitleButton } from '@/components/list-vi
 import { Page } from '@/components/page'
 import { PageHeader } from '@/components/page-header'
 import { BulkPricesModal } from '@/components/plans/bulk-prices-modal'
+import { PLAN_BADGES } from '@/components/plans/plan-badge'
 import { PlanForm } from '@/components/plans/plan-form'
 import { EditorModal, useEditor } from '@/components/row-editor'
 import { ActionsHead, EditMenu, OrderCell, OrderHead, RemoveConfirm } from '@/components/sortable-list'
@@ -24,8 +25,9 @@ import { useRows } from '@/lib/use-rows'
 import { cn } from '@/lib/utils'
 
 /**
- * «پلن‌ها»: the catalogue in the order customers see it, a plan the bot does not show flagged with why, and the bulk price
- * change. `addServers` is where servers are added (the owner's); an agent's panel adds none.
+ * «پلن‌ها»: the catalogue in the order customers see it, each with the badge its card wears, a plan the bot does not show
+ * flagged with why, and the bulk price change. `addServers` is where servers are added (the owner's); an agent's panel
+ * adds none.
  */
 export function PlansPage({ addServers }: { addServers?: string }) {
   const editor = useEditor<PlanRow>()
@@ -105,7 +107,11 @@ export function PlansPage({ addServers }: { addServers?: string }) {
                 <OrderCell list={list} index={index} label={plan.name} />
                 <TableCell>
                   <div className="grid">
-                    <RowTitleButton onClick={() => editor.edit(plan)}>{plan.name}</RowTitleButton>
+                    <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                      <RowTitleButton onClick={() => editor.edit(plan)}>{plan.name}</RowTitleButton>
+                      {/* The label its card wears in the mini app and on the website. */}
+                      {plan.badge && <Badge variant="info">{PLAN_BADGES[plan.badge]}</Badge>}
+                    </span>
                     {plan.description && <span className="line-clamp-1 max-w-64 text-footnote text-muted-foreground">{plan.description}</span>}
                     <span className="text-footnote text-muted-foreground md:hidden">
                       {formatGb(plan.traffic_gb)} · {formatDuration(plan.duration_hours)}

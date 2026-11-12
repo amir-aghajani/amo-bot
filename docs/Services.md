@@ -4,8 +4,8 @@
 
 «فروش › اشتراک‌ها», in both panels: the customers' services. A service is one client on a server's panel, with the one
 subscription link the customer adds to their app. The shop keeps a copy of each service's numbers, and the panel is the
-truth: about every 15 minutes the running services are read from their panels — counters, quota, end, link —, and a
-service whose time or traffic ran out there ends here too.
+truth: about every 15 minutes by default the running services are read from their panels — counters, quota, end,
+link —, and a service whose time or traffic ran out there ends here too.
 
 **The term starts at the first connection**: a new service waits for it — «در انتظار اولین اتصال (n روز)», an hourly
 plan's «(n ساعت)» — and its end is set then. A term is kept in hours (an hourly plan's hours, a daily one's days × 24);
@@ -53,7 +53,7 @@ until the next run takes it. Then what may be done with it now:
 | «فعال کردن دوباره» | A service switched off here (an ended one needs a renewal) | The client switched on again | Told |
 | «انتقال به سرور دیگر» | An active service | [Below](#moving-services) | Gets the new link |
 | «انتقال به مشتری دیگر» | Anything but a free test or a service gone from its panel | [Below](#handing-a-service-to-another-customer) | Both told: it left the one, it is the other's |
-| «حذف سرویس» | While no order of it is open | Asks for an optional note; the client off its panel and the service off the shop — no trace; the orders that sold it keep their record | Told when it was still active; an ended or switched-off one goes quietly |
+| «حذف سرویس» | While no order of it is open | Asks for an optional note; the client off its panel and the service off the shop — no trace but the report group's «حذف سرویس‌ها», which names who deleted it; the orders that sold it keep their record | Told when it was still active; an ended or switched-off one goes quietly |
 
 **«حذف سرویس» waits for the service's open orders.** While a renewal or an extra of it is unpaid, being delivered or
 failed, the button is not offered, and a delete sent from elsewhere is refused: «سفارش #… این سرویس هنوز تمام نشده
@@ -180,6 +180,20 @@ Every operation works on it. Its delete confirmation has one more choice, «حذ
 customer sends the link again. As with «حذف سرویس», the customer of a running service is told it was deleted, with your
 note.
 
+## A customer's own name for a service
+
+A customer may give a service of theirs a name of their own — «نام دلخواه», one line of 32 characters at most, «گوشی
+من» — in the [mini app](Mini-App.md) or on the shop's website, and take it away again. The bot shows it beside the
+client's name, «گوشی من (amir_1)», where it names the service in passing — the bot texts' `%client%` in «سرویس‌های
+من» and the buttons that pick a service, the questions and confirmations of renewing it, its extras, a new link, handing
+it on and a ticket about it, and the short notices about it (support switching it off or on, deleting it or handing it
+on, an automatic renewal the wallet could not pay, a renewal or an extra paid but not delivered). The texts that carry
+the service's details — its screen, its delivery, a new link, a renewal or an extra done, the reminders, a service
+moved to another server, handed to the customer or given time and traffic — keep the client's name alone in their
+`%client%`: the username the customer copies and support asks for. The panels and the report group name a service by
+its client alone. A service that changes hands — handed to another customer, or added to another account by its link —
+leaves the name behind.
+
 ## Agents' shops
 
 Working an agent's shop — the agent in their panel, or you with their shop open — has rules of its own:
@@ -205,7 +219,10 @@ service**, nor takes a customer's — another admin, or you, does.
 
 ## What runs by itself
 
-- **The sync**, every 15 minutes: the running services read from their panels — their usage, and what you changed
+How often each of these runs is a default: you set it in
+[«زمان‌بندی کارها»](Running-In-Production.md#the-task-schedule).
+
+- **The sync**, every 15 minutes by default: the running services read from their panels — their usage, and what you changed
   there by hand: traffic, end, and on 3X-UI the device limit, which the next extra then builds on (a renewal brings its
   plan's); a panel whose last contact failed is left alone ten minutes ([Servers](Servers.md#health)).
 - **Renewal** — the customer renews a service on its own plan at its price today, in the bot or on the website, an ended
@@ -235,18 +252,18 @@ service**, nor takes a customer's — another admin, or you, does.
   limit holds («از …: ۱ کاربر») while it differs from the one now — also for a renewal whose traffic counted at once.
 - **«یادآوری»** — a service near its end, or near its traffic's end, is told once while it stays there (both off until
   switched on, [Bot settings](Bot-Settings.md#reminders)). A free test never is.
-- **The automatic removal**, every 15 minutes after the sync, in every shop that has ended services or tests — a
-  stopped agent's too —, by each shop's rules, quietly (the customer not told): a service that ended — its time or
-  traffic ran out, or its panel no longer has it — is removed from its panel and the shop «فاصله حذف» hours after it
-  ended, while the shop's «حذف خودکار سرویس‌های منقضی‌شده» is on (off until switched on,
-  [Bot settings](Bot-Settings.md#ended-services)); the orders that sold it keep their record. A free test that ended
-  goes after the shop's own grace, and one never connected after its days
-  ([Test accounts](Test-Accounts.md#the-clean-up)). When a service ended is the deadline it passed, else when its panel
-  said its traffic was used up or its client gone; one that runs again starts afresh. Each is read from its panel again
-  first, so one renewed, extended or connected to since the sync stays. One switched off here is left for you, and one
-  with an order about it still open — a renewal waiting for its receipt, a delivery waiting for support's retry —
-  waits for it. A run takes at most 100 of each rule in a shop, the oldest first; the rest wait for the next. The bot's
-  service screen and the shop's website tell the customer when an ended service goes.
+- **The automatic removal**, every 15 minutes by default, after the sync, in every shop that has ended services or tests
+  — a stopped agent's too —, by each shop's rules, quietly (the customer not told; the report group's «حذف سرویس‌ها»
+  lists the ended services each run removed, in one report): a service that ended — its time or traffic ran out, or its
+  panel no longer has it — is removed from its panel and the shop «فاصله حذف» hours after it ended, while the shop's
+  «حذف خودکار سرویس‌های منقضی‌شده» is on (off until switched on, [Bot settings](Bot-Settings.md#ended-services)); the
+  orders that sold it keep their record. A free test that ended goes after the shop's own grace, and one never connected
+  after its days ([Test accounts](Test-Accounts.md#the-clean-up)). When a service ended is the deadline it passed, else
+  when its panel said its traffic was used up or its client gone; one that runs again starts afresh. Each is read from
+  its panel again first, so one renewed, extended or connected to since the sync stays. One switched off here is left
+  for you, and one with an order about it still open — a renewal waiting for its receipt, a delivery waiting for
+  support's retry — waits for it. A run takes at most 100 of each rule in a shop, the oldest first; the rest wait for
+  the next. The bot's service screen and the shop's website tell the customer when an ended service goes.
 
 ## Watch out for
 

@@ -92,6 +92,38 @@ final class UpgradesTest extends TestCase
         self::assertSame(self::shape(self::freshInstall()), self::shape($installed));
     }
 
+    /**
+     * 0.8.0's run that stopped right after making `mini_apps` — MySQL makes a table, then its unique indexes and its key,
+     * each on its own — gets them all when run again: one mini app a shop (MiniApps::current() counts on it).
+     */
+    public function testAMiniAppsTableMadeWithoutItsIndexesAndKeyGetsThemWhenRunAgain(): void
+    {
+        $installed = self::firstRelease();
+        (new Upgrades($installed))->run(self::ROOT . '/database/upgrades', Installation::FIRST_RELEASE, '0.7.2', static function (): void {});
+        $installed->getSchemaBuilder()->create('mini_apps', static function (Blueprint $table): void {
+            $table->bigIncrements('id');
+            $table->foreignId('bot_id')->default(1);
+            $table->string('key', 24);
+            $table->boolean('enabled')->default(false);
+            $table->string('title', 64)->nullable();
+            $table->string('accent_color', 7)->nullable();
+            $table->string('logo_path', 100)->nullable();
+            $table->string('announcement', 500)->nullable();
+            $table->string('announcement_url', 255)->nullable();
+            $table->boolean('fullscreen')->default(true);
+            $table->boolean('reviews_enabled')->default(false);
+            $table->boolean('menu_button')->default(true);
+            $table->string('menu_button_text', 32)->nullable();
+            $table->timestamps();
+        });
+
+        (new Upgrades($installed))->run(self::ROOT . '/database/upgrades', '0.7.2', Application::VERSION, static function (): void {});
+
+        $fresh = self::shape(self::freshInstall());
+        self::assertSame($fresh['mini_apps'], self::shape($installed)['mini_apps'], 'unique(bot_id), unique(key), the key to bots');
+        self::assertSame($fresh, self::shape($installed));
+    }
+
     public function testATermKeptInDaysIsKeptInHours(): void
     {
         $installed = self::firstRelease();

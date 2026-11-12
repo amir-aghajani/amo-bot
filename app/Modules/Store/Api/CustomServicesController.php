@@ -13,21 +13,25 @@ use App\Modules\Discounts\Exceptions\DiscountCodeRefusedException;
 use App\Modules\Orders\Exceptions\RequestKeyReusedException;
 use App\Modules\Store\Exceptions\CheckoutRefusedException;
 use App\Modules\Store\Http\IdempotencyKey;
+use App\Modules\Store\Http\StoreMiddleware;
 use App\Modules\Store\Presenters\CustomServicePresenter;
 use App\Modules\Store\Services\CustomerCheckout;
+use App\Modules\Store\Services\CustomerGates;
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 
 /**
  * «سرویس دلخواه» on the website (Catalog\Services\CustomServices): what may be built — anyone may read it —, and for a
  * signed-in customer its price and its checkout (Store\Services\CustomerCheckout), the ordering request with its
- * Idempotency-Key, read before anything else.
+ * Idempotency-Key, read before anything else — and through the mini app held to the bot's gates
+ * (Store\Services\CustomerGates::holdBack()).
  */
 final class CustomServicesController extends ApiController
 {
     public function __construct(
         private readonly CustomServices $custom,
         private readonly CustomerCheckout $checkout,
+        private readonly CustomerGates $gates,
     ) {}
 
     /** GET /custom-services — whether the builder is offered, each quantity's tiers, bounds and buttons, the devices, the servers. */
@@ -60,6 +64,7 @@ final class CustomServicesController extends ApiController
     {
         $key = IdempotencyKey::of($request);
         $customer = Customer::of($request)->user;
+        $this->gates->holdBack(StoreMiddleware::door($request), $customer);
 
         return $this->json($response, ['checkout' => $this->checkout->answer($customer, $this->checkout->buildService($customer, $this->input($request), $key))]);
     }

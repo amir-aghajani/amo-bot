@@ -4,12 +4,14 @@ import { AGENT_NAV } from '@/apps/agent/nav'
 import {
   APPEARANCE_SECTION,
   areaFor,
+  BACKUPS_SECTION,
   BOT_SETTINGS_SECTIONS,
   DASHBOARD,
   inSettings,
   isGroup,
   isNavItemActive,
   isSectionCurrent,
+  MINI_APP_SETTINGS_SECTIONS,
   navOfShop,
   pageTitle,
   REFERRAL_SECTIONS,
@@ -58,17 +60,17 @@ describe('the sidebar’s column', () => {
     expect(areaFor(AGENT_NAV, '/broadcasts')).toBeNull()
   })
 
-  it('is the settings’ own on every settings page: the bot’s, the website’s, and the panel’s own beside them', () => {
+  it('is the settings’ own on every settings page: the bot’s, the website’s, the mini app’s, and the panel’s own beside them', () => {
     const owner = areaFor(ADMIN_NAV, '/settings/database')
     expect(owner?.id).toBe('settings')
-    expect(owner?.groups.map((group) => group.id)).toEqual(['bot', 'website', 'panel'])
-    expect(areaFor(AGENT_NAV, '/bot-settings/qr')?.groups.map((group) => group.id)).toEqual(['bot', 'website', 'panel'])
+    expect(owner?.groups.map((group) => group.id)).toEqual(['bot', 'website', 'mini-app', 'panel'])
+    expect(areaFor(AGENT_NAV, '/bot-settings/qr')?.groups.map((group) => group.id)).toEqual(['bot', 'website', 'mini-app', 'panel'])
     expect(inSettings(ADMIN_NAV, '/bot-settings/general')).toBe(true)
     expect(inSettings(AGENT_NAV, '/settings/appearance')).toBe(true)
   })
 
   it('holds the shop’s website in both panels — an agent’s shop has one too —, its connection, each way in, then its admins', () => {
-    expect(WEBSITE_SETTINGS_SECTIONS.map((section) => section.value)).toEqual(['connection', 'telegram', 'google', 'email', 'reviews', 'staff'])
+    expect(WEBSITE_SETTINGS_SECTIONS.map((section) => section.value)).toEqual(['connection', 'telegram', 'google', 'email', 'phone', 'reviews', 'staff'])
     for (const nav of [ADMIN_NAV, AGENT_NAV]) {
       expect(nav.settings.groups.find((group) => group.id === 'website')?.sections).toEqual(WEBSITE_SETTINGS_SECTIONS)
       for (const section of WEBSITE_SETTINGS_SECTIONS) {
@@ -78,9 +80,20 @@ describe('the sidebar’s column', () => {
     }
   })
 
-  it('holds the panel’s look among every panel’s own settings, and the owner’s email, login and AmoBot’s update among the owner’s', () => {
-    expect(panelSettingsOf(ADMIN_NAV)).toEqual(['telegram', 'database', 'app', 'mail', 'login', 'appearance', 'update', 'advanced'])
-    expect(panelSettingsOf(AGENT_NAV)).toEqual(['appearance'])
+  it('holds the shop’s mini app in both panels — every bot has its own —, its connection, its look, then its preview', () => {
+    expect(MINI_APP_SETTINGS_SECTIONS.map((section) => section.value)).toEqual(['connection', 'appearance', 'preview'])
+    for (const nav of [ADMIN_NAV, AGENT_NAV]) {
+      expect(nav.settings.groups.find((group) => group.id === 'mini-app')?.sections).toEqual(MINI_APP_SETTINGS_SECTIONS)
+      for (const section of MINI_APP_SETTINGS_SECTIONS) {
+        expect(areaFor(nav, section.to)?.id).toBe('settings')
+        expect(pageTitle(nav, section.to)).toBe('مینی‌اپ تلگرام')
+      }
+    }
+  })
+
+  it('holds the backups and the panel’s look among every panel’s own settings, and the owner’s email, login, AmoBot’s update and the schedule among the owner’s', () => {
+    expect(panelSettingsOf(ADMIN_NAV)).toEqual(['telegram', 'database', 'app', 'mail', 'sms', 'login', 'appearance', 'update', 'schedule', 'backups', 'advanced'])
+    expect(panelSettingsOf(AGENT_NAV)).toEqual(['backups', 'appearance'])
   })
 })
 
@@ -161,13 +174,14 @@ describe('a menu item', () => {
 })
 
 describe('the panels’ trees', () => {
-  it('give an agent no link to the owner’s own pages — of the panel’s settings, the look alone is theirs', () => {
+  it('give an agent no link to the owner’s own pages — of the panel’s settings, the backups and the look alone are theirs', () => {
     const linked = addresses(AGENT_NAV)
-    const ownersSettings = PANEL_SETTINGS_SECTIONS.filter((section) => section !== APPEARANCE_SECTION).map((section) => section.to)
+    const ownersSettings = PANEL_SETTINGS_SECTIONS.filter((section) => section !== APPEARANCE_SECTION && section !== BACKUPS_SECTION).map((section) => section.to)
     for (const owners of ['/servers', '/agents', '/broadcasts/gifts', ...ownersSettings]) {
       expect(linked.filter((to) => to === owners || to.startsWith(`${owners}/`))).toEqual([])
     }
     expect(linked).toContain('/account')
+    expect(linked).toContain(BACKUPS_SECTION.to)
     expect(linked).toContain(APPEARANCE_SECTION.to)
   })
 

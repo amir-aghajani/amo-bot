@@ -11,14 +11,17 @@ use App\Modules\Bots\CurrentBot;
 use App\Modules\Bots\Models\Bot;
 use App\Modules\Orders\Enums\OrderStatus;
 use App\Modules\Payments\Enums\PaymentStatus;
+use App\Modules\Users\Enums\UserRole;
+use App\Modules\Users\Enums\UserStatus;
 use App\Modules\Users\Models\User;
 use Tests\BotTestCase;
 
 /**
  * A button of the report group is a decision, and callback data is whatever the pressing client sends: a modified
- * client can write any `ag:`/`rv:`/`rt:` data under any message of a bot's it can see. An agent is the admin of their
- * own bot, so in their bot's group they pass the "bot admins only" rule — and still decide nothing but their own shop's
- * matters: never a request to become an agent (the main bot's alone), never a payment or an order of another shop.
+ * client can write any `ag:`/`rv:`/`rt:`/`um:` data under any message of a bot's it can see. An agent is the admin of
+ * their own bot, so in their bot's group they pass the "bot admins only" rule — and still decide nothing but their own
+ * shop's matters: never a request to become an agent (the main bot's alone), never a payment, an order or a customer of
+ * another shop.
  */
 final class GroupButtonsAcrossShopsTest extends BotTestCase
 {
@@ -75,5 +78,19 @@ final class GroupButtonsAcrossShopsTest extends BotTestCase
         self::assertNull($payment->reviewer);
         self::assertSame(OrderStatus::Failed, $failed->refresh()->status);
         self::assertSame('0.00', $this->friend->balance(), 'no top-up landed');
+    }
+
+    public function testAnAgentCannotManageAnotherShopsCustomerFromTheirBotsGroup(): void
+    {
+        CurrentBot::run($this->bot, fn() => $this->reportGroup(-1009876543210));
+
+        foreach (["um:rs:{$this->friend->id}:admin", "um:bs:{$this->friend->id}:banned", "um:n:{$this->friend->id}"] as $forged) {
+            $this->sendTo($this->bot, $this->groupTap($forged, self::POST, self::THREAD, self::AGENT_TELEGRAM_ID));
+
+            self::assertNotContains('sendMessage', $this->calls(), "{$forged}: no card of the main shop's customer");
+        }
+
+        $this->friend->refresh();
+        self::assertSame([UserRole::Customer, UserStatus::Active], [$this->friend->role, $this->friend->status], 'no customer of the agent\'s shop');
     }
 }

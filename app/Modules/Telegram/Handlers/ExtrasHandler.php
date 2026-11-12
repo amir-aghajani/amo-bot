@@ -179,21 +179,21 @@ final class ExtrasHandler implements Handler, RedrawableCheckout
         $after = $this->card->values($terms->preview($subscription));
         $text = match ($kind) {
             ExtraKind::Traffic => $this->texts->render(BotText::ExtraTrafficCheckout, [
-                'client' => $subscription->remote_name,
+                'client' => $subscription->shownAs(),
                 'extra_traffic' => $kind->words($quantity),
                 'amount' => Money::format($price),
                 'remaining' => $after['remaining'],
                 'expires' => $after['expires'],
             ]),
             ExtraKind::Time => $this->texts->render(BotText::ExtraTimeCheckout, [
-                'client' => $subscription->remote_name,
+                'client' => $subscription->shownAs(),
                 'extra_time' => $kind->words($quantity),
                 'amount' => Money::format($price),
                 'expires' => $after['expires'],
                 'remaining' => $after['remaining'],
             ]),
             ExtraKind::Devices => $this->texts->render(BotText::ExtraDevicesCheckout, [
-                'client' => $subscription->remote_name,
+                'client' => $subscription->shownAs(),
                 'extra_devices' => $kind->words($quantity),
                 'amount' => Money::format($price),
                 'days_left' => self::daysLeft($offer),

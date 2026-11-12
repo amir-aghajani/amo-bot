@@ -73,7 +73,7 @@ final class RenewalWindowTest extends DatabaseTestCase
 
         $window = $this->renewal()->window($plenty);
         self::assertSame([false, null, null, 20], [$window->open, $window->opensAt, $window->daysBefore, $window->percent], 'ten of thirty left; its deadline counts for nothing');
-        self::assertSame('وقتی ٪۲۰ از حجم یا کمتر مانده باشد', $window->when());
+        self::assertSame('وقتی ۲۰٪ از حجم یا کمتر مانده باشد', $window->when());
 
         self::assertTrue($this->renewal()->window($this->service30(daysLeft: 25, usedGb: 24))->open, 'six of thirty: twenty percent');
         $unlimited = $this->renewal()->window($this->service30(daysLeft: 1, overrides: ['traffic_limit_bytes' => 0]));
@@ -85,7 +85,7 @@ final class RenewalWindowTest extends DatabaseTestCase
         $this->window(days: 7, percent: 20);
 
         $closed = $this->renewal()->window($this->service30(daysLeft: 10, usedGb: 1));
-        self::assertSame('از ' . Persian::date(Carbon::parse('2026-10-15 12:00:00'), withTime: true) . ' یا وقتی ٪۲۰ از حجم یا کمتر مانده باشد', $closed->when());
+        self::assertSame('از ' . Persian::date(Carbon::parse('2026-10-15 12:00:00'), withTime: true) . ' یا وقتی ۲۰٪ از حجم یا کمتر مانده باشد', $closed->when());
         self::assertTrue($this->renewal()->window($this->service30(daysLeft: 5, usedGb: 1))->open, 'by its deadline');
         self::assertTrue($this->renewal()->window($this->service30(daysLeft: 25, usedGb: 27))->open, 'by its traffic');
     }
@@ -120,7 +120,7 @@ final class RenewalWindowTest extends DatabaseTestCase
         $this->window(days: 7, percent: 50);
         self::assertTrue($this->renewal()->window($this->service30(daysLeft: null, usedGb: 20))->open, 'ten of thirty left lets it in');
         self::assertFalse($this->renewal()->window($never)->open, 'nothing used');
-        self::assertSame('وقتی ٪۵۰ از حجم یا کمتر مانده باشد', $this->renewal()->window($never)->when());
+        self::assertSame('وقتی ۵۰٪ از حجم یا کمتر مانده باشد', $this->renewal()->window($never)->when());
     }
 
     public function testAServiceThatNeverEndsByTimeIsNotHeldBackByTheWindowsDays(): void

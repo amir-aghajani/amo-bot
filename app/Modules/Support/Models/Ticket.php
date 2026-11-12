@@ -28,6 +28,8 @@ use Illuminate\Support\Carbon;
  * @property int|null $subscription_id The customer's service it is about; null for none, or one deleted since
  * @property Carbon|null $last_message_at When its latest message was written (set with every one): the lists' order
  * @property bool $customer_unread Support wrote since the customer last read it
+ * @property Carbon|null $support_read_at When support last read it (opened it in a panel, or answered it): the customer's
+ *                                        messages written by then read as read
  * @property int|null $rating 1 to 5: the customer's word on it once it was closed; null for none
  * @property string|null $rating_note What they said with it
  * @property Carbon|null $closed_at When it was closed; null while it is not
@@ -43,7 +45,7 @@ class Ticket extends Model
 
     protected $table = 'tickets';
 
-    protected $fillable = ['user_id', 'subject', 'status', 'subscription_id', 'last_message_at', 'customer_unread'];
+    protected $fillable = ['user_id', 'subject', 'status', 'subscription_id', 'last_message_at', 'customer_unread', 'support_read_at'];
 
     /** @var array<string, string> */
     protected $casts = [
@@ -52,6 +54,7 @@ class Ticket extends Model
         'subscription_id' => 'integer',
         'last_message_at' => 'datetime',
         'customer_unread' => 'boolean',
+        'support_read_at' => 'datetime',
         'rating' => 'integer',
         'closed_at' => 'datetime',
     ];

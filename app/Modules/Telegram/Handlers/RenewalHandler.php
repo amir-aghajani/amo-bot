@@ -32,6 +32,7 @@ use App\Modules\Telegram\Messages;
 use App\Modules\Telegram\Notifications\ServiceCard;
 use App\Modules\Telegram\Texts\BotText;
 use App\Modules\Telegram\Texts\BotTexts;
+use App\Modules\Telegram\Texts\PremiumText;
 use App\Modules\Telegram\Update\CallbackData;
 use App\Support\Money;
 use Illuminate\Database\Eloquent\Collection;
@@ -205,8 +206,8 @@ final class RenewalHandler implements Handler, RedrawableCheckout
         [$quote, $dropped] = $this->screen->quote($ctx, self::checkoutOf($subscription, $from, $preview), $this->price($subscription, $preview), $typed);
         $values = $this->card->values($preview->after);
         $text = $this->texts->render(BotText::RenewCheckout, [
-            'client' => $subscription->remote_name,
-            'plan' => $with instanceof Plan ? $with->name : Order::builtName($with->gb, $with->days),
+            'client' => $subscription->shownAs(),
+            'plan' => $with instanceof Plan ? PremiumText::plan($with) : Order::builtName($with->gb, $with->days),
             'duration' => Messages::duration($preview->package->hours),
             'traffic' => Messages::traffic($preview->package->bytes),
             'devices' => ServiceCard::devicesAfter($preview->after),
@@ -313,7 +314,7 @@ final class RenewalHandler implements Handler, RedrawableCheckout
         if ($grouped) {
             [$shown, $page, $pages] = Buttons::slice($groups, $page);
             $buttons = array_map(fn(array $group): array => InlineKeyboard::callback(
-                $group['category']->name ?? $this->texts->get(BotText::CategoryOther),
+                $group['category'] === null ? $this->texts->get(BotText::CategoryOther) : PremiumText::category($group['category'])->text,
                 self::categoryCallback($subscription->id, $from, $group['category']->id ?? 0),
             ), $shown);
             $keyboard = InlineKeyboard::make()->grid($buttons, 1);
@@ -324,7 +325,7 @@ final class RenewalHandler implements Handler, RedrawableCheckout
         $build = InlineKeyboard::callback($this->texts->get(BotText::CustomRenewButton), CustomServiceHandler::renewalCallback($subscription->id, $from), 'primary');
         $text = $this->buttons->paged(
             $keyboard,
-            $this->texts->render(BotText::RenewPickPlan, ['client' => $subscription->remote_name]),
+            $this->texts->render(BotText::RenewPickPlan, ['client' => $subscription->shownAs()]),
             $page,
             $pages,
             static fn(int $at): string => $at > 1 ? CallbackData::build(self::PREFIX, $subscription->id, $from, self::PAGE, $at) : self::checkoutCallback($subscription->id, $from),
@@ -351,8 +352,8 @@ final class RenewalHandler implements Handler, RedrawableCheckout
         $text = $this->buttons->paged(
             $keyboard,
             $this->texts->render(BotText::RenewCategoryPlans, [
-                'client' => $subscription->remote_name,
-                'category' => $category->name ?? $this->texts->get(BotText::CategoryOther),
+                'client' => $subscription->shownAs(),
+                'category' => $category === null ? $this->texts->inMessage(BotText::CategoryOther) : PremiumText::category($category),
             ]),
             $page,
             $pages,

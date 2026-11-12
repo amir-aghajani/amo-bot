@@ -53,7 +53,7 @@ owner must do is the [checklist](Running-In-Production.md#checklist) of running 
 - PHP answers JSON — and the pictures it keeps, as their bytes, and one small page where an online gateway sends a
   customer's browser back — and nothing else. Every answer has a sandboxing Content-Security-Policy, `nosniff`, no
   framing, and no caching (a picture the panels show is kept a few minutes, in the viewer's browser alone). The panels'
-  pages carry a policy of their own from the build, and the gateway's return page one that loads nothing and runs no
+  pages and the mini app's carry a policy of their own from the build, and the gateway's return page one that loads nothing and runs no
   script.
 - A failure's details never reach a visitor. A JSON body is read to 1 MiB at most, and an upload to its own limit.
 - Every guard belongs to its route group: an address spelled another way is the same route behind the same guards (a
@@ -63,9 +63,16 @@ owner must do is the [checklist](Running-In-Production.md#checklist) of running 
 ### Signing in
 
 - Every sign-in — the owner's, an agent's link, a website customer's password, code or provider — is limited per
-  address and per account, counted before it is judged, and fails closed when the limit cannot be counted.
+  address and per account, counted before it is judged, and fails closed when the limit cannot be counted. A texted
+  code is counted against its number only while one waits for it, so a stranger guessing at a number locks its holder
+  out of nothing; wrong codes stop its codes being tried, never a new one going.
+- A code by SMS is weaker than Telegram or Google — a SIM swapped, or a number the carrier gave someone else, reads
+  it —: an account with two-factor sign-in is asked its second step after it too, it proves no such account again on
+  its own, and a sign-in by it alone is no strong one. Of two accounts holding one number it signs in to one and offers
+  the other as a merge, never merging unasked.
 - A change to how a customer's account is signed in to asks for a recent sign-in, and is told on every channel the
-  account has. Handing a service to another customer on the website asks for a recent sign-in too.
+  account has. Handing a service to another customer on the website asks for a recent sign-in too, and so does setting
+  up the mini app's fingerprint ([the Telegram mini app](#the-telegram-mini-app)).
 - A fresh upload's installer asks for a key only the host's files hold, and a lost panel login comes back through a key
   written to the host's files — never through the web alone.
 - Moving the Bot API's address — where every bot's token goes — asks for the owner's current password, and a wrong one
@@ -74,7 +81,8 @@ owner must do is the [checklist](Running-In-Production.md#checklist) of running 
 ### The shop's admins on its website
 
 The shop's admins on its website ([the shop's admins](Store-API-Admins.md)) are shut out until the shop lets them in.
-They are asked for a strong sign-in (not a password alone) by default, and for a sign-in of the last 12 hours always.
+They are asked for a strong sign-in (not a password, nor a code by SMS, alone) by default, and for a sign-in of the last
+12 hours always.
 They get nothing beyond the daily work but what the shop grants, and each grant, like approving a payment, asks for a
 sign-in of the last 15 minutes. They never decide about themselves, and never touch an admin's or an agent's account:
 they cannot put one in a customer group, nor switch a group an admin is in to «همکار», whose members buy at the agents'
@@ -87,7 +95,8 @@ act for each other —, so the role is for people the owner trusts. The shop's c
 
 - Secrets at rest — the servers' panel credentials and their SOCKS5 proxies' passwords, the agents' bots' tokens, the
   payment methods' tokens and keys, the websites' secrets, customers' two-factor secrets — are encrypted with `APP_KEY`.
-  Short codes are kept as keyed hashes, passwords as bcrypt hashes.
+  Short codes are kept as keyed hashes, passwords as bcrypt hashes, customers' session tokens and the mini app's
+  fingerprint secrets as their sha256.
 - A kept panel secret goes only to the panel's own origin, through the same proxy and with the same TLS check; a kept
   proxy password only to the same proxy host and port: changed, either must be typed again
   ([Servers](Servers.md#adding-a-server)).
@@ -103,6 +112,11 @@ act for each other —, so the role is for people the owner trusts. The shop's c
   a shared host has other accounts. Where it runs as a server-wide user — Apache's `mod_php` — they are `0644` and
   `0755`, so the owner can still open them in the host's File Manager; there every account's PHP is one user, and the
   other accounts can read them ([file ownership](Running-In-Production.md#file-ownership)).
+- A backup is signed with a key drawn from `APP_KEY`, over every line: only a file this installation made, unchanged,
+  is restored, so nobody — an agent with their own shop's file among them — writes into one rows of another shop's or
+  of the owner's; a shop's file restores only in that shop. It is not encrypted beyond the columns that are: its
+  customers' data reads as it is, so it is kept in `storage/backups/`, which the web never reaches, and goes only to
+  the report group ([Backups](Backups.md)).
 
 ### Payments
 
@@ -129,3 +143,27 @@ act for each other —, so the role is for people the owner trusts. The shop's c
   panels show.
 - A server's SOCKS5 proxy carries that panel's requests alone: Telegram, mail and every other outgoing call never go
   through it.
+
+### The Telegram mini app
+
+- A customer of the shop's mini app is signed in by the launch data Telegram hands it, checked as Telegram's
+  documentation says: an HMAC-SHA256 over its fields under a key made of the bot's token, compared in constant time.
+  Only Telegram, which holds the token, can sign it; the page only carries it. It signs in for a day, but the session is
+  proven from when Telegram made it, so an old launch changes nothing a recent sign-in guards. Every refusal counts as a
+  failed sign-in.
+- A fingerprint or face proves a way in again through a secret the shop gives one session and Telegram keeps behind the
+  device's biometrics: it is made only on a recent sign-in, kept as its sha256, proves that session alone, and leaves
+  how it was signed in as it was. The shop never sees a fingerprint or a face. It is the mini app's alone: under a
+  website's key it is no route, and neither it nor the launch data proves a way in again there — a website would keep
+  the secret beside the bearer token, a pair that keeps the session recent for as long as it lasts.
+- Under the mini app's store key no other site may call the API (no CORS), no captcha or admin API is there, and what
+  only a website has answers as no route at all. Sessions belong to the shop, not to a door, so the website's admin API
+  refuses a session the mini app signed in under the website's key too, for its whole life: the mini app is the
+  customer side alone.
+- It is the bot's own door, and the bot answers nothing before its gates: through it, the server itself refuses an
+  order, a gift code and a service added by its link while the shop asks every customer for their number and this one
+  has none, or has not joined the shop's channels — whatever the app shows.
+- Its pages load no third-party script: Telegram's own is bundled into the build, and the build's
+  Content-Security-Policy lets them talk to the shop's own address alone. Its folder may be framed by Telegram's web
+  client and by the site itself — the panels' «پیش‌نمایش» of the app —
+  (`frame-ancestors 'self' https://web.telegram.org`) and by nobody else; every other page may be framed by nobody.

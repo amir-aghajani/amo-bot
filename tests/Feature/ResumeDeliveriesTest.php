@@ -58,7 +58,7 @@ final class ResumeDeliveriesTest extends DatabaseTestCase
     public function testTheTaskLooksEveryMinuteInEveryShop(): void
     {
         self::assertSame(
-            ['task' => ResumeDeliveriesTask::class, 'interval' => 60, 'eachBot' => true],
+            ['task' => ResumeDeliveriesTask::class, 'key' => 'resume_deliveries', 'interval' => 60, 'eachBot' => true],
             $this->service(Scheduler::class)->tasks()[ResumeDeliveriesTask::class],
         );
     }

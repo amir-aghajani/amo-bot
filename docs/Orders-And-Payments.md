@@ -174,7 +174,8 @@ refund would give the money twice. To give it back, take it out of their wallet 
 ### A payment held for support
 
 An online payment the shop would not settle on its gateway's word is held for you: one confirmed for another order or
-amount, an underpayment AtlasPay accepted, one on which the gateway kept money unsettled for 48 hours, or one the
+amount, an underpayment AtlasPay accepted, one on which the gateway kept money unsettled for 48 hours (by default,
+[«زمان‌بندی کارها»](Running-In-Production.md#the-task-schedule)), or one the
 gateway closed after it said money had come in on it — held at once
 ([Payment methods](Payment-Methods.md#a-payment-held-for-you)).
 
@@ -182,7 +183,7 @@ gateway closed after it said money had come in on it — held at once
   پشتیبانی» in the list, on the customer's page and among its order's payments. The tab «نگه داشته شده» lists those
   still waiting, and the dashboard's «نیازمند توجه» counts them.
 - Its dialog's «بررسی پشتیبانی» says why («درگاه این پرداخت را با سفارش یا مبلغ دیگری تایید کرد؛ …», «درگاه پولی را
-  که برای این پرداخت رسیده بود دو روز پس از بسته شدن صفحه هم تسویه نکرد؛ …», or «درگاه این پرداخت را بست، با اینکه
+  که برای این پرداخت رسیده بود تا پایان مهلت تسویه پس از بسته شدن صفحه هم تسویه نکرد؛ …», or «درگاه این پرداخت را بست، با اینکه
   پیش‌تر گفته بود پولی برای آن رسیده است؛ …»), and the report group's «خطاها» heard of it once.
 - Nothing asks its gateway about it any more: «استعلام از درگاه» is not offered.
 - While it still waits — pending, or failed with its page —, its order does not expire and the customer cannot pay it
@@ -387,9 +388,12 @@ the referral program's gifts and the lucky wheel's «فقط مشتری‌های�
 
 ## What runs by itself
 
+How often each of these runs, and the hours below, are the defaults: you set them in
+[«زمان‌بندی کارها»](Running-In-Production.md#the-task-schedule).
+
 - **Deliveries left behind** — a delivery whose process stopped (the bot restarted, say) is finished by the scheduler,
   every minute, the longest-waiting first: an order paid and not started for 10 minutes, or one being delivered with no
-  sign of life for 18 minutes. A failed delivery waits for you.
+  sign of life for 18 minutes (these two are fixed). A failed delivery waits for you.
 - **Unpaid orders expire** — an order nobody paid, with nothing done to it or its payments for **48 hours**, is
   cancelled within ten minutes after — an order made with a discount code sooner
   ([Discounts](Discounts.md#uses-and-giving-them-back)). It goes quietly: its rows are kept, a rejected receipt's reason

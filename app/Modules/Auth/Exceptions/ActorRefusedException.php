@@ -12,7 +12,9 @@ use App\Modules\Auth\StaffGrant;
  * themselves (their payment, wallet, service, agency request, review, referral alert, an order made for them); from the
  * website, touching an admin's or an agent's account, switching «همکار» on for a group an admin is in, putting a customer
  * in a «همکار» group without the `catalog` grant (one with a `grant`: StaffMiddleware answers it as its own door does), or
- * approving a payment with no receipt in review. The owner and agents are refused none of these.
+ * approving a payment with no receipt in review; from the report group, an admin's own account, an agent's, banning an
+ * admin, putting one in a «همکار» group, setting one's own discount, making an admin of someone with either, or their
+ * website sign-in. The owner and agents are refused none of these.
  */
 final class ActorRefusedException extends DomainRuleException
 {
@@ -22,6 +24,11 @@ final class ActorRefusedException extends DomainRuleException
     public const OWN_REQUEST = 'درخواست نمایندگی خودتان را نمی‌توانید تایید کنید؛ این کار با مدیر دیگری است.';
     public const OWN_REVIEW = 'نظر خودتان را نمی‌توانید تایید، رد یا حذف کنید؛ این کار با مدیر دیگری است.';
     public const OWN_ALERT = 'هشدار زیرمجموعه‌گیری خودتان را نمی‌توانید رفع کنید؛ این کار با مدیر دیگری است.';
+    public const OWN_ACCOUNT = 'حساب خودتان را از گروه گزارش‌ها نمی‌توانید تغییر دهید؛ این کار با مدیر دیگری یا پنل است.';
+    public const ADMIN_BANNED = 'مدیر ربات مسدود نمی‌شود؛ اول نقش مدیرش را بردارید.';
+    public const ADMIN_TO_AGENT_GROUP = 'مدیر ربات فقط از پنل در گروه «همکار» گذاشته می‌شود.';
+    public const ADMIN_DISCOUNT = 'تخفیف اختصاصی مدیر ربات فقط از پنل تغییر می‌کند.';
+    public const ADMIN_WITH_OWN_PRICES = 'این کاربر تخفیف اختصاصی دارد یا در گروه «همکار» است؛ مدیر ربات این‌ها را فقط از پنل می‌گیرد. اول تخفیف و گروه «همکار» را از کارتش بردارید، یا از پنل مدیرش کنید.';
     public const OWN_ORDER = 'برای خودتان نمی‌توانید سفارش ثبت کنید؛ این کار با مدیر دیگری است.';
     public const ADMIN_ACCOUNT = 'حساب مدیران فروشگاه فقط از پنل تغییر می‌کند.';
     public const AGENT_ACCOUNT = 'حساب نماینده‌ها فقط از پنل تغییر می‌کند.';
@@ -70,6 +77,39 @@ final class ActorRefusedException extends DomainRuleException
     public static function ownOrder(): self
     {
         return new self(self::OWN_ORDER);
+    }
+
+    /** A report group's admin about their own account (its role, standing, groups). */
+    public static function ownAccount(): self
+    {
+        return new self(self::OWN_ACCOUNT);
+    }
+
+    /** A report group's admin banning one of the shop's admins: their role goes first. */
+    public static function adminBanned(): self
+    {
+        return new self(self::ADMIN_BANNED);
+    }
+
+    /** A report group's admin putting one of the shop's admins in a «همکار» group, whose agent prices would be theirs. */
+    public static function adminToAgentGroup(): self
+    {
+        return new self(self::ADMIN_TO_AGENT_GROUP);
+    }
+
+    /** A report group's admin setting one of the shop's admins' own discount: their prices are the panel's to lower. */
+    public static function adminDiscount(): self
+    {
+        return new self(self::ADMIN_DISCOUNT);
+    }
+
+    /**
+     * A report group's admin making an admin of someone with their own discount or in a «همکار» group: the panel's to
+     * give an admin, so taking the role off, setting either and giving it back does not go round the two rules above.
+     */
+    public static function adminWithOwnPrices(): self
+    {
+        return new self(self::ADMIN_WITH_OWN_PRICES);
     }
 
     public static function adminAccount(): self

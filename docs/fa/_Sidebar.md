@@ -34,7 +34,9 @@
   - [متن‌ها و کیبوردهای ربات](Bot-Texts-And-Keyboards.md)
   - [مرجع متن‌های ربات (انگلیسی)](../Bot-Texts-Reference.md)
   - [وب‌سایت](Website.md)
+  - [مینی‌اپ تلگرام](Mini-App.md)
   - [تنظیمات پنل](Panel-Settings.md)
+  - [پیامک](Sms.md)
 - راهنمای ربات
   - [برای کاربران و ادمین‌ها](Bot-Guide.md)
 - رابط Store API
@@ -61,6 +63,7 @@
   - [ساختار داخلی: ربات تلگرام](Internals-Telegram-Bot.md)
   - [ساختار داخلی: API وب‌سایت](Internals-Website-API.md)
   - [ساختار داخلی: پنل‌ها](Internals-Panels.md)
+  - [ساختار داخلی: مینی‌اپ](Internals-Mini-App.md)
   - [درایورها](Drivers.md)
   - [افزودن قابلیت](Extending.md)
   - [توسعه](Development.md)

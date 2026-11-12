@@ -33,10 +33,14 @@ use Slim\Routing\RouteContext;
  * asked in this order:
  * 1. the customer is an admin of the shop (anyone else learns nothing more);
  * 2. the website lets its admins in (`staff_enabled`);
- * 3. while it asks a strong sign-in, the session is strong (Telegram, Google, or a password with its second step);
- * 4. a way in was proven on the session within SIGN_IN_HOURS — a working day, so a leaked admin token works for hours,
+ * 3. the session is not the mini app's (CustomerSessions::isMiniApp(): signed in by its launch data, for its life) —
+ *    the mini app is the customer side alone, and its sessions are bound to the shop, not to a door —, nor a panel's
+ *    preview of it (which opens nothing under a website's key before this is asked: CustomerAuthMiddleware);
+ * 4. while it asks a strong sign-in, the session is strong (Telegram, Google, or a password or a code to the mobile with
+ *    its second step — a code by SMS alone is none: a SIM swapped, or a number given to someone else, reads it);
+ * 5. a way in was proven on the session within SIGN_IN_HOURS — a working day, so a leaked admin token works for hours,
  *    not for the months a customer's session lasts;
- * 5. an operation that needs a grant (StaffGrant::ARGUMENT on its route) is granted, and then asks a recent sign-in too,
+ * 6. an operation that needs a grant (StaffGrant::ARGUMENT on its route) is granted, and then asks a recent sign-in too,
  *    as does one marked RECENT_SIGN_IN (approving a payment, which delivers a service by the admin's word alone).
  * The request then carries the staff Principal — with the grants it may use, a service's own rule asking one by what the
  * request holds (putting a customer in a «همکار» group) and refused the same two ways —, and every change it asks is
@@ -47,11 +51,15 @@ final class StaffMiddleware implements MiddlewareInterface
     /** The refusal anyone but the shop's admins gets, worded for a customer (they may be one). */
     public const NOT_STAFF = 'این بخش فقط برای پشتیبانی فروشگاه است.';
     public const STAFF_OFF = 'این وب‌سایت فعلا مدیران فروشگاه را راه نمی‌دهد.';
-    public const SIGN_IN_STRONGLY = 'برای کار مدیریت، با تلگرام، گوگل یا رمز عبور همراه کد ورود دو مرحله‌ای وارد شوید.';
+    public const MINI_APP_SESSION = 'کار مدیریت با ورود مینی‌اپ ممکن نیست؛ در خود وب‌سایت وارد شوید.';
+    public const SIGN_IN_STRONGLY = 'برای کار مدیریت، با تلگرام یا گوگل وارد شوید، یا با رمز عبور یا کد پیامکی همراه کد ورود دو مرحله‌ای.';
     public const NOT_GRANTED = 'فروشگاه این کار را به مدیران وب‌سایت نسپرده است.';
 
-    /** What a session signed in with a password alone is asked (RFC 9470): a strong way, which POST /me/reauthenticate proves. */
-    public const STRONG_CHALLENGE = 'Bearer error="insufficient_user_authentication", acr_values="telegram google password_2fa"';
+    /**
+     * What a session signed in with a password or a code by SMS alone is asked (RFC 9470): a strong way, which POST
+     * /me/reauthenticate proves (a password with its code) — or a new sign-in (a code by SMS with the app's code).
+     */
+    public const STRONG_CHALLENGE = 'Bearer error="insufficient_user_authentication", acr_values="telegram google password_2fa phone_2fa"';
 
     /** How long a way in proven on an admin's session lets it work the admin API: a working day. */
     public const SIGN_IN_HOURS = 12;
@@ -76,6 +84,9 @@ final class StaffMiddleware implements MiddlewareInterface
         }
         if (!$website->staff_enabled) {
             return $this->refuse(self::STAFF_OFF);
+        }
+        if (CustomerSessions::isMiniApp($customer->session) || CustomerSessions::isPreview($customer->session)) {
+            return $this->refuse(self::MINI_APP_SESSION);
         }
         if ($website->staff_strong_sign_in && !CustomerSessions::isStrong($customer->session)) {
             return $this->refuse(self::SIGN_IN_STRONGLY)->withHeader('WWW-Authenticate', self::STRONG_CHALLENGE);

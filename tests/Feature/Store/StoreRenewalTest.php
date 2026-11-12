@@ -277,7 +277,7 @@ final class StoreRenewalTest extends HttpTestCase
     {
         // It ends in 30 days; the shop lets it be renewed from 7 days before.
         $this->botSettings('renewal', ['renew_window_days' => 7, 'renew_window_percent' => 20]);
-        $refusal = sprintf(CustomerCheckout::NOT_YET, 'از ' . Persian::date(Carbon::parse('2026-10-12 12:00:00'), withTime: true) . ' یا وقتی ٪۲۰ از حجم یا کمتر مانده باشد');
+        $refusal = sprintf(CustomerCheckout::NOT_YET, 'از ' . Persian::date(Carbon::parse('2026-10-12 12:00:00'), withTime: true) . ' یا وقتی ۲۰٪ از حجم یا کمتر مانده باشد');
 
         $service = $this->decode($this->get($this->storeApi($this->website, "/subscriptions/{$this->subscription->id}")))['subscription'];
         self::assertSame([true, ['open' => false, 'opens_at' => '2026-10-12T12:00:00+00:00', 'days_before' => null, 'traffic_percent' => 20]], [$service['renewable'], $service['renewal_window']]);

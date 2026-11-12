@@ -14,7 +14,7 @@ Paths are relative to the website's base address plus `/admin`, `{APP_URL}/api/s
 
 | Parameter | In | Type | Required | What it is |
 |---|---|---|---|---|
-| `store` | path | string matching `^[0-9a-f]{24}$` | yes | The website's store key, which names the shop. Not a secret; the panel shows it with the base address and can replace it |
+| `store` | path | string matching `^[0-9a-f]{24}$` | yes | The store key of the shop's website, or of its Telegram mini app (each has a key of its own), which names the shop. Not a secret; the panel shows the website's with the base address and can replace it |
 
 Every operation may also return the common error shape ([errors](Store-API.md#errors)). Objects are closed
 ([API schemas](API-Schemas.md)).
@@ -313,6 +313,7 @@ A plan's whole form, to add or update it: its texts, its price, what it gives (0
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `name` | string | yes |  |
+| `emoji_id` | string or null | no | The premium emoji the bot draws for the name's leading emoji (a custom emoji id, digits): the name must start with an emoji while one is set. Blank or null for none. Left out: none for a new one; an existing one keeps its own while its name still starts with an emoji. |
 | `description` | string | no | Shown with the plan in the bot; blank for none. |
 | `price` | [AmountInput](API-Schemas.md#amountinput) | yes | Whole Toman; 0 for a free plan. |
 | `duration_hours` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | The term in hours from the first connection (a daily plan's is days × 24); 0 never ends. This or `duration_days` is required; when both are sent, this one is used. |
@@ -324,6 +325,7 @@ A plan's whole form, to add or update it: its texts, its price, what it gives (0
 | `checkout_note` | string or null | no | A note shown under the bot's checkout for this plan, at most 500 characters. Blank or null for none. Left out: none for a new plan, unchanged for an existing one. |
 | `button_style` | string: ``, `primary`, `success`, `danger`, `null` or null | no | The colour of its button in the bot's plan list: blue, green or red. Blank or null for the client's default. Left out: the default for a new plan, unchanged for an existing one. |
 | `button_row` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | How many buttons share its row there, 1 to 3. Left out: a row of its own for a new plan, unchanged for an existing one. |
+| `badge` | string: ``, `bestseller`, `recommended`, `vip`, `null` or null | no | The label its card wears in the mini app and on the website (a PlanBadge). Blank or null for none. Left out: none for a new plan, unchanged for an existing one. |
 | `extras` | [ExtraPricesRequest](API-Schemas.md#extrapricesrequest) or null | no | The plan's own prices for extra traffic, time and devices; null to use the shop's. Left out: the shop's for a new plan, unchanged for an existing one. |
 | `category_id` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | A category id (`PlanCategoryRow.id`); blank or 0 for none. |
 | `servers` | list of [PlanServerEntryInput](API-Schemas.md#planserverentryinput) | yes | At least one, each server once. |
@@ -456,6 +458,7 @@ A plan's whole form, to add or update it: its texts, its price, what it gives (0
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `name` | string | yes |  |
+| `emoji_id` | string or null | no | The premium emoji the bot draws for the name's leading emoji (a custom emoji id, digits): the name must start with an emoji while one is set. Blank or null for none. Left out: none for a new one; an existing one keeps its own while its name still starts with an emoji. |
 | `description` | string | no | Shown with the plan in the bot; blank for none. |
 | `price` | [AmountInput](API-Schemas.md#amountinput) | yes | Whole Toman; 0 for a free plan. |
 | `duration_hours` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | The term in hours from the first connection (a daily plan's is days × 24); 0 never ends. This or `duration_days` is required; when both are sent, this one is used. |
@@ -467,6 +470,7 @@ A plan's whole form, to add or update it: its texts, its price, what it gives (0
 | `checkout_note` | string or null | no | A note shown under the bot's checkout for this plan, at most 500 characters. Blank or null for none. Left out: none for a new plan, unchanged for an existing one. |
 | `button_style` | string: ``, `primary`, `success`, `danger`, `null` or null | no | The colour of its button in the bot's plan list: blue, green or red. Blank or null for the client's default. Left out: the default for a new plan, unchanged for an existing one. |
 | `button_row` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | How many buttons share its row there, 1 to 3. Left out: a row of its own for a new plan, unchanged for an existing one. |
+| `badge` | string: ``, `bestseller`, `recommended`, `vip`, `null` or null | no | The label its card wears in the mini app and on the website (a PlanBadge). Blank or null for none. Left out: none for a new plan, unchanged for an existing one. |
 | `extras` | [ExtraPricesRequest](API-Schemas.md#extrapricesrequest) or null | no | The plan's own prices for extra traffic, time and devices; null to use the shop's. Left out: the shop's for a new plan, unchanged for an existing one. |
 | `category_id` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | A category id (`PlanCategoryRow.id`); blank or 0 for none. |
 | `servers` | list of [PlanServerEntryInput](API-Schemas.md#planserverentryinput) | yes | At least one, each server once. |
@@ -587,6 +591,7 @@ A plan category to add or update.
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `name` | string | yes | Unique in the shop. |
+| `emoji_id` | string or null | no | The premium emoji the bot draws for the name's leading emoji (a custom emoji id, digits): the name must start with an emoji while one is set. Blank or null for none. Left out: none for a new one; an existing one keeps its own while its name still starts with an emoji. |
 | `is_active` | boolean | no | Left out: on for a new category, unchanged for an existing one. |
 
 **Answers**
@@ -642,6 +647,7 @@ A plan category to add or update.
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `name` | string | yes | Unique in the shop. |
+| `emoji_id` | string or null | no | The premium emoji the bot draws for the name's leading emoji (a custom emoji id, digits): the name must start with an emoji while one is set. Blank or null for none. Left out: none for a new one; an existing one keeps its own while its name still starts with an emoji. |
 | `is_active` | boolean | no | Left out: on for a new category, unchanged for an existing one. |
 
 **Answers**
@@ -1773,7 +1779,7 @@ All support tickets. Latest activity first; searchable by customer, subject or n
 
 ### GET /tickets/{id}
 
-One ticket, with its whole conversation.
+One ticket, with its whole conversation. Opening it is support reading it — from either panel or through the website's admin API (`/admin`) alike: the customer's messages written so far turn read on their side (the Store API's `StoreTicketMessage.seen`, the second tick). Written only when a message came since support last read it, and not counted in the change feed (`GET /api/{panel}/changes`).
 
 - **Who:** an admin of the shop, signed in on its website.
 - **In the panels:** [`GET /api/{panel}/tickets/{id}`](Panels-API-Reference.md#get-apipanelticketsid).

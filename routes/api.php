@@ -16,6 +16,7 @@ use App\Modules\Admin\Api\AgencyController;
 use App\Modules\Admin\Api\AgencyLevelsController;
 use App\Modules\Admin\Api\AgencySettingsController;
 use App\Modules\Admin\Api\AgentAuthController;
+use App\Modules\Admin\Api\BackupsController;
 use App\Modules\Admin\Api\BotChannelsController;
 use App\Modules\Admin\Api\BotSettingsController;
 use App\Modules\Admin\Api\BotTextsController;
@@ -35,17 +36,20 @@ use App\Modules\Admin\Api\KeyboardsController;
 use App\Modules\Admin\Api\LotteryController;
 use App\Modules\Admin\Api\LoyaltyTiersController;
 use App\Modules\Admin\Api\MassGrantsController;
+use App\Modules\Admin\Api\MiniAppController;
 use App\Modules\Admin\Api\OrdersController;
 use App\Modules\Admin\Api\OwnerAuthController;
 use App\Modules\Admin\Api\PaymentMethodsController;
 use App\Modules\Admin\Api\PaymentsController;
 use App\Modules\Admin\Api\PlanCategoriesController;
 use App\Modules\Admin\Api\PlansController;
+use App\Modules\Admin\Api\PreferencesController;
 use App\Modules\Admin\Api\QueuesController;
 use App\Modules\Admin\Api\ReferralsController;
 use App\Modules\Admin\Api\ReportGroupController;
 use App\Modules\Admin\Api\ReviewsController;
 use App\Modules\Admin\Api\SalesController;
+use App\Modules\Admin\Api\ScheduleController;
 use App\Modules\Admin\Api\ServerGrantsController;
 use App\Modules\Admin\Api\ServerMigrationsController;
 use App\Modules\Admin\Api\ServersController;
@@ -66,19 +70,25 @@ use App\Modules\Store\Api\CheckoutController;
 use App\Modules\Store\Api\CustomServicesController;
 use App\Modules\Store\Api\GiftCodesController as StoreGiftCodesController;
 use App\Modules\Store\Api\IdentitiesController;
+use App\Modules\Store\Api\LotteryController as StoreLotteryController;
 use App\Modules\Store\Api\MeController;
+use App\Modules\Store\Api\MiniAppLogoController;
 use App\Modules\Store\Api\NotificationsController;
 use App\Modules\Store\Api\OrdersController as StoreOrdersController;
 use App\Modules\Store\Api\ReferralController;
 use App\Modules\Store\Api\ReviewsController as StoreReviewsController;
 use App\Modules\Store\Api\StoreController;
 use App\Modules\Store\Api\SubscriptionsController as StoreSubscriptionsController;
+use App\Modules\Store\Api\TestAccountController as StoreTestAccountController;
 use App\Modules\Store\Api\TicketsController as StoreTicketsController;
 use App\Modules\Store\Api\TwoFactorController;
 use App\Modules\Store\Api\WalletController;
+use App\Modules\Store\Api\WheelController as StoreWheelController;
 use App\Modules\Store\Http\JsonBodiesMiddleware;
+use App\Modules\Store\Http\MiniAppOnlyMiddleware;
 use App\Modules\Store\Http\StaffMiddleware;
 use App\Modules\Store\Http\StoreMiddleware;
+use App\Modules\Store\Http\WebsiteOnlyMiddleware;
 use App\Modules\Store\Services\Storefront;
 use App\Modules\Updates\Controllers\UpdateController;
 use Slim\App;
@@ -91,8 +101,9 @@ use Slim\Routing\RouteCollectorProxy;
  *   work ($operations) and its configuration ($configuration). The owner's whole-shop sections run across every shop
  *   (`shop.everywhere`) or in the main one (`shop.main`).
  * - /api/install (the installer, `installer.open`): only until the shop is installed, and only with the install key.
- * - /api/store/v1/{store} (the Store API): a store key, and a customer's bearer token for their own; its /admin mounts
- *   $operations again — never $configuration — for the shop's admins (StaffMiddleware).
+ * - /api/store/v1/{store} (the Store API): a website's or a mini app's store key — what one of them alone has is a group
+ *   whose outermost guard is WebsiteOnlyMiddleware or MiniAppOnlyMiddleware —, and a customer's bearer token for their
+ *   own; its /admin mounts $operations again — never $configuration — for the shop's admins (StaffMiddleware).
  */
 return static function (App $app): void {
     $app->get('/health', HealthController::class);
@@ -207,7 +218,8 @@ return static function (App $app): void {
     };
 
     // The shop's configuration (payment methods, the bot's settings, texts and keyboards, the report group, the website,
-    // who its admins are) and the panels' error reports: both panels, never the website's admins.
+    // the mini app — and a look at it as one of the customers —, who its admins are, its backups), the panel user's own
+    // preferences and the panels' error reports: both panels, never the website's admins.
     $configuration = static function (RouteCollectorProxy $shop): void {
         $shop->post('/client-errors', ClientErrorsController::class);
 
@@ -232,6 +244,14 @@ return static function (App $app): void {
         $shop->post('/bot/channels/reorder', [BotChannelsController::class, 'reorder']);
         $shop->post('/bot/channels/{id:[0-9]+}/check', [BotChannelsController::class, 'check']);
         $shop->delete('/bot/channels/{id:[0-9]+}', [BotChannelsController::class, 'destroy']);
+        $shop->get('/backups', [BackupsController::class, 'show']);
+        $shop->put('/backups/auto', [BackupsController::class, 'auto']);
+        $shop->get('/backups/download', [BackupsController::class, 'download']);
+        $shop->post('/backups/inspect', [BackupsController::class, 'inspect']);
+        $shop->post('/backups/restore', [BackupsController::class, 'restore']);
+        $shop->get('/backups/kept/{name:[A-Za-z0-9_.-]+}', [BackupsController::class, 'kept']);
+        $shop->get('/preferences', [PreferencesController::class, 'show']);
+        $shop->put('/preferences/favorites', [PreferencesController::class, 'favorites']);
         $shop->get('/bot/report-group', [ReportGroupController::class, 'show']);
         $shop->post('/bot/report-group/link', [ReportGroupController::class, 'link']);
         $shop->post('/bot/report-group/check', [ReportGroupController::class, 'check']);
@@ -254,6 +274,13 @@ return static function (App $app): void {
         $shop->get('/website', [WebsiteController::class, 'show']);
         $shop->patch('/website', [WebsiteController::class, 'update']);
         $shop->post('/website/key', [WebsiteController::class, 'rotateKey']);
+
+        $shop->get('/mini-app', [MiniAppController::class, 'show']);
+        $shop->patch('/mini-app', [MiniAppController::class, 'update']);
+        $shop->get('/mini-app/logo', [MiniAppController::class, 'logo']);
+        $shop->post('/mini-app/logo', [MiniAppController::class, 'uploadLogo']);
+        $shop->delete('/mini-app/logo', [MiniAppController::class, 'removeLogo']);
+        $shop->post('/mini-app/preview', [MiniAppController::class, 'preview']);
 
         $shop->get('/discount-codes', [DiscountCodesController::class, 'index']);
         $shop->post('/discount-codes', [DiscountCodesController::class, 'store']);
@@ -385,12 +412,16 @@ return static function (App $app): void {
                 $owner->put('/agency/levels/{id:[0-9]+}', [AgencyLevelsController::class, 'update']);
                 $owner->delete('/agency/levels/{id:[0-9]+}', [AgencyLevelsController::class, 'destroy']);
 
+                $owner->get('/schedule', [ScheduleController::class, 'show']);
+                $owner->put('/schedule', [ScheduleController::class, 'update']);
                 $owner->get('/settings/config', [ConfigSettingsController::class, 'index']);
                 $owner->get('/settings/config/cron-url', [ConfigSettingsController::class, 'cronUrl']);
                 $owner->post('/settings/config/telegram/test', [ConfigSettingsController::class, 'testTelegram']);
                 $owner->post('/settings/config/database/test', [ConfigSettingsController::class, 'testDatabase']);
                 $owner->post('/settings/config/mail/test', [ConfigSettingsController::class, 'testMail']);
-                $owner->put('/settings/config/{group:app|database|telegram|mail|advanced}', [ConfigSettingsController::class, 'update']);
+                $owner->post('/settings/config/sms/test', [ConfigSettingsController::class, 'testSms']);
+                $owner->get('/settings/config/sms/credit', [ConfigSettingsController::class, 'smsCredit']);
+                $owner->put('/settings/config/{group:app|database|telegram|mail|sms|advanced}', [ConfigSettingsController::class, 'update']);
             })->add('shop.main');
         })->add('panel.admin');
     })->add(SessionMiddleware::class)->add(JsonCsrfMiddleware::class)->add(InstalledMiddleware::class);
@@ -410,38 +441,52 @@ return static function (App $app): void {
         })->add('panel.agent');
     })->add(SessionMiddleware::class)->add(JsonCsrfMiddleware::class)->add(InstalledMiddleware::class);
 
-    // The shop's website (the Store API): the store key names the shop. Customers use bearer tokens — no cookie, so no
-    // CSRF header — and bodies are JSON (a form only where a picture is uploaded), so another site's page cannot send
-    // one without the preflight only the website's origins pass. The catalogue and reviews are public (read as the
-    // customer when a token comes with them); a customer's own data and checkout need their token.
+    // The Store API: the store key names a shop's website or its Telegram mini app (each has a key of its own), and the
+    // request runs in that shop. Customers use bearer tokens — no cookie, so no CSRF header — and bodies are JSON (a form
+    // only where a picture is uploaded), so another site's page cannot send one without the preflight only the website's
+    // origins pass (the mini app is on the shop's own address). The catalogue and reviews are public (read as the customer
+    // when a token comes with them); a customer's own data and checkout need their token. What only one door has — the
+    // website's ways in, its captcha and its admins' API; the mini app's sign-in, logo and fingerprint secret — is the
+    // other's 404.
     $app->group(Urls::STORE, function (RouteCollectorProxy $store) use ($operations): void {
         $store->get('', [StoreController::class, 'show']);
         $store->get('/plans', [CatalogController::class, 'plans'])->add(OptionalCustomerMiddleware::class);
         $store->get('/plans/{id:[0-9]+}', [CatalogController::class, 'plan'])->add(OptionalCustomerMiddleware::class);
         $store->get('/status', [CatalogController::class, 'status']);
+        $store->get('/sales', [CatalogController::class, 'sales']);
+        $store->get('/tutorial', [StoreController::class, 'tutorial']);
         $store->get('/custom-services', [CustomServicesController::class, 'show']);
         $store->get('/reviews', [StoreReviewsController::class, 'index']);
         $store->post('/reviews', [StoreReviewsController::class, 'store'])->add(OptionalCustomerMiddleware::class);
-        $store->post('/auth/nonce', [StoreAuthController::class, 'nonce']);
-        $store->post('/auth/telegram/authorize', [StoreAuthController::class, 'authorize']);
-        $store->post('/auth/telegram', [StoreAuthController::class, 'telegram']);
-        $store->post('/auth/google', [StoreAuthController::class, 'google']);
-        $store->post('/auth/register', [StoreAuthController::class, 'register']);
-        $store->post('/auth/register/verify', [StoreAuthController::class, 'verify']);
-        $store->post('/auth/login', [StoreAuthController::class, 'login']);
-        $store->post('/auth/login/2fa', [StoreAuthController::class, 'twoFactor']);
-        $store->post('/auth/password/forgot', [StoreAuthController::class, 'forgot']);
-        $store->post('/auth/password/reset', [StoreAuthController::class, 'reset']);
-        // The website's captcha for forms of its own: its widget's challenge, and a token its backend asks the shop to judge.
-        $store->get(Storefront::CHALLENGE, [CaptchaController::class, 'challenge']);
-        $store->post('/captcha/verify', [CaptchaController::class, 'verify']);
+
+        $store->group('', function (RouteCollectorProxy $website): void {
+            $website->post('/auth/nonce', [StoreAuthController::class, 'nonce']);
+            $website->post('/auth/telegram/authorize', [StoreAuthController::class, 'authorize']);
+            $website->post('/auth/telegram', [StoreAuthController::class, 'telegram']);
+            $website->post('/auth/google', [StoreAuthController::class, 'google']);
+            $website->post('/auth/register', [StoreAuthController::class, 'register']);
+            $website->post('/auth/register/verify', [StoreAuthController::class, 'verify']);
+            $website->post('/auth/login', [StoreAuthController::class, 'login']);
+            $website->post('/auth/login/2fa', [StoreAuthController::class, 'twoFactor']);
+            $website->post('/auth/password/forgot', [StoreAuthController::class, 'forgot']);
+            $website->post('/auth/password/reset', [StoreAuthController::class, 'reset']);
+            $website->post('/auth/phone', [StoreAuthController::class, 'phone']);
+            $website->post('/auth/phone/verify', [StoreAuthController::class, 'verifyPhone']);
+            // The website's captcha for forms of its own: its widget's challenge, and a token its backend asks the shop to judge.
+            $website->get(Storefront::CHALLENGE, [CaptchaController::class, 'challenge']);
+            $website->post('/captcha/verify', [CaptchaController::class, 'verify']);
+        })->add(WebsiteOnlyMiddleware::class);
+
+        $store->group('', function (RouteCollectorProxy $miniApp): void {
+            $miniApp->post('/auth/mini-app', [StoreAuthController::class, 'miniApp']);
+            $miniApp->get(Storefront::LOGO, MiniAppLogoController::class);
+        })->add(MiniAppOnlyMiddleware::class);
 
         $store->group('', function (RouteCollectorProxy $customer): void {
             $customer->post('/auth/logout', [MeController::class, 'logout']);
             $customer->get('/me', [MeController::class, 'show']);
             $customer->patch('/me', [MeController::class, 'update']);
             $customer->post('/me/reauthenticate', [MeController::class, 'reauthenticate']);
-            $customer->post('/me/telegram/authorize', [StoreAuthController::class, 'authorize']);
             $customer->get('/me/sessions', [MeController::class, 'sessions']);
             $customer->delete('/me/sessions/{id:[0-9]+}', [MeController::class, 'endSession']);
 
@@ -452,11 +497,9 @@ return static function (App $app): void {
                 $credentials->post('/me/2fa/setup', [TwoFactorController::class, 'setup']);
                 $credentials->post('/me/2fa/enable', [TwoFactorController::class, 'enable']);
                 $credentials->post('/me/2fa/disable', [TwoFactorController::class, 'disable']);
-                $credentials->post('/me/identities/telegram', [IdentitiesController::class, 'telegram']);
-                $credentials->post('/me/identities/google', [IdentitiesController::class, 'google']);
                 $credentials->post('/me/identities/email', [IdentitiesController::class, 'email']);
                 $credentials->post('/me/identities/email/verify', [IdentitiesController::class, 'verifyEmail']);
-                $credentials->delete('/me/identities/{kind:telegram|google|email}', [IdentitiesController::class, 'remove']);
+                $credentials->delete('/me/identities/{kind:telegram|google|email|phone}', [IdentitiesController::class, 'remove']);
                 $credentials->post('/me/merge', [IdentitiesController::class, 'merge']);
             })->add(RecentSignInMiddleware::class);
 
@@ -466,6 +509,7 @@ return static function (App $app): void {
             $customer->patch('/subscriptions/{id:[0-9]+}', [StoreSubscriptionsController::class, 'update']);
             $customer->post('/subscriptions/{id:[0-9]+}/refresh', [StoreSubscriptionsController::class, 'refresh']);
             $customer->post('/subscriptions/{id:[0-9]+}/rotate-link', [StoreSubscriptionsController::class, 'rotateLink']);
+            $customer->get('/subscriptions/{id:[0-9]+}/qr', [StoreSubscriptionsController::class, 'qr']);
             $customer->get('/subscriptions/{id:[0-9]+}/transfer', [StoreSubscriptionsController::class, 'transferRecipient']);
             // Handing a service to someone else asks a recent sign-in too: a bearer token alone gives no service away.
             $customer->post('/subscriptions/{id:[0-9]+}/transfer', [StoreSubscriptionsController::class, 'transfer'])->add(RecentSignInMiddleware::class);
@@ -479,7 +523,9 @@ return static function (App $app): void {
             $customer->get('/payment-methods', [CheckoutController::class, 'methods']);
             $customer->get('/orders', [StoreOrdersController::class, 'index']);
             $customer->post('/orders', [CheckoutController::class, 'purchase']);
-            $customer->post('/custom-services/quote', [CustomServicesController::class, 'quote']);
+            // A built service's price, which the mini app's builder asks by itself: a preview may ask it — but with a
+            // discount code, whose tries are the customer's to spend.
+            $customer->post('/custom-services/quote', [CustomServicesController::class, 'quote'])->setArgument(CustomerAuthMiddleware::PREVIEW_READS, 'discount_code');
             $customer->post('/custom-services/orders', [CustomServicesController::class, 'buy']);
             $customer->get('/orders/{id:[0-9]+}', [StoreOrdersController::class, 'show']);
             $customer->post('/discount-codes/check', [CheckoutController::class, 'checkCode']);
@@ -493,6 +539,11 @@ return static function (App $app): void {
             $customer->get('/wallet/transactions', [WalletController::class, 'transactions']);
             $customer->post('/gift-codes/redeem', [StoreGiftCodesController::class, 'redeem']);
             $customer->get('/referral', [ReferralController::class, 'show']);
+            $customer->get('/test-account', [StoreTestAccountController::class, 'show']);
+            $customer->post('/test-account', [StoreTestAccountController::class, 'take']);
+            $customer->get('/wheel', [StoreWheelController::class, 'show']);
+            $customer->post('/wheel/spin', [StoreWheelController::class, 'spin']);
+            $customer->get('/lottery', [StoreLotteryController::class, 'show']);
             $customer->get('/notifications', [NotificationsController::class, 'index']);
             $customer->post('/notifications/read', [NotificationsController::class, 'read']);
             $customer->get('/tickets', [StoreTicketsController::class, 'index']);
@@ -505,10 +556,34 @@ return static function (App $app): void {
             $customer->post('/tickets/{id:[0-9]+}/rating', [StoreTicketsController::class, 'rate']);
         })->add(CustomerAuthMiddleware::class);
 
+        // A signed-in customer's website ways in: Telegram's redirect for them, a code to their mobile to prove it again,
+        // and Telegram's and Google's own sign-ins and a mobile number added to their account under the website's own
+        // ways (a recent sign-in's alone, as above). Through the mini app these are the router's 404 before the customer
+        // or their sign-in is asked anything.
+        $store->group('', function (RouteCollectorProxy $website): void {
+            $website->post('/me/reauthenticate/phone', [MeController::class, 'reauthenticationCode']);
+            $website->post('/me/telegram/authorize', [StoreAuthController::class, 'authorize']);
+            $website->group('', function (RouteCollectorProxy $credentials): void {
+                $credentials->post('/me/identities/telegram', [IdentitiesController::class, 'telegram']);
+                $credentials->post('/me/identities/google', [IdentitiesController::class, 'google']);
+                $credentials->post('/me/identities/phone', [IdentitiesController::class, 'phone']);
+                $credentials->post('/me/identities/phone/verify', [IdentitiesController::class, 'verifyPhone']);
+            })->add(RecentSignInMiddleware::class);
+        })->add(CustomerAuthMiddleware::class)->add(WebsiteOnlyMiddleware::class);
+
+        // A signed-in customer's fingerprint in the mini app: the secret it keeps behind the device's fingerprint or
+        // face (Telegram's BiometricManager), set — a recent sign-in's alone, as proving it again proves a way in — and
+        // forgotten. A website has nothing to keep it behind but the bearer token beside it: through its key these are
+        // the router's 404.
+        $store->group('', function (RouteCollectorProxy $miniApp): void {
+            $miniApp->put('/me/biometric', [MeController::class, 'biometric'])->add(RecentSignInMiddleware::class);
+            $miniApp->delete('/me/biometric', [MeController::class, 'forgetBiometric']);
+        })->add(CustomerAuthMiddleware::class)->add(MiniAppOnlyMiddleware::class);
+
         // The shop's daily work again, for its admins — its customers whose role is admin — while the website lets them
         // in, each operation the panels' own: never the shop's configuration.
         $store->group('/admin', function (RouteCollectorProxy $staff) use ($operations): void {
             $operations($staff);
-        })->add(StaffMiddleware::class)->add(CustomerAuthMiddleware::class);
+        })->add(StaffMiddleware::class)->add(CustomerAuthMiddleware::class)->add(WebsiteOnlyMiddleware::class);
     })->add(JsonBodiesMiddleware::class)->add(StoreMiddleware::class)->add(InstalledMiddleware::class);
 };

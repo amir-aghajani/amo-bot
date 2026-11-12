@@ -9,6 +9,7 @@ use App\Core\Exceptions\TooManyAttemptsException;
 use App\Core\Exceptions\ValidationException;
 use App\Core\Http\ApiController;
 use App\Core\Mail\MailFailedException;
+use App\Core\Sms\SmsFailedException;
 use App\Modules\Accounts\DTO\SignedIn;
 use App\Modules\Accounts\DTO\TwoFactorChallenge;
 use App\Modules\Accounts\Exceptions\SignInsBusyException;
@@ -17,6 +18,8 @@ use App\Modules\Accounts\Services\AccountPresenter;
 use App\Modules\Accounts\Services\AuthChallenges;
 use App\Modules\Accounts\Services\EmailSignIn;
 use App\Modules\Accounts\Services\GoogleSignIn;
+use App\Modules\Accounts\Services\MiniAppSignIn;
+use App\Modules\Accounts\Services\PhoneSignIn;
 use App\Modules\Accounts\Services\TelegramSignIn;
 use App\Modules\Accounts\Services\TwoFactor;
 use App\Modules\Auth\Exceptions\SignInRefusedException;
@@ -28,10 +31,11 @@ use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 
 /**
- * The website's sign-in routes (`/auth/*`): a nonce for an id_token, Telegram (popup or redirect), Google, and an email
- * with a password — sign-up, sign-in, its second step, a forgotten password. A sign-in answers the bearer token (shown
- * this once) and the account, or a 202 with the second step's challenge; what emails a code answers a 202 with how long
- * it waits, whether or not the address has an account.
+ * The sign-in routes (`/auth/*`): the website's — a nonce for an id_token, Telegram (popup or redirect), Google, an
+ * email with a password: sign-up, sign-in, its second step, a forgotten password —, a code texted to a mobile — and the
+ * mini app's, by Telegram's launch data. A sign-in answers the bearer token (shown this once) and the account, or a 202
+ * with the second step's challenge; what emails or texts a code answers a 202 with how long it waits, whether or not the
+ * address or the number has an account.
  */
 final class AuthController extends ApiController
 {
@@ -41,8 +45,23 @@ final class AuthController extends ApiController
         private readonly TelegramSignIn $telegram,
         private readonly GoogleSignIn $google,
         private readonly EmailSignIn $email,
+        private readonly PhoneSignIn $phone,
         private readonly TwoFactor $twoFactor,
+        private readonly MiniAppSignIn $miniApp,
     ) {}
+
+    /**
+     * POST /auth/mini-app — {init_data, referral_code?}: the mini app's customer signed in by the launch data Telegram
+     * handed the app (MiniAppSignIn).
+     *
+     * @throws SignInRefusedException 401 the launch data does not hold; 403 banned
+     * @throws ValidationException 422 on `init_data`
+     * @throws TooManyAttemptsException 429
+     */
+    public function miniApp(Request $request, Response $response): Response
+    {
+        return $this->signedIn($response, $this->miniApp->signIn(StoreMiddleware::miniApp($request), $request, $this->input($request)));
+    }
 
     /**
      * POST /auth/nonce — the nonce the site hands the provider; the sign-in brings it back once.
@@ -143,7 +162,8 @@ final class AuthController extends ApiController
     }
 
     /**
-     * POST /auth/login/2fa — {challenge, code}: the second step, with the app's code or a recovery code.
+     * POST /auth/login/2fa — {challenge, code}: the second step of a password's sign-in or a code by SMS's, with the app's
+     * code or a recovery code.
      *
      * @throws SignInRefusedException 401 the challenge opens nothing any more, 403 banned
      * @throws ValidationException 422 a field missing, the code wrong
@@ -180,13 +200,43 @@ final class AuthController extends ApiController
         return $this->signedIn($response, $this->email->reset(StoreMiddleware::website($request), $request, $this->input($request)));
     }
 
-    /** A sign-in's answer: the bearer token and the account — or a 202 with the second step's challenge, no session yet. */
+    /**
+     * POST /auth/phone — {phone, captcha?}: a code texted to the number, whether or not it has an account (202).
+     *
+     * @throws SignInRefusedException 422 sign-in by SMS off, 503 the SMS budget spent
+     * @throws ValidationException 422 on `phone`, on `captcha`
+     * @throws CaptchaUnavailableException 503
+     * @throws TooManyAttemptsException 429
+     * @throws SmsFailedException 502
+     */
+    public function phone(Request $request, Response $response): Response
+    {
+        return $this->json($response, PhoneSignIn::sent($this->phone->start(StoreMiddleware::website($request), $request, $this->input($request))), 202);
+    }
+
+    /**
+     * POST /auth/phone/verify — {phone, code, referral_code?}: the number's customer signed in (with a merge offered when
+     * another account holds it too), a newcomer made with it, or the second step's challenge (202).
+     *
+     * @throws SignInRefusedException 403 banned, 422 sign-in by SMS off
+     * @throws ValidationException 422 on `phone`, on `code`
+     * @throws TooManyAttemptsException 429
+     */
+    public function verifyPhone(Request $request, Response $response): Response
+    {
+        return $this->signedIn($response, $this->phone->verify(StoreMiddleware::website($request), $request, $this->input($request)));
+    }
+
+    /**
+     * A sign-in's answer: the bearer token and the account, with the merge offered beside it (a sign-in by SMS's) — or a
+     * 202 with the second step's challenge, no session yet.
+     */
     private function signedIn(Response $response, SignedIn|TwoFactorChallenge $signedIn): Response
     {
         if ($signedIn instanceof TwoFactorChallenge) {
             return $this->json($response, ['two_factor' => ['challenge' => $signedIn->challenge, 'expires_in' => $signedIn->expiresIn]], 202);
         }
 
-        return $this->json($response, ['token' => $signedIn->token, 'customer' => AccountPresenter::present($signedIn->session->user)]);
+        return $this->json($response, ['token' => $signedIn->token, 'customer' => AccountPresenter::present($signedIn->session->user)] + ($signedIn->merge?->present() ?? []));
     }
 }

@@ -9,12 +9,13 @@ On a host where it cannot, you replace the files by hand and the panel still run
 ## From the panel
 
 «تنظیمات پنل › به‌روزرسانی» shows the version the shop runs and the newest release on GitHub, with its notes. The
-scheduler reads the newest release once a day, so the dashboard's «وضعیت سیستم» card says when one is out; «بررسی
-دوباره» reads it at once.
+scheduler reads the newest release once a day by default
+([the task schedule](Running-In-Production.md#the-task-schedule)), so the dashboard's «وضعیت سیستم» card says when one
+is out; «بررسی دوباره» reads it at once.
 
-**Back the database up first** ([Backups](Backups.md)). Then press «به‌روزرسانی به نسخه …» and confirm. The update
-goes a step a request, so keep the page open until it is done; if it closes, open it again and «ادامه به‌روزرسانی» goes
-on from the same step:
+**Back the shop up first**: «تنظیمات پنل › پشتیبان‌گیری», in the main shop, downloads the whole installation's database
+([Backups](Backups.md)). Then press «به‌روزرسانی به نسخه …» and confirm. The update goes a step a request, so keep the
+page open until it is done; if it closes, open it again and «ادامه به‌روزرسانی» goes on from the same step:
 
 1. **«دانلود و بررسی امضا»** — the release's `release.json` (its manifest: the version, the zip's size and sha256, the
    PHP and the extensions it needs) and its signature, checked against the key built into the shop
@@ -49,7 +50,8 @@ When something fails:
 - **An install a crash cut short** is finished by the next «ادامه به‌روزرسانی».
 
 An installed update is taken back with «بازگرداندن نسخه قبلی» while the version it replaced is kept, until the next
-update — unless the update changed the database: then only your backup takes it back.
+update — unless the update changed the database: then only your backup takes it back. A backup the version before
+made restores on the new one too: it is brought along by the upgrades since ([restoring](Backups.md#restoring)).
 
 What the panel's update needs, and says it needs where it is missing:
 
@@ -63,7 +65,8 @@ What the panel's update needs, and says it needs where it is missing:
 
 ## By hand
 
-1. **Back up** the database, `config.php` and `storage/` ([Backups](Backups.md)), and check that the host's PHP is one
+1. **Back up** the database («تنظیمات پنل › پشتیبان‌گیری», or the host's tools), `config.php` and `storage/`
+   ([Backups](Backups.md)), and check that the host's PHP is one
    the release takes ([what you need](Installation.md#what-you-need)): below 8.3.36 the new release does not start.
 2. **Replace the files.** In the host's File Manager, delete every folder and file of the old release except
    `config.php` and `storage/`, then upload and extract the new release's zip in their place (its own `storage/` folder

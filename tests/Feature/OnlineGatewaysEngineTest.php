@@ -27,6 +27,7 @@ use App\Modules\Payments\Services\Checkout;
 use App\Modules\Payments\Services\OnlineInvoices;
 use App\Modules\Payments\Services\OnlinePayments;
 use App\Modules\Payments\Tasks\OnlinePaymentsTask;
+use App\Modules\Settings\Services\ScheduleSettings;
 use App\Modules\Users\Models\User;
 use App\Support\LocalTime;
 use GuzzleHttp\HandlerStack;
@@ -173,14 +174,14 @@ final class OnlineGatewaysEngineTest extends HttpTestCase
         // Hours after its page closed, still AtlasPay's to decide: asked, never closed.
         $task = $this->service(OnlinePaymentsTask::class);
         foreach (range(1, 20) as $step) {
-            Carbon::setTestNow(now()->addMinutes(OnlinePaymentsTask::LATE_CHECK_MINUTES));
+            Carbon::setTestNow(now()->addMinutes(ScheduleSettings::LATE_CHECK_MINUTES));
             $task->run();
         }
         self::assertSame(PaymentStatus::Pending, $payment->refresh()->status);
 
         // AtlasPay confirms it: the task finds it.
         $atlas->pay($atlas->onlyOrder());
-        Carbon::setTestNow(now()->addMinutes(OnlinePaymentsTask::LATE_CHECK_MINUTES));
+        Carbon::setTestNow(now()->addMinutes(ScheduleSettings::LATE_CHECK_MINUTES));
         $task->run();
         self::assertSame(PaymentStatus::Paid, $payment->refresh()->status);
         self::assertSame('50000.00', $this->customer->balance());

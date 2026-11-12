@@ -17,6 +17,7 @@ use App\Modules\Telegram\Handler;
 use App\Modules\Telegram\Keyboard\Buttons;
 use App\Modules\Telegram\Texts\BotText;
 use App\Modules\Telegram\Texts\BotTexts;
+use App\Modules\Telegram\Texts\PremiumText;
 
 /**
  * «➕ افزودن سرویس»: a service support made on a panel by hand, added to the customer's account by its subscription link
@@ -107,7 +108,7 @@ final class ServiceClaimHandler implements Handler
 
         $ctx->session->clear();
         $ctx->reply(
-            $this->texts->render(BotText::ClaimAdded, ['client' => $service->remote_name, 'server' => $service->server->name]),
+            $this->texts->render(BotText::ClaimAdded, ['client' => $service->shownAs(), 'server' => PremiumText::server($service->server)]),
             ['reply_markup' => $this->buttons->serviceOnly($service->id)],
         );
     }

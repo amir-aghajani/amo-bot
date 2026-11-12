@@ -67,10 +67,11 @@ final class OrderPresenter
     }
 
     /**
-     * One attempt to pay an order: its way to pay, how it stands, whether a receipt was sent, its verdict's note, and an
-     * online payment's page while it waits on it (openLink()).
+     * One attempt to pay an order: its way to pay, how it stands, whether a receipt was sent, its verdict's note, an
+     * online payment's page while it waits on it (openLink()), its gateway's tracking code (`reference`), and whether
+     * it waits for support as held (Payments\Services\OnlinePayments::awaitsSupport()).
      *
-     * @return array{id: int, method: array{id: int, label: string, kind: string|null, min_amount: string|null, max_amount: string|null}, status: string, amount: string, created_at: string|null, paid_at: string|null, receipt: array{sent_at: string}|null, note: string|null, link: array{payment_id: int, url: string, expires_at: string|null, amount: string, amount_rial: string, fee: string|null, card: array{number: string, holder: string|null, bank: string|null}|null}|null}
+     * @return array{id: int, method: array{id: int, label: string, kind: string|null, min_amount: string|null, max_amount: string|null}, status: string, amount: string, created_at: string|null, paid_at: string|null, receipt: array{sent_at: string}|null, note: string|null, reference: string|null, held: bool, link: array{payment_id: int, url: string, expires_at: string|null, amount: string, amount_rial: string, fee: string|null, card: array{number: string, holder: string|null, bank: string|null}|null}|null}
      */
     public function payment(Payment $payment): array
     {
@@ -85,6 +86,9 @@ final class OrderPresenter
             // A hold's note is support's: the customer reads that it is with support, not to be paid again. Support's own
             // word (a cancellation's note) replaces it once they settle it.
             'note' => in_array($payment->note, PaymentService::HELD_NOTES, true) ? sprintf(PaymentHeldException::MESSAGE, $payment->order_id) : $payment->note,
+            // The gateway's own: the shop's references of other payments (a wallet line's) are no tracking code to quote.
+            'reference' => $this->gateways->kind($payment->method->driver) === GatewayKind::Online ? $payment->reference : null,
+            'held' => OnlinePayments::awaitsSupport($payment),
             'link' => $this->openLink($payment),
         ];
     }

@@ -7,8 +7,8 @@ import { planRow } from '@/test/rows'
 import { json, noContent, refusal, server } from '@/test/server'
 
 /*
- * The plans list (pages/plans): the flag on a plan the bot does not show, the other prices and the term under each
- * plan, no delete for a plan with history, a copy made once and shown where the server puts it, and the bulk price
+ * The plans list (pages/plans): the flag on a plan the bot does not show, its badge, the other prices and the term under
+ * each plan, no delete for a plan with history, a copy made once and shown where the server puts it, and the bulk price
  * change (components/plans/bulk-prices-modal): preview, apply exactly what was previewed, and a refusal that names the
  * plans.
  */
@@ -60,6 +60,15 @@ describe('the plans list', () => {
     expect(discounted.closest('td')?.textContent).toBe('۱۲۰٬۰۰۰ تومانخرید اول: ۹۰٬۰۰۰ تومان')
     expect(screen.getByText('خرید اول: رایگان').closest('td')?.textContent).toBe('۵۰٬۰۰۰ تومانخرید اول: رایگان')
     expect(screen.getAllByText(/^خرید اول:/)).toHaveLength(2)
+  })
+
+  it('shows beside a plan’s name the badge its card wears, in the card’s words — and none for a plan without one', async () => {
+    showPlans([planRow({ id: 1, name: 'ماهانه', badge: 'bestseller' }), planRow({ id: 2, name: 'طلایی', badge: 'vip' }), planRow({ id: 3, name: 'تست' })])
+
+    const badge = await screen.findByText('پرفروش‌ترین')
+    expect(badge.closest('td')?.textContent).toContain('ماهانه')
+    expect(screen.getByText('VIP').closest('td')?.textContent).toContain('طلایی')
+    expect(screen.queryByText('پیشنهاد ما')).toBeNull()
   })
 
   it('formats each term from its hours: whole days, hours, both, or none', async () => {

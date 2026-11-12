@@ -135,12 +135,15 @@ export function botSettingsRow(overrides: Partial<BotSettingsData> = {}): BotSet
     referral_alert_idle: 20,
     report_purchases: true,
     report_renewals: true,
+    report_tests: true,
+    report_deletions: true,
     report_wallet: true,
     report_receipts: true,
     report_users: true,
     report_errors: true,
     report_tickets: true,
     report_reviews: true,
+    report_backups: true,
     gift_codes_enabled: false,
     wheel_enabled: false,
     wheel_cooldown_hours: 24,
@@ -525,7 +528,7 @@ function serverField(name: string, overrides: Partial<FieldDescription>): FieldD
  * Plan 3 «طلایی», 120٬000 Toman for everyone — no first-purchase price, no agent price —, 30 days (`duration_hours`, its
  * days beside them as the API says them), sold whole on server 1 and shown in the bot — with history, so it is not
  * deleted —, its extras at the shop's prices; no checkout note, its button in the bot the client's own look, a row of
- * its own.
+ * its own, no label on its card.
  */
 export function planRow(overrides: Partial<PlanRow> = {}): PlanRow {
   const hours = overrides.duration_hours ?? 30 * 24
@@ -533,6 +536,7 @@ export function planRow(overrides: Partial<PlanRow> = {}): PlanRow {
     id: 3,
     category: null,
     name: 'طلایی',
+    emoji_id: null,
     description: null,
     price: '120000.00',
     first_purchase_price: null,
@@ -540,6 +544,7 @@ export function planRow(overrides: Partial<PlanRow> = {}): PlanRow {
     checkout_note: null,
     button_style: null,
     button_row: 1,
+    badge: null,
     duration_days: daysOf(hours),
     duration_hours: hours,
     traffic_gb: 30,
@@ -564,7 +569,7 @@ export function groupRow(overrides: Partial<CustomerGroupRow> = {}): CustomerGro
 
 /** Category 1 «ماهانه», on, two plans under it. */
 export function categoryRow(overrides: Partial<PlanCategoryRow> = {}): PlanCategoryRow {
-  return { id: 1, name: 'ماهانه', is_active: true, sort: 1, counts: { plans: 2 }, created_at: '2026-09-01T10:00:00Z', updated_at: '2026-10-06T09:00:00Z', ...overrides }
+  return { id: 1, name: 'ماهانه', emoji_id: null, is_active: true, sort: 1, counts: { plans: 2 }, created_at: '2026-09-01T10:00:00Z', updated_at: '2026-10-06T09:00:00Z', ...overrides }
 }
 
 /** Agency level 1 «طلایی», 3٬000 Toman a GB, no agent on it. */
@@ -731,6 +736,7 @@ export function websiteRow(overrides: Partial<Website> = {}): Website {
     origins: ['http://localhost:3000'],
     telegram: { enabled: true, client_id: '7123456789', bot_id: 7123456789, has_secret: true },
     email: { enabled: false, mail_ready: true },
+    phone: { enabled: false, sms: 'ready' },
     google: { client_id: null },
     captcha: websiteCaptcha(),
     reviews: { enabled: false },

@@ -294,7 +294,7 @@ final class ProvisioningService
      * `$claimed` runs in the transaction that writes the row; a client the shop keeps already fails on the row's unique key.
      *
      * @param \Closure(Subscription): void $claimed
-     * @param array{plan_id?: int|null, auto_renew?: bool, is_test?: bool} $carried
+     * @param array{plan_id?: int|null, auto_renew?: bool, is_test?: bool, label?: string|null} $carried
      * @throws UniqueConstraintViolationException when the shop keeps the client already
      */
     public function adopt(User $user, Server $server, ClientInfo $client, Carbon $observedAt, \Closure $claimed, array $carried = []): Subscription
@@ -830,15 +830,15 @@ final class ProvisioningService
 
     /**
      * The columns a service takes with a new owner, whichever way it changes hands — handed on (ServiceTransfers) or
-     * added to their account by its link (adopt()): theirs, «تمدید خودکار» off (their wallet is theirs to commit), and
-     * nothing stamped as told (the reminders, the short wallet's notice: they have heard nothing yet). Written in the
-     * transaction that changes the owner, with its report; relabel() follows the commit.
+     * added to their account by its link (adopt()): theirs, «تمدید خودکار» off (their wallet is theirs to commit), no name
+     * of the last owner's own (`label`), and nothing stamped as told (the reminders, the short wallet's notice: they have
+     * heard nothing yet). Written in the transaction that changes the owner, with its report; relabel() follows the commit.
      *
-     * @return array{user_id: int, auto_renew: false, renewal_notified_at: null, expiry_reminded_at: null, traffic_reminded_at: null}
+     * @return array{user_id: int, auto_renew: false, label: null, renewal_notified_at: null, expiry_reminded_at: null, traffic_reminded_at: null}
      */
     public static function newOwner(User $owner): array
     {
-        return ['user_id' => $owner->id, 'auto_renew' => false, 'renewal_notified_at' => null, 'expiry_reminded_at' => null, 'traffic_reminded_at' => null];
+        return ['user_id' => $owner->id, 'auto_renew' => false, 'label' => null, 'renewal_notified_at' => null, 'expiry_reminded_at' => null, 'traffic_reminded_at' => null];
     }
 
     /**
@@ -1153,15 +1153,18 @@ final class ProvisioningService
      * sales record) and point at nothing; a test's record (`test_accounts`) stays for its quota. A client the panel no
      * longer has counts as deleted, and one already found gone is not asked about again; with `$leavePanel` (the panel is
      * out of reach) the panel is not contacted and the client stays there for the admin to remove. `$kept`, when given, is
-     * asked of the row as it is removed, under its lock (remove()): true keeps it. True when this call removed the row.
+     * asked of the row as it is removed, under its lock (remove()): true keeps it. `$removed`, when given, runs in the
+     * transaction that removes the row, once it is gone (the report of it stands or falls with it). True when this call
+     * removed the row.
      *
      * @param (\Closure(Subscription): bool)|null $kept
+     * @param (\Closure(Subscription): void)|null $removed
      * @throws ProviderException|ServiceBusyException
      * @throws ModelNotFoundException when the service is gone
      */
-    public function delete(Subscription $subscription, bool $leavePanel = false, ?\Closure $kept = null): bool
+    public function delete(Subscription $subscription, bool $leavePanel = false, ?\Closure $kept = null, ?\Closure $removed = null): bool
     {
-        return $this->holding($subscription, fn(Lease $lease): bool => $this->remove($subscription, $lease, $leavePanel, $kept));
+        return $this->holding($subscription, fn(Lease $lease): bool => $this->remove($subscription, $lease, $leavePanel, $kept, $removed));
     }
 
     /**
@@ -1193,8 +1196,9 @@ final class ProvisioningService
      * keeps the row, marked deleted when this call took its client off the panel.
      *
      * @param (\Closure(Subscription): bool)|null $kept
+     * @param (\Closure(Subscription): void)|null $removed Run in that transaction once the row is gone (delete())
      */
-    private function remove(Subscription $subscription, Lease $lease, bool $leavePanel, ?\Closure $kept = null): bool
+    private function remove(Subscription $subscription, Lease $lease, bool $leavePanel, ?\Closure $kept = null, ?\Closure $removed = null): bool
     {
         $offPanel = null;
         if (!$leavePanel && $subscription->status !== SubscriptionStatus::Deleted) {
@@ -1206,7 +1210,7 @@ final class ProvisioningService
             $offPanel = now();
         }
 
-        $deleted = $this->db->transaction(static function () use ($subscription, $kept): ?bool {
+        $deleted = $this->db->transaction(static function () use ($subscription, $kept, $removed): ?bool {
             if ($subscription->newModelQuery()->whereKey($subscription->id)->lockForUpdate()->value('id') === null) {
                 return false;
             }
@@ -1217,8 +1221,12 @@ final class ProvisioningService
             // sees: written here, the orders and the test accounts screens follow.
             Order::query()->where('subscription_id', $subscription->id)->update(['subscription_id' => null]);
             TestAccount::query()->where('subscription_id', $subscription->id)->update(['subscription_id' => null]);
+            $gone = $subscription->newModelQuery()->whereKey($subscription->id)->delete() === 1;
+            if ($gone && $removed !== null) {
+                $removed($subscription);
+            }
 
-            return $subscription->newModelQuery()->whereKey($subscription->id)->delete() === 1;
+            return $gone;
         });
         if ($deleted === null) {
             if ($offPanel !== null) {

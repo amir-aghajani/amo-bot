@@ -174,6 +174,43 @@ describe('a file the browser asks for itself — a picture, a video, a download'
     await expect((await api.blob('/bot/custom-emojis/5/animation')).text()).resolves.toBe('tgs bytes')
     await expect(api.blob('/bot/custom-emojis/6/animation')).rejects.toMatchObject({ status: 404 })
   })
+
+  it('is read with the name the server gives it when the panel saves it — never a folder with it —, else as the API’s failure', async () => {
+    const backup = (disposition?: string) =>
+      withHeaders({ kind: 'response', status: 200, body: 'gzip bytes', type: 'application/gzip' }, disposition === undefined ? {} : { 'Content-Disposition': disposition })
+    const named = async (disposition?: string) => {
+      server().on('GET', '/api/admin/backups/download', backup(disposition))
+      return (await api.download('/backups/download')).name
+    }
+
+    server().on('GET', '/api/admin/backups/kept/amobot-shop-1.json.gz', refusal(404, 'این فایل پیدا نشد.'))
+    await expect(api.download('/backups/kept/amobot-shop-1.json.gz')).rejects.toMatchObject({ status: 404, message: 'این فایل پیدا نشد.' })
+    expect(await named('attachment; filename="amobot-2026-11-12.json.gz"')).toBe('amobot-2026-11-12.json.gz')
+    expect(await named('attachment; filename=plain.json.gz')).toBe('plain.json.gz')
+    expect(await named(`attachment; filename="fallback.gz"; filename*=UTF-8''%D9%BE%D8%B4%D8%AA%DB%8C%D8%A8%D8%A7%D9%86.json.gz`)).toBe('پشتیبان.json.gz')
+    expect(await named('attachment; filename="../../etc/passwd"')).toBe('passwd')
+    expect(await named('attachment')).toBeNull()
+    expect(await named()).toBeNull()
+
+    server().on('GET', '/api/admin/backups/download', backup('attachment; filename="amobot.json.gz"'))
+    await expect((await api.download('/backups/download')).bytes.text()).resolves.toBe('gzip bytes')
+  })
+
+  it('is saved only when it is a file — a page answered 200 in its place (a host’s login) is not the API’s', async () => {
+    server().on('GET', '/api/admin/backups/download', withHeaders(html('<html><body>Welcome to cPanel</body></html>'), { 'X-Request-Id': 'host-1' }))
+
+    const error = await api.download('/backups/download').catch((failure: unknown) => failure)
+
+    expect(error).toBeInstanceOf(ApiError)
+    expect(error).toMatchObject({ status: 200, facts: { foreign: true, endpoint: 'GET /api/admin/backups/download', requestId: 'host-1' } })
+    expect(isTransportError(error)).toBe(false)
+
+    // Plain bytes, and gzip under its other name, are files all the same.
+    for (const type of ['application/octet-stream', 'application/x-gzip; charset=binary']) {
+      server().on('GET', '/api/admin/backups/download', { kind: 'response', status: 200, body: 'gzip bytes', type })
+      await expect((await api.download('/backups/download')).bytes.text()).resolves.toBe('gzip bytes')
+    }
+  })
 })
 
 describe('a failure', () => {
@@ -207,6 +244,25 @@ describe('a failure', () => {
     expect(outcome).toBeInstanceOf(ApiError)
     expect(outcome).toMatchObject({ status: 0, facts: { timedOut: true } })
     expect(isTransportError(outcome)).toBe(true)
+  })
+
+  it('waits as long as a request asks — a backup’s minutes —, saying so when it gives up', async () => {
+    vi.useFakeTimers()
+    server().on('GET', '/api/admin/backups/download', silent).on('POST', '/api/admin/backups/inspect', silent)
+    let download: unknown = 'pending'
+    let upload: unknown = 'pending'
+    void api.download('/backups/download', { timeoutMs: 900_000 }).catch((failure: unknown) => (download = failure))
+    void api.post('/backups/inspect', { file: new Blob(['gzip']) }, { timeoutMs: 900_000 }).catch((failure: unknown) => (upload = failure))
+
+    // Past the usual 90 seconds, still waiting.
+    await vi.advanceTimersByTimeAsync(899_999)
+    expect([download, upload]).toEqual(['pending', 'pending'])
+
+    await vi.advanceTimersByTimeAsync(1)
+    for (const outcome of [download, upload]) {
+      expect(outcome).toBeInstanceOf(ApiError)
+      expect(outcome).toMatchObject({ status: 0, message: 'No answer within 900 seconds', facts: { timedOut: true } })
+    }
   })
 
   it('refuses a success that is not JSON — a host’s or a proxy’s page', async () => {

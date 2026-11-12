@@ -67,16 +67,19 @@ final class PaymentService
     public const NOTE_HELD = 'درگاه این پرداخت را با سفارش یا مبلغ دیگری تایید کرد؛ پشتیبانی باید آن را در درگاه بررسی کند';
 
     /**
-     * The note on one held for support since its gateway kept money on it unsettled two days (Tasks\OnlinePaymentsTask::
-     * REVIEW_HOURS) after its page closed.
+     * The note on one held for support since its gateway kept money on it unsettled past the owner's hours after its page
+     * closed (ScheduleSettings::reviewHours(), «زمان‌بندی کارها»): no number in it, since the hours are the owner's.
      */
-    public const NOTE_UNSETTLED = 'درگاه پولی را که برای این پرداخت رسیده بود دو روز پس از بسته شدن صفحه هم تسویه نکرد؛ پشتیبانی باید آن را در درگاه بررسی کند';
+    public const NOTE_UNSETTLED = 'درگاه پولی را که برای این پرداخت رسیده بود تا پایان مهلت تسویه پس از بسته شدن صفحه هم تسویه نکرد؛ پشتیبانی باید آن را در درگاه بررسی کند';
+
+    /** NOTE_UNSETTLED as it read while the hours were a fixed two days: a payment held then still carries it. */
+    private const NOTE_UNSETTLED_TWO_DAYS = 'درگاه پولی را که برای این پرداخت رسیده بود دو روز پس از بسته شدن صفحه هم تسویه نکرد؛ پشتیبانی باید آن را در درگاه بررسی کند';
 
     /** The note on one held for support at once: its gateway closed it after saying money had come in on it (OnlinePayments). */
     public const NOTE_CLOSED_WITH_MONEY = 'درگاه این پرداخت را بست، با اینکه پیش‌تر گفته بود پولی برای آن رسیده است؛ پشتیبانی باید آن را در درگاه بررسی کند';
 
-    /** The notes a hold for support writes — support's words, never the customer's to read. */
-    public const HELD_NOTES = [self::NOTE_HELD, self::NOTE_UNSETTLED, self::NOTE_CLOSED_WITH_MONEY];
+    /** The notes a hold for support writes — support's words, never the customer's to read; an earlier version's too. */
+    public const HELD_NOTES = [self::NOTE_HELD, self::NOTE_UNSETTLED, self::NOTE_UNSETTLED_TWO_DAYS, self::NOTE_CLOSED_WITH_MONEY];
 
     /**
      * Minutes an online payment's page must still take money for a checkout to show it again; one closing sooner is left

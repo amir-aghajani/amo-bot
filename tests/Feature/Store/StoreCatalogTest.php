@@ -6,6 +6,7 @@ namespace Tests\Feature\Store;
 
 use App\Core\Http\ErrorHandler;
 use App\Modules\Bots\CurrentBot;
+use App\Modules\Catalog\Enums\PlanBadge;
 use App\Modules\Catalog\Models\Plan;
 use App\Modules\Catalog\Models\PlanCategory;
 use App\Modules\Catalog\Services\PlanCategoryService;
@@ -38,7 +39,7 @@ final class StoreCatalogTest extends HttpTestCase
         $economy = $this->category(['name' => 'اقتصادی']);
         $special = $this->category(['name' => 'ویژه']);
         $retired = $this->category(['name' => 'قدیمی', 'is_active' => false]);
-        $monthly = $this->plan(['name' => 'یک‌ماهه', 'category_id' => $economy->id, 'description' => 'برای یک ماه'], $this->berlin);
+        $monthly = $this->plan(['name' => 'یک‌ماهه', 'category_id' => $economy->id, 'description' => 'برای یک ماه', 'badge' => PlanBadge::Bestseller], $this->berlin);
         $loose = $this->plan(['name' => 'بی‌دسته', 'traffic_gb' => 0, 'duration_hours' => 0, 'ip_limit' => 0], $this->berlin);
         $filedAway = $this->plan(['name' => 'دسته خاموش', 'category_id' => $retired->id, 'traffic_gb' => 0.5], $this->berlin);
         $this->plan(['name' => 'خاموش', 'category_id' => $economy->id, 'is_active' => false], $this->berlin);
@@ -64,6 +65,7 @@ final class StoreCatalogTest extends HttpTestCase
                 'devices' => 1,
                 'category_id' => $economy->id,
                 'locations' => [['id' => $this->berlin->id, 'name' => 'Berlin']],
+                'badge' => 'bestseller',
             ]]],
             ['category' => ['id' => $special->id, 'name' => 'ویژه'], 'plans' => []],
             ['category' => null, 'plans' => [
@@ -207,6 +209,7 @@ final class StoreCatalogTest extends HttpTestCase
             'devices' => 1,
             'category_id' => $category?->id,
             'locations' => [['id' => $this->berlin->id, 'name' => 'Berlin']],
+            'badge' => null,
         ], $overrides);
         $offered['duration_hours'] = $overrides['duration_hours'] ?? $offered['duration_days'] * 24;
 

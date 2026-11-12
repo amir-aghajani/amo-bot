@@ -3,6 +3,9 @@
 // scripts; a test counts as a caller.
 {
   "$schema": "./node_modules/knip/schema-jsonc.json",
+  // The mini app is built apart (`vite build --mode app`), so knip, which reads vite.config.ts as the panels' build,
+  // is given its entry.
+  "entry": ["resources/panel/src/apps/app/main.tsx"],
   "project": ["resources/panel/src/**/*.{ts,tsx,css}", "scripts/*.mjs"],
   "vitest": {
     // Vitest reads its setup files from Vite's root (resources/panel); knip reads them from here.

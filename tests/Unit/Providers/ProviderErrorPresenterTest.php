@@ -9,6 +9,7 @@ use App\Modules\Providers\Enums\ConnectionFailure;
 use App\Modules\Providers\Exceptions\AuthenticationException;
 use App\Modules\Providers\Exceptions\ConnectionException;
 use App\Modules\Providers\Exceptions\NotFoundException;
+use App\Modules\Providers\Exceptions\PanelApiException;
 use App\Modules\Providers\Exceptions\ProviderException;
 use App\Modules\Providers\Exceptions\UnexpectedResponseException;
 use App\Modules\Providers\Exceptions\UnsupportedOperationException;
@@ -44,6 +45,7 @@ final class ProviderErrorPresenterTest extends TestCase
         yield 'tls' => [new ConnectionException(ConnectionFailure::Tls, 'cURL error 60'), ['گواهی TLS']];
         yield 'proxy' => [new ConnectionException(ConnectionFailure::Proxy, 'cURL error 97: User was rejected by the SOCKS5 server (1 1).'), ['پراکسی SOCKS5', 'نام کاربری و رمز', '(cURL error 97: User was rejected']];
         yield 'panel refusal' => [new ThreeXuiApiException('POST', '/panel/api/clients/add', 400, 'Duplicate email: amir_1'), ['پنل درخواست را رد کرد', 'Duplicate email: amir_1']];
+        yield 'panel refusal with the driver\'s remedy' => [new PanelApiException('The panel refused it.', 400, 'Client limit reached. Maximum allowed: 500', 'سقف کاربرهای ادمین را در پنل بالا ببرید.'), ['پنل درخواست را رد کرد. سقف کاربرهای ادمین', '(Client limit reached. Maximum allowed: 500)']];
         yield 'not found' => [new NotFoundException('3x-ui has no client "amir_1".'), ['روی پنل پیدا نشد', '(3x-ui has no client "amir_1".)']];
         yield 'unsupported' => [new UnsupportedOperationException('No host statistics.'), ['چنین امکانی ندارد', '(No host statistics.)']];
         yield 'anything else' => [new ProviderException('custom failure'), ['ارتباط با پنل به مشکل خورد', '(custom failure)']];

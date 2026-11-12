@@ -17,8 +17,8 @@ use Illuminate\Database\ConnectionInterface;
 use Illuminate\Database\UniqueConstraintViolationException;
 
 /**
- * Customers as they arrive, through the bot (Telegram\UserResolver) or the website (Telegram, email or Google sign-in):
- * one row per Telegram account, email or Google account in the shop, and every newcomer registered one way — attributed
+ * Customers as they arrive, through the bot (Telegram\UserResolver) or the website (Telegram, email, Google or SMS
+ * sign-in): one row per Telegram account, email or Google account in the shop, and every newcomer registered one way — attributed
  * to whoever's referral code they came with and reported to the group, in one transaction. An agent is the admin of
  * their own bot from their first arrival. A visit alone is written at most once a minute and quietly
  * (ChangeFeed::quietly()), so it does not make every open panel reload its customer lists.
@@ -82,6 +82,15 @@ final class Customers
     public function byEmail(string $email, string $passwordHash, array $profile, ?string $referralCode): User
     {
         return $this->register(static fn(): User => User::query()->create($profile + ['email' => $email, 'password_hash' => $passwordHash, 'last_seen_at' => now()]), $referralCode);
+    }
+
+    /**
+     * A newcomer who proved their mobile number (E.164) by a code texted to it on the website: the number and nothing else
+     * — they name themselves on the website (PATCH /me).
+     */
+    public function byPhone(string $phone, ?string $referralCode): User
+    {
+        return $this->register(static fn(): User => User::query()->create(['phone' => $phone, 'last_seen_at' => now()]), $referralCode);
     }
 
     /**

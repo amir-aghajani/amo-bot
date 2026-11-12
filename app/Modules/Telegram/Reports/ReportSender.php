@@ -45,10 +45,6 @@ final class ReportSender
     /** Rows looked at for one nobody holds. */
     private const CANDIDATES = 5;
 
-    /** Days a sent or given-up row is kept (a later report may reply to it), and hours a row may wait to be sent. */
-    private const KEEP_DAYS = 7;
-    private const EXPIRE_HOURS = 24;
-
     /** Under a report whose picture could not be copied (the customer deleted their message, or blocked the bot). */
     private const NO_PICTURE = '🖼 تصویر کپی نشد؛ در پنل مدیریت دیده می‌شود.';
 
@@ -114,35 +110,36 @@ final class ReportSender
     }
 
     /**
-     * Forget rows sent or given up on KEEP_DAYS ago (but tickets' reports: pruneTickets()) and give up on rows waiting
-     * too long. Both halves are ranges of the pruning index under a null ticket, so a run with nothing old reads nothing.
+     * Forget rows sent or given up on `$keepDays` ago (but tickets' reports: pruneTickets()) and give up on rows waiting
+     * longer than `$waitHours`. Both halves are ranges of the pruning index under a null ticket, so a run with nothing
+     * old reads nothing.
      */
-    public function prune(): void
+    public function prune(int $keepDays, int $waitHours): void
     {
-        self::old(ReportMessage::query()->whereNull('ticket_id'))->delete();
-        ReportMessage::waiting()->where('created_at', '<', now()->subHours(self::EXPIRE_HOURS))->update(['failed_at' => now(), 'error' => 'Waited too long to be sent.'] + Lease::FREE);
+        self::old(ReportMessage::query()->whereNull('ticket_id'), $keepDays)->delete();
+        ReportMessage::waiting()->where('created_at', '<', now()->subHours($waitHours))->update(['failed_at' => now(), 'error' => 'Waited too long to be sent.'] + Lease::FREE);
     }
 
     /**
-     * Forget old reports of closed (or deleted) tickets. Those of an open ticket stay however old: a reply to any of them
-     * still answers the ticket (TicketReplies). Runs hourly with the tickets' housekeeping.
+     * Forget reports of closed (or deleted) tickets sent `$keepDays` ago. Those of an open ticket stay however old: a
+     * reply to any of them still answers the ticket (TicketReplies). Runs with the tickets' housekeeping.
      */
-    public function pruneTickets(): void
+    public function pruneTickets(int $keepDays): void
     {
-        self::old(ReportMessage::query()->whereNotNull('ticket_id'))
+        self::old(ReportMessage::query()->whereNotNull('ticket_id'), $keepDays)
             ->whereNotIn('ticket_id', Ticket::query()->select('id')->where('status', '!=', TicketStatus::Closed->value))
             ->delete();
     }
 
     /**
-     * Of `$query`, what was sent, or given up on without being sent, KEEP_DAYS ago.
+     * Of `$query`, what was sent, or given up on without being sent, `$days` ago.
      *
      * @param Builder<ReportMessage> $query
      * @return Builder<ReportMessage>
      */
-    private static function old(Builder $query): Builder
+    private static function old(Builder $query, int $days): Builder
     {
-        $old = now()->subDays(self::KEEP_DAYS);
+        $old = now()->subDays($days);
 
         return $query->where(static fn(Builder $rows) => $rows
             ->where('sent_at', '<', $old)

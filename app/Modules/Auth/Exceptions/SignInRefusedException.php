@@ -50,6 +50,13 @@ final class SignInRefusedException extends DomainRuleException
     /** A nonce asked while neither sign-in that brings one back (Telegram's, Google's) is on. */
     public const ID_TOKEN_OFF = 'ورود با تلگرام و Google برای این وب‌سایت فعال نیست.';
     public const GOOGLE_UNREACHABLE = 'Google در دسترس نبود؛ چند لحظه بعد دوباره امتحان کنید.';
+    /** Sign-in by SMS asked of a site that does not take it: switched off, or no SMS goes out for it. */
+    public const PHONE_OFF = 'ورود با شماره موبایل برای این وب‌سایت فعال نیست.';
+    /** The shop's or the installation's budget of codes by SMS is spent for now. */
+    public const SMS_OFF = 'فعلا پیامکی از این فروشگاه فرستاده نمی‌شود؛ کمی بعد دوباره امتحان کنید یا از راه دیگری وارد شوید.';
+
+    /** The mini app's launch data does not hold: not Telegram's for this bot, or too old. */
+    public const LAUNCH_REFUSED = 'ورود از مینی‌اپ تایید نشد؛ مینی‌اپ را ببندید و دوباره از ربات باز کنید.';
 
     private function __construct(
         string $message,
@@ -170,6 +177,21 @@ final class SignInRefusedException extends DomainRuleException
     public static function idTokenOff(): self
     {
         return new self(self::ID_TOKEN_OFF, 422);
+    }
+
+    public static function phoneOff(): self
+    {
+        return new self(self::PHONE_OFF, 422);
+    }
+
+    public static function smsOff(): self
+    {
+        return new self(self::SMS_OFF, 503);
+    }
+
+    public static function launchRefused(): self
+    {
+        return new self(self::LAUNCH_REFUSED, 401);
     }
 
     public static function googleUnreachable(\Throwable $previous): self

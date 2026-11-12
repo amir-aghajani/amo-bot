@@ -87,7 +87,7 @@ section and that the signing secret is set — no unsigned release is ever publi
 from the last release's tag), and publishes the GitHub release: the zip, `release.json` and `release.json.sig`, its
 notes that section of [Releases](Releases.md), its relative links turned into links to the pages as the tag has them
 (`https://github.com/<owner>/<repo>/blob/v1.2.3/docs/…`) — relative ones would lead nowhere on the release's page. The
-shops' daily check sees it within a day; «بررسی دوباره» at once.
+shops see it at their next check (once a day by default); «بررسی دوباره» at once.
 
 Every push to `main` and every pull request runs the checks on PHP 8.3–8.5 and builds the panels
 (`.github/workflows/ci.yml`, [Testing](Testing.md#ci)).

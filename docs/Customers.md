@@ -59,13 +59,18 @@ a ban, the groups, two-factor sign-in, the devices — are changed from the pane
 
 - may send `/broadcast` and `/emoji` in the bot ([Bot guide](Bot-Guide.md#for-the-bots-admins));
 - passes the bot's gates — its switch, the phone, the channels — so they can try a bot that is switched off;
-- acts in the report group: approves and rejects receipts, retries a failed delivery, answers and closes tickets — and,
-  in the main bot's group, decides agency requests ([Report group](Telegram-Group.md));
+- acts in the report group: approves and rejects receipts, retries a failed delivery, answers and closes tickets,
+  manages a customer from their card (`/manage`: services, wallet, a service by hand, discount, groups, role, ban) —
+  and, in the main bot's group, decides agency requests
+  ([Report group](Telegram-Group.md));
 - works the shop's daily work on its website, while the website lets its admins in ([Website](Website.md#the-shops-admins)).
 
-The role is given and taken here alone — never from the website. To make yourself one, start the bot from your own
-Telegram account first, then find yourself in the list; «نقش › مدیران ربات» lists the admins. An agent is made the
-admin of their own bot by itself, the first time they write to it. The customer is not told.
+The role is given and taken here, or by another bot admin from a customer's card in the report group
+([A customer's card](Telegram-Group.md#a-customers-card)) — never from the website. The card never makes an admin of a
+customer with their own discount or in a «همکار» group: an admin's prices are yours to lower, so that is done here. To
+make yourself one, start the bot from your own Telegram account first, then find yourself in the list; «نقش › مدیران
+ربات» lists the admins. An agent is made the admin of their own bot by itself, the first time they write to it. The
+customer is not told.
 
 An admin is still a customer: **another admin decides what is theirs** — their own payment approved or refunded, their
 wallet, their service changed, their review decided —, in the report group and on the website alike; your panel is held

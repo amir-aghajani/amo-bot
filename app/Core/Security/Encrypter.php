@@ -76,9 +76,18 @@ final class Encrypter
      */
     public function mac(string $text, string $purpose = self::MAC_LABEL): string
     {
+        return hash_hmac('sha256', $text, $this->macKey($purpose));
+    }
+
+    /**
+     * The key of `$purpose`'s keyed hash, derived from APP_KEY as mac() derives it — for one computed piece by piece
+     * (hash_init() with HASH_HMAC: a backup file signed as it is written).
+     */
+    public function macKey(string $purpose): string
+    {
         $this->assertReady();
 
-        return hash_hmac('sha256', $text, $purpose === self::MAC_LABEL ? $this->macKey : hash_hkdf('sha256', $this->key, 32, $purpose));
+        return $purpose === self::MAC_LABEL ? $this->macKey : hash_hkdf('sha256', $this->key, 32, $purpose);
     }
 
     public function decrypt(string $payload): string

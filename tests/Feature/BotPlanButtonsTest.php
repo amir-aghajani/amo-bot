@@ -62,6 +62,43 @@ final class BotPlanButtonsTest extends BotTestCase
         self::assertSame([['danger', 'success'], [null]], array_map(static fn(array $row): array => array_map(static fn(array $button): ?string => $button['style'] ?? null, $row), $rows), 'each in its colour; none, the client\'s own');
     }
 
+    public function testAPlansAndACategorysPremiumEmojiIsTheirButtonsIconAndPremiumInTheirTexts(): void
+    {
+        $this->plan->forceFill(['name' => '🔥 طلایی', 'emoji_id' => '111'])->save();
+        $vip = $this->category(['name' => '💎 ویژه', 'emoji_id' => '222']);
+        $this->plan->forceFill(['category_id' => $vip->id])->save();
+
+        $this->send($this->tap(MainMenu::PLANS));
+        $category = $this->inlineKeyboard(0)[0][0];
+        self::assertSame(['ویژه', '222'], [$category['text'], $category['icon_custom_emoji_id'] ?? null], "the name's leading emoji, as the icon");
+
+        $this->send($this->tap($category['callback_data']));
+        self::assertStringContainsString('<tg-emoji emoji-id="222">💎</tg-emoji> ویژه', implode(PHP_EOL, $this->said()), 'premium in the text that names it');
+        $button = $this->inlineKeyboard(0)[0][0];
+        self::assertSame('111', $button['icon_custom_emoji_id'] ?? null);
+        self::assertStringStartsWith('طلایی — ', $button['text']);
+
+        $this->send($this->tap(PurchaseHandler::planCallback($this->plan->id)));
+        self::assertStringContainsString('<tg-emoji emoji-id="111">🔥</tg-emoji> طلایی', implode(PHP_EOL, $this->said()));
+    }
+
+    public function testALocationsPremiumEmojiIsItsButtonsIconInTheSymbolsPlaceAndPremiumInItsTexts(): void
+    {
+        $this->berlin->forceFill(['name' => '🇩🇪 برلین', 'meta' => ['emoji_id' => '333']])->save();
+        $paris = $this->sellingServer('Paris');
+        $this->planEntry($this->plan, $paris);
+
+        $this->send($this->tap(PurchaseHandler::planCallback($this->plan->id)));
+        $buttons = array_column(array_merge(...$this->inlineKeyboard(0)), null, 'callback_data');
+        $berlin = $buttons[PurchaseHandler::serverCallback($this->plan->id, $this->berlin->id)];
+        self::assertSame(['برلین', '333'], [$berlin['text'], $berlin['icon_custom_emoji_id'] ?? null], "the location's premium emoji, as the icon, in the wording's 🌍's place");
+        $other = $buttons[PurchaseHandler::serverCallback($this->plan->id, $paris->id)];
+        self::assertSame([self::text(BotText::ServerButton, ['server' => 'Paris']), null], [$other['text'], $other['icon_custom_emoji_id'] ?? null], 'one without: as it was');
+
+        $this->send($this->tap(PurchaseHandler::serverCallback($this->plan->id, $this->berlin->id)));
+        self::assertStringContainsString('<tg-emoji emoji-id="333">🇩🇪</tg-emoji> برلین', implode(PHP_EOL, $this->said()));
+    }
+
     public function testALocationsButtonTakesItsServersColourAndRow(): void
     {
         $paris = $this->sellingServer('Paris', ['meta' => ['button_style' => 'primary', 'button_row' => '2']]);

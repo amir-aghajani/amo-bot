@@ -8,17 +8,20 @@
 shadcn/ui روی Radix، react-query و react-router. به فایل‌های استاتیک بیلد می‌شوند و فقط از راه JSON API با PHP حرف
 می‌زنند. این صفحه نقشه پایه مشترک است — بیلد، لایه داده، خطاها، پوسته (shell) و مجموعه کامپوننت‌ها — و بعد نقشه صفحه‌هایی که
 روی آن ساخته شده‌اند ([صفحه‌ها](#صفحه‌ها)). اینکه پنل‌ها برای مالک فروشگاه چه شکلی دارند در [پنل‌ها](Panels.md) آمده است؛ و APIای
-که صدا می‌زنند در [قرارداد API](API-Contract.md) توصیف شده است.
+که صدا می‌زنند در [قرارداد API](API-Contract.md) توصیف شده است. همین پروژه صفحه سومی را جداگانه بیلد می‌کند — مینی‌اپ تلگرام
+فروشگاه‌ها، روی Store API؛ نقشه خودش در [ساختار داخلی: مینی‌اپ](Internals-Mini-App.md) است.
 
 ## درخت سورس
 
 ```text
 resources/panel/
   admin/index.html, agent/index.html   each panel's page (entry: src/apps/<panel>/main.tsx)
+  app/index.html, app/open.html        the mini app's page and its bridge to a VPN app (built apart)
   src/
     root.tsx        mount(routes): providers, router, error net — what both panels stand on
     apps/admin/     the owner's routes (app.tsx), menu (nav.ts), shell config, sign-in, owner-only pages
     apps/agent/     an agent's routes, menu, sign-in and account page
+    apps/app/       the mini app: its own routes, screens, kit and Telegram bridge (Internals-Mini-App)
     pages/          the shop's pages both panels have, each its own chunk (pages/lazy.ts)
     components/     the generic kit at the top level; domain folders (plans/, orders/…) beside it
     components/shell/  sidebar, rail, drawer, topbar, the nav tree
@@ -47,7 +50,8 @@ resources/panel/
 brotli کنار هر اسکریپت و stylesheet، و `assets/.htaccess` را، که آن نسخه‌ها را همان‌طور که هستند با کش طولانی و `Content-Type`
 درست سرو می‌کند (وگرنه LiteSpeed فایل <code dir="ltr">.js.br</code> را به شکل `application/octet-stream` می‌فرستاد). مسیرهای
 بیلدشده نسبی‌اند، و اسکریپت inline هر صفحه `<base>` را روی پوشه خودش می‌گذارد، پس یک بیلد از هر زیرپوشه و هر لینک عمیقی کار
-می‌کند.
+می‌کند. مینی‌اپ جداگانه بیلد می‌شود، با `vite build --mode app` (قدم دوم `pnpm build`)، در `public/app` با فایل‌های hashدار خودش:
+گوشی کاربر هیچ‌چیز از کد پنل‌ها را بار نمی‌کند، و پنل‌ها هیچ‌چیز از کد آن را.
 
 ماژول `lib/config` بقیه چیزها را یک بار از روی صفحه می‌خواند: کدام پنل است، پایه API آن، basename مسیریاب و **فروشگاهی که تب
 نشان می‌دهد**. تب مالک فروشگاه، فروشگاه را در آدرسش نگه می‌دارد (<code dir="ltr">/admin/…</code> فروشگاه اصلی است،
@@ -298,7 +302,7 @@ isolate را به شکل یک مربع یا یک فاصله می‌کشند: `li
   هرگز `setState` در یک effect — oxlint این را اعمال می‌کند، و هیچ کامنت lint-disable در درخت نیست.
 - هر `Button` همان <code dir="ltr">type="button"</code> است مگر بگوید <code dir="ltr">type="submit"</code>.
 - ذخیره‌سازی مرورگر فقط برای راحتی‌هاست، از راه `lib/storage` (ممکن است رد کند).
-- دستور `pnpm check` باید سبز باشد: نوع‌های API به‌روز، `tsc`، oxlint، knip (هیچ چیز بی‌استفاده)، Prettier، تست‌ها.
+- دستور `pnpm check` باید سبز باشد: نوع‌های API و فهرست جستجوی تنظیمات به‌روز (`pnpm settings:index`)، `tsc`، oxlint، knip (هیچ چیز بی‌استفاده)، Prettier، تست‌ها.
 
 ## تست‌ها
 
@@ -374,7 +378,8 @@ UTC). `src/test/setup` به هر تست یک سرور فیک تازه به‌ج�
 پلن‌ها، دسته‌بندی‌ها، روش‌های پرداخت و گروه‌های کاربری فهرست‌هایی هستند که ادمین ترتیبشان را تعیین می‌کند. `PlanForm` چهار تبش
 را در یک خانه grid نگه می‌دارد، تب‌های پنهان `inert` و نامرئی، پس پنجره هرگز زیر اشاره‌گر ارتفاعش را عوض نمی‌کند، و ذخیره
 ردشده به اولین تبی که خطا دارد می‌پرد. `reads` آن قیمت‌ها را با رقم‌هایشان و مدت را به ساعت مقایسه می‌کند، پس `dirty` فقط وقتی
-true است که سرور چیز دیگری ذخیره کند. تغییر گروهی قیمت (`BulkPricesModal`) باید پیش‌نمایش شود، و دقیقا همان درخواستی را که
+true است که سرور چیز دیگری ذخیره کند. تب جزئیاتش برچسب پلن را می‌گذارد، برچسبی که کارتش در مینی‌اپ و وب‌سایت دارد
+(`components/plans/plan-badge`: کلمه‌هایی که هر کدام نشان می‌دهد، مثل <code dir="ltr">PlanBadge::label()</code>). تغییر گروهی قیمت (`BulkPricesModal`) باید پیش‌نمایش شود، و دقیقا همان درخواستی را که
 پیش‌نمایش کرده اعمال می‌کند. روش پرداخت از راه یک `PickerModal` از توصیف‌های درایورها اضافه می‌شود؛ فرمش (`MethodForm`) با
 `DriverFields` کشیده می‌شود.
 
@@ -440,7 +445,30 @@ true است که سرور چیز دیگری ذخیره کند. تغییر گرو
 ### تنظیمات وب‌سایت و پنل
 
 هر کارت تنظیمات وب‌سایت فقط فیلدهای خودش را با یک PATCH ذخیره می‌کند (`useWebsiteGroup`)، و `dirty` هر چیزی است که آن PATCH
-تغییر می‌داد؛ پاسخ (کل وب‌سایت) جای تنها خواندن صفحه را می‌گیرد، پس پیش‌نویس کارت دیگر دست نمی‌خورد. تنظیمات پنل
+تغییر می‌داد؛ پاسخ (کل وب‌سایت) جای تنها خواندن صفحه را می‌گیرد، پس پیش‌نویس کارت دیگر دست نمی‌خورد.
+
+صفحه «مینی‌اپ تلگرام» (`pages/mini-app-settings.tsx`، هر دو پنل) یک صفحه بخش‌بندی‌شده با سه بخش است
+(`MINI_APP_SETTINGS_SECTIONS`): اتصال — کلید روشن و خاموش، آدرس مینی‌اپ، دکمه منوی ربات —، ظاهر، با لوگو
+(`components/mini-app`)، و «پیش‌نمایش»، خود مینی‌اپ همان‌طور که کاربر می‌بیند. یک خواندن (`miniAppQuery`، `GET /mini-app`) همه کارت‌ها را تغذیه می‌کند؛ هر کارت فیلدهای خودش را با یک
+PATCH ذخیره می‌کند (`useMiniAppGroup`)، که پاسخش جای آن خواندن را می‌گیرد، و `menu_button_error` در آن — ذخیره انجام شد، ولی
+تلگرام دکمه منو را نپذیرفت — بالای کارت‌ها گفته می‌شود. برنامه مالک `appSettings` را می‌دهد، صفحه‌ای که `APP_URL` در آن تنظیم
+می‌شود: روشن کردن مینی‌اپ آن را با https می‌خواهد.
+
+پیش‌نمایش (`components/mini-app/preview`) تلگرام را دور خود مینی‌اپ واقعی می‌کشد. `preview-section` یک کاربر را انتخاب می‌کند
+(`customer-picker`، با همان جستجوی فهرست کاربران)، یک Session فقط خواندنی برایش باز می‌کند (`POST /mini-app/preview`: ۳۰
+دقیقه، حتی وقتی مینی‌اپ خاموش است) و آدرس مینی‌اپ را در یک frame روی همان سایت باز می‌کند، با fragmentی که آنچه تلگرام هنگام
+باز کردن می‌دهد در آن است — `tgWebAppPreview` (توکن Session، به جای داده راه‌اندازی)، نسخه Bot API، پلتفرم و تم انتخاب‌شده
+([ساختار داخلی: مینی‌اپ](Internals-Mini-App.md#پیش‌نمایش)). `telegram-phone` گوشی را می‌کشد — نوار وضعیت، هدر و دکمه
+برگشت تلگرام، دکمه اصلی و دوم، تمام‌صفحه با کنترل‌های شناور تلگرام، popupها، درخواست اثر انگشت — با تم روشن یا تیره و در دو
+اندازه (`telegram.ts`: تم‌های تلگرام، گوشی‌ها، و ارتفاع چیزهایی که تلگرام می‌کشد)، و `use-web-app-bridge` نیمه تلگرام از
+پروتکل frame در telegram-web-app.js است: مینی‌اپ <code dir="ltr">{eventType, eventData}</code> را به پنجره والدش می‌فرستد،
+این hook آنچه تلگرام می‌کشید را در state خود نگه می‌دارد و همان‌طور که تلگرام جواب می‌دهد جواب می‌دهد، و پیام هر پنجره دیگری را
+نادیده می‌گیرد. frame با عوض شدن تم، گوشی یا ذخیره یک کارت دوباره باز می‌شود — با همان Session —؛ «باز کردن دوباره» یک
+Session تازه باز می‌کند، و وقتی Sessionی تمام شد پوششی روی گوشی آن را می‌گوید. صفحه پنل فقط صفحه‌های خود سایت را در frame
+نشان می‌دهد، و پوشه مینی‌اپ به سایت اجازه می‌دهد آن را در frame نشان دهد (`vite.config.ts`، که `frame-policy.test.ts` آن را
+نگه می‌دارد).
+
+تنظیمات پنل
 (`apps/admin/settings`) گروه‌های config.php را از راه `useConfigGroup` ویرایش می‌کنند؛ بخش به‌روزرسانی یک به‌روزرسانی را در هر
 درخواست یک قدم جلو می‌برد تا وقتی صفحه روی بیلد تازه دوباره بار شود. نصب‌کننده وب (`apps/admin/install`) با کلید نصبی که مالک
 فروشگاه از روی هاست خوانده (`X-Install-Key`، که برای تب نگه داشته می‌شود) با <code dir="ltr">/api/install</code> حرف می‌زند، و

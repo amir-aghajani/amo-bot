@@ -89,7 +89,7 @@ final class ServiceTransferHandler implements Handler
         }
 
         $ctx->session->enter(self::STATE, [self::SERVICE => $service->id]);
-        $ctx->edit($this->texts->render(BotText::TransferAsk, ['client' => $service->remote_name]), $this->backToService($service));
+        $ctx->edit($this->texts->render(BotText::TransferAsk, ['client' => $service->shownAs()]), $this->backToService($service));
     }
 
     /**
@@ -118,7 +118,7 @@ final class ServiceTransferHandler implements Handler
         }
 
         $ctx->session->enter(self::confirmation($service, $recipient->id), [self::SERVICE => $service->id]);
-        $ctx->reply($this->texts->render(BotText::TransferConfirm, ['client' => $service->remote_name, 'name' => $recipient->shownAs()]), [
+        $ctx->reply($this->texts->render(BotText::TransferConfirm, ['client' => $service->shownAs(), 'name' => $recipient->shownAs()]), [
             'reply_markup' => $this->buttons->confirmChange($service->id, BotText::TransferYes, CallbackData::build(self::PREFIX, $service->id, $recipient->id)),
         ]);
     }
@@ -130,9 +130,11 @@ final class ServiceTransferHandler implements Handler
     private function confirm(Context $ctx, Subscription $service, int $recipientId): void
     {
         $this->recipients->confirm($ctx, self::confirmation($service, $recipientId), $recipientId, function (User $recipient) use ($ctx, $service): void {
+            // Named as the giver knew it: their own name for it goes with the handover.
+            $shown = $service->shownAs();
             $this->transfers->transfer($service, $recipient, Actor::customer($ctx->user));
             $ctx->edit(
-                $this->texts->render(BotText::TransferDone, ['client' => $service->remote_name, 'name' => $recipient->shownAs()]),
+                $this->texts->render(BotText::TransferDone, ['client' => $shown, 'name' => $recipient->shownAs()]),
                 ['reply_markup' => $this->buttons->backOnly(MenuHandler::subscriptionsCallback(1))],
             );
         }, BotText::TransferExpired, BotText::TransferRefused, $this->backToService($service));

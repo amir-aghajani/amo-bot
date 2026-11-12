@@ -2,7 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { toast } from 'sonner'
 import { describe, expect, it, vi } from 'vitest'
 import { ReportsSection } from '@/components/bot/settings/reports-section'
-import type { ReportGroupData, ReportGroupResponse, ReportGroupTestResponse, Session } from '@/lib/api-types'
+import type { BotSettingsSaved, ReportGroupData, ReportGroupResponse, ReportGroupTestResponse, ReportTopicInfo, Session } from '@/lib/api-types'
 import { AGENT_SHOP, OWNER, signedIn, until } from '@/test/render'
 import { botSettingsRow } from '@/test/rows'
 import { json, refusal, server } from '@/test/server'
@@ -46,6 +46,39 @@ describe('the report topics', () => {
     await until(() => expect(document.querySelectorAll('[data-slot="skeleton"]')).toHaveLength(0))
   })
 
+  it('are saved whole, «پشتیبان‌گیری» among them — each labelled and explained by the group', async () => {
+    const about = 'فایل پشتیبان کل نصب — همه فروشگاه‌ها، سرورها و نماینده‌ها —، هر روز یک بار.'
+    const topics: ReportTopicInfo[] = [
+      { key: 'reviews', title: 'نظرات', about: 'هر نظری که در وب‌سایت فروشگاه نوشته می‌شود.', ready: true, enabled: true },
+      { key: 'backups', title: 'پشتیبان‌گیری', about, ready: true, enabled: true },
+    ]
+    server()
+      .on('GET', '/api/admin/bot/report-group', json({ group: { ...GROUP, topics } } satisfies ReportGroupResponse))
+      .on('PUT', '/api/admin/bot/settings/reports', json({ settings: { ...SETTINGS, report_backups: false } } satisfies BotSettingsSaved))
+    showSection()
+
+    expect(await screen.findByText(about)).toBeTruthy()
+    const backups = screen.getByRole('switch', { name: 'پشتیبان‌گیری' })
+    expect(backups.getAttribute('aria-checked')).toBe('true')
+    fireEvent.click(backups)
+    fireEvent.click(screen.getByRole('button', { name: 'ذخیره' }))
+
+    await until(() => expect(server().sent('PUT', '/api/admin/bot/settings/reports')).toHaveLength(1))
+    expect(server().sent('PUT', '/api/admin/bot/settings/reports')[0]?.body).toEqual({
+      report_purchases: true,
+      report_renewals: true,
+      report_tests: true,
+      report_deletions: true,
+      report_wallet: true,
+      report_receipts: true,
+      report_users: true,
+      report_errors: true,
+      report_tickets: true,
+      report_reviews: true,
+      report_backups: false,
+    })
+  })
+
   it('keep saying it while it is asked again — both cards’ buttons spinning, asking once —, until the answer', async () => {
     server().on('GET', '/api/admin/bot/report-group', refusal(500, 'خطای سرور.'))
     showSection()
@@ -74,13 +107,13 @@ describe('the report group', () => {
   it('gets the agency’s requests in the main bot’s shop alone', async () => {
     server().on('GET', '/api/admin/bot/report-group', json({ group: GROUP } satisfies ReportGroupResponse))
     showSection()
-    expect(await screen.findByText(/خطاها، تیکت‌ها، نظرات و درخواست‌های نمایندگی در یک گروه تلگرام/)).toBeTruthy()
+    expect(await screen.findByText(/حذف سرویس‌ها، شارژ کیف پول، رسیدها، کاربران جدید، خطاها، تیکت‌ها، نظرات، پشتیبان‌ها و درخواست‌های نمایندگی در یک گروه تلگرام/)).toBeTruthy()
   })
 
   it('in an agent’s shop says nothing of the agency', async () => {
     server().on('GET', '/api/admin/bot/report-group', json({ group: GROUP } satisfies ReportGroupResponse))
     showSection(AGENT_SHOP)
-    expect(await screen.findByText(/کاربران جدید، خطاها، تیکت‌ها و نظرات در یک گروه تلگرام/)).toBeTruthy()
+    expect(await screen.findByText(/کاربران جدید، خطاها، تیکت‌ها، نظرات و پشتیبان‌ها در یک گروه تلگرام/)).toBeTruthy()
     expect(screen.queryByText(/درخواست‌های نمایندگی/)).toBeNull()
   })
 

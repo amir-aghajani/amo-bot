@@ -20,6 +20,7 @@ import {
   Radio,
   Settings,
   ShoppingCart,
+  Smartphone,
   Star,
   Store,
   Tags,
@@ -243,11 +244,12 @@ export const BOT_SETTINGS: NavSectionGroup = { id: 'bot', title: 'تنظیمات
  * then the ways its customers sign in: Telegram, Google, and an email with a password (with the captcha that guards it),
  * and last the shop's admins working it from the website.
  */
-export const WEBSITE_SETTINGS_SECTIONS: NavSection<'connection' | 'telegram' | 'google' | 'email' | 'reviews' | 'staff'>[] = [
+export const WEBSITE_SETTINGS_SECTIONS: NavSection<'connection' | 'telegram' | 'google' | 'email' | 'phone' | 'reviews' | 'staff'>[] = [
   { value: 'connection', title: 'اتصال', to: '/website-settings/connection' },
   { value: 'telegram', title: 'ورود با تلگرام', to: '/website-settings/telegram' },
   { value: 'google', title: 'ورود با گوگل', to: '/website-settings/google' },
   { value: 'email', title: 'ورود با ایمیل', to: '/website-settings/email' },
+  { value: 'phone', title: 'ورود با موبایل', to: '/website-settings/phone' },
   { value: 'reviews', title: 'نظرات', to: '/website-settings/reviews' },
   { value: 'staff', title: 'مدیران سایت', to: '/website-settings/staff' },
 ]
@@ -255,12 +257,32 @@ export const WEBSITE_SETTINGS_SECTIONS: NavSection<'connection' | 'telegram' | '
 /** The shop's website in the settings' column, after the bot's — every panel's: an agent's shop has a website of its own. */
 export const WEBSITE_SETTINGS: NavSectionGroup = { id: 'website', title: 'تنظیمات وب‌سایت', icon: Globe, sections: WEBSITE_SETTINGS_SECTIONS }
 
+/**
+ * The Telegram mini app's settings' sections (pages/mini-app-settings): its connection — the switch, its address, the
+ * bot's menu button —, how it looks to the customer, then the app itself as a customer sees it, on a phone.
+ */
+export const MINI_APP_SETTINGS_SECTIONS: NavSection<'connection' | 'appearance' | 'preview'>[] = [
+  { value: 'connection', title: 'اتصال', to: '/mini-app-settings/connection' },
+  { value: 'appearance', title: 'ظاهر', to: '/mini-app-settings/appearance' },
+  { value: 'preview', title: 'پیش‌نمایش', to: '/mini-app-settings/preview' },
+]
+
+/** The shop's Telegram mini app in the settings' column, after the website's — every panel's: each bot has its own. */
+export const MINI_APP_SETTINGS: NavSectionGroup = { id: 'mini-app', title: 'مینی‌اپ تلگرام', icon: Smartphone, sections: MINI_APP_SETTINGS_SECTIONS }
+
 /** The panel's look in this browser — dark or light —: a section of every panel's own settings (`panelSettings()`). */
 export const APPEARANCE_SECTION: NavSection<'appearance'> = { value: 'appearance', title: 'ظاهر', to: '/settings/appearance' }
 
 /**
- * A panel's own settings in the settings' column, «تنظیمات پنل», after the bot's and the website's: the owner's
- * config.php and login, and every panel's look (APPEARANCE_SECTION) — the account row only signs out.
+ * «پشتیبان‌گیری» (components/backups): the shop's backup — the whole installation's for the owner in the main shop —,
+ * its sending to the report group and a restore: a section of every panel's own settings (`panelSettings()`).
+ */
+export const BACKUPS_SECTION: NavSection<'backups'> = { value: 'backups', title: 'پشتیبان‌گیری', to: '/settings/backups' }
+
+/**
+ * A panel's own settings in the settings' column, «تنظیمات پنل», after the bot's, the website's and the mini app's: the
+ * owner's config.php and login, and every panel's backups (BACKUPS_SECTION) and look (APPEARANCE_SECTION) — the account
+ * row only signs out.
  */
 export function panelSettings(sections: NavSection[]): NavSectionGroup {
   return { id: 'panel', title: 'تنظیمات پنل', icon: Settings, sections }

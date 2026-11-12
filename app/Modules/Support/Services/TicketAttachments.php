@@ -23,14 +23,11 @@ use Psr\Log\LoggerInterface;
 /**
  * A ticket message's picture, under the shop's one picture rule (Users\Services\CustomerPictures): an upload judged by
  * its bytes and kept in the tickets' folder (`tickets.path`) under a name the shop makes up until its ticket has been
- * closed KEEP_DAYS (prune()), or a photo sent in Telegram, kept by its file id. Served to the panels and the website
+ * closed a while (prune(): as long as the owner's «زمان‌بندی کارها» says), or a photo sent in Telegram, kept by its file id. Served to the panels and the website
  * (fetch()), and sent to a customer's chat as a photo (send(): support's answer, the bot's ticket screen).
  */
 final class TicketAttachments
 {
-    /** Days an uploaded picture of a closed ticket is kept after it closed; a reopened ticket keeps its own. */
-    public const KEEP_DAYS = 30;
-
     /** What a refusal of a message's picture calls it. */
     private const WHAT = 'تصویر';
 
@@ -141,13 +138,13 @@ final class TicketAttachments
     }
 
     /**
-     * Delete the uploaded pictures of the shop's tickets closed KEEP_DAYS ago. Each message is cleared first by a
+     * Delete the uploaded pictures of the shop's tickets closed `$days` ago. Each message is cleared first by a
      * conditional update that still requires its ticket closed, so a ticket reopened meanwhile keeps its pictures; the
      * message keeps the picture's name, so it still says it had one. Telegram's pictures stay Telegram's.
      */
-    public function prune(): void
+    public function prune(int $days): void
     {
-        $closed = Ticket::query()->select('id')->where('status', TicketStatus::Closed->value)->where('closed_at', '<', now()->subDays(self::KEEP_DAYS)->utc());
+        $closed = Ticket::query()->select('id')->where('status', TicketStatus::Closed->value)->where('closed_at', '<', now()->subDays($days)->utc());
         $pruned = 0;
         foreach (TicketMessage::query()->whereNotNull('attachment_path')->whereIn('ticket_id', $closed)->get(['id', 'attachment_path']) as $message) {
             $path = (string) $message->attachment_path;
@@ -157,7 +154,7 @@ final class TicketAttachments
             }
         }
         if ($pruned > 0) {
-            $this->logger->info('{count} uploaded pictures of tickets closed {days} days ago were deleted', ['count' => $pruned, 'days' => self::KEEP_DAYS]);
+            $this->logger->info('{count} uploaded pictures of tickets closed {days} days ago were deleted', ['count' => $pruned, 'days' => $days]);
         }
     }
 

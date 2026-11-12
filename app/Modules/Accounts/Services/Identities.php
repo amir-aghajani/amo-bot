@@ -8,6 +8,7 @@ use App\Core\Exceptions\TooManyAttemptsException;
 use App\Core\Exceptions\ValidationException;
 use App\Core\Mail\Mailer;
 use App\Core\Mail\MailFailedException;
+use App\Core\Sms\SmsFailedException;
 use App\Modules\Accounts\Contracts\SignInSite;
 use App\Modules\Accounts\DTO\MergeOffer;
 use App\Modules\Accounts\Enums\WayIn;
@@ -20,15 +21,16 @@ use App\Modules\Notifications\Services\CustomerNotifier;
 use App\Modules\Subscriptions\Services\ProvisioningService;
 use App\Modules\Telegram\Api\TelegramUnreachableException;
 use App\Modules\Users\Models\User;
+use App\Support\Mobile;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Psr\Http\Message\ServerRequestInterface;
 
 /**
- * A signed-in customer's ways into their account (Enums\WayIn: Telegram, Google, an email with its password), added and
- * taken away. A way in is proven the way it signs in before anything is said about it; then it is already this
- * account's, refused (the account has another of its kind), filled into the empty slot, or — another account of the
- * shop holds it — offered as a merge (MergeOffers).
+ * A signed-in customer's ways into their account (Enums\WayIn: Telegram, Google, an email with its password, a mobile
+ * number), added and taken away. A way in is proven the way it signs in before anything is said about it; then it is
+ * already this account's, refused (the account has another of its kind), filled into the empty slot, or — another
+ * account of the shop holds it — offered as a merge (MergeOffers).
  *
  * Every write is one conditional UPDATE on the slot it fills or empties, so two requests at once never leave an account
  * with no way in, nor a way in on two accounts. The customer is notified of every change on every channel they have, and
@@ -42,6 +44,7 @@ final class Identities
         private readonly TelegramSignIn $telegram,
         private readonly GoogleSignIn $google,
         private readonly EmailSignIn $email,
+        private readonly PhoneSignIn $phone,
         private readonly MergeOffers $offers,
         private readonly CustomerNotifier $notifier,
         private readonly Mailer $mailer,
@@ -153,25 +156,81 @@ final class Identities
     }
 
     /**
+     * Text the code that proves a mobile number the customer adds to their account. How long it waits.
+     *
+     * @param array<string, mixed> $input {phone}
+     * @throws AccountRefusedException 422 the account has a number
+     * @throws SignInRefusedException 422 the site takes no sign-in by SMS; 503 the SMS budget is spent
+     * @throws ValidationException 422 on `phone`
+     * @throws TooManyAttemptsException 429
+     * @throws SmsFailedException 502
+     */
+    public function sendPhoneCode(SignInSite $site, ServerRequestInterface $request, User $user, array $input): int
+    {
+        return $this->phone->sendLinkCode($site, $request, $user, $input);
+    }
+
+    /**
+     * Add the mobile number once its code is typed back — or, another account of the shop holding it (PhoneSignIn's
+     * holderOf()), offer a merge. A number reaches its account as far as a sign-in by it does: to the other account's
+     * second step, which a merge by it gets past no more than a sign-in by it (MergeOffers' `$byAddress`).
+     *
+     * @param array<string, mixed> $input {phone, code}
+     * @throws AccountRefusedException 422 the account has a number; the number's account asks a second step; a merge the
+     *                                 rules refuse
+     * @throws SignInRefusedException 422 the site takes no sign-in by SMS
+     * @throws ValidationException 422 on `phone`, on `code`
+     * @throws TooManyAttemptsException 429
+     */
+    public function verifyPhone(SignInSite $site, ServerRequestInterface $request, User $user, array $input): User|MergeOffer
+    {
+        $phone = $this->phone->proveLink($site, $request, $user, $input);
+
+        return $this->link($user, WayIn::Phone, function (User $user) use ($phone): User|MergeOffer|array {
+            if ($user->phone === $phone) {
+                return $user;
+            }
+            if ($user->phone !== null) {
+                throw AccountRefusedException::hasPhone();
+            }
+            $other = PhoneSignIn::holderOf($phone);
+
+            return $other !== null ? $this->offers->offer($user, $other, ['phone' => $phone], byAddress: true) : ['phone' => $phone];
+        });
+    }
+
+    /**
      * Take a way in off the account, never its last: an email goes with its password and two-factor sign-in (and the
-     * address is mailed that it is no way in any more), a Telegram account with its handle. The customer is notified.
+     * address is mailed that it is no way in any more), a Telegram account with its handle. A mobile number counts as a
+     * way in that stays only where a sign-in by SMS would open this very account by it (signsInBy()). The customer is
+     * notified.
      *
      * @throws AccountRefusedException 422 the account has none of that kind, or it is the last way in
      */
-    public function remove(User $user, WayIn $kind): User
+    public function remove(SignInSite $site, User $user, WayIn $kind): User
     {
         $column = $kind->column();
         $changes = match ($kind) {
             WayIn::Telegram => ['telegram_id' => null, 'username' => null, 'bot_blocked' => false],
             WayIn::Google => ['google_sub' => null],
             WayIn::Email => ['email' => null, 'password_hash' => null] + array_fill_keys(TwoFactor::COLUMNS, null),
+            WayIn::Phone => ['phone' => null],
         };
-        $others = array_values(array_diff(WayIn::columns(), [$column]));
+        $others = array_values(array_filter(WayIn::cases(), static fn(WayIn $other): bool => $other !== $kind && $other !== WayIn::Phone));
+        $phone = $kind !== WayIn::Phone && self::signsInBy($site, $user) ? $user->phone : null;
         $address = $user->email;
 
-        // Only while another way in stays: two removals at once never leave none.
+        // Only while another way in stays — the number only while it is the one judged: two removals at once never leave
+        // none, nor a number changed meanwhile.
         $removed = User::query()->whereKey($user->id)->whereNotNull($column)
-            ->where(static fn(Builder $left) => $left->whereNotNull($others[0])->orWhereNotNull($others[1]))
+            ->where(static function (Builder $left) use ($others, $phone): void {
+                foreach ($others as $other) {
+                    $left->orWhereNotNull($other->column());
+                }
+                if ($phone !== null) {
+                    $left->orWhere('phone', $phone);
+                }
+            })
             ->update($changes);
         $user->refresh();
         if ($removed !== 1) {
@@ -187,6 +246,19 @@ final class Identities
         }
 
         return $user;
+    }
+
+    /**
+     * Whether a sign-in by SMS on `$site` opens this very account by its mobile: the site signs in by SMS, the number is an
+     * Iranian mobile as one is kept (App\Support\Mobile: one shared with the bot from abroad no SMS reaches), and of the
+     * accounts holding it this is the one such a sign-in opens (PhoneSignIn::holderOf()) — not one it merely offers to
+     * merge.
+     */
+    private static function signsInBy(SignInSite $site, User $user): bool
+    {
+        $phone = $user->phone;
+
+        return $phone !== null && $site->allowsPhoneSignIn() && Mobile::of($phone) === $phone && PhoneSignIn::holderOf($phone)?->id === $user->id;
     }
 
     /**

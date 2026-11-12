@@ -30,7 +30,9 @@ use App\Modules\Providers\Support\PanelCredentials;
 use App\Modules\Subscriptions\Models\GrantPart;
 use App\Modules\Subscriptions\Models\ServerMigration;
 use App\Modules\Subscriptions\Models\Subscription;
+use App\Modules\Telegram\Emoji\PremiumEmojiField;
 use App\Modules\Telegram\Keyboard\KeyboardLayout;
+use App\Modules\Telegram\Texts\PremiumText;
 use App\Support\Input;
 use App\Support\Persian;
 use App\Support\Text as Words;
@@ -357,14 +359,19 @@ final class ServerService
     }
 
     /**
-     * A server's whole form on a connector: its name, the connector's connection form, then under «تنظیمات پیشرفته» its
-     * capacity, the owner's notes, its switch, and its button among a plan's locations in the bot (colour, and how many
-     * share its row).
+     * A server's whole form on a connector: its name and the premium emoji the bot draws for the name's leading emoji, the
+     * connector's connection form, then under «تنظیمات پیشرفته» its capacity, the owner's notes, its switch, and its button
+     * among a plan's locations in the bot (colour, and how many share its row).
      */
     private static function form(Form $connection): Form
     {
         return new Form($connection->key, [
-            new Text('name', 'name', '', label: 'نام سرور', max: self::NAME_MAX, required: true, spec: new FieldSpec('نام سرور', hint: 'مشتری این نام را به‌عنوان لوکیشن سرویس می‌بیند.', placeholder: 'مثلا آلمان ۱')),
+            // A premium emoji is chosen beside the name, never typed into it: the shop's other doors show the name plain.
+            new Text('name', 'name', '', label: 'نام سرور', max: self::NAME_MAX, required: true, pattern: '/^(?!.*<tg-emoji)/is', mismatch: PremiumText::TAG_IN_NAME, spec: new FieldSpec('نام سرور', hint: 'مشتری این نام را به‌عنوان لوکیشن سرویس می‌بیند.', placeholder: 'مثلا آلمان ۱')),
+            new PremiumEmojiField('emoji_id', self::META . 'emoji_id', 'name', spec: new FieldSpec(
+                'ایموجی پرمیوم نام',
+                hint: 'اختیاری: ربات ایموجی اول نام را به شکل پرمیوم نشان می‌دهد؛ روی دکمه لوکیشن به شکل آیکون. جاهای دیگر همان ایموجی معمولی دیده می‌شود.',
+            )),
             ...$connection->fields,
             new Capacity('capacity', 'capacity', spec: new FieldSpec('ظرفیت', hint: 'حداکثر اشتراک فعال روی این سرور؛ خالی = نامحدود.', placeholder: '200', advanced: true)),
             new Text('notes', 'notes', '', label: 'یادداشت', max: self::NOTES_MAX, type: FieldType::Textarea, spec: new FieldSpec('یادداشت', placeholder: 'مثلا محل دیتاسنتر، تاریخ تمدید، …', advanced: true)),

@@ -55,9 +55,8 @@ final class GoogleSignIn
     public function signIn(SignInSite $site, ServerRequestInterface $request, array $input): SignedIn
     {
         $account = $this->account($site, $request, $input);
-        $code = Input::text($input, 'referral_code');
         $known = User::query()->where('google_sub', $account->sub)->exists();
-        $user = $this->customers->byGoogle($account->sub, $account->email, $account->profile, $code === '' ? null : $code);
+        $user = $this->customers->byGoogle($account->sub, $account->email, $account->profile, ProviderSignIn::referralCode($input));
         if (!$known && !$user->wasRecentlyCreated) {
             // The account found by its address took the Google account on: one more way into it.
             $this->notifier->wayInAdded($user, WayIn::Google->label());

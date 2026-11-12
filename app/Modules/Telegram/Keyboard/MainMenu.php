@@ -11,6 +11,7 @@ use App\Modules\Rewards\Services\GiftCodeSettings;
 use App\Modules\Rewards\Services\WheelSettings;
 use App\Modules\Subscriptions\Services\TestAccountSettings;
 use App\Modules\Telegram\Context;
+use App\Modules\Telegram\Contracts\MiniAppAddress;
 use App\Modules\Telegram\Messages;
 use App\Modules\Telegram\Texts\BotText;
 use App\Modules\Telegram\Texts\BotTexts;
@@ -20,7 +21,9 @@ use App\Modules\Users\Models\User;
  * The bot's main menu. The admin lays it out (KeyboardLayouts, "start"): which actions, in which rows, as a reply
  * keyboard or inline buttons. This class knows the actions (ACTIONS), renders the layout for a customer (hiding what is
  * switched off), and is the one place that knows which form it takes — show() sends it, screen() puts a screen it
- * opens in place of the tapped message.
+ * opens in place of the tapped message. «📱 اپلیکیشن فروشگاه» (`app`) opens the shop's mini app: inline, its button
+ * opens it; on a reply keyboard, whose web app button would give the app no launch data, it is a label like any other,
+ * and its screen carries the button that opens it (MenuHandler).
  */
 final class MainMenu
 {
@@ -28,6 +31,7 @@ final class MainMenu
     public const PREFIX = 'menu:';
 
     public const PLANS = 'menu:plans';
+    public const APP = 'menu:app';
     public const TEST = 'menu:test';
     public const SUBSCRIPTIONS = 'menu:subs';
     public const RENEW = 'menu:renew';
@@ -40,12 +44,13 @@ final class MainMenu
     public const WHEEL = 'menu:wheel';
     public const HOME = 'menu:home';
 
-    /** The actions whose buttons come and go with their program (markup()). */
-    private const SWITCHED = ['affiliates', 'agency', 'gift', 'wheel', 'test'];
+    /** The actions whose buttons come and go with their program — the mini app's with its address (markup()). */
+    private const SWITCHED = ['affiliates', 'agency', 'gift', 'wheel', 'test', 'app'];
 
     /** Every action a menu button can stand for: key => admin-facing title, default label, the screen it opens. */
     public const ACTIONS = [
         'buy' => ['title' => 'خرید اشتراک', 'label' => Messages::MENU_BUY, 'screen' => self::PLANS],
+        'app' => ['title' => 'اپلیکیشن', 'label' => Messages::MENU_APP, 'screen' => self::APP],
         'test' => ['title' => 'اکانت تست', 'label' => Messages::MENU_TEST, 'screen' => self::TEST],
         'services' => ['title' => 'سرویس‌های من', 'label' => Messages::MENU_SERVICES, 'screen' => self::SUBSCRIPTIONS],
         'renew' => ['title' => 'تمدید سرویس', 'label' => Messages::MENU_RENEW, 'screen' => self::RENEW],
@@ -65,6 +70,7 @@ final class MainMenu
         private readonly GiftCodeSettings $giftCodes,
         private readonly WheelSettings $wheel,
         private readonly TestAccountSettings $tests,
+        private readonly MiniAppAddress $miniApp,
         private readonly Buttons $buttons,
         private readonly BotTexts $texts,
     ) {}
@@ -72,6 +78,7 @@ final class MainMenu
     /**
      * The layout a fresh shop starts with (rows in reading order, right to left):
      *   [ خرید اشتراک ]
+     *   [ اپلیکیشن فروشگاه ]          — only while the shop's mini app can be opened (markup())
      *   [ اکانت تست ]                 — only while free test accounts are switched on (markup())
      *   [ سرویس‌های من | تمدید سرویس ]
      *   [ آموزش | کیف پول + شارژ ]
@@ -85,6 +92,7 @@ final class MainMenu
 
         return (new KeyboardLayout(KeyboardLayout::TYPE_REPLY, [
             [$button('buy')],
+            [$button('app')],
             [$button('test')],
             [$button('services'), $button('renew')],
             [$button('tutorial'), $button('wallet')],
@@ -183,7 +191,8 @@ final class MainMenu
 
     /**
      * The menu's `reply_markup` for a customer, without the buttons of programs switched off (an agent keeps
-     * «نمایندگی»: it is their account). They stay on the admin's layout and come back with their program. A layout of
+     * «نمایندگی»: it is their account) — nor «📱 اپلیکیشن فروشگاه» while the shop's mini app gives no address (it is off,
+     * or the shop is not on https). They stay on the admin's layout and come back with their program. A layout of
      * nothing but such buttons, all off, gives the built-in menu in its form — never an empty keyboard, which Telegram
      * refuses —, as KeyboardLayouts::get() does for one with nothing left in this shop.
      *
@@ -191,17 +200,19 @@ final class MainMenu
      */
     public function markup(User $user): array
     {
+        $app = $this->miniApp->url();
         $off = array_keys(array_filter([
             'affiliates' => !$this->referrals->enabled(),
             'agency' => !$this->agency->enabled() && !$user->isAgent(),
             'gift' => !$this->giftCodes->enabled(),
             'wheel' => !$this->wheel->enabled(),
             'test' => !$this->tests->enabled(),
+            'app' => $app === null,
         ]));
         $layout = $this->layout();
         $shown = $layout->without(...$off);
 
-        return ($shown->rows === [] ? self::builtIn($layout)->without(...$off) : $shown)->markup();
+        return ($shown->rows === [] ? self::builtIn($layout)->without(...$off) : $shown)->markup($app === null ? [] : ['app' => $app]);
     }
 
     /** @return list<string> The reply-keyboard labels to route as messages. */

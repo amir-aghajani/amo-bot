@@ -29,7 +29,7 @@ export function ConnectionSection({ website }: { website: Website }) {
       <SectionCard form={group} title="وب‌سایت فروشگاه" description="روشن و خاموش کردن API وب‌سایت، و آدرس‌هایی که اجازه دارند از مرورگر بازدیدکننده به آن درخواست بفرستند.">
         <SwitchRow
           label="API وب‌سایت روشن باشد"
-          hint="خاموش که باشد، هر درخواستی به آدرس API جواب «این فروشگاه وب‌سایت فعالی ندارد» می‌گیرد."
+          hint="خاموش که باشد، هر درخواستی به آدرس API جواب «این فروشگاه فعلا در دسترس نیست» می‌گیرد."
           checked={values.enabled}
           onCheckedChange={(checked) => set('enabled', checked)}
           error={error('enabled')}

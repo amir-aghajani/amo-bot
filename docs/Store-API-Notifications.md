@@ -3,7 +3,8 @@
 # Store API: notifications
 
 Everything the shop tells a customer on its own — a payment approved or refused, a service ending soon, a gift of days,
-a renewal, support's answer to a ticket — is kept for the website for 180 days, whether it reached them in Telegram, by
+a renewal, support's answer to a ticket — is kept for the website for 180 days by default (the owner's
+[«زمان‌بندی کارها»](Running-In-Production.md#the-task-schedule)), whether it reached them in Telegram, by
 email or not at all. It goes to their Telegram chat when they have a Telegram account; a customer without one — or who
 blocked the bot — gets it **by email**, from the shop's name, when they have an email and the shop's email goes out. A
 change of how the account is signed in to goes to both ([a recent sign-in](Store-API-Account.md#a-recent-sign-in)).

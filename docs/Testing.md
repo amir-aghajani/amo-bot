@@ -56,7 +56,11 @@ rarely cares about and `$overrides`, merged last, for the ones it does: `custome
 `purchaseOrder()`, `cardPayment()`, `receipt()`, `subscription()`, `agent()`, `agentBot()`, `website()`,
 `customerSession()`, `ticket()`, `review()` and more. Some build a whole scenario: `buy()` (paid from the wallet),
 `renew()`, `paidByCard()` (a receipt sent and approved), `reportGroup()` (connected, every topic made), the programs'
-switches (`referralProgram()`, `agencyProgram()`, `extrasOnSale()`…). Balances are ledgers: `wallet($user, $balance)` and
+switches (`referralProgram()`, `agencyProgram()`, `extrasOnSale()`…). The mini app's: `miniApp()` (the shop's, switched
+on, with a store key of its own — `storeApi($door, $path)` of `HttpTestCase` takes it or a website), and
+`launchData($telegramId, $madeAt, $startParam, $token)`, the launch data Telegram would hand it, signed with the main
+bot's token (`FakeTelegram::TOKEN`) or an agent's (`FakeTelegram::AGENT_TOKEN`); `Tests\Support\TelegramLaunch` makes and
+signs such data field by field, for a test of what does not hold. Balances are ledgers: `wallet($user, $balance)` and
 `traffic($bot, $gb)` add the one line that brings them there. A fixture builds in the current shop; wrap it in
 `CurrentBot::run($bot, …)` for an agent's. `panelActor()` and `groupAdminActor()` are the actors for a test that calls a
 service directly.
@@ -92,10 +96,13 @@ counts its runs, a leased table).
 - **Layers**: `tests/Unit/Core/LayersTest` fails when Core or Support names a module, or when the modules a module
   names differ from its `MODULES` map ([Architecture](Architecture.md#modules)).
 - **Routes**: `tests/Feature/RouteGuardsTest` walks every route through every guard in order, and with another shop's
-  row.
+  row; `tests/Feature/Store/MiniAppDoorTest` asks every Store API route under a website's key and the mini app's, and
+  finds missing exactly what the description marks `x-door` for the other.
 - **The API description**: `tests/Unit/Http/ApiDescriptionTest` holds `resources/api/openapi.yaml` to the routes, its
   objects closed, and readable by a website's own tools ([API contract](API-Contract.md#how-the-php-side-is-held-to-it)).
 - **Upgrades**: `tests/Unit/Database/UpgradesTest` holds every schema change to its upgrade ([Database](Database.md#upgrades)).
+- **Backups**: `tests/Feature/Backups/BackupTablesTest` holds every table to one kind of `BackupTables`, and every foreign
+  key between a shop's rows and the owner's to a rule the restore knows ([Architecture](Architecture.md#backups)).
 - **Drivers**: `tests/Unit/Drivers/DriverFormsTest` holds each driver's request shape to its form
   ([Drivers](Drivers.md#the-kernel)).
 - **Dead code**: PHPStan's dead-code detector fails on anything nothing calls — a test is no caller.
@@ -108,6 +115,11 @@ behaviour the way a screen uses it. Every test gets a fake server in place of `f
 the API description does not take. `src/test/render` renders a screen with the app's providers (`providers()`,
 `signedIn()`), `src/test/rows` makes whole API rows, and time is faked — nothing waits for real.
 [Internals: panels](Internals-Panels.md) has more.
+
+The mini app's tests (`src/apps/app`) run in the same suite, whose page is the owner's panel: each file starts with
+`vi.mock('@/apps/app/config', () => import('@/apps/app/test/config'))`, which puts the app at its store key, and renders
+a screen with `src/apps/app/test/app`'s `screen()` — signed in, `GET /` and `GET /me` answered (`shop()`,
+`account()`) —, with `telegram()` for a fake Telegram on the window ([Internals: mini app](Internals-Mini-App.md#tests)).
 
 ## The documentation
 

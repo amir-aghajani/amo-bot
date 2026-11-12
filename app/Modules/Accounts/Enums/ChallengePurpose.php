@@ -22,6 +22,15 @@ enum ChallengePurpose: string
     /** The code emailed to an address a signed-in customer adds to their account, keeping the password they chose for it. */
     case LinkEmail = 'link_email';
 
+    /** The code texted to a mobile number a customer signs in with (Services\PhoneSignIn). */
+    case PhoneSignIn = 'phone_sign_in';
+
+    /** The code texted to a mobile number a signed-in customer adds to their account. */
+    case LinkPhone = 'link_phone';
+
+    /** The code texted to the account's own mobile, proving it again on the session that asked (about it: that session). */
+    case PhoneReauth = 'phone_reauth';
+
     /** A password sign-in's second step, waiting for the code of the account's authenticator app (or a recovery code). */
     case TwoFactor = 'two_factor';
 

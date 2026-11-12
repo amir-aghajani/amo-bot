@@ -22,8 +22,34 @@ export function ReportsSection({ settings }: { settings: BotSettingsData }) {
 
 /** The switches the shop has, a topic's by its key (`report_purchases` …) — the agency's in the main bot's shop only (an agent's group has no such topic). */
 function switchesOf(settings: BotSettingsData): BotReportsSettingsRequest {
-  const { report_purchases, report_renewals, report_wallet, report_receipts, report_users, report_errors, report_agency, report_tickets, report_reviews } = settings
-  return { report_purchases, report_renewals, report_wallet, report_receipts, report_users, report_errors, report_tickets, report_reviews, ...(report_agency === undefined ? {} : { report_agency }) }
+  const {
+    report_purchases,
+    report_renewals,
+    report_tests,
+    report_deletions,
+    report_wallet,
+    report_receipts,
+    report_users,
+    report_errors,
+    report_agency,
+    report_tickets,
+    report_reviews,
+    report_backups,
+  } = settings
+  return {
+    report_purchases,
+    report_renewals,
+    report_tests,
+    report_deletions,
+    report_wallet,
+    report_receipts,
+    report_users,
+    report_errors,
+    report_tickets,
+    report_reviews,
+    report_backups,
+    ...(report_agency === undefined ? {} : { report_agency }),
+  }
 }
 
 /** Which subjects the report group gets: a switch per topic. A topic switched off gets nothing but stays in the group. */
@@ -31,8 +57,8 @@ function TopicsCard({ settings }: { settings: BotSettingsData }) {
   const read = useReportGroup()
   const { data: group, refetch } = read
   const failure = useReadFailure(read)
-  // The group card shows which topics are on.
-  const form = useBotSettingsGroup(switchesOf(settings), (values) => api.put('/bot/settings/reports', values), { invalidates: [queryKeys.reportGroup] })
+  // The group card shows which topics are on; «پشتیبان‌گیری» shows the backups' switch.
+  const form = useBotSettingsGroup(switchesOf(settings), (values) => api.put('/bot/settings/reports', values), { invalidates: [queryKeys.reportGroup, queryKeys.backups] })
   const { values, set, error } = form
 
   return (

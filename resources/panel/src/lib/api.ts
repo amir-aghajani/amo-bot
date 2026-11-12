@@ -19,12 +19,17 @@ export interface FailureFacts {
   endpoint?: string | null
   /** The answer was not the API's (a host's or a proxy's page, or none at all): `message` is a technical line. */
   foreign?: boolean
-  /** No answer: the panel stopped waiting (TIMEOUT_MS). */
+  /** No answer: the panel stopped waiting (TIMEOUT_MS, or the request's own `timeoutMs`). */
   timedOut?: boolean
   /** No answer while the browser said it was offline. */
   offline?: boolean
   /** With APP_DEBUG, what the server threw: «RuntimeException: disk on fire». */
   debug?: string | null
+  /**
+   * The answer's `WWW-Authenticate`: on the Store API a 401's `Bearer` (the customer's session ended) or a 403's
+   * `insufficient_user_authentication` (a sign-in more recent is needed first).
+   */
+  challenge?: string | null
 }
 
 export class ApiError extends Error {
@@ -64,7 +69,11 @@ export function shopMissing(error: unknown): boolean {
   return error instanceof ApiError && error.status === 404 && error.field('shop') !== undefined
 }
 
-/** The longest the panel waits for an answer. PHP ends every request well within this; only a stalled connection reaches it. */
+/**
+ * The longest the panel waits for an answer, its body included. PHP ends every request well within this, so only a
+ * stalled connection reaches it — but for a backup's, which wait longer (`timeoutMs`): a large file going either way
+ * over a slow connection, or a restore, can take minutes.
+ */
 const TIMEOUT_MS = 90_000
 
 type Listener = () => void
@@ -84,6 +93,8 @@ interface RequestOptions {
    * answer): the same key again is answered by what it did, never done a second time.
    */
   idempotencyKey?: string
+  /** How long to wait for the answer, its body included, when it is longer than TIMEOUT_MS (a backup's). */
+  timeoutMs?: number
 }
 
 /** Whether a body carries a file (an upload): it then goes as multipart. */
@@ -100,15 +111,56 @@ function formOf(body: Record<string, unknown>): FormData {
   return form
 }
 
-/** What a request reads of a success: JSON, the bytes (a file the panel handles itself), or nothing (is the file there?). */
-type Reading = 'json' | 'blob' | 'none'
+/** A file the panel saves for the admin (a backup): its bytes, and the name the server gave it, if any. */
+interface Download {
+  bytes: Blob
+  name: string | null
+}
+
+/**
+ * The name a `Content-Disposition` gives its file — RFC 6266's `filename*` (UTF-8, percent-encoded) over the plain
+ * `filename` —, never a folder with it; null without one.
+ */
+function fileNameOf(disposition: string | null): string | null {
+  if (disposition === null) return null
+  let name: string | null = null
+  const extended = /filename\*\s*=\s*utf-8''([^;\s]+)/i.exec(disposition)
+  if (extended?.[1] !== undefined) {
+    try {
+      name = decodeURIComponent(extended[1])
+    } catch {
+      name = null
+    }
+  }
+  if (name === null) {
+    const plain = /filename\s*=\s*(?:"((?:[^"\\]|\\.)*)"|([^;\s]+))/i.exec(disposition)
+    name = plain ? (plain[1]?.replace(/\\(.)/g, '$1') ?? plain[2] ?? null) : null
+  }
+  const base = name?.split(/[\\/]/).pop()?.trim() ?? ''
+
+  return base === '' ? null : base
+}
+
+/**
+ * What a request reads of a success: JSON, the bytes (a file the panel handles itself), the bytes with the file's name
+ * (a file the panel saves), or nothing (is the file there?).
+ */
+type Reading = 'json' | 'blob' | 'file' | 'none'
+
+/** The types a file the panel saves comes as (a backup: gzip); a page in its place is not the API's. */
+const FILE_TYPES = new Set(['application/gzip', 'application/x-gzip', 'application/octet-stream'])
+
+/** An answer's media type, without its parameters: «text/html; charset=UTF-8» is `text/html`. */
+function mediaTypeOf(response: Response): string {
+  return (response.headers.get('Content-Type') ?? '').split(';')[0]?.trim().toLowerCase() ?? ''
+}
 
 async function request<T>(
   url: string,
   method: string,
   headers: Record<string, string>,
   body?: unknown,
-  { signIn = false, idempotencyKey }: RequestOptions = {},
+  { signIn = false, idempotencyKey, timeoutMs = TIMEOUT_MS }: RequestOptions = {},
   reading: Reading = 'json',
 ): Promise<T> {
   const content = body === undefined ? undefined : holdsFile(body) ? formOf(body) : JSON.stringify(body)
@@ -118,7 +170,7 @@ async function request<T>(
   const timer = setTimeout(() => {
     timedOut = true
     controller.abort()
-  }, TIMEOUT_MS)
+  }, timeoutMs)
 
   let response: Response
   let text = ''
@@ -140,12 +192,12 @@ async function request<T>(
     })
     // A failure is JSON whatever was asked for; a success is what was asked for.
     if (!response.ok || reading === 'json') text = response.status === 204 ? '' : await response.text()
-    else if (reading === 'blob') bytes = await response.blob()
+    else if (reading === 'blob' || reading === 'file') bytes = await response.blob()
     else await response.body?.cancel()
   } catch {
     // The browser's own words ("Failed to fetch") mean nothing to the admin; lib/failure words what happened.
     const offline = navigator.onLine === false
-    throw new ApiError(0, timedOut ? `No answer within ${TIMEOUT_MS / 1000} seconds` : 'No answer: the request did not reach the server', {}, { endpoint, timedOut, offline, foreign: true })
+    throw new ApiError(0, timedOut ? `No answer within ${timeoutMs / 1000} seconds` : 'No answer: the request did not reach the server', {}, { endpoint, timedOut, offline, foreign: true })
   } finally {
     clearTimeout(timer)
   }
@@ -155,6 +207,13 @@ async function request<T>(
   }
   if (response.ok && reading === 'blob') {
     return bytes as T
+  }
+  if (response.ok && reading === 'file') {
+    // A success that is no file — a host's login or a proxy's page answered 200 — is not saved as one.
+    if (!FILE_TYPES.has(mediaTypeOf(response))) {
+      throw new ApiError(response.status, `HTTP ${response.status} that is not a file`, {}, { endpoint, requestId: response.headers.get('X-Request-Id'), foreign: true })
+    }
+    return { bytes, name: fileNameOf(response.headers.get('Content-Disposition')) } as T
   }
 
   let payload: unknown = null
@@ -180,6 +239,7 @@ async function request<T>(
       retryAfter: retryAfterOf(response),
       foreign: !worded,
       debug: data.debug ? `${data.debug.exception}: ${data.debug.detail}` : null,
+      challenge: response.headers.get('WWW-Authenticate'),
     })
   }
 
@@ -253,6 +313,8 @@ export function apiClient<W extends Write = never>(base: string, headers: () => 
     probe: (path: string) => request<void>(`${base}${path}`, 'GET', headers(), undefined, {}, 'none'),
     /** The bytes of the file at `path`. */
     blob: (path: string) => request<Blob>(`${base}${path}`, 'GET', headers(), undefined, {}, 'blob'),
+    /** The file at `path` to save: its bytes and the name the server gives it (lib/save-file); a large one may wait longer (`timeoutMs`). */
+    download: (path: string, { timeoutMs }: Pick<RequestOptions, 'timeoutMs'> = {}) => request<Download>(`${base}${path}`, 'GET', headers(), undefined, { timeoutMs }, 'file'),
     post: write('POST'),
     put: write('PUT'),
     patch: write('PATCH'),

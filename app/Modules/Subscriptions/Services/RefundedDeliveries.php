@@ -71,7 +71,7 @@ final class RefundedDeliveries implements RefundedOrders
         if ($holding !== null) {
             throw RefundRefusedException::serviceInUse($holding);
         }
-        $this->actions->delete($service, $actor, null, leavePanel: false, notify: false);
+        $this->actions->delete($service, $actor, null, leavePanel: false, refunded: $order);
 
         return $service->remote_name;
     }

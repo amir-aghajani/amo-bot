@@ -7,6 +7,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { ConnectionSection } from '@/components/website/connection-section'
 import { EmailSection } from '@/components/website/email-section'
 import { GoogleLoginSection } from '@/components/website/google-login-section'
+import { PhoneLoginSection } from '@/components/website/phone-login-section'
 import { ReviewsSection } from '@/components/website/reviews-section'
 import { StaffSection } from '@/components/website/staff-section'
 import { TelegramLoginSection } from '@/components/website/telegram-login-section'
@@ -17,9 +18,10 @@ import { websiteQuery } from '@/components/website/website-query'
  * the ways customers sign in, reviews and the shop's admins. One read feeds every card; each save answers the whole
  * website, which replaces the read.
  *
- * `mailSettings`: where the panel sets up the shop's email (the owner's), which email sign-up needs; an agent has none.
+ * `mailSettings` and `smsSettings`: where the panel sets up the shop's email and SMS (the owner's), which email sign-up
+ * and sign-in by SMS need; an agent has neither.
  */
-export function WebsiteSettingsPage({ mailSettings }: { mailSettings?: string }) {
+export function WebsiteSettingsPage({ mailSettings, smsSettings }: { mailSettings?: string; smsSettings?: string }) {
   const read = useQuery(websiteQuery)
   const { data, refetch } = read
   const failure = useReadFailure(read)
@@ -28,7 +30,7 @@ export function WebsiteSettingsPage({ mailSettings }: { mailSettings?: string })
     <SectionedPage
       sections={WEBSITE_SETTINGS_SECTIONS}
       width="narrow"
-      header={() => ({ title: 'تنظیمات وب‌سایت', description: 'وب‌سایت فروشگاه از راه API به فروشگاه وصل می‌شود و مشتری در آن با تلگرام، گوگل یا ایمیل وارد حسابش می‌شود.' })}
+      header={() => ({ title: 'تنظیمات وب‌سایت', description: 'وب‌سایت فروشگاه از راه API به فروشگاه وصل می‌شود و مشتری در آن با تلگرام، گوگل، ایمیل یا شماره موبایل وارد حسابش می‌شود.' })}
       above={() => (
         <>
           {failure.error && <ErrorState what="تنظیمات وب‌سایت" error={failure.error} onRetry={() => void refetch()} retrying={failure.retrying} />}
@@ -42,6 +44,7 @@ export function WebsiteSettingsPage({ mailSettings }: { mailSettings?: string })
             telegram: <TelegramLoginSection website={data.website} />,
             google: <GoogleLoginSection website={data.website} />,
             email: <EmailSection website={data.website} mailSettings={mailSettings} />,
+            phone: <PhoneLoginSection website={data.website} smsSettings={smsSettings} />,
             reviews: <ReviewsSection website={data.website} />,
             staff: <StaffSection website={data.website} />,
           }
@@ -50,4 +53,4 @@ export function WebsiteSettingsPage({ mailSettings }: { mailSettings?: string })
   )
 }
 
-const EMPTY = { connection: null, telegram: null, google: null, email: null, reviews: null, staff: null }
+const EMPTY = { connection: null, telegram: null, google: null, email: null, phone: null, reviews: null, staff: null }

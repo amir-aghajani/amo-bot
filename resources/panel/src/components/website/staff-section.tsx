@@ -71,7 +71,7 @@ export function StaffSection({ website }: { website: Website }) {
       />
       <SwitchRow
         label="ورود امن مدیران"
-        hint="کار مدیریتی فقط از ورودی پذیرفته می‌شود که با تلگرام، گوگل یا رمز عبور همراه کد ورود دو مرحله‌ای بوده است؛ خاموش باشد، رمز عبور تنها هم کافی است."
+        hint="کار مدیریتی فقط از ورودی پذیرفته می‌شود که با تلگرام، گوگل، یا رمز عبور یا کد پیامکی همراه کد ورود دو مرحله‌ای بوده است؛ کد پیامکی تنها کافی نیست. خاموش باشد، رمز عبور تنها هم کافی است."
         checked={values.staff_strong_sign_in}
         onCheckedChange={(checked) => set('staff_strong_sign_in', checked)}
         error={error('staff_strong_sign_in')}

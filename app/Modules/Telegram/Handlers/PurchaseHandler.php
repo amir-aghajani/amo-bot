@@ -29,6 +29,7 @@ use App\Modules\Telegram\Keyboard\MainMenu;
 use App\Modules\Telegram\Messages;
 use App\Modules\Telegram\Texts\BotText;
 use App\Modules\Telegram\Texts\BotTexts;
+use App\Modules\Telegram\Texts\PremiumText;
 use App\Modules\Telegram\Update\CallbackData;
 use App\Support\Money;
 use App\Support\Traffic;
@@ -133,7 +134,7 @@ final class PurchaseHandler implements Handler, RedrawableCheckout
 
         $description = trim((string) $plan->description);
         $text = $this->texts->render(BotText::PlanDetails, [
-            'plan' => $plan->name,
+            'plan' => PremiumText::plan($plan),
             'description' => $description === '' ? '' : "\n" . $description,
             'traffic' => Messages::traffic($plan->trafficBytes()),
             'duration' => Messages::duration($plan->duration_hours),
@@ -188,8 +189,8 @@ final class PurchaseHandler implements Handler, RedrawableCheckout
         [$quote, $dropped] = $this->screen->quote($ctx, $at, $this->price($ctx, $plan, $server), $typed);
 
         $text = $this->texts->render(BotText::Checkout, [
-            'plan' => $plan->name,
-            'server' => $server->name,
+            'plan' => PremiumText::plan($plan),
+            'server' => PremiumText::server($server),
             'amount' => Money::format($quote->amount()),
         ]);
         $this->screen->show(

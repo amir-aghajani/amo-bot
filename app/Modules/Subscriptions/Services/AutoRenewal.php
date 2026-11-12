@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Modules\Subscriptions\Services;
 
 use App\Core\Database\Transitions;
+use App\Core\Scheduling\Intervals;
+use App\Core\Scheduling\Scheduler;
 use App\Modules\Bots\CurrentBot;
 use App\Modules\Catalog\Models\Plan;
 use App\Modules\Notifications\Services\CustomerNotifier;
@@ -44,17 +46,13 @@ use Psr\Log\LoggerInterface;
  * most amount — one outside them is renewed by hand —, and while the renewal ends it by the last day the shop keeps
  * (endsInTime(); one that would not is reminded of its end, as one outside the wallet's bounds is). By ResetTime, which
  * starts the term afresh and throws away what was left of it, the renewal waits for the last run before the deadline
- * (LAST_RUN_MINUTES), so it loses no more than that; a wallet that cannot pay is still told at the window's start. A
+ * (lastRunMinutes()), so it loses no more than that; a wallet that cannot pay is still told at the window's start. A
  * deadline is renewed once, and two runs never charge a service twice (claim()).
  */
 final class AutoRenewal
 {
-    /**
-     * How near its deadline a renewal by ResetTime waits to be: the last run before it — the task's interval
-     * (AutoRenewTask::INTERVAL_MINUTES), and a few minutes for a run that comes late (the scheduler's minute, the shops
-     * before this one) —, so the term it throws away is that much at most.
-     */
-    public const LAST_RUN_MINUTES = AutoRenewTask::INTERVAL_MINUTES + 5;
+    /** Minutes a run may come late, beside the task's interval: the scheduler's minute, the shops before this one. */
+    public const LATE_RUN_MINUTES = 5;
 
     /** `orders.notes` of a renewal the wallet could not pay after all (its balance dropped between check and charge). */
     private const NOTE_UNPAID = 'تمدید خودکار: موجودی کیف پول کافی نبود';
@@ -69,7 +67,18 @@ final class AutoRenewal
         private readonly Pricing $pricing,
         private readonly ConnectionInterface $db,
         private readonly LoggerInterface $logger,
+        private readonly Intervals $intervals,
     ) {}
+
+    /**
+     * How near its deadline a renewal by ResetTime waits to be: the last run before it — the task's interval, the owner's
+     * (AutoRenewTask::INTERVAL_MINUTES by default) —, and LATE_RUN_MINUTES for a run that comes late, so the term it
+     * throws away is that much at most.
+     */
+    public function lastRunMinutes(): int
+    {
+        return $this->intervals->minutes(Scheduler::key(AutoRenewTask::class), AutoRenewTask::INTERVAL_MINUTES) + self::LATE_RUN_MINUTES;
+    }
 
     /** Whether the customer is offered the switch: the wallet, which pays, is on and could renew the service (renews()). */
     public function offeredFor(Subscription $subscription): bool
@@ -300,12 +309,12 @@ final class AutoRenewal
 
     /**
      * When a renewal by `$method` of a service due at `$deadline` may be made from: the admin's days before it — by
-     * ResetTime, which throws away the term left, only from the last run before it (LAST_RUN_MINUTES).
+     * ResetTime, which throws away the term left, only from the last run before it (lastRunMinutes()).
      */
     private function opensAt(Carbon $deadline, RenewalMethod $method): Carbon
     {
         return $method === RenewalMethod::ResetTime
-            ? $deadline->copy()->subMinutes(self::LAST_RUN_MINUTES)
+            ? $deadline->copy()->subMinutes($this->lastRunMinutes())
             : $deadline->copy()->subDays($this->settings->autoRenewDays());
     }
 

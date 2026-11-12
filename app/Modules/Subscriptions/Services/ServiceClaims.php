@@ -87,8 +87,8 @@ final class ServiceClaims
             if (!$this->clearedStale($user, $kept)) {
                 throw self::refusal($user, $kept);
             }
-            // What the customer had of it comes back with it — a free test stays one.
-            $carried = ['plan_id' => $kept->plan_id, 'auto_renew' => $kept->auto_renew, 'is_test' => $kept->is_test];
+            // What the customer had of it comes back with it — a free test stays one, their own name for it stays theirs.
+            $carried = ['plan_id' => $kept->plan_id, 'auto_renew' => $kept->auto_renew, 'is_test' => $kept->is_test, 'label' => $kept->label];
         }
 
         try {

@@ -20,6 +20,7 @@ use App\Modules\Telegram\Notifications\ServiceCard;
 use App\Modules\Telegram\Texts\BotText;
 use App\Modules\Telegram\Texts\BotTexts;
 use App\Modules\Telegram\Texts\Html;
+use App\Modules\Telegram\Texts\PremiumText;
 use App\Modules\Telegram\Update\CallbackData;
 use App\Support\Persian;
 use Psr\Log\LoggerInterface;
@@ -95,7 +96,7 @@ final class TestAccountHandler implements Handler
         $buttons = [];
         foreach ($shown as ['server' => $server, 'terms' => $terms]) {
             $lines[] = $this->texts->part(BotText::TestServerLine, [
-                'server' => $server->name,
+                'server' => PremiumText::server($server),
                 'traffic' => Messages::bytes($terms->bytes),
                 'duration' => Messages::duration($terms->hours),
                 'hold' => $terms->onHold ? $this->texts->part(BotText::TestOnHold) : '',

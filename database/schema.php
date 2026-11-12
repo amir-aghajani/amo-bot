@@ -150,6 +150,9 @@ return [
             $table->unique(['bot_id', 'telegram_id']);
             $table->unique(['bot_id', 'email']);
             $table->unique(['bot_id', 'google_sub']);
+            // A sign-in by SMS finds its customer by their verified mobile, in their shop. Not unique: a number shared with
+            // the bot is taken as Telegram vouches for it, and a number given up passes to someone else.
+            $table->index(['bot_id', 'phone']);
             $table->index(['bot_id', 'status']);
             // A shop's customers newest first (the users screen), and the dashboard's newcomers by day.
             $table->index(['bot_id', 'created_at']);
@@ -248,7 +251,13 @@ return [
          * once), `device` and `ip` for the session list. Ends 30 days unused, or at `expires_at` (180 days after the
          * sign-in). `authenticated_at` is when a way in was last proven on it (changing how the account signs in asks
          * this within 15 minutes); `method` how it was signed in (Accounts\Enums\SignInMethod; null counts as a password
-         * alone).
+         * alone); `biometric_hash` the mini app's fingerprint secret's sha256, which proves a way in again on that session.
+         *
+         * `mini_apps` — a shop's Telegram mini app, one per bot (Store\Services\MiniApps): its switch, its own store key
+         * (the mini app's address names it, and the Store API opens under it with the mini app's sign-in alone), how it
+         * looks (`title`, `accent_color`, `logo_path` under storage/uploads/logos), an `announcement` with its link,
+         * whether it opens full screen, whether it shows the reviews, and the bot's menu button that opens it
+         * (`menu_button`, its `menu_button_text`).
          *
          * `auth_challenges` — the sign-in flows' short-lived secrets: nonces, OIDC states (with the PKCE challenge and
          * redirect address in `payload`, encrypted JSON), emailed codes (`subject` the address), a two-factor second
@@ -270,6 +279,8 @@ return [
             $table->string('telegram_client_id', 32)->nullable();
             $table->text('telegram_client_secret')->nullable();
             $table->boolean('email_signup')->default(false);
+            // Customers sign in with a code texted to their mobile (the installation's SMS sends it).
+            $table->boolean('phone_login')->default(false);
             $table->string('google_client_id', 191)->nullable();
             $table->string('captcha_driver', 32)->nullable();
             $table->text('captcha_config')->nullable();
@@ -277,6 +288,23 @@ return [
             $table->boolean('staff_enabled')->default(false);
             $table->boolean('staff_strong_sign_in')->default(true);
             $table->json('staff_grants')->nullable();
+            $table->timestamps();
+        },
+
+        'mini_apps' => static function (Blueprint $table): void {
+            $table->bigIncrements('id');
+            $table->foreignId('bot_id')->default(1)->unique()->constrained('bots')->restrictOnDelete();
+            $table->string('key', 24)->unique();
+            $table->boolean('enabled')->default(false);
+            $table->string('title', 64)->nullable();
+            $table->string('accent_color', 7)->nullable();
+            $table->string('logo_path', 100)->nullable();
+            $table->string('announcement', 500)->nullable();
+            $table->string('announcement_url', 255)->nullable();
+            $table->boolean('fullscreen')->default(true);
+            $table->boolean('reviews_enabled')->default(false);
+            $table->boolean('menu_button')->default(true);
+            $table->string('menu_button_text', 32)->nullable();
             $table->timestamps();
         },
 
@@ -288,6 +316,9 @@ return [
             $table->string('device', 128)->nullable();
             $table->string('ip', 45)->nullable();
             $table->string('method', 16)->nullable();
+            // The sha256 of the secret the mini app keeps behind the device's fingerprint or face (Telegram's
+            // BiometricManager): proving it again counts as a recent sign-in on this session alone. Null: none set.
+            $table->string('biometric_hash', 64)->nullable();
             $table->timestamp('last_used_at')->nullable();
             $table->timestamp('authenticated_at')->nullable();
             // Always set; a TIMESTAMP that may not be null needs a default in strict MySQL — one written without it has ended.
@@ -437,6 +468,8 @@ return [
             $table->bigIncrements('id');
             $table->foreignId('bot_id')->default(1)->constrained('bots')->restrictOnDelete();
             $table->string('name', 64);
+            // The premium emoji the bot draws for the name's leading emoji (Telegram\Texts\PremiumText); null for none.
+            $table->string('emoji_id', 20)->nullable();
             $table->boolean('is_active')->default(true);
             $table->integer('sort')->default(0);
             $table->timestamps();
@@ -450,6 +483,8 @@ return [
             $table->foreignId('bot_id')->default(1)->constrained('bots')->restrictOnDelete();
             $table->foreignId('category_id')->nullable()->constrained('plan_categories')->nullOnDelete();
             $table->string('name', 128);
+            // The premium emoji the bot draws for the name's leading emoji (Telegram\Texts\PremiumText); null for none.
+            $table->string('emoji_id', 20)->nullable();
             $table->text('description')->nullable();
             // A note under its checkout («یادداشت پیش‌فاکتور»), a purchase's and a renewal's; null for none.
             $table->text('checkout_note')->nullable();
@@ -467,6 +502,8 @@ return [
             // Its button in the bot's plan list: Telegram's colour (null: the client's) and how many share its row (1–3).
             $table->string('button_style', 16)->nullable();
             $table->unsignedTinyInteger('button_row')->default(1);
+            // The label its card wears in the mini app and on the website (Catalog\Enums\PlanBadge); null for none.
+            $table->string('badge', 16)->nullable();
             $table->boolean('is_active')->default(true);
             // An agent's plan the owner keeps from sale («پنهان‌شده توسط مدیر»), whatever its own switch says.
             $table->boolean('hidden_by_owner')->default(false);
@@ -529,6 +566,8 @@ return [
             $table->timestamp('claimed_at')->nullable();
             $table->foreignId('server_id')->constrained('servers')->restrictOnDelete();
             $table->string('remote_name', 191);
+            // The customer's own name for it («نام دلخواه»), shown beside its client name; null for none.
+            $table->string('label', 32)->nullable();
             $table->string('subscription_url', 500);
             $table->string('status', 16)->default('active');
             $table->unsignedBigInteger('traffic_limit_bytes')->default(0);
@@ -1189,6 +1228,8 @@ return [
             $table->foreignId('subscription_id')->nullable()->constrained('subscriptions')->nullOnDelete();
             $table->timestamp('last_message_at')->nullable();
             $table->boolean('customer_unread')->default(false);
+            // When support last read it (opened it in a panel or answered it): the customer's messages up to then show as read.
+            $table->timestamp('support_read_at')->nullable();
             $table->unsignedTinyInteger('rating')->nullable();
             $table->string('rating_note', 500)->nullable();
             $table->timestamp('closed_at')->nullable();

@@ -26,7 +26,7 @@ final class Number extends Field
         public readonly int $min,
         public readonly int $max,
         /** Said after the bounds: «ثانیه», «گیگابایت» */
-        private readonly string $unit = '',
+        public readonly string $unit = '',
         ?FieldSpec $spec = null,
         private readonly ?self $atLeast = null,
     ) {

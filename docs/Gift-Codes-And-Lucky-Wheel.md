@@ -91,6 +91,10 @@ Every try counts until it names one of the shop's codes, so codes are not guesse
 - «فقط مشتری‌هایی که خرید کرده‌اند» — only customers who have bought something with a price and kept it may spin (a
   free plan, a service given free or a purchase refunded since is no purchase); the bot's admins may always.
 
+In the [mini app](Mini-App.md) and on the shop's website the wheel spins by the same rules — and first asks what the bot
+asks: a Telegram account linked to the customer's account, their own number while «تایید شماره موبایل» is on, and the
+shop's required channels joined (bot admins pass).
+
 While the wheel is off, «فاصله دو چرخش» and «هزینه هر چرخش» are held as they are saved — unless you changed one: then it
 stays open, since the save still checks it.
 

@@ -9,6 +9,7 @@ use App\Modules\Accounts\Tasks\PruneAccountsTask;
 use App\Modules\Agency\DTO\AgencyTerms;
 use App\Modules\Agency\Services\AgencyActions;
 use App\Modules\Bots\CurrentBot;
+use App\Modules\Bots\Models\Bot;
 use App\Modules\Bots\Services\Bots;
 use App\Modules\Catalog\Models\Plan;
 use App\Modules\Notifications\Enums\Delivery;
@@ -25,6 +26,7 @@ use App\Modules\Payments\Services\PaymentActions;
 use App\Modules\Payments\Services\PaymentService;
 use App\Modules\Providers\Models\Server;
 use App\Modules\Referrals\Services\ReferralService;
+use App\Modules\Settings\Services\ScheduleSettings;
 use App\Modules\Settings\Services\Settings;
 use App\Modules\Subscriptions\Models\Subscription;
 use App\Modules\Subscriptions\Services\SubscriptionActions;
@@ -345,7 +347,22 @@ final class NoticesTest extends HttpTestCase
         $this->service(PruneAccountsTask::class)->run();
 
         $left = CurrentBot::everywhere(static fn() => Notification::query()->pluck('created_at')->map(static fn(Carbon $at): string => $at->format('Y-m-d'))->all());
-        self::assertSame(['2026-05-01'], $left, "every shop's notices older than " . Notices::KEEP_DAYS . ' days gone');
+        self::assertSame(['2026-05-01'], $left, "every shop's notices older than " . ScheduleSettings::NOTICE_DAYS . ' days gone, by default');
+    }
+
+    public function testTheHousekeepingKeepsNoticesAsLongAsTheOwnerSays(): void
+    {
+        $customer = $this->mirrored($this->subscription($this->ali, $this->plan, $this->server, 'ali_1'));
+        $this->service(Settings::class)->set('schedule.notices_keep_days', 30, Bot::MAIN);
+        Carbon::setTestNow('2026-09-01 12:00:00');
+        $this->service(CustomerNotifier::class)->serviceEnabled($customer);
+        Carbon::setTestNow('2026-09-25 12:00:00');
+        $this->service(CustomerNotifier::class)->serviceEnabled($customer);
+
+        Carbon::setTestNow('2026-10-08 12:00:00');
+        $this->service(PruneAccountsTask::class)->run();
+
+        self::assertSame(['2026-09-25'], Notification::query()->pluck('created_at')->map(static fn(Carbon $at): string => $at->format('Y-m-d'))->all(), 'older than the owner\'s thirty days: gone');
     }
 
     public function testSupportsAnswerToATicketAndItsClosingAreKeptWithTheTicket(): void

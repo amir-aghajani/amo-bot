@@ -64,8 +64,8 @@ another customer, and no admin.
 ## Signing in
 
 An admin signs in as any customer does ([signing in](Store-API-Sign-In.md)), and their bearer token opens the admin API
-too. `GET /me` (and `PATCH /me`) say what it lets them do, in `staff` — `null` for a customer who is no admin, and while
-the website lets no admin in:
+too. `GET /me` (and `PATCH /me`) say what it lets them do, in `staff` — `null` for a customer who is no admin, while
+the website lets no admin in, and for a session the mini app signed in ([below](#signing-in)):
 
 ```json
 "staff": {
@@ -81,16 +81,25 @@ the website lets no admin in:
 |---|---|
 | `grants` | What the website grants its admins beyond the daily work |
 | `strong_sign_in` | Whether the website asks its admins a strong sign-in |
-| `signed_in_strongly` | Whether this session is one: signed in with Telegram, Google, or a password with its second step |
+| `signed_in_strongly` | Whether this session is one: signed in with Telegram, Google, or a password or a code texted to the account's mobile with its second step |
 | `signed_in_until` | Until when this session works the admin API at all — 12 hours after a way in was last proven on it; `null`: prove one again first |
 | `recent_until` | Until when this session's sign-in counts as recent — what a granted operation and approving a payment ask; `null`: prove a way in again first |
 
-- **A strong sign-in.** While the website asks one, a session signed in with a password alone is refused every admin
-  operation, with `WWW-Authenticate: Bearer error="insufficient_user_authentication", acr_values="telegram google password_2fa"`.
-  Proving a strong way on the session — `POST /me/reauthenticate` with Telegram, with Google, or with the password and
-  the code of an account whose two-factor sign-in is on ([a recent sign-in](Store-API-Account.md#a-recent-sign-in)) —
-  makes it a strong one for the rest of its life. A password proven again alone changes nothing; an admin who signs in
-  with a password should turn two-factor sign-in on, or add Telegram or Google.
+- **Not the mini app's sessions.** A session the shop's Telegram mini app signed in — by its launch data; `GET /me`'s
+  `session.method` is `mini_app` — is refused every admin operation, `403`
+  `کار مدیریت با ورود مینی‌اپ ممکن نیست؛ در خود وب‌سایت وارد شوید.`: the mini app is the customer side alone, and its
+  sessions belong to the shop, not to the door they were opened through, so its token would otherwise work here too.
+  It stays refused for the session's life — a strong `method` is never replaced, whatever is proven on it since —, and
+  so does a password-alone session that the mini app's launch data made strong. The admin signs in on the website
+  itself.
+- **A strong sign-in.** While the website asks one, a session signed in with a password or a texted code alone is
+  refused every admin operation, with `WWW-Authenticate: Bearer error="insufficient_user_authentication", acr_values="telegram google password_2fa phone_2fa"`.
+  A texted code is no strong way: a SIM swapped, or a number the carrier gave someone else, reads it. Proving a strong
+  way on the session — `POST /me/reauthenticate` with Telegram, with Google, or with the password and the code of an
+  account whose two-factor sign-in is on ([a recent sign-in](Store-API-Account.md#a-recent-sign-in)) — makes it a
+  strong one for the rest of its life; so does signing in by SMS with that code (`phone_2fa`,
+  [a code by SMS](Store-API-Sign-In.md#a-code-by-sms)). A password or a texted code proven again alone changes nothing;
+  an admin who signs in with either should turn two-factor sign-in on, or add Telegram or Google.
 - **A working day.** Every admin operation asks a way in proven on the session within the last **12 hours** — at the
   sign-in, or by `POST /me/reauthenticate` since —, else `403` `برای این کار دوباره وارد شوید.` with the challenge of a
   recent sign-in: an admin's token that leaked works for hours, not for the months a customer's session lasts.
@@ -127,7 +136,8 @@ Every refusal is the Store API's error shape ([errors](Store-API.md#errors)). At
 |---|---|---|
 | `این بخش فقط برای پشتیبانی فروشگاه است.` | The customer is no admin of the shop — whatever the website says | show no admin area |
 | `این وب‌سایت فعلا مدیران فروشگاه را راه نمی‌دهد.` | The website lets no admin in now | say so |
-| `برای کار مدیریت، با تلگرام، گوگل یا رمز عبور همراه کد ورود دو مرحله‌ای وارد شوید.` | A password alone, while a strong sign-in is asked (`acr_values` in `WWW-Authenticate`) | offer the strong ways, through `POST /me/reauthenticate` |
+| `کار مدیریت با ورود مینی‌اپ ممکن نیست؛ در خود وب‌سایت وارد شوید.` | A session the mini app signed in (`session.method` is `mini_app`) | sign in on the website, as a new session |
+| `برای کار مدیریت، با تلگرام یا گوگل وارد شوید، یا با رمز عبور یا کد پیامکی همراه کد ورود دو مرحله‌ای.` | A password or a texted code alone, while a strong sign-in is asked (`acr_values` in `WWW-Authenticate`) | offer the strong ways, through `POST /me/reauthenticate` |
 | `فروشگاه این کار را به مدیران وب‌سایت نسپرده است.` | An operation the website has not granted | hide the control (read `staff.grants`) |
 | `برای این کار دوباره وارد شوید.` | The session's sign-in older than 12 hours — or, for a granted operation or a payment's approval, than 15 minutes (`WWW-Authenticate` with `max_age=900`) | prove a way in again, then retry |
 | `حساب کاربری شما مسدود شده است.` | The admin is banned | sign out |

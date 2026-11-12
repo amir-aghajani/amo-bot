@@ -42,9 +42,9 @@ function requestOf(captcha: Captcha, values: DriverDraft): WebsiteCaptchaRequest
 }
 
 /**
- * The captcha guarding the website's forms (sign-up, password sign-in and reset, reviews, the site's own forms): none, or
- * a driver with its form drawn from its description. A kept secret is bound to the site key: change the key and the
- * secret must be typed again. Refusals come under `captcha.<field>`.
+ * The captcha guarding the website's forms (sign-up, password sign-in and reset, a code by SMS, reviews, the site's own
+ * forms): none, or a driver with its form drawn from its description. A kept secret is bound to the site key: change the
+ * key and the secret must be typed again. Refusals come under `captcha.<field>`.
  */
 export function CaptchaCard({ website }: { website: Website }) {
   const group = useWebsiteGroup<CaptchaDraft>(
@@ -92,9 +92,9 @@ export function CaptchaCard({ website }: { website: Website }) {
       )}
       {driver && (
         <Callout tone="info" icon={Info}>
-          ثبت‌نام، ورود با رمز عبور، بازیابی رمز عبور و ثبت نظر از وب‌سایت، توکن ویجت را هم می‌خواهند (فیلد <code dir="ltr">captcha</code>)، هر کدام برای action خودش: <bdi dir="ltr">sign_up</bdi>،{' '}
-          <bdi dir="ltr">sign_in</bdi>، <bdi dir="ltr">password_reset</bdi> و <bdi dir="ltr">review</bdi>. فرم‌های دیگر وب‌سایت، مثل فرم تماس با ما، را سرور وب‌سایت با{' '}
-          <bdi dir="ltr">POST /captcha/verify</bdi> از فروشگاه می‌پرسد؛ کلید مخفی فقط نزد فروشگاه است.
+          ثبت‌نام، ورود با رمز عبور، بازیابی رمز عبور، درخواست کد پیامکی و ثبت نظر از وب‌سایت، توکن ویجت را هم می‌خواهند (فیلد <code dir="ltr">captcha</code>)، هر کدام برای action خودش:{' '}
+          <bdi dir="ltr">sign_up</bdi>، <bdi dir="ltr">sign_in</bdi>، <bdi dir="ltr">password_reset</bdi>، <bdi dir="ltr">phone_sign_in</bdi> و <bdi dir="ltr">review</bdi>. فرم‌های دیگر وب‌سایت، مثل
+          فرم تماس با ما، را سرور وب‌سایت با <bdi dir="ltr">POST /captcha/verify</bdi> از فروشگاه می‌پرسد؛ کلید مخفی فقط نزد فروشگاه است.
         </Callout>
       )}
     </SectionCard>

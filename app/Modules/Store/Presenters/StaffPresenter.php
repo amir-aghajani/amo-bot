@@ -6,12 +6,15 @@ namespace App\Modules\Store\Presenters;
 
 use App\Modules\Accounts\Http\Customer;
 use App\Modules\Accounts\Services\CustomerSessions;
+use App\Modules\Store\Contracts\Door;
 use App\Modules\Store\Http\StaffMiddleware;
 use App\Modules\Store\Models\Website;
 
 /**
  * `GET /me`'s `staff`: what the admin API (Http\StaffMiddleware) will let this customer do, so the site offers only that.
- * Null for a customer who is no admin, and while the website lets no admin in.
+ * Null for a customer who is no admin, while the website lets no admin in, through the mini app (which has no admin
+ * API: an admin works the shop from the website or the panels), and for a session the mini app signed in, which the
+ * admin API refuses through the website too (CustomerSessions::isMiniApp()).
  */
 final class StaffPresenter
 {
@@ -22,9 +25,9 @@ final class StaffPresenter
      *
      * @return array{grants: list<string>, strong_sign_in: bool, signed_in_strongly: bool, signed_in_until: string|null, recent_until: string|null}|null
      */
-    public static function present(Website $website, Customer $customer): ?array
+    public static function present(Door $website, Customer $customer): ?array
     {
-        if (!$customer->user->isAdmin() || !$website->staff_enabled) {
+        if (!$website instanceof Website || !$customer->user->isAdmin() || !$website->staff_enabled || CustomerSessions::isMiniApp($customer->session)) {
             return null;
         }
         $session = $customer->session;

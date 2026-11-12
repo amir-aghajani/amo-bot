@@ -2,9 +2,9 @@
 
 # Servers
 
-«سرورها», the owner's alone: the VPN panels the shop sells on — 3X-UI v3 or PasarGuard 3.1+. Every shop sells on the same
-servers: an agent's plans are built on them too, and a server's services are every shop's. An agent's panel has no
-servers page.
+«سرورها», the owner's alone: the VPN panels the shop sells on — 3X-UI v3, PasarGuard 3.1+ or HMPanel 2.5+. Every shop
+sells on the same servers: an agent's plans are built on them too, and a server's services are every shop's. An agent's
+panel has no servers page.
 
 ## The list
 
@@ -21,15 +21,16 @@ address, and in amber why it cannot sell, when it cannot; then «وضعیت», �
 
 ## Adding a server
 
-«افزودن سرور» asks which software runs the panel — «3X-UI» or «PasarGuard», each with its notes and a link to its
-project —, then its form:
+«افزودن سرور» asks which software runs the panel — «3X-UI», «PasarGuard» or «HMPanel (HMray)», each with its notes and a
+link to its project —, then its form:
 
 | Field | What it takes |
 |---|---|
 | «نام سرور» | 100 characters at most. **Customers see it**: it is the server's «لوکیشن» in the bot, on the shop's website and its status page — name it as a customer should read it («آلمان ۱») |
-| «آدرس پنل» | The panel's own address, 255 characters at most, http or https: 3X-UI's with its web base path (`https://host:2053/AbCdEf`), without the `/panel` or `/login` of its pages after it; PasarGuard's dashboard address without `/dashboard` (`https://panel.example.com:8000`), no `/api` either. No `user:pass@`, `?` or `#` |
-| «احراز هویت» | «توکن API» (3X-UI) or «کلید API» (PasarGuard) — recommended —, or «نام کاربری و رمز» |
-| «توکن API» / «کلید API» | 3X-UI's from *Settings → Security → API Token*, an **Admin** token (a Monitor or Node one only reads the status). PasarGuard's from *API Keys* (version 5.1 and later): the whole `pg_key_…` key, which the panel shows once, with full rights over users and reading groups and the system |
+| «ایموجی پرمیوم نام» | Optional: a premium emoji from the bot's list ([Bot texts and keyboards](Bot-Texts-And-Keyboards.md#premium-emoji)). Picked, its plain emoji becomes the name's first, and the bot draws that one premium: the location's button gets it as its icon — in place of the «🌍» its wording starts with —, and the texts that name the location (`%server%`) show it in its place. The website, the status page and the panels show the plain one. While it is chosen the name must start with an emoji |
+| «آدرس پنل» | The panel's own address, 255 characters at most, http or https: 3X-UI's with its web base path (`https://host:2053/AbCdEf`), without the `/panel` or `/login` of its pages after it; PasarGuard's dashboard address without `/dashboard` (`https://panel.example.com:8000`), no `/api` either; HMPanel's the address its sign-in page opens at (`https://panel.example.com`), without `/api`, `/dashboard`, `/clients` or any page of it. No `user:pass@`, `?` or `#` |
+| «احراز هویت» | «توکن API» (3X-UI) or «کلید API» (PasarGuard, HMPanel) — recommended —, or «نام کاربری و رمز». HMPanel offers its key alone: its API takes no admin's password |
+| «توکن API» / «کلید API» | 3X-UI's from *Settings → Security → API Token*, an **Admin** token (a Monitor or Node one only reads the status). PasarGuard's from *API Keys* (version 5.1 and later): the whole `pg_key_…` key, which the panel shows once, with full rights over users and reading groups and the system. HMPanel's from «تنظیمات ← API» (*Settings → API*): the whole `hmp_…` key, which the panel shows once, made with the scope `*` — or with `clients.read`, `clients.write`, `clients.renew` and `inbounds.read` |
 | «نام کاربری» / «رمز عبور» | The panel admin you sign in with (PasarGuard: an admin made in the dashboard — the one of its env file signs in only in debug mode) |
 | «کلید TOTP» | 3X-UI only, when its two-factor login is on: the Base32 secret it showed as you turned it on. The shop makes each sign-in's code from it |
 
@@ -39,7 +40,7 @@ Under «تنظیمات پیشرفته»:
 |---|---|
 | «بررسی گواهی TLS» | On. Off for a panel with a self-signed certificate |
 | «تایم‌اوت اتصال (ثانیه)» | 5 to 120, 30 by default: how long a call to the panel may take (connecting gives up after 10 seconds at most) |
-| «آدرس اشتراک» | Blank: the subscription links are the panel's own. Set, the full prefix before the link's token, when the links must come from another address (a reverse proxy): `https://sub.example.com/sub` |
+| «آدرس اشتراک» | Blank: the subscription links are the panel's own. Set, the full prefix before the link's token, when the links must come from another address (a reverse proxy): `https://sub.example.com/sub` (HMPanel's links: `https://sub.example.com/s`) |
 | «اتصال از طریق پراکسی SOCKS5» | Off: the shop talks to the panel directly. On, every request the shop makes to this panel goes through a SOCKS5 proxy ([below](#a-panel-behind-a-socks5-proxy)), and these appear: |
 | «آدرس پراکسی» | The proxy's host name or IP address, without `socks5://` and without a port: `proxy.example.com`, `203.0.113.10` (an IP typed in Persian digits is read as the same IP) |
 | «پورت پراکسی» | 1 to 65535, 1080 by default |
@@ -136,8 +137,9 @@ whose connector this installation no longer has is not checked: «کانکتور
 
 ### Inbounds
 
-The panel's inbounds as the shop last read them — PasarGuard's groups play their part —, each with its protocol, port,
-clients and the «فروش» switch. A plan sold on the whole server uses every inbound marked «فروش» and enabled on the
+The panel's inbounds as the shop last read them — PasarGuard's groups play their part; HMPanel's are the inbounds of
+the 3X-UI panels beneath it, each named after its panel («Germany · DE») —, each with its protocol, port, clients and
+the «فروش» switch. A plan sold on the whole server uses every inbound marked «فروش» and enabled on the
 panel, at the moment of each purchase; a plan that pins its inbounds uses those whatever the switch says
 ([Plans](Plans.md)); a service moved here, on a plan without this server, gets the inbounds marked. Every service is
 one client on the panel, attached to its inbounds.
@@ -178,7 +180,7 @@ only to one with a quota. A service the days would end after [the last day](Serv
 is passed by whole, its traffic too. The dialog counts whom it reaches from the shop's copy now; the card's progress says how many
 were checked, given, passed by and failed.
 
-**How it runs**: one service at a time, by the card while the page is open, else by the scheduler every minute. One
+**How it runs**: one service at a time, by the card while the page is open, else by the scheduler every minute by default. One
 gift runs on a server at a time — a [mass gift](Broadcasts.md#the-mass-gift)'s part on it too.
 
 - **A panel out of reach** holds the gift at that service, with an amber note saying why, and it goes on once the panel
@@ -235,7 +237,7 @@ reference](Bot-Texts-Reference.md)). Without «پیام به مشتری‌ها»
 either way. The main bot's report group hears in «خطاها» when a move starts and when it ends, with its numbers.
 
 **How it runs**: as [adding days and traffic](#adding-days-and-traffic) does — by the card while the page is open, else by
-the scheduler every minute. The card shows how far it got: services checked, moved, passed by and failed, and the
+the scheduler every minute by default. The card shows how far it got: services checked, moved, passed by and failed, and the
 clients it left on a panel that are still there («کلاینت روی پنل مانده است»; [below](#the-clients-a-rescue-left)).
 
 - **A panel out of reach** — the target's, or this one's in a migration — holds the move at that service with an amber
@@ -294,7 +296,7 @@ switched off is not counted), and the main bot's
 report group hears it in «خطاها»: «🔴 پنل سرور «…» جواب نمی‌دهد», with the reason, when a panel that answered stops,
 and «🟢 پنل سرور «…» دوباره جواب می‌دهد» when it answers again ([Report group](Telegram-Group.md)).
 
-## The two connectors
+## The three connectors
 
 **3X-UI** (v3 and later, MHSanaei's):
 
@@ -314,6 +316,30 @@ and «🟢 پنل سرور «…» دوباره جواب می‌دهد» when it
 - Its status shows CPU, RAM, disk and uptime of the panel's host; the cores run on its nodes, so their state reads
   «نامشخص».
 - «تغییر لینک» revokes the link: every earlier one stops working.
+
+**HMPanel** («HMPanel (HMray)» in «افزودن سرور», 2.5 and later) — a panel that runs several 3X-UI panels beneath it:
+
+- **Its key is the one way in**: made in its «تنظیمات ← API» (*Settings → API*, or `/api-keys`), shown once, with the
+  scope `*` — or `clients.read`, `clients.write`, `clients.renew` and `inbounds.read`. The key acts as the HMPanel admin
+  it was made for: a reseller's reaches only that reseller's clients, and a disabled or expired admin takes its keys
+  with it. «تست اتصال» reads the key and names a scope it lacks.
+- **Only the inbounds of its 3X-UI panels are offered**, each named after its panel; a PasarGuard or Eylan panel
+  beneath it goes another way inside HMPanel. A client lives on **one** panel: a plan on this server — or the inbounds
+  marked «فروش», for a plan sold on the whole server — must keep to one panel's inbounds, or its sales are refused.
+  To sell two of its panels as two locations, add the HMPanel twice, each server selling one panel's inbounds.
+- A service's term starts at its first connection and the plan's devices are its IP limit — 3X-UI's, as HMPanel passes
+  them on —; the comment names the customer's Telegram id. The numbers are HMPanel's copy of 3X-UI's, as fresh as its
+  own sync.
+- The link is HMPanel's own (`https://panel.example.com/s/…`), or «آدرس اشتراک» in front of the client's token
+  (`https://sub.example.com/s`).
+- There is no «تغییر لینک» (its key API renews no credentials), and no status card of CPU, RAM and disk: the key API
+  reports none.
+- **A key answers 60 calls a minute** unless it was made with more; past that HMPanel refuses every call until the
+  minute is over, and the shop leaves the server alone a few minutes («خطا در اتصال», with what to do). The shop keeps
+  its calls few — the sync lists 200 clients a call —, but a busy shop wants a key with a higher limit.
+- **An error of HMPanel's own** (an answer of 500 or more) to a change counts as no clear answer: HMPanel may have made
+  the change before it failed, so the shop asks the panel before doing it again — a service is never made twice, under
+  another name.
 
 Another panel is a driver ([Drivers](Drivers.md#a-vpn-panel-connector)). For developers, `panel:probe` tries a panel
 from a console as «تست اتصال» does ([Console commands](Console-Commands.md)); a shop never needs it.

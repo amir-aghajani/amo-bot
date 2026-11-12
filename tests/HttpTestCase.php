@@ -13,6 +13,7 @@ use App\Modules\Bots\Models\Bot;
 use App\Modules\Catalog\Models\Plan;
 use App\Modules\Payments\Models\PaymentMethod;
 use App\Modules\Providers\Models\Server;
+use App\Modules\Store\Contracts\Door;
 use App\Modules\Store\Models\Website;
 use App\Modules\Users\Enums\UserRole;
 use App\Modules\Users\Models\User;
@@ -141,10 +142,13 @@ abstract class HttpTestCase extends DatabaseTestCase
         $this->bearer($this->customerSession($user, ['method' => SignInMethod::Telegram]));
     }
 
-    /** The address of a website's Store API endpoint: its base address, then `$path` ('' for its `GET /`). */
-    protected function storeApi(Website $website, string $path = ''): string
+    /**
+     * The address of a Store API endpoint through a door — a website, or the mini app —: its base address under the
+     * door's key, then `$path` ('' for its `GET /`).
+     */
+    protected function storeApi(Door $door, string $path = ''): string
     {
-        return "/api/store/v1/{$website->key}{$path}";
+        return "/api/store/v1/{$door->storeKey()}{$path}";
     }
 
     /**

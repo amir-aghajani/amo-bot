@@ -37,6 +37,7 @@ use Tests\Fakes\FakeProvider;
 use Tests\Fakes\NullSleeper;
 use Tests\Fakes\ProbedDriver;
 use Tests\Fakes\RecordingMailTransport;
+use Tests\Fakes\RecordingSmsSender;
 use Tests\Support\FakeAban;
 use Tests\Support\FakeAqayePardakht;
 use Tests\Support\FakeAtlasPay;
@@ -72,6 +73,8 @@ abstract class TestCase extends BaseTestCase
         'files.cache' => 'files',
         'jwks.path' => 'jwks',
         'qr.backgrounds' => 'qr',
+        'miniapp.logos' => 'logos',
+        'backups.path' => 'backups',
         'receipts.path' => 'receipts',
         'tickets.path' => 'tickets',
         'poller.lock' => 'bot-poll.lock',
@@ -228,6 +231,8 @@ abstract class TestCase extends BaseTestCase
             $container->set(Sleeper::class, new NullSleeper());
             // The shop's email goes to the tests' own mail server, whatever config.php's MAIL_* say (mail() sets up the rest).
             $container->set('mail.transport', new RecordingMailTransport());
+            // One-time codes by SMS go to the tests' own provider, off until a test sets SMS up (sms()).
+            $container->set('sms.sender', new RecordingSmsSender());
             // Every database driver as a test may answer its probes (probedDatabase()) — the real one's until it does.
             // The app's own connection is booted already, on the real driver.
             $container->set('database.drivers', new Registry(array_map(
@@ -337,13 +342,13 @@ abstract class TestCase extends BaseTestCase
     }
 
     /**
-     * A bot text's default wording, with `$values` filled in.
+     * A bot text's default wording, with `$values` filled in — a part's Html or a name's PremiumText as its words.
      *
-     * @param array<string, scalar> $values
+     * @param array<string, scalar|\Stringable> $values
      */
     protected static function text(BotText $text, array $values = []): string
     {
-        return Messages::fill($text->spec()->default, $values);
+        return Messages::fill($text->spec()->default, array_map(static fn(mixed $value): string => (string) $value, $values));
     }
 
     /** The fake panel (any outgoing HTTP: a panel, Resend) as the outgoing client's transport for this test. */
@@ -430,6 +435,20 @@ abstract class TestCase extends BaseTestCase
         }
 
         return $fake;
+    }
+
+    /**
+     * SMS set up — config.php's SMS_DRIVER naming a driver, SMS_AGENTS as `$forAgents` says — around the tests' own
+     * provider, which this returns with nothing sent yet.
+     */
+    protected function sms(bool $forAgents = false): RecordingSmsSender
+    {
+        $this->config(['sms.driver' => 'ippanel', 'sms.agents' => $forAgents]);
+        $sender = self::$app?->container()->get('sms.sender');
+        assert($sender instanceof RecordingSmsSender);
+        $sender->reset();
+
+        return $sender;
     }
 
     /**

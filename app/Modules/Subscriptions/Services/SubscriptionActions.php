@@ -27,6 +27,7 @@ use App\Modules\Subscriptions\Exceptions\MoveException;
 use App\Modules\Subscriptions\Exceptions\ServiceBusyException;
 use App\Modules\Subscriptions\Exceptions\TermTooLongException;
 use App\Modules\Subscriptions\Models\Subscription;
+use App\Modules\Telegram\Reports\ShopReports;
 use Illuminate\Database\ConnectionInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -73,6 +74,7 @@ final class SubscriptionActions
     public function __construct(
         private readonly ProvisioningService $provisioning,
         private readonly CustomerNotifier $notifier,
+        private readonly ShopReports $reports,
         private readonly TrafficPool $pool,
         private readonly RateLimiter $limiter,
         private readonly ConnectionInterface $db,
@@ -207,18 +209,19 @@ final class SubscriptionActions
      * while an order of it is not finished with (Order::OPEN: unpaid, being delivered, or failed and waiting for
      * support): it would be left with no service to deliver to. Asked under the service's row lock, as an order for it is
      * opened (OrderService::holding()), before its panel is — and again as the row is removed, so one opened while the
-     * panel deleted the client keeps the row (marked deleted: its client is gone) and the refusal names it. The customer
-     * is notified only when a running service was taken away — and not at all when `$notify` is off (a refund says it in
-     * its own message).
+     * panel deleted the client keeps the row (marked deleted: its client is gone) and the refusal names it. The report
+     * group hears every one (ShopReports::serviceDeleted(), in the transaction that removes the row); the customer only
+     * when a running service was taken away — and not at all for a refund, which says it in its own message.
      *
      * @param bool $leavePanel do not contact the panel (out of reach): the row goes and the client stays on the panel
      *                         for the admin to remove
+     * @param Order|null $refunded the purchase whose refund takes the service back (RefundedDeliveries)
      * @throws ActorRefusedException 403 a shop admin's own service
      * @throws ValidationException 422 on `status` (OPEN_ORDER), on `leave_panel`
      * @throws PanelFailedException|ServiceBusyException|TooManyAttemptsException
      * @throws ModelNotFoundException when the service is gone meanwhile
      */
-    public function delete(Subscription $subscription, Actor $actor, ?string $note, bool $leavePanel, bool $notify = true): void
+    public function delete(Subscription $subscription, Actor $actor, ?string $note, bool $leavePanel, ?Order $refunded = null): void
     {
         self::notTheirOwn($subscription, $actor);
         self::unlessOpen($this->db->transaction(static function () use ($subscription): ?int {
@@ -231,13 +234,16 @@ final class SubscriptionActions
         }
         $this->panelWork($subscription, $actor);
         $running = $subscription->isActive();
+        // A client the panel had lost already is left nowhere.
+        $leftOnPanel = $leavePanel && $subscription->status !== SubscriptionStatus::Deleted;
         $open = static fn(Subscription $held): bool => self::orderHolding($held, Order::OPEN) !== null;
-        if (!$this->onPanel($subscription, $actor, fn(): bool => $this->provisioning->delete($subscription, $leavePanel, kept: $open))) {
+        $reported = fn(Subscription $gone) => $this->reports->serviceDeleted($gone, $actor, $note, $refunded, $leftOnPanel);
+        if (!$this->onPanel($subscription, $actor, fn(): bool => $this->provisioning->delete($subscription, $leavePanel, kept: $open, removed: $reported))) {
             self::unlessOpen(self::orderHolding($subscription, Order::OPEN));
 
             return;
         }
-        if ($running && $notify) {
+        if ($running && $refunded === null) {
             $this->notifier->serviceDeleted($subscription, $note);
         }
     }

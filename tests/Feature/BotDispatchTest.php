@@ -35,7 +35,8 @@ use Tests\Support\FakeTelegram;
 /**
  * The dispatcher: a banned customer told so and nothing more, then the gates, then the route that takes the update — a
  * command, a keyboard label, the contact card, a tap's longest prefix, the step the chat is at by its longest prefix —
- * with the flow left behind on navigation and an admin's routes nobody else's; a tap answered once, after its handler;
+ * with the flow left behind on navigation (not for a contact card nothing asked for) and an admin's routes nobody
+ * else's; a tap answered once, after its handler;
  * a failure told on the button while it can be, in a message otherwise; the customer's row and the chat's session made
  * once though a chat's first updates come at once, and the row kept fresh without a write per update.
  */
@@ -94,7 +95,6 @@ final class BotDispatchTest extends BotTestCase
     {
         yield 'a command' => [static fn(self $test): Update => $test->message('/menu')];
         yield 'a keyboard label' => [static fn(self $test): Update => $test->message(Messages::MENU_SERVICES)];
-        yield 'the contact card' => [static fn(self $test): Update => $test->contact('+989120000000', self::CHAT)];
         yield "the menu's button" => [static fn(self $test): Update => $test->tap(MainMenu::HOME)];
         yield 'a button of a screen long gone' => [static fn(self $test): Update => $test->tap('nobody:knows')];
         yield 'a command the bot does not have' => [static fn(self $test): Update => $test->message('/nope')];
@@ -110,6 +110,18 @@ final class BotDispatchTest extends BotTestCase
         $this->send($this->message('42'));
 
         self::assertSame([self::text(BotText::Unknown)], $this->said(), 'the step no longer takes what the customer types');
+    }
+
+    public function testAContactCardNothingAskedForLeavesTheFlowWhereItIs(): void
+    {
+        $this->atStep();
+
+        // The mini app's «share my number» sends the customer's own card whatever step the chat is at.
+        $this->send($this->contact('+989120000000', self::CHAT));
+        self::assertSame([self::text(BotText::PhoneNotNeeded)], $this->said(), 'a word alone, no menu');
+        $this->send($this->message('42'));
+
+        self::assertSame([StepHandler::SAYS], $this->said(), 'the step still takes what the customer types');
     }
 
     public function testAButtonOfTheStepsOwnScreenLeavesTheFlowWhereItIs(): void

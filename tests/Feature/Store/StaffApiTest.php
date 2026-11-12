@@ -97,14 +97,20 @@ final class StaffApiTest extends HttpTestCase
         $this->assertRefused(StaffMiddleware::STAFF_OFF);
         self::assertNull($this->me()['staff'], 'while the website lets no admin in');
 
-        // A password alone — or a session from before the shop kept how it was signed in — is no strong sign-in.
+        // A password alone, a code by SMS alone (a SIM swapped, or a number given to someone else, reads it) — or a session
+        // from before the shop kept how it was signed in — is no strong sign-in.
         $this->website->forceFill(['staff_enabled' => true])->save();
-        foreach ([SignInMethod::Password, null] as $method) {
+        foreach ([SignInMethod::Password, SignInMethod::Phone, null] as $method) {
             $this->bearer($this->customerSession($this->sara, ['method' => $method]));
             $refused = $this->assertRefused(StaffMiddleware::SIGN_IN_STRONGLY);
             self::assertSame(StaffMiddleware::STRONG_CHALLENGE, $refused->getHeaderLine('WWW-Authenticate'), 'the challenge names the strong ways');
             self::assertFalse($this->me()['staff']['signed_in_strongly'] ?? null);
         }
+        foreach ([SignInMethod::PasswordAndCode, SignInMethod::PhoneAndCode] as $method) {
+            $this->bearer($this->customerSession($this->sara, ['method' => $method]));
+            self::assertSame(200, $this->get($this->staffApi('/dashboard'))->getStatusCode(), "{$method->value}: either with its second step");
+        }
+        $this->bearer($this->customerSession($this->sara, ['method' => SignInMethod::Password]));
         $this->website->forceFill(['staff_strong_sign_in' => false])->save();
         self::assertSame(200, $this->get($this->staffApi('/dashboard'))->getStatusCode(), 'unless the website asks none');
 

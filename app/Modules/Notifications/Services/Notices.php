@@ -19,16 +19,13 @@ use App\Modules\Support\Models\Ticket;
 use App\Modules\Users\Models\User;
 
 /**
- * Delivers every notice CustomerNotifier composes: kept for the customer's website feed (`notifications`, KEEP_DAYS),
+ * Delivers every notice CustomerNotifier composes: kept for the customer's website feed (`notifications`, as long as the owner's «زمان‌بندی کارها» says),
  * then sent to their Telegram chat (CustomerChats) or — no Telegram account, or one that turned the bot away — to their
  * email when they have one and the shop's email works (Mailer). The same words everywhere: the bot text as the bot sends
  * it, rendered for the web and email by WebText.
  */
 final class Notices
 {
-    /** How long a notice stays in the website's feed. */
-    public const KEEP_DAYS = 180;
-
     public function __construct(
         private readonly CustomerChats $chats,
         private readonly Mailer $mailer,
@@ -79,10 +76,10 @@ final class Notices
         return $delivery;
     }
 
-    /** Delete every shop's notices older than KEEP_DAYS: the website's feed goes back that far, no further. */
-    public function prune(): void
+    /** Delete every shop's notices older than `$days`: the website's feed goes back that far, no further. */
+    public function prune(int $days): void
     {
-        $before = now()->subDays(self::KEEP_DAYS);
+        $before = now()->subDays($days);
         CurrentBot::everywhere(static fn() => Notification::query()->where('created_at', '<', $before)->delete());
     }
 

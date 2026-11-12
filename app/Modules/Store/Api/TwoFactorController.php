@@ -27,7 +27,7 @@ final class TwoFactorController extends ApiController
      */
     public function setup(Request $request, Response $response): Response
     {
-        return $this->json($response, $this->twoFactor->setup(StoreMiddleware::website($request), Customer::of($request)->user));
+        return $this->json($response, $this->twoFactor->setup(StoreMiddleware::door($request), Customer::of($request)->user));
     }
 
     /**

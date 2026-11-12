@@ -115,7 +115,8 @@ approved by itself, and its order delivered — as if support had approved it; t
 - It approves only while the order is still waiting: a receipt whose order was paid another way meanwhile stays with
   support. And it approves only a receipt still in review: one support rejects or cancels in the same moment stays
   rejected or cancelled.
-- It runs with the scheduler, every minute: without the cron (or the poller) nothing is approved by itself.
+- It runs with the scheduler, every minute by default ([the task schedule](Running-In-Production.md#the-task-schedule)):
+  without the cron (or the poller) nothing is approved by itself.
 - The window read is the method's as it is when the scheduler looks: raising it delays receipts already waiting, and
   setting it to `0` stops approvals even for customers already told a wait.
 - It applies to a method switched off too, for the receipts it already has.
@@ -155,7 +156,8 @@ answered with what the shop already knows. The shop also asks:
 
 - when the customer taps «🔄 بررسی پرداخت» (a website can ask too);
 - when support presses «استعلام از درگاه» on the payments screen;
-- by itself: every few minutes while a page is open, then every quarter of an hour for two hours after it closed — a
+- by itself: every few minutes while a page is open, then every quarter of an hour for two hours after it closed — the
+  defaults of [«زمان‌بندی کارها»](Running-In-Production.md#the-task-schedule); a
   payment failed or cancelled meanwhile too. So a lost call delays nothing for long (with the cron or the poller
   running: [Running in production](Running-In-Production.md#the-scheduler)).
 
@@ -166,14 +168,14 @@ answer — once, however many times it is sent. A webhook no method signs is ref
 پرداخت», the customer's return, support's «استعلام از درگاه» and the scheduler read what the webhook said.
 
 **A page that closed unpaid** fails its payment («مهلت پرداخت در درگاه تمام شد»), and the customer starts again. Two
-hours after its page closed, the shop stops asking about it. An order whose page still takes money never expires,
+hours after its page closed (by default), the shop stops asking about it. An order whose page still takes money never expires,
 whatever a discount code's hold says.
 
 **Money in, not settled yet.** A gateway may say money came in on a payment it has not settled yet: AtlasPay with a
 receipt in review, or an underpayment whose rest the customer said they would pay; AbanGateway with an invoice split
 into parts and paid in part; Plisio with a coin seen on its chain and awaiting its confirmations. The shop does not give
-up on such a payment: it asks every quarter of an hour until 48 hours after its page closed, and settles it as soon as
-the gateway does. Still unsettled then, the payment is [held for you](#a-payment-held-for-you). Should the gateway close
+up on such a payment: it asks every quarter of an hour until 48 hours after its page closed (by default), and settles it
+as soon as the gateway does. Still unsettled then, the payment is [held for you](#a-payment-held-for-you). Should the gateway close
 it unsettled before — AtlasPay rejecting the receipt, AbanGateway's invoice paid in part expiring —, it is held for you
 at once: money may have left the customer's account.
 
@@ -208,7 +210,8 @@ look at their account on the shop's site.
 
 A payment the shop cannot take at its gateway's word is **held for support**: one its gateway confirmed for another
 order or amount (an underpayment AtlasPay accepted, among them), one on which the gateway kept money unsettled for 48
-hours, and one the gateway closed after it said money had come in on it (above).
+hours (by default: [«زمان‌بندی کارها»](Running-In-Production.md#the-task-schedule)), and one the gateway closed after it
+said money had come in on it (above).
 
 - The shop asks its gateway about it no more; the log says what the gateway said.
 - The report group's «خطاها» hears of it once: the customer, the order, the method, the gateway's id for it and why
@@ -346,10 +349,10 @@ How a payment goes ([every online gateway](#every-online-gateway) has the rest):
   asks), the bot and the website also show the card, its holder and the exact sum — and «💳 پرداخت» stays, since a
   receipt goes through the mini app. The card is kept encrypted and shown only while the page takes money.
 - AtlasPay calls the shop the moment it confirms or rejects an order — when the shop's address («آدرس سایت»,
-  `APP_URL`) begins with `https://`; a shop on http waits for the scheduler's asking, a few minutes at most.
+  `APP_URL`) begins with `https://`; a shop on http waits for the scheduler's asking, a few minutes at most by default.
 - A receipt in review at AtlasPay, or the rest of an underpayment the customer said they would pay, is
-  [money in, not settled yet](#every-online-gateway): waited for, up to 48 hours after the page closed. A rejected or
-  expired order fails its payment, and the customer starts again — but one AtlasPay had said money came in on is
+  [money in, not settled yet](#every-online-gateway): waited for, up to 48 hours (by default) after the page closed. A
+  rejected or expired order fails its payment, and the customer starts again — but one AtlasPay had said money came in on is
   [held for you](#a-payment-held-for-you) at once.
 - **An underpayment AtlasPay accepted is held for you.** A customer who paid less than asked may have AtlasPay take the
   smaller sum: AtlasPay then confirms the order for less, and the shop delivers nothing by itself — the payment is
@@ -388,13 +391,13 @@ How a payment goes ([every online gateway](#every-online-gateway) has the rest):
   that sum.
 - AbanGateway calls the shop the moment the money comes and sends the customer's browser back to it — when the shop's
   address («آدرس سایت», `APP_URL`) begins with `https://` and the internet reaches it —, and the browser is shown
-  [what came of it](#every-online-gateway); a shop on http waits for the scheduler's asking, a few minutes at most.
+  [what came of it](#every-online-gateway); a shop on http waits for the scheduler's asking, a few minutes at most by default.
 - A paid invoice is claimed once (AbanGateway's verify), so no order is ever delivered twice; one AbanGateway says was
   paid for another order or amount than asked is [held for you](#a-payment-held-for-you), and never claimed.
 - A sum above a card's daily ceiling (about 15 million Toman) is split by AbanGateway into parts on its page, each
   transferred apart; the bot and the site show the card for sums up to 10 million Toman — the shop's own limit —, only
   the page above it. A split invoice paid in part is [money in, not settled yet](#every-online-gateway): waited for, up
-  to 48 hours after its page closed, AbanGateway giving it more time.
+  to 48 hours (by default) after its page closed, AbanGateway giving it more time.
 - An invoice that expired or was cancelled fails its payment, and the customer starts again — but one paid in part is
   [held for you](#a-payment-held-for-you) at once.
 - An empty fee wallet, a key AbanGateway does not take, no card registered there, or no distinct sum free on your cards

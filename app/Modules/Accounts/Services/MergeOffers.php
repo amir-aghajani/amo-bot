@@ -16,16 +16,18 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\UniqueConstraintViolationException;
 
 /**
- * A merge offered when the way in a customer adds is another account's (Identities), and its acceptance. offer() refuses
- * a merge the rules refuse before any ticket exists, describes the other account for the customer to recognise, says
- * which one stays, and hands out a ticket (a challenge of theirs) that keeps what the survivor takes once they are one.
- * accept() spends the ticket once, checks the other account still holds that way in, merges, and gives the survivor
- * what the offer carried (a Google account or address for an empty slot, the password chosen with an email — which ends
- * the account's other sessions). The customer is notified.
+ * A merge offered when the way in a customer adds is another account's (Identities) — or the number a sign-in by SMS
+ * proved is another account's too (PhoneSignIn::mergeOffer()) —, and its acceptance. offer() refuses a merge the rules
+ * refuse before any ticket exists, describes the other account for the customer to recognise, says which one stays, and
+ * hands out a ticket (a challenge of theirs) that keeps what the survivor takes once they are one. accept() spends the
+ * ticket once, checks the other account still holds that way in, merges, and gives the survivor what the offer carried
+ * (a Google account or address for an empty slot, the password chosen with an email — which ends the account's other
+ * sessions). The customer is notified.
  *
- * An account reached by its email address alone (an emailed code, or Google vouching for it) is offered no merge while
- * it has two-factor sign-in on: the address is all a password reset needs, and a reset stops at the second step, so a
- * merge must not get past it either. Judged again when the ticket is spent.
+ * An account reached by its email address alone (an emailed code, or Google vouching for it) — or by its mobile number
+ * alone (a texted code) — is offered no merge while it has two-factor sign-in on: the address is all a password reset
+ * needs and the number all a sign-in by SMS does, and both stop at the second step, so a merge must not get past it
+ * either. Judged again when the ticket is spent.
  */
 final class MergeOffers
 {
@@ -41,7 +43,8 @@ final class MergeOffers
 
     /**
      * Offer `$user` a merge with `$other`, which holds a way in they just proved (`$holds`: column => value). `$apply` is
-     * what the survivor takes once merged; `$byAddress` says the other account was reached by its email address alone.
+     * what the survivor takes once merged; `$byAddress` says the other account was reached by its email address — or its
+     * mobile number — alone.
      *
      * @param array<string, int|string> $holds
      * @param array<string, string|null> $apply
@@ -49,7 +52,7 @@ final class MergeOffers
      */
     public function offer(User $user, User $other, array $holds, array $apply = [], bool $byAddress = false): MergeOffer
     {
-        $refusal = self::pastSecondStep($other, $byAddress) ? AccountRefusedException::twoFactorAccount() : $this->merger->refusal($user, $other);
+        $refusal = self::pastSecondStep($other, $byAddress) ? AccountRefusedException::twoFactorAccount(self::byNumber($holds)) : $this->merger->refusal($user, $other);
         if ($refusal !== null) {
             throw $refusal;
         }
@@ -66,6 +69,7 @@ final class MergeOffers
             'telegram' => $other->telegram_id !== null,
             'email' => $other->email !== null,
             'google' => $other->google_sub !== null,
+            'phone' => $other->phone !== null,
         ], AccountMerger::older($user, $other) === $user ? 'this' : 'other');
     }
 
@@ -86,7 +90,7 @@ final class MergeOffers
             throw AccountRefusedException::offerGone();
         }
         if (self::pastSecondStep($other, ($kept['by_address'] ?? false) === true)) {
-            throw AccountRefusedException::twoFactorAccount();
+            throw AccountRefusedException::twoFactorAccount(self::byNumber($holds));
         }
 
         $survivor = $this->merger->merge($user, $other, AccountMerger::BY_CUSTOMER);
@@ -103,10 +107,20 @@ final class MergeOffers
         return $survivor;
     }
 
-    /** Whether the merge would get past the other account's second step: reached by its address alone, with two-factor on. */
+    /** Whether the merge would get past the other account's second step: reached by its address (or number) alone, with two-factor on. */
     private static function pastSecondStep(User $other, bool $byAddress): bool
     {
         return $byAddress && $other->hasTwoFactor();
+    }
+
+    /**
+     * Whether the way in the offer is about is a mobile number (the refusal names it so).
+     *
+     * @param array<mixed> $holds
+     */
+    private static function byNumber(array $holds): bool
+    {
+        return array_key_exists(WayIn::Phone->column(), $holds);
     }
 
     /**

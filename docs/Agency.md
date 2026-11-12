@@ -66,10 +66,13 @@ minimum, and why their bot sells nothing when it does not — with:
 - **«➕ افزایش موجودی»**.
 
 Their panel ([Panels](Panels.md#an-agents-account)) is their shop: plans, payment methods, orders, customers, texts,
-settings, website — and their account, with the traffic's history and their terms of selling («شرایط فروش»). They
-cannot buy traffic there: it is the main bot's. While their bot's selling is suspended, or its end or a short month is
-near, their account and their dashboard's «نیازمند توجه» say so, and why — and a strip over every other page of their
-panel leads to the account.
+settings, website — and their account, with the traffic's history and their terms of selling («شرایط فروش»). They cannot
+buy traffic there: it is the main bot's. Their shop's backups are theirs too («تنظیمات پنل › پشتیبان‌گیری», and their
+report group's «پشتیبان‌گیری» topic): their own shop's rows alone, restored only in their shop, and never your part of
+it — their traffic, terms and suspension, your servers, what you keep from their shop
+([Backups](Backups.md#a-shops-restore)). While their bot's selling is suspended, or its end or a short month is near,
+their account and their dashboard's «نیازمند توجه» say so, and why — and a strip over every other page of their panel
+leads to the account.
 
 ## Their traffic
 
@@ -182,7 +185,7 @@ shop and bot back as they were.
 
 No «نمایندگی» of its own — no menu button, texts or report topic —, no «نماینده‌ها» broadcast audience, no servers (they
 sell on yours; their «خطاها» topic hears of their own failed deliveries, not of servers), and none of the installation's
-settings.
+settings (their «تنظیمات پنل» has the look and their shop's backups alone).
 
 ## Watch out for
 

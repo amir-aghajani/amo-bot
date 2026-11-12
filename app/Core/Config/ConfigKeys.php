@@ -42,6 +42,10 @@ final class ConfigKeys
             'MAIL_FROM_ADDRESS' => ['', "The address the shop's emails come from (no-reply@example.com) — a mail server sends from its own accounts\nonly. Empty: no email goes out."],
             'MAIL_FROM_NAME' => ['', 'The name they come from; empty: the shop\'s name (an agent\'s shop: its bot\'s).'],
         ],
+        'SMS' => [
+            'SMS_DRIVER' => ['none', "How the shop sends one-time codes by SMS — a website's sign-in by phone number: none, or an SMS driver —\nippanel, IPPanel's pattern sending (ippanel.com: an access key, one of the account's lines and a pattern\napproved there whose one variable is the code). A driver's own SMS_* settings end this section, as the\npanel's settings write them."],
+            'SMS_AGENTS' => [false, "Whether agents' websites may send sign-in codes by SMS too. Every SMS is paid from this one account, whichever\nshop's website asked for it."],
+        ],
         'Keys and secrets' => [
             'APP_KEY' => ['', "The key the shop encrypts its secrets with (the panels' passwords, the agents' bots' tokens). Never change it:\nwhat it encrypted could not be read again. Keep a copy of this file with your backups."],
             'CRON_TOKEN' => ['', 'The secret of the /cron/<token> address, for a host whose cron calls an address instead of running a command.'],
@@ -68,6 +72,7 @@ final class ConfigKeys
         'ADMIN_' => 'The panel\'s login',
         'TELEGRAM_' => 'Telegram',
         'MAIL_' => 'Mail',
+        'SMS_' => 'SMS',
         'LOG_' => 'Advanced',
         'SESSION_' => 'Advanced',
     ];

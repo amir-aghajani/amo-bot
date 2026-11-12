@@ -2,20 +2,23 @@
 
 # Internals: website API
 
-The Store API that a shop's own website talks to, the customers' accounts on it, the shop's admins working from it, and
-the panels' controllers — `app/Modules/{Store,Accounts,Admin}`. This page is how they fit together and why; what a
-website's developer sees is in [Store API](Store-API.md) and its pages, what an owner sees in [Website](Website.md).
+The Store API that a shop's own website and its Telegram mini app talk to, the customers' accounts on them, the shop's
+admins working from the website, and the panels' controllers — `app/Modules/{Store,Accounts,Admin}`. This page is how
+they fit together and why; what a website's developer sees is in [Store API](Store-API.md) and its pages, what an owner
+sees in [Website](Website.md). The mini app's own code is [Internals: mini app](Internals-Mini-App.md).
 
 ## The modules
 
 | Module | What it owns | Open first |
 | --- | --- | --- |
-| Store | the Store API's door and CORS, the website row and its settings, everything a signed-in customer does on the site, the admins' door | `Http\StoreMiddleware`, `Http\StaffMiddleware`, `Services\Websites`, `Services\CustomerCheckout` |
-| Accounts | customers' sign-in on a website: sessions, one-use challenges, OpenID providers, email and password, two-factor, ways in, merges | `Services\ProviderSignIn`, `Services\EmailSignIn`, `Services\CustomerSessions`, `Services\AuthChallenges` |
+| Store | the Store API's two doors and CORS, the website and mini app rows and their settings, everything a signed-in customer does through them, the admins' door | `Http\StoreMiddleware`, `Contracts\Door`, `Http\StaffMiddleware`, `Services\Websites`, `Services\MiniApps`, `Services\CustomerCheckout` |
+| Accounts | customers' sign-in on a website or the mini app: sessions, one-use challenges, OpenID providers, email and password, a code by SMS, two-factor, the mini app's launch data, ways in, merges | `Services\ProviderSignIn`, `Services\EmailSignIn`, `Services\PhoneSignIn`, `Services\MiniAppSignIn`, `Services\CustomerSessions`, `Services\AuthChallenges` |
 | Admin | the panels' API controllers and the panel-only services (dashboard, queues, customer page, client errors, system status) | `Api\*Controller`, `Services\DashboardStats` |
 
 **Store leans on Accounts, never the other way.** What signing in needs of a website is Accounts' own interface,
-`Contracts\SignInSite`, which `Store\Models\Website` implements; no Accounts file names a Store class.
+`Contracts\SignInSite`, which Store's `Contracts\Door` extends and both `Store\Models\Website` and `Store\Models\MiniApp`
+implement (the mini app's ways in all off: no Client ID, no email sign-up, no captcha, no origin); no Accounts file
+names a Store class.
 `tests/Unit/Core/LayersTest` holds that, and the module map as a whole.
 
 **Controllers are thin**: load the row, call one service, present the answer (`Core\Http\ApiController`: `load()`,
@@ -32,21 +35,40 @@ Besides `/health`, `/api/app` and the installer's `/api/install`, routes/api.php
 /api/admin, /api/agent ── Session · CSRF header · PanelAuthMiddleware (owner or agent)
     $operations       the shop's daily work (lists, payments, orders, tickets, …)
     $configuration    the shop's settings (methods, bot settings, texts, the website, …)
-/api/store/v1/{store} ── StoreMiddleware (the key opens a website; the request runs in its shop) · JsonBodies
-    public            GET /, the catalogue, the reviews, /auth/*
+/api/store/v1/{store} ── StoreMiddleware (the key opens a website or a mini app; the request runs in its shop) · JsonBodies
+    public            GET /, the catalogue, the sales, the tutorial, the reviews
+    website only      WebsiteOnlyMiddleware → the website's ways in (/auth/*, /auth/phone and /auth/phone/verify among
+                      them), its captcha
+    mini app only     MiniAppOnlyMiddleware → POST /auth/mini-app, GET /app/logo
     customer          CustomerAuthMiddleware (bearer token) — and RecentSignInMiddleware on what changes the ways in
-                      or gives a service away
-    /admin            CustomerAuthMiddleware · StaffMiddleware → $operations again, never $configuration
+                      or gives a service or money away
+    website only      WebsiteOnlyMiddleware · CustomerAuthMiddleware → /me/telegram/authorize, /me/reauthenticate/phone,
+                      /me/identities/{telegram,google,phone}, /me/identities/phone/verify
+    mini app only     MiniAppOnlyMiddleware · CustomerAuthMiddleware → PUT and DELETE /me/biometric
+    /admin            WebsiteOnlyMiddleware · CustomerAuthMiddleware · StaffMiddleware → $operations again, never $configuration
 ```
 
-- **The door.** `StoreMiddleware` reads the 24-hex store key, finds the open website across shops (`Websites::open()`:
-  switched on, its bot running) and runs the request in that shop (`CurrentBot::run`). Any other key is the same 404,
-  whatever the path under it.
+- **The doors.** `StoreMiddleware` reads the 24-hex store key, finds the open website (`Websites::open()`) or else the
+  open mini app (`MiniApps::open()`) across shops — switched on, its bot running —, runs the request in that shop
+  (`CurrentBot::run`) and puts the door on the request: `StoreMiddleware::door()` reads it as a `Contracts\Door` (its
+  `storeKey()`, `showsReviews()` and the sign-in site's answers), `website()` and `miniApp()` as the one door a route
+  group allows. Any other key is the same 404, whatever the path under it. What only one door has is a route group whose
+  outermost guard is `WebsiteOnlyMiddleware` or `MiniAppOnlyMiddleware`: through the other door it answers the router's
+  own 404 before a token is read, so the other door shows nothing of it. Only the Store group's own middleware runs
+  before that guard — `JsonBodiesMiddleware` among them, so a POST, PUT or PATCH whose body is not JSON gets its 415
+  first. The description marks those operations `x-door` ([API contract](API-Contract.md#what-the-description-holds)),
+  and `ApiDescriptionTest` and `MiniAppDoorTest` hold the routes and the marks together. A mini app switched off still
+  opens for a panel's preview of it: a key no open door has is tried as a switched-off app (`MiniApps::previewable()`),
+  and a request carrying the token of a live preview session of that shop finds it as if it were on — every request the
+  preview makes, `GET /` among them —, so the owner tries the app before customers see it; one a preview may not ask
+  (`CustomerAuthMiddleware::previewMayAsk()`) is the 403 `PREVIEW` there, whatever the route, and anyone else still gets
+  `CLOSED`.
 - **JSON only.** `JsonBodiesMiddleware` answers 415 to a body that is not JSON, except multipart on the few routes marked
   `UPLOAD` (a receipt, a ticket's picture). A form or text body is a CORS "simple request" any site can make a browser
   send without a preflight; refusing it means a sign-in posted from another site always needs the preflight.
 - **CORS** is `Store\Http\WebsiteCorsPolicy` under Core's `CorsMiddleware`: only a Store API path, only an origin the
-  open website lists; the panels' API never answers an origin.
+  open website lists (`allowsOrigin()`); the mini app, on the shop's own address, allows none — not even Telegram's
+  web client, which frames the page, not the API; the panels' API never answers an origin.
 - **Optional sign-in.** `OptionalCustomerMiddleware` (the catalogue's prices, a review) lets a request without a token
   through as a guest, but sends one with a token through the customer's door whole — a bad token is a 401, never
   quietly a guest.
@@ -70,15 +92,55 @@ password), a Google account, or any mix (`Enums\WayIn`). The ways in:
   Workspace `hd`), otherwise an address someone else owns today could take over an account.
 - **Email and password** (`EmailSignIn`) never tell whether an address has an account: sign-up and reset answer the
   same and send a different email; a wrong address is checked against a dummy hash of the same cost as a real one.
-- **Two-factor** (`TwoFactor`) is the password sign-in's second step (TOTP, ten recovery codes kept as keyed hashes). A
+- **A code by SMS** (`PhoneSignIn`, while `SignInSite::allowsPhoneSignIn()`: the site's switch, `Core\Sms\Sms`
+  available, and the main shop's site or `Sms::forAgents()` — `Store\Services\Websites` tells each website it loads
+  whether SMS goes out for it, `Website::smsOpen()`) texts a six-digit code (`AuthChallenges::issueCode()`, a keyed
+  hash, five minutes, five tries) to an Iranian mobile in E.164 (`Support\Mobile`) whether or not it has an account. The
+  code typed back signs in the customer whose `users.phone` it is — of two, the one with Telegram, then the one seen
+  last (`holderOf()`), the others offered as a merge beside the token (`mergeOffer()`, `SignedIn::$merge`; the number
+  proved for all of them, never merged unasked) — or registers a newcomer with the number (`Customers::byPhone()`),
+  `SignInMethod::Phone`. A code by SMS is weaker than a provider (a SIM swapped, a number recycled): an account with
+  two-factor sign-in answers the second step's challenge (`TwoFactor::signIn()` then opens `PhoneAndCode`),
+  `SignInMethod::strong()` leaves `Phone` out, and the number proves no such account again. Every SMS is counted
+  against its budgets before it goes and given back when the provider refused (`SignInThrottle::texting()`; the new
+  code replaces the last only once the provider took it, `AuthChallenges::issueCode()`'s `$deliver`), and a six-digit
+  code against the number's wrong codes (`textedCode()`) only while a code waits (`AuthChallenges::liveCode()`) — a
+  blind guess locks nobody out, and wrong codes never stop a code going. A mobile number is a `WayIn` too: added by a
+  code (a merge offered when another account holds it, refused past a second step), removed while another way stays —
+  the number counting as one only where a sign-in by SMS opens that very account —, and proven again by a code bound
+  to the session that asked (`sendReauthCode()`).
+- **Two-factor** (`TwoFactor`) is the password sign-in's second step, and a sign-in by SMS's (TOTP, ten recovery codes kept as keyed hashes). A
   password reset leaves it on and keeps the new password in the second step's challenge, because the email alone must
   not get past it.
+- **The mini app's launch data** (`MiniAppSignIn`, `POST /auth/mini-app`): `Support\LaunchData::read()` checks
+  `Telegram.WebApp.initData` as Telegram's documentation says — every field but `hash`, sorted, as `name=value` lines,
+  under HMAC-SHA256 keyed with the HMAC-SHA256 of the bot's token and `WebAppData`; a field twice, a missing account, or
+  an `auth_date` older than allowed or over 60 seconds ahead of the shop's clock is refused — and answers a
+  `DTO\MiniAppLaunch`: the Telegram id, its profile, when Telegram made it. A sign-in takes data up to a day old
+  (`MAX_AGE_SECONDS`), registers a newcomer exactly as the bot does (`Customers::byTelegram()`, with the invite code),
+  and opens the session through `ProviderSignIn::open()` with `SignInMethod::MiniApp` (strong) and `authenticated_at` the
+  launch's moment, not now: an old launch signs in, but proves nothing a recent sign-in guards. Every proof runs under
+  the address's website throttle, a failure counted; a refusal is a 401 at sign-in and a 422 on `init_data` for a
+  signed-in customer (`launch()`'s `$signedIn`).
 
 **Sessions** (`CustomerSessions`): a bearer token per device, only its sha256 kept, per shop, idle after 30 days, ended
 after 180. `authenticated_at` is when a way in was last proven: changes to the ways in, the password, two-factor
 sign-in or a merge, and a service handed to another customer, need it within 15 minutes (`RecentSignInMiddleware`, a
-403 with RFC 9470's challenge), and `POST /me/reauthenticate` proves one again. So a leaked token alone takes no
-account over and gives no service away.
+403 with RFC 9470's challenge), and `POST /me/reauthenticate` proves one again (`Reauthentication`). So a leaked token
+alone takes no account over and gives no service away. `GET /me` says where the session stands (`session`: its method,
+whether it keeps a fingerprint secret, `recent_until` from `CustomerSessions::provenUntil()`).
+
+A session is the shop's, not its door's: a token either door signed in opens the other's customer routes too. The mini
+app proves a way in again two ways of its own:
+
+- **Fresh launch data** (`mini_app`): `MiniAppSignIn::launch()` with `RECENT_SECONDS` as the age limit; the session is
+  recent from the launch's `auth_date` (`CustomerSessions::reauthenticated()`'s `$provenAt`), never less recent than it
+  was, and upgraded to `mini_app` when it was a password alone.
+- **The fingerprint secret** (`biometric`): `PUT /me/biometric` (itself behind `RecentSignInMiddleware`) makes 32 random
+  bytes for Telegram's `BiometricManager` to keep behind the device's fingerprint or face, and keeps only their sha256 on
+  the session (`customer_sessions.biometric_hash`, `CustomerSessions::setBiometric()`); `holdsBiometric()` compares in
+  constant time. Proven, the session is recent from now and keeps its method — it proves the session's holder, not a
+  way in; `DELETE /me/biometric` forgets it. A failure counts as a failed sign-in.
 
 **Challenges** (`AuthChallenges`) are every short-lived secret: a random secret whose sha256 is kept with an encrypted
 payload, spent once by one conditional DELETE. Emailed codes are six digits, so they are kept as an HMAC under a key
@@ -117,9 +179,13 @@ service of the account the same way.
 
 ## The shop on the website
 
-Everything a customer does on the site goes through the services the bot uses; the Store services only add the
-website's shape and limits.
+Everything a customer does on the site — or in the mini app — goes through the services the bot uses; the Store
+services only add the API's shape and limits.
 
+- **The storefront** (`Storefront::present()`, `GET /`) takes the door: `sign_in.mini_app` and `app` (its look, its
+  logo's address versioned by the row's `updated_at`, the shop's zone) through the mini app, `null` through a website;
+  `programs`, the shop's programs' switches as the bot reads them; `phone_required`, the bot's phone gate. The tutorial
+  (`StoreController::tutorial()`) is the bot's own text (`BotText::Tutorial`).
 - **Catalogue** (`StoreCatalog`): exactly the bot's «خرید اشتراک» (`PlanCategoryService::catalogue()`), priced for the
   reader by `Pricing`, in a few queries however many plans.
 - **Checkout** (`CustomerCheckout`) is the bot's checkout (`Payments\Services\Checkout`) under the bot's rules. Every
@@ -140,6 +206,21 @@ website's shape and limits.
   `CustomerRenewal::preview()`; `refused()` turns its `refusal()` into the field and words the site shows.
 - **Services** (`CustomerSubscriptions`): what each may do is judged for a whole page at once; reading a panel and new
   links are rate-limited per customer, and a panel failure is told as its summary, never the owner's diagnosis.
+  `update()` takes `auto_renew` and `label` (the customer's name for it, `subscriptions.label`) judged together, the
+  label written only while the service is still theirs — `ProvisioningService::newOwner()` clears it when the service
+  changes hands —; `qrCard()` draws the bot's QR card (`Telegram\Qr\QrCard`), 30 a minute, a 503
+  (`QrCardUnavailableException`) when it cannot.
+- **Sales** (`StoreSales`): the timed sales running (`Sale::running()`), for a banner; prices already carry them.
+- **Programs**: `CustomerTestAccounts` gives a free test through `Subscriptions\Services\TestAccounts` under the bot's
+  quota; `CustomerWheel` spins `Rewards\Services\LuckyWheel` with `tell: false` and answers where it landed for the
+  page's animation (the server draws; the page only shows); `Rewards\Services\LotteryBoard` reads the nightly draw for one
+  customer, counting their entries as `Lottery::entries()` will. A free test and a spin first ask what the bot's gates
+  ask before anything free (`CustomerGates`: a Telegram account, the customer's own number while the shop asks it, the
+  required channels joined — `ChannelMembership::missingFor()` —; the shop's admins pass). Through the mini app, the
+  bot's own door, an order, a gift code and a service claimed by its link ask the number and the channels too
+  (`CustomerGates::holdBack()`, from their controllers: the door is the request's). A program switched off is a 404
+  (`ProgramOffException`) — the wheel's refusals, the bot's words, a 422 on `status`. Nothing of these is sent in
+  Telegram: the page shows it.
 - **Receipts** (`CustomerReceipts`) are taken as the bot takes them, but an uploaded receipt never auto-approves: the
   account behind it may be an email made a minute ago.
 - **Online payments** (`CustomerOnlinePayments`): a checkout by an online gateway answers its page (`link`, read off
@@ -156,7 +237,12 @@ website's shape and limits.
   ([Internals: commerce](Internals-Commerce.md#wallet-transfers)). The recipient of money or of a service is shown by
   `Presenters\RecipientPresenter` alone: their Telegram name and handle, nothing else of their account.
 - **Notices, tickets, reviews, gift codes, referrals**: thin layers over Notifications, Support, Reviews, Rewards and
-  Referrals (see [Internals: services](Internals-Services.md) and [Internals: commerce](Internals-Commerce.md)).
+  Referrals (see [Internals: services](Internals-Services.md) and [Internals: commerce](Internals-Commerce.md)). A
+  ticket's messages say `seen` from `tickets.support_read_at`, which support's reading writes
+  (`Tickets::readBySupport()`, quietly, when the panels or the website's admin API open it) and an answer writes too;
+  reviews follow the door's own switch (`Door::showsReviews()`, `shop.programs.reviews`). Through the mini app a
+  customer does not take their Telegram account off (`IdentitiesController::TELEGRAM_STAYS`, a 422 on `kind`): the app and
+  the bot know them by it.
 
 A customer's rows are always read through their own query (`where('user_id', …)`), so another customer's id is a 404
 like a row that never existed.
@@ -164,9 +250,10 @@ like a row that never existed.
 ## The shop's admins on the website
 
 Customers with the bot's admin role can work the shop from its website: `/admin/*` mounts the panels' `$operations`
-again behind `StaffMiddleware`, whose checks run in a fixed order (an admin; the website lets admins in; a strong
-sign-in while asked; a sign-in within a working day; the operation's grant; a recent sign-in for a granted operation or
-a payment approval). A leaked admin token therefore works for hours, not months. Each operation that needs a grant names
+again behind `StaffMiddleware`, whose checks run in a fixed order (an admin; the website lets admins in; a session that
+is not the mini app's — `CustomerSessions::isMiniApp()`, its launch data's for its life: the mini app is the customer
+side alone; a strong sign-in while asked; a sign-in within a working day; the operation's grant; a recent sign-in for a
+granted operation or a payment approval). A leaked admin token therefore works for hours, not months. Each operation that needs a grant names
 it on its route (`Auth\StaffGrant::ARGUMENT`) and in the API description (`x-staff`); `ApiDescriptionTest` holds the
 two together. The request then carries the staff `Principal` — with the website's grants only while the sign-in is
 recent — and every change it asks is logged with them on the line, a refused one too, a 404 included. Decisions carry
@@ -196,6 +283,40 @@ only its fields: `update()` is a partial save on the field engine (`Form::checkS
 judged on the row as the save would leave it (`Core\Forms\Fields\Ruled`) and the captcha checked by its driver's form
 (see [Drivers](Drivers.md)). Secrets are never sent back, only whether one is kept.
 
+## Mini app settings
+
+`Store\Services\MiniApps` keeps a shop's mini app (`mini_apps`, one row per bot), made switched off with a random key
+the first time a panel asks (`current()`). Both panels' «مینی‌اپ تلگرام» (`Admin\Api\MiniAppController`,
+`GET|PATCH /api/{panel}/mini-app`, part of `$configuration`: the website's admins never have it) save through
+`update()`, a partial save on the field engine; switching it on needs `APP_URL` on https (`secure()`), since Telegram
+opens a mini app from no other address. `address()` is `{APP_URL}/app/{key}/`; `url()` is that address while the app is
+on and secure — `Telegram\Contracts\MiniAppAddress`, bound to `MiniApps` in `bootstrap/container.php`, which is how the
+bot's buttons find it ([Internals: Telegram bot](Internals-Telegram-Bot.md#the-mini-app)).
+
+Every save sets the bot's menu button as the app now stands (`applyMenuButton()`, `BotApi::setChatMenuButton`): the
+app's, with its words, while it is on, secure and keeps its button. Otherwise it asks Telegram what the button is now
+(`BotApi::getChatMenuButton()`) and gives Telegram's own back only when that button opens this app — under any `APP_URL`
+the shop had, by its key —, so a button the shop set itself at @BotFather is left alone. Telegram refusing or out of
+reach never undoes the save: the answer's `menu_button_error` says why the button is not set.
+
+The logo (`GET|POST|DELETE /api/{panel}/mini-app/logo`) is a picture judged by its bytes (PNG, JPEG or WebP, 2 MB at
+most), kept no larger than 512 pixels a side and written again without its metadata where the host has GD, in the
+shop's own file under `storage/uploads/logos` (`miniapp.logos`); the Store API answers it at `GET /app/logo`, through
+the mini app's key alone (`MiniAppLogoController`, any cache five minutes).
+
+The panels' «پیش‌نمایش» (`POST /api/{panel}/mini-app/preview`, `MiniAppController::preview()`) opens the app as one of
+the shop's customers sees it: `Store\Services\MiniAppPreviews::open()` refuses anyone who is no customer of the shop, or
+is banned (a 422 on `user_id`), opens a preview session for them (`CustomerSessions::openPreview()`, `method`
+`preview`, `PREVIEW_MINUTES` — 30 — and never longer), logs who looked and as whom, and answers its token once with the
+app's address on this host (`MiniApps::path()`, under the folder the panel's request came in by); the panel hands the
+token to the app in its address's fragment ([Internals: mini app](Internals-Mini-App.md#the-preview)). The customer is
+told nothing. `CustomerAuthMiddleware` admits such a session through the mini app's key alone — under a website's it
+opens nothing — and to read only: any request but GET, HEAD or OPTIONS is a 403 with `PREVIEW` («این پیش‌نمایش است؛ در
+آن چیزی ذخیره یا فرستاده نمی‌شود.») before anything runs, but for a route marked `PREVIEW_READS`, which only works
+something out — `POST /custom-services/quote`, its value naming the field (`discount_code`) that, sent, makes it a
+write again. Nothing of a preview is recorded: neither the session's use nor the customer's visit; it is none of their
+devices (`CustomerSessions::isPreview()`), and never a recent sign-in.
+
 ## The panels' controllers
 
 `app/Modules/Admin/Api` holds both panels' controllers; the owner and an agent share most of them because their routes
@@ -220,14 +341,16 @@ Feature tests live in `tests/Feature/Store` (the Store API) and `tests/Feature/A
 against resources/api/openapi.yaml both ways (see [API contract](API-Contract.md)). Useful helpers: `website()`,
 `webCustomer()`, `customerSession()` and `bearer()` for a signed-in customer, `loginAsStaff()` for the admin API,
 `telegramLogin()`, `googleLogin()`, `turnstile()` and `mail()` for the outside services, and the `WebsiteSignIns`
-trait for nonces and redirect states. `RouteGuardsTest` walks every route with another shop's rows and every admin-API
-route through each step of the door. See [Testing](Testing.md).
+trait for nonces and redirect states. The mini app's: `miniApp()` (the shop's, switched on, with a key of its own),
+`launchData()` (signed launch data, `Tests\Support\TelegramLaunch`) and `storeApi($door, $path)` for either door.
+`RouteGuardsTest` walks every route with another shop's rows and every admin-API route through each step of the door;
+`MiniAppDoorTest` asks every Store API route under each door's key. See [Testing](Testing.md).
 
 ## Where to start
 
 - A new customer route: its controller in `Store\Api`, its service in `Store\Services`, the route in routes/api.php
   (inside the customer group, and the recent-sign-in group if it changes how the account is signed in to), and its
-  operation in openapi.yaml.
+  operation in openapi.yaml. A route only one door has goes in that door's group, its operation marked `x-door`.
 - A new way in: a proof method returning an account DTO through `ProviderSignIn::prove()`, a `WayIn` case (its column on
   `users`), and how a merge carries it (`AccountMerger::takeOn()`).
 - A new admin-API operation: add it to `$operations` and mark it `x-staff` (with its grant when it needs one).

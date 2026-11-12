@@ -9,14 +9,18 @@
 /storage/*/*
 !/storage/*/.gitkeep
 
-# Dependencies and builds: Composer's and pnpm's, the panels' build (shipped in the release zip), the release zip.
+# Dependencies and builds: Composer's and pnpm's, the panels' and the mini app's build (shipped in the release zip), the
+# release zip.
 /vendor/
 /node_modules/
+# Vitest's cache, which it keeps beside the panels' sources (resources/panel is vite's root).
+/resources/panel/node_modules/
 /.pnpm-store/
 /composer.phar
 /public/admin/
 /public/agent/
 /public/assets/
+/public/app/
 /build/
 
 # The tools' caches and local files.

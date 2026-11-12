@@ -240,6 +240,17 @@ final class StoreOnlinePaymentTest extends HttpTestCase
         self::assertSame([1, 1], [Payment::query()->count(), count($this->cubePay->callsTo(CubePayGateway::CREATE))]);
     }
 
+    public function testANoteAHoldWroteBeforeTheHoursWereTheOwnersStaysSupportsWords(): void
+    {
+        $this->checkout($this->placeOrder($this->website, $this->plan, $this->server, $this->online));
+        // NOTE_UNSETTLED as it read while the hours were a fixed two days: a payment held then still carries it.
+        Payment::query()->sole()->forceFill(['note' => 'درگاه پولی را که برای این پرداخت رسیده بود دو روز پس از بسته شدن صفحه هم تسویه نکرد؛ پشتیبانی باید آن را در درگاه بررسی کند'])->save();
+        $order = Order::query()->sole();
+
+        $shown = $this->decode($this->get($this->storeApi($this->website, '/orders/' . $order->id)))['order'];
+        self::assertSame(sprintf(PaymentHeldException::MESSAGE, $order->id), $shown['payments'][0]['note'], 'the customer reads where to go, never support\'s note');
+    }
+
     public function testChecksAreHeldToTenAMinute(): void
     {
         $link = $this->checkout($this->placeOrder($this->website, $this->plan, $this->server, $this->online))['link'];

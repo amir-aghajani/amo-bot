@@ -7,16 +7,16 @@ namespace App\Modules\Store\Models;
 use App\Core\Database\Casts\Encrypted;
 use App\Core\Database\Casts\EncryptedArray;
 use App\Core\Http\Origin;
-use App\Modules\Accounts\Contracts\SignInSite;
 use App\Modules\Auth\StaffGrant;
 use App\Modules\Bots\Models\Concerns\BelongsToBot;
+use App\Modules\Store\Contracts\Door;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 
 /**
  * A shop's website, one per bot (made by Services\Websites): its switch, its public store key, its address and allowed
  * origins, how customers sign in, its captcha, its reviews switch, and the door for the shop's admins. It is the
- * SignInSite the account services sign customers in on.
+ * sign-in site the account services sign customers in on, and the Store API's door under its key (Contracts\Door).
  *
  * @property int $id
  * @property string $key The store key: 24 lower-case hex characters — it names the shop, it is no secret
@@ -27,17 +27,18 @@ use Illuminate\Support\Carbon;
  * @property string|null $telegram_client_id The site's Client ID as @BotFather shows it (digits)
  * @property string|null $telegram_client_secret Its secret, encrypted at rest — only the redirect flow needs it
  * @property bool $email_signup Whether customers sign up with their email and a password (the installation's mail sends their codes)
+ * @property bool $phone_login Whether customers sign in with a code by SMS to their mobile (the installation's SMS sends it)
  * @property string|null $google_client_id The site's OAuth client id in Google Cloud: Google sign-in is on while there is one
  * @property string|null $captcha_driver The captcha its forms ask: a driver's key (Core\Captcha\Verifier); null: none
  * @property array<string, mixed>|null $captcha_config What that driver's form keeps, by key — encrypted at rest (Turnstile's secret among it)
  * @property bool $reviews_enabled Whether it shows the reviews support approved and takes new ones (GET and POST /reviews)
  * @property bool $staff_enabled Whether the shop's admins work it from the website (its admin API, Http\StaffMiddleware)
- * @property bool $staff_strong_sign_in Whether they must have signed in strongly: Telegram, Google, or a password with its second step
+ * @property bool $staff_strong_sign_in Whether they must have signed in strongly: Telegram, Google, or a password or a code to their mobile with its second step
  * @property list<string>|null $staff_grants What they may do beyond the shop's daily work (Auth\StaffGrant values)
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
-class Website extends Model implements SignInSite
+class Website extends Model implements Door
 {
     use BelongsToBot;
 
@@ -52,6 +53,7 @@ class Website extends Model implements SignInSite
         'telegram_client_id',
         'telegram_client_secret',
         'email_signup',
+        'phone_login',
         'google_client_id',
         'captcha_driver',
         'captcha_config',
@@ -63,11 +65,15 @@ class Website extends Model implements SignInSite
 
     protected $hidden = ['telegram_client_secret', 'captcha_config'];
 
+    /** Whether SMS goes out for this site (smsOpen()); no column. */
+    private bool $smsOpen = false;
+
     /** A website starts with everything off — the shop's admins shut out too, and asked a strong sign-in once let in. */
     protected $attributes = [
         'enabled' => false,
         'telegram_login' => false,
         'email_signup' => false,
+        'phone_login' => false,
         'reviews_enabled' => false,
         'staff_enabled' => false,
         'staff_strong_sign_in' => true,
@@ -80,12 +86,23 @@ class Website extends Model implements SignInSite
         'telegram_login' => 'boolean',
         'telegram_client_secret' => Encrypted::class,
         'email_signup' => 'boolean',
+        'phone_login' => 'boolean',
         'captcha_config' => EncryptedArray::class,
         'reviews_enabled' => 'boolean',
         'staff_enabled' => 'boolean',
         'staff_strong_sign_in' => 'boolean',
         'staff_grants' => 'array',
     ];
+
+    public function storeKey(): string
+    {
+        return $this->key;
+    }
+
+    public function showsReviews(): bool
+    {
+        return $this->reviews_enabled;
+    }
 
     /** Whether a page on `$origin` may call the API: the site's own origin, or one it lists. */
     public function allowsOrigin(string $origin): bool
@@ -96,6 +113,12 @@ class Website extends Model implements SignInSite
         }
 
         return $origin === Origin::of((string) $this->url) || in_array($origin, $this->origins ?? [], true);
+    }
+
+    /** A website: it has no launch data and no fingerprint to prove a way in again by — those are the mini app's. */
+    public function isMiniApp(): bool
+    {
+        return false;
     }
 
     /** The Telegram Client ID while Telegram sign-in is on and one is kept; null otherwise. */
@@ -126,6 +149,24 @@ class Website extends Model implements SignInSite
     public function allowsEmailSignUp(): bool
     {
         return $this->email_signup;
+    }
+
+    /** Whether customers sign in by a code texted to their mobile: the switch on, and SMS going out for it (smsOpen()). */
+    public function allowsPhoneSignIn(): bool
+    {
+        return $this->phone_login && $this->smsOpen;
+    }
+
+    /**
+     * Say whether SMS goes out for this site — the installation sends it, and its shop is the main one or the owner lets
+     * agents' sites text too (Services\Websites, which loads every website the API and the panels work with). A website
+     * nobody told texts nothing.
+     */
+    public function smsOpen(bool $open): static
+    {
+        $this->smsOpen = $open;
+
+        return $this;
     }
 
     public function captchaDriver(): ?string

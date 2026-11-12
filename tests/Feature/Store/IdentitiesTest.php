@@ -167,7 +167,7 @@ final class IdentitiesTest extends HttpTestCase
         $merge = $this->decode($offered)['merge'];
         self::assertMatchesRegularExpression('/^[0-9a-f]{64}$/', $merge['token']);
         self::assertSame(MergeOffers::TICKET_SECONDS, $merge['expires_in']);
-        self::assertSame(['name' => 'Ali', 'created_at' => '2026-09-01T10:00:00+00:00', 'services' => 1, 'orders' => 1, 'balance' => '50000.00', 'telegram' => true, 'email' => false, 'google' => false], $merge['account'], 'the other account, for the customer to judge it is theirs');
+        self::assertSame(['name' => 'Ali', 'created_at' => '2026-09-01T10:00:00+00:00', 'services' => 1, 'orders' => 1, 'balance' => '50000.00', 'telegram' => true, 'email' => false, 'google' => false, 'phone' => false], $merge['account'], 'the other account, for the customer to judge it is theirs');
         self::assertSame('other', $merge['keeps'], 'the older stays');
         self::assertSame(2, User::query()->count(), 'nothing merged yet');
 

@@ -1,5 +1,7 @@
 import { QrCode } from 'lucide-react'
+import { PremiumEmoji } from '@/components/bot-texts/premium-emoji'
 import { TelegramText } from '@/components/bot-texts/telegram-html'
+import { leadingPremium, plainShown } from '@/components/bot-texts/wording-problem'
 import type { BotTextKind } from '@/lib/api-types'
 
 interface TextPreviewProps {
@@ -53,12 +55,12 @@ function Bubble({ kind, text }: { kind: BotTextKind; text: string }) {
   )
 }
 
-/** A callback's alert: Telegram shows it over the chat, as typed, with an OK. */
+/** A callback's alert: Telegram shows it over the chat, as typed — a premium emoji as its plain one —, with an OK. */
 function Popup({ text }: { text: string }) {
   return (
     <div className="mx-auto my-auto grid w-64 max-w-full grid-cols-[minmax(0,1fr)] gap-3 rounded-lg px-4 pt-4 pb-2.5 shadow-lg" style={{ background: 'var(--tg-header)' }}>
       <p className="leading-relaxed wrap-anywhere whitespace-pre-wrap" dir="rtl">
-        {text}
+        {plainShown(text)}
       </p>
       <span className="justify-self-end px-2 py-1 text-caption font-semibold" style={{ color: 'var(--tg-accent)' }} dir="ltr">
         OK
@@ -67,13 +69,28 @@ function Popup({ text }: { text: string }) {
   )
 }
 
-/** A button hanging under a message, as wide as it. */
+/**
+ * A button hanging under a message, as wide as it: a premium emoji at the start of its label drawn as its icon, where the
+ * label's own emoji would sit — as the bot sends it (PlainWording::icon()) —, any other as its plain emoji.
+ */
 function InlineButton({ label }: { label: string }) {
+  const lead = leadingPremium(label)
+  const words = lead ? plainShown(label.slice(lead.tag.length)).replace(/^[ \t]+/, '') : ''
+  const icon = lead && words !== '' ? lead : null
+
   return (
     <div className="me-auto grid w-64 max-w-[88%] grid-cols-[minmax(0,1fr)] gap-1">
       <div className="h-9 rounded-xl rounded-bl-sm" style={{ background: 'var(--tg-in)' }} aria-hidden />
       <span className="flex h-8 min-w-0 items-center justify-center overflow-hidden rounded-md px-2 text-caption font-medium" style={{ background: 'var(--tg-inline)' }} dir="rtl">
-        <span className="truncate">{label}</span>
+        <span className="truncate">
+          {icon ? (
+            <>
+              <PremiumEmoji id={icon.id} fallback={icon.emoji} /> {words}
+            </>
+          ) : (
+            plainShown(label)
+          )}
+        </span>
       </span>
     </div>
   )

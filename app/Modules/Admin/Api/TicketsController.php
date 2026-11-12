@@ -40,13 +40,16 @@ final class TicketsController extends ApiController
     }
 
     /**
-     * GET /tickets/{id}
+     * GET /tickets/{id} — support opened it: the customer's messages so far read as read (Tickets::readBySupport()).
      *
      * @param array<string, string> $args
      */
     public function show(Request $request, Response $response, array $args): Response
     {
-        return $this->ticket($response, $args);
+        $ticket = $this->load(Ticket::class, $args, [...TicketDirectory::RELATIONS, 'messages']);
+        $this->support->readBySupport($ticket);
+
+        return $this->json($response, ['ticket' => $this->tickets->detail($ticket)]);
     }
 
     /**

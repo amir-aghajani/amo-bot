@@ -268,12 +268,27 @@ final class BotApiTest extends TestCase
             [[['text' => 'خرید', 'callback_data' => 'buy', 'style' => 'success', 'icon_custom_emoji_id' => '42']]],
             [[['text' => 'خرید', 'callback_data' => 'buy', 'style' => 'success']]],
         ];
+        // A bot text's button with a premium emoji at the start of its label: its icon, and plain in the label when refused.
+        yield "a label's premium emoji" => [
+            static fn(BotApi $api): array => $api->sendMessage(42, 'منو', ['reply_markup' => ['inline_keyboard' => [[['text' => '<tg-emoji emoji-id="7">❌</tg-emoji> انصراف', 'callback_data' => 'drop', 'style' => 'danger']]]]]),
+            $buttons('inline_keyboard'),
+            [[['text' => 'انصراف', 'callback_data' => 'drop', 'style' => 'danger', 'icon_custom_emoji_id' => '7']]],
+            [[['text' => '❌ انصراف', 'callback_data' => 'drop', 'style' => 'danger']]],
+        ];
         yield "a reply button's icon" => [
             static fn(BotApi $api): array => $api->sendMessage(42, 'منو', ['reply_markup' => ['keyboard' => [[['text' => 'خرید', 'style' => 'primary', 'icon_custom_emoji_id' => '42']]]]]),
             $buttons('keyboard'),
             [[['text' => 'خرید', 'style' => 'primary', 'icon_custom_emoji_id' => '42']]],
             [[['text' => 'خرید', 'style' => 'primary']]],
         ];
+    }
+
+    public function testANoticeShowsAPremiumEmojisPlainOne(): void
+    {
+        $this->telegram->api()->answerCallbackQuery('cb-1', '<tg-emoji emoji-id="7">⭐</tg-emoji> امتیاز شما ثبت شد', true);
+
+        self::assertSame('⭐ امتیاز شما ثبت شد', $this->telegram->params(0)['text'], 'a notice draws no premium emoji');
+        self::assertCount(1, $this->telegram->calls());
     }
 
     public function testOnlyARefusalOverPremiumEmojiIsTriedAgain(): void

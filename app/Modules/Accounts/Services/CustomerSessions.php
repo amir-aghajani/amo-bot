@@ -7,6 +7,7 @@ namespace App\Modules\Accounts\Services;
 use App\Core\Http\RequestOrigin;
 use App\Modules\Accounts\DTO\SignedIn;
 use App\Modules\Accounts\Enums\SignInMethod;
+use App\Modules\Accounts\Exceptions\AccountRefusedException;
 use App\Modules\Accounts\Models\CustomerSession;
 use App\Modules\Accounts\Support\DeviceName;
 use App\Modules\Auth\Actor;
@@ -27,7 +28,11 @@ use Psr\Log\LoggerInterface;
  * `authenticated_at` is when a way in was last proven on the session (the sign-in, or POST /me/reauthenticate): changes
  * to how the account is signed in to ask it to be recent (isRecent()), so a leaked token alone changes nothing; the
  * website's admin API asks it over a working day (provenUntil()). `method` is how it was signed in (a strong way proven
- * since replaces a password alone), which the admin API may ask to be strong (isStrong()).
+ * since replaces a password, or a code by SMS, alone), which the admin API may ask to be strong (isStrong()) and refuses
+ * when it is the mini app's launch data (isMiniApp()).
+ *
+ * A panel's preview of the mini app as one of the customers (openPreview(), isPreview()) is a session of theirs only in
+ * what it reads: it is none of their devices — not listed, counted, ended by them, nor pushing one of theirs out.
  */
 final class CustomerSessions
 {
@@ -41,6 +46,12 @@ final class CustomerSessions
     /** How long a proven way in lets the session change how the account is signed in to. */
     public const RECENT_SECONDS = 900;
 
+    /** How long a panel's preview of the mini app lasts from its opening, whatever its use: never extended. */
+    public const PREVIEW_MINUTES = 30;
+
+    /** What a preview session's device says it is: a panel's look, not one of the customer's own. */
+    public const PREVIEW_DEVICE = 'پیش‌نمایش پنل';
+
     private const TOUCH_MINUTES = 5;
 
     public function __construct(
@@ -48,8 +59,11 @@ final class CustomerSessions
         private readonly LoggerInterface $logger,
     ) {}
 
-    /** A new session on the device the request came from, signed in now by `$method`; their oldest ends past MAX_SESSIONS. */
-    public function open(User $user, ServerRequestInterface $request, SignInMethod $method): SignedIn
+    /**
+     * A new session on the device the request came from, signed in now by `$method` — proven at `$provenAt` when the proof
+     * is older than the request (a mini app's launch data), now otherwise —; their oldest ends past MAX_SESSIONS.
+     */
+    public function open(User $user, ServerRequestInterface $request, SignInMethod $method, ?Carbon $provenAt = null): SignedIn
     {
         $token = bin2hex(random_bytes(32));
         $ip = $this->origin->clientIp($request);
@@ -60,15 +74,44 @@ final class CustomerSessions
             'ip' => $ip === '' ? null : mb_substr($ip, 0, 45),
             'method' => $method,
             'last_used_at' => now(),
-            'authenticated_at' => now(),
+            'authenticated_at' => $provenAt ?? now(),
             'expires_at' => now()->addDays(self::LIFETIME_DAYS),
         ]);
         $session->setRelation('user', $user);
 
-        $kept = CustomerSession::query()->where('user_id', $user->id)->orderByDesc('id')->limit(self::MAX_SESSIONS)->pluck('id')->all();
-        CustomerSession::query()->where('user_id', $user->id)->whereNotIn('id', $kept)->delete();
+        $kept = self::own(CustomerSession::query())->where('user_id', $user->id)->orderByDesc('id')->limit(self::MAX_SESSIONS)->pluck('id')->all();
+        self::own(CustomerSession::query())->where('user_id', $user->id)->whereNotIn('id', $kept)->delete();
 
         return new SignedIn($token, $session);
+    }
+
+    /**
+     * A panel's preview of the mini app as `$user` sees it (SignInMethod::Preview): it ends PREVIEW_MINUTES from now
+     * whatever its use, and proves no way in — never recent, never strong. It reads what their own session reads, through
+     * the mini app's key alone, and changes nothing (Http\CustomerAuthMiddleware); it is none of their devices, and they
+     * are told nothing of it — no sign-in's path is taken.
+     */
+    public function openPreview(User $user): SignedIn
+    {
+        $token = bin2hex(random_bytes(32));
+        $session = CustomerSession::query()->create([
+            'user_id' => $user->id,
+            'token_hash' => hash('sha256', $token),
+            'device' => self::PREVIEW_DEVICE,
+            'method' => SignInMethod::Preview,
+            'last_used_at' => now(),
+            'authenticated_at' => null,
+            'expires_at' => now()->addMinutes(self::PREVIEW_MINUTES),
+        ]);
+        $session->setRelation('user', $user);
+
+        return new SignedIn($token, $session);
+    }
+
+    /** Whether the session is a panel's preview of the mini app (openPreview()). */
+    public static function isPreview(CustomerSession $session): bool
+    {
+        return $session->method === SignInMethod::Preview;
     }
 
     /** Whether a way in was proven on the session within RECENT_SECONDS. */
@@ -86,19 +129,66 @@ final class CustomerSessions
     }
 
     /**
-     * A way in proven again on the session: recent from now, and upgraded to `$method` when that is strong and its own
-     * was not (a password alone proven again never downgrades it).
+     * A way in proven again on the session: recent from `$provenAt` (now, unless the proof was made before the request: a
+     * mini app's launch data) — never less recent than it was: an older proof leaves a later one standing —, and upgraded
+     * to `$method` when that is strong and its own was not (a password alone proven again never downgrades it).
      */
-    public function reauthenticated(CustomerSession $session, SignInMethod $method): void
+    public function reauthenticated(CustomerSession $session, SignInMethod $method, ?Carbon $provenAt = null): void
     {
+        $provenAt ??= now();
+        if ($session->authenticated_at?->gt($provenAt) === true) {
+            $provenAt = $session->authenticated_at;
+        }
         $upgrade = $method->strong() && $session->method?->strong() !== true;
-        $session->forceFill(['authenticated_at' => now()] + ($upgrade ? ['method' => $method] : []))->save();
+        $session->forceFill(['authenticated_at' => $provenAt] + ($upgrade ? ['method' => $method] : []))->save();
+    }
+
+    /**
+     * A new secret for the mini app to keep behind the device's fingerprint or face (Telegram's BiometricManager): only
+     * its sha256 is kept, on this session alone, and proving it again (Reauthentication's `biometric`) makes the session
+     * recent. A secret set before is replaced. Shown this once. Only on a session the mini app signed in (isMiniApp()):
+     * a website's token, used through the mini app's public key, would keep itself recent for as long as it lasts.
+     *
+     * @throws AccountRefusedException 422 a session the mini app's launch data did not sign in
+     */
+    public function setBiometric(CustomerSession $session): string
+    {
+        if (!self::isMiniApp($session)) {
+            throw AccountRefusedException::notMiniAppSession();
+        }
+        $secret = bin2hex(random_bytes(32));
+        $session->forceFill(['biometric_hash' => hash('sha256', $secret)])->save();
+
+        return $secret;
+    }
+
+    /** The session's fingerprint secret forgotten: proving it again proves nothing. */
+    public function clearBiometric(CustomerSession $session): void
+    {
+        $session->forceFill(['biometric_hash' => null])->save();
+    }
+
+    /** Whether `$secret` is the one the session keeps behind the device's fingerprint or face. */
+    public static function holdsBiometric(CustomerSession $session, string $secret): bool
+    {
+        return $session->biometric_hash !== null && $secret !== '' && hash_equals($session->biometric_hash, hash('sha256', $secret));
     }
 
     /** Whether the session was signed in strongly, or a strong way was proven on it since. */
     public static function isStrong(CustomerSession $session): bool
     {
         return $session->method?->strong() === true;
+    }
+
+    /**
+     * Whether the session's way in is the mini app's launch data: signed in by it, or a password (or a code by SMS) alone
+     * made strong by it. It stays so for the session's life — a strong way proven since never replaces another
+     * (reauthenticated()) —,
+     * which the website's admin API refuses: the mini app is the customer side alone.
+     */
+    public static function isMiniApp(CustomerSession $session): bool
+    {
+        return $session->method === SignInMethod::MiniApp;
     }
 
     /** The current shop's live session the token opens, with its customer; null for none. */
@@ -144,30 +234,30 @@ final class CustomerSessions
         $this->logger->info('{reviewer} signed customer #{customer} out of the website on every device', ['reviewer' => $actor->reviewer, 'customer' => $user->id]);
     }
 
-    /** How many sessions of the customer's have not ended: the devices they are signed in on. */
+    /** How many sessions of the customer's have not ended: the devices they are signed in on (a panel's preview is none). */
     public function count(User $user): int
     {
-        return self::live(CustomerSession::query())->where('user_id', $user->id)->count();
+        return self::live(self::own(CustomerSession::query()))->where('user_id', $user->id)->count();
     }
 
     /**
-     * End one of the customer's sessions by its id; another customer's is a 404.
+     * End one of the customer's sessions by its id; another customer's — or a panel's preview — is a 404.
      *
      * @throws \Illuminate\Database\Eloquent\ModelNotFoundException
      */
     public function end(User $user, int $id): void
     {
-        $this->close(CustomerSession::query()->where('user_id', $user->id)->findOrFail($id));
+        $this->close(self::own(CustomerSession::query())->where('user_id', $user->id)->findOrFail($id));
     }
 
     /**
-     * The customer's sessions that have not ended, newest first.
+     * The customer's sessions that have not ended, newest first; a panel's preview is none of them.
      *
      * @return Collection<int, CustomerSession>
      */
     public function list(User $user): Collection
     {
-        return self::live(CustomerSession::query())->where('user_id', $user->id)->orderByDesc('id')->get();
+        return self::live(self::own(CustomerSession::query()))->where('user_id', $user->id)->orderByDesc('id')->get();
     }
 
     /**
@@ -212,6 +302,17 @@ final class CustomerSessions
         return $sessions->where('expires_at', '>', now())->where(static fn(Builder $used) => $used
             ->where('last_used_at', '>', $since)
             ->orWhere(static fn(Builder $never) => $never->whereNull('last_used_at')->where('created_at', '>', $since)));
+    }
+
+    /**
+     * The customer's own sessions: every one but a panel's preview (a session older than `method` among them).
+     *
+     * @param Builder<CustomerSession> $sessions
+     * @return Builder<CustomerSession>
+     */
+    private static function own(Builder $sessions): Builder
+    {
+        return $sessions->where(static fn(Builder $own) => $own->whereNull('method')->orWhere('method', '!=', SignInMethod::Preview->value));
     }
 
     private static function idleSince(): Carbon

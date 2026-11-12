@@ -8,6 +8,7 @@ use App\Modules\Telegram\Api\BotApi;
 use App\Modules\Telegram\Api\Refusal;
 use App\Modules\Telegram\Api\TelegramApiException;
 use App\Modules\Telegram\Session\ChatSession;
+use App\Modules\Telegram\Texts\PlainWording;
 use App\Modules\Telegram\Update\Update;
 use App\Modules\Users\Models\User;
 
@@ -211,7 +212,7 @@ final class Context
     /**
      * A refusal's plain words (a popup's text): in a popup on the button tapped, the screen left as it was — or, for
      * something typed at a step (no button to answer, so a popup would never show), a message of its own with
-     * `$options`, the step over.
+     * `$options`, the step over, its premium emoji kept (PlainWording).
      *
      * @param array<string, mixed> $options sendMessage options (reply_markup etc.)
      */
@@ -224,7 +225,7 @@ final class Context
         }
 
         $this->session->clear();
-        $this->reply(htmlspecialchars($text), $options);
+        $this->reply(PlainWording::html($text), $options);
     }
 
     /** Whether the tap was answered; a failure after that is reported in a message instead. */

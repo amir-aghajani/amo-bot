@@ -23,6 +23,7 @@ use App\Modules\Telegram\Qr\QrCard;
 use App\Modules\Telegram\Texts\BotText;
 use App\Modules\Telegram\Texts\BotTexts;
 use App\Modules\Telegram\Texts\Html;
+use App\Modules\Telegram\Texts\PremiumText;
 use App\Modules\Telegram\Texts\TelegramHtml;
 use App\Support\Persian;
 use Psr\Log\LoggerInterface;
@@ -50,12 +51,14 @@ final class ServiceCard
     ) {}
 
     /**
-     * What every text about one service is filled with; a free test, which has no plan, is named as one, a service its
+     * What every text about one service is filled with — the service by its client name, the username the panel knows it
+     * by and support asks for (the customer's own name for it is for the screens they open, Subscription::shownAs(), never
+     * a card's line to copy); a free test, which has no plan, is named as one, a service its
      * customer built as one, and one added by its link and not renewed on a plan as having none. The link is the one
      * subscription link the row keeps, never the per-inbound config links (a panel with thirty inbounds would make a
      * wall of them; the link carries them all).
      *
-     * @return array{client: string, plan: string|Html, server: string, duration: string, expires: string, traffic: string, remaining: string, subscription: string}
+     * @return array{client: string, plan: string|Html|PremiumText, server: PremiumText, duration: string, expires: string, traffic: string, remaining: string, subscription: string}
      */
     public function values(Subscription $subscription): array
     {
@@ -65,13 +68,13 @@ final class ServiceCard
             'client' => $subscription->remote_name,
             'plan' => match (true) {
                 $subscription->is_test => $this->texts->part(BotText::TestPlanName),
-                $subscription->plan !== null => $subscription->plan->name,
+                $subscription->plan !== null => PremiumText::plan($subscription->plan),
                 // Built by its customer («سرویس دلخواه»): neither added by its link nor ever on a plan.
                 $subscription->plan_id === null && $subscription->claimed_at === null => $this->texts->part(BotText::CustomPlanName),
                 // Added by its link and not renewed on a plan.
                 default => $this->texts->part(BotText::NoPlanName),
             },
-            'server' => $subscription->server->name,
+            'server' => PremiumText::server($subscription->server),
             'duration' => Messages::duration($subscription->duration_hours),
             'expires' => Messages::expiry($subscription->expires_at, $subscription->duration_hours),
             'traffic' => Messages::traffic($subscription->traffic_limit_bytes),
@@ -187,13 +190,14 @@ final class ServiceCard
             return $this->texts->render(BotText::PayFirstPurchaseUsed, ['order' => $order->id]);
         }
         if ($failure === OrderFailure::ServiceChangedHands) {
+            // No longer theirs: its new owner's own name for it is not theirs to read.
             return $this->texts->render(BotText::PayServiceChangedHands, ['order' => $order->id, 'client' => self::subscriptionOf($order)->remote_name]);
         }
 
         return match ($order->type) {
             OrderType::Purchase => $this->texts->get(BotText::PayProvisionFailed),
-            OrderType::Renewal => $this->texts->render(BotText::RenewFailed, ['client' => self::subscriptionOf($order)->remote_name]),
-            OrderType::ExtraTraffic, OrderType::ExtraTime, OrderType::ExtraDevices => $this->texts->render(BotText::ExtraFailed, ['client' => self::subscriptionOf($order)->remote_name, 'extra' => self::extraOf($order)]),
+            OrderType::Renewal => $this->texts->render(BotText::RenewFailed, ['client' => self::subscriptionOf($order)->shownAs()]),
+            OrderType::ExtraTraffic, OrderType::ExtraTime, OrderType::ExtraDevices => $this->texts->render(BotText::ExtraFailed, ['client' => self::subscriptionOf($order)->shownAs(), 'extra' => self::extraOf($order)]),
             OrderType::WalletTopUp => $this->texts->get(BotText::TopupFailed),
             OrderType::Traffic => $this->texts->get(BotText::AgencyTrafficFailed),
         };

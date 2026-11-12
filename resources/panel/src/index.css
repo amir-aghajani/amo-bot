@@ -489,6 +489,41 @@
 }
 
 /*
+ * A setting the settings search opened (components/settings-search/arrival): its field (or card) ringed for a moment —
+ * a soft halo of the focus blue around it, with a hairline of it, fading out over two seconds; nothing of its own
+ * surface changes. Under reduced motion the ring stands still for those two seconds and goes at once.
+ */
+@keyframes setting-arrival {
+  0%,
+  55% {
+    box-shadow:
+      0 0 0 8px color-mix(in srgb, var(--focus) 12%, transparent),
+      0 0 0 9px color-mix(in srgb, var(--focus) 50%, transparent);
+  }
+  100% {
+    box-shadow:
+      0 0 0 8px transparent,
+      0 0 0 9px transparent;
+  }
+}
+
+@layer components {
+  [data-arrived] {
+    border-radius: var(--radius-md);
+    animation: setting-arrival 2s cubic-bezier(0.2, 0, 0, 1) forwards;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    [data-arrived] {
+      animation: none;
+      box-shadow:
+        0 0 0 8px color-mix(in srgb, var(--focus) 12%, transparent),
+        0 0 0 9px color-mix(in srgb, var(--focus) 50%, transparent);
+    }
+  }
+}
+
+/*
  * Optical centring of Latin text. Vazirmatn's Latin letters and digits carry their mass about 0.1em higher than its
  * Persian letters, whose bodies sit on the baseline (measured centroids: Persian 0.18em above the baseline, Latin
  * 0.29em, digits 0.35em; the font's own centre is 0.245em). Metric centring is therefore right for Persian and about
@@ -598,4 +633,16 @@ textarea[dir='ltr'],
 }
 .emoji-repaint svg [stroke]:not([stroke='none'], mask *, clipPath *) {
   stroke: currentColor;
+}
+
+/* The mini app's preview (components/mini-app/preview/telegram-phone): the light that sweeps across Telegram's main
+   button while the app asks for its shine. */
+@keyframes tg-shine {
+  0% {
+    translate: -100% 0;
+  }
+  20%,
+  100% {
+    translate: 100% 0;
+  }
 }

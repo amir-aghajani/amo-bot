@@ -13,16 +13,16 @@ use App\Modules\Reviews\Exceptions\ReviewsFullException;
 use App\Modules\Reviews\Exceptions\SignInToReviewException;
 use App\Modules\Reviews\Services\ReviewDirectory;
 use App\Modules\Reviews\Services\Reviews;
+use App\Modules\Store\Contracts\Door;
 use App\Modules\Store\Exceptions\ReviewsOffException;
 use App\Modules\Store\Http\StoreMiddleware;
-use App\Modules\Store\Models\Website;
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 
 /**
- * The customers' reviews, while the website shows them (`reviews_enabled`; off, both routes are a 404): the approved ones
- * with their summary, and a new review (Reviews\Services\Reviews) — a guest's, or a signed-in customer's — that waits for
- * support's approval.
+ * The customers' reviews, while the website — or the mini app — shows them (`reviews_enabled`, each door its own; off,
+ * both routes are a 404): the approved ones with their summary, and a new review (Reviews\Services\Reviews) — a guest's,
+ * or a signed-in customer's — that waits for support's approval.
  */
 final class ReviewsController extends ApiController
 {
@@ -62,14 +62,14 @@ final class ReviewsController extends ApiController
     }
 
     /**
-     * The request's website, while it shows and takes reviews.
+     * The request's door — its website or its mini app —, while it shows and takes reviews.
      *
      * @throws ReviewsOffException 404
      */
-    private static function open(Request $request): Website
+    private static function open(Request $request): Door
     {
-        $website = StoreMiddleware::website($request);
+        $door = StoreMiddleware::door($request);
 
-        return $website->reviews_enabled ? $website : throw new ReviewsOffException();
+        return $door->showsReviews() ? $door : throw new ReviewsOffException();
     }
 }

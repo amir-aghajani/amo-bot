@@ -11,7 +11,10 @@ use App\Modules\Accounts\Http\Customer;
 use App\Modules\Auth\Actor;
 use App\Modules\Providers\DTO\ClientInfo;
 use App\Modules\Providers\Exceptions\PanelFailedException;
+use App\Modules\Store\Exceptions\QrCardUnavailableException;
+use App\Modules\Store\Http\StoreMiddleware;
 use App\Modules\Store\Presenters\RecipientPresenter;
+use App\Modules\Store\Services\CustomerGates;
 use App\Modules\Store\Services\CustomerSubscriptions;
 use App\Modules\Subscriptions\Exceptions\AutoRenewUnavailableException;
 use App\Modules\Subscriptions\Exceptions\ServiceBusyException;
@@ -25,14 +28,15 @@ use Psr\Http\Message\ServerRequestInterface as Request;
 
 /**
  * A signed-in customer's services (Store\Services\CustomerSubscriptions): the list, one of them (another customer's is a
- * 404), read from its panel now, its «تمدید خودکار», a new link, handed to another customer (ServiceTransfers, as the
- * bot does it) — and one added by its link.
+ * 404), read from its panel now, its «تمدید خودکار» and their own name for it, a new link, its QR card, handed to another
+ * customer (ServiceTransfers, as the bot does it) — and one added by its link.
  */
 final class SubscriptionsController extends ApiController
 {
     public function __construct(
         private readonly CustomerSubscriptions $subscriptions,
         private readonly ServiceTransfers $transfers,
+        private readonly CustomerGates $gates,
     ) {}
 
     /** GET /subscriptions — ?status=&page=, newest first. */
@@ -56,15 +60,17 @@ final class SubscriptionsController extends ApiController
 
     /**
      * POST /subscriptions/claim — {link}: «افزودن سرویس با لینک», the service its link is for added to the customer's
-     * account; a 201 with it.
+     * account; a 201 with it. Through the mini app, once the bot's gates let them (CustomerGates::holdBack()).
      *
-     * @throws ValidationException 422 on `link`: too long
+     * @throws ValidationException 422 on `link`: too long; on `status`: the bot's gates hold them back
      * @throws ServiceClaimRefusedException 422 / 409 / 502 on `link`
      * @throws TooManyAttemptsException 429
      */
     public function claim(Request $request, Response $response): Response
     {
-        $subscription = $this->subscriptions->claim(Customer::of($request)->user, $this->input($request));
+        $customer = Customer::of($request)->user;
+        $this->gates->holdBack(StoreMiddleware::door($request), $customer);
+        $subscription = $this->subscriptions->claim($customer, $this->input($request));
 
         return $this->json($response, ['subscription' => $this->subscriptions->present($subscription)], 201);
     }
@@ -84,19 +90,32 @@ final class SubscriptionsController extends ApiController
     }
 
     /**
-     * PATCH /subscriptions/{id} — {auto_renew}: its «تمدید خودکار», on or off.
+     * PATCH /subscriptions/{id} — {auto_renew?, label?}: its «تمدید خودکار», on or off, and the customer's name for it.
      *
      * @param array<string, string> $args
      * @throws ModelNotFoundException 404
-     * @throws ValidationException 422 on `auto_renew`: no switch
+     * @throws ValidationException 422: nothing sent; on `auto_renew`: no switch; on `label`
      * @throws AutoRenewUnavailableException 422 on `auto_renew`: not offered
      */
     public function update(Request $request, Response $response, array $args): Response
     {
         $subscription = $this->own($request, $args);
-        $this->subscriptions->autoRenew($subscription, $this->switch($request, 'auto_renew'));
+        $this->subscriptions->update($subscription, $this->input($request));
 
         return $this->answer($response, $subscription);
+    }
+
+    /**
+     * GET /subscriptions/{id}/qr — its QR card, as the bot sends it with a delivery; never cached, as its link may change.
+     *
+     * @param array<string, string> $args
+     * @throws ModelNotFoundException 404: another's, or one without a link
+     * @throws TooManyAttemptsException 429
+     * @throws QrCardUnavailableException 503
+     */
+    public function qr(Request $request, Response $response, array $args): Response
+    {
+        return $this->bytes($response, $this->subscriptions->qrCard($this->own($request, $args)), 'image/jpeg', 'private, no-cache');
     }
 
     /**

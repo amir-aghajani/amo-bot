@@ -12,6 +12,23 @@ const VARIABLE = /%([A-Za-z_][A-Za-z0-9_]*)%/g
 /** A tag in a text Telegram shows as typed (a popup, a button). */
 const ANY_TAG = /<\/?[a-z][a-z-]*[^>]*>/i
 
+/**
+ * A premium emoji as a popup or a button carries it, written as the picker writes it (PlainWording::TAG): its id, and the
+ * plain emoji Telegram shows where the premium one cannot be — a notice; a button's leading one is its icon.
+ */
+const PLAIN_PREMIUM = /<tg-emoji emoji-id="(\d{1,20})">([^<]*)<\/tg-emoji>/gu
+
+/** What a notice shows of a popup's or a button's wording (PlainWording::shown()): each premium emoji's plain one. */
+export function plainShown(text: string): string {
+  return text.replace(PLAIN_PREMIUM, '$2')
+}
+
+/** A button label's leading premium emoji — its icon: the id, its plain emoji and the tag as written; null without one. */
+export function leadingPremium(label: string): { id: string; emoji: string; tag: string } | null {
+  const [tag, id, emoji] = new RegExp(PLAIN_PREMIUM.source, 'u').exec(label) ?? []
+  return tag !== undefined && id !== undefined && emoji !== undefined && label.startsWith(tag) ? { id, emoji, tag } : null
+}
+
 /** What PHP's trim() takes off a wording's ends: ASCII spaces (not the form feed) and NUL — a no-break space stays. */
 const TRIMMED_START = /^[ \t\n\r\0\v]+/
 const TRIMMED_END = /[ \t\n\r\0\v]+$/
@@ -46,7 +63,7 @@ const INVISIBLE = /[\p{Z}\p{Cc}\p{Cf}\u{034F}\u{115F}\u{1160}\u{17B4}\u{17B5}\u{
  * part may be blank: it then shows nothing in the text that takes it in.
  */
 export function blankWording(text: Pick<BotTextRow, 'kind' | 'html'>, kept: string): boolean {
-  return text.kind !== 'part' && (text.html ? visibleText(kept) : kept).replace(INVISIBLE, '') === ''
+  return text.kind !== 'part' && (text.html ? visibleText(kept) : plainShown(kept)).replace(INVISIBLE, '') === ''
 }
 
 /** The server's refusal of a wording with nothing in it (BotTexts::EMPTY). */
@@ -54,8 +71,8 @@ const EMPTY = 'متن نمی‌تواند خالی باشد.'
 
 /**
  * What the server would refuse in a wording, or null — the first of, in the server's order (the length aside): empty, a
- * button on two lines, an unknown or missing required variable, tags where there is no formatting or Telegram HTML that
- * Telegram would not take, then blank as Telegram reads it (blankWording()) — the HTML before it, so an unfinished tag,
+ * button on two lines, an unknown or missing required variable, a tag but a premium emoji where there is no formatting
+ * (or a premium emoji there where it cannot be) or Telegram HTML that Telegram would not take, then blank as Telegram reads it (blankWording()) — the HTML before it, so an unfinished tag,
  * which strip_tags() swallows, is told as what it is.
  */
 export function wordingProblem(text: Pick<BotTextRow, 'kind' | 'html' | 'variables'>, input: string): string | null {
@@ -72,7 +89,7 @@ export function wordingProblem(text: Pick<BotTextRow, 'kind' | 'html' | 'variabl
   const missing = text.variables.find((variable) => variable.required && !used.includes(variable.name))
   if (missing) return `متغیر %${missing.name}% باید در متن بماند.`
 
-  const markup = text.html ? telegramHtmlProblem(value) : ANY_TAG.test(value) ? 'این متن قالب‌بندی ندارد و تگ‌ها همان‌طور که نوشته شده‌اند نشان داده می‌شوند؛ آن‌ها را بردارید.' : null
+  const markup = text.html ? telegramHtmlProblem(value) : plainProblem(text.kind, value)
   if (markup !== null) return markup
 
   return blankWording(text, value) ? EMPTY : null
@@ -118,6 +135,28 @@ const TIME_UNIX = 'تگ <tg-time> باید زمان را به ثانیه‌ها�
 const TIME_FORMAT_REFUSED = 'مقدار format در تگ <tg-time> یا r است، یا از w، سپس d یا D، سپس t یا T ساخته می‌شود (مثلا wDT)؛ یا format را ننویسید تا متن همان‌طور که هست نشان داده شود.'
 const TIME_FORMAT_BARE = 'مقدار format در تگ <tg-time> را داخل "…" بنویسید؛ بدون آن تلگرام حروف بزرگ آن را کوچک می‌خواند.'
 const TIME_CONTENT = 'داخل <tg-time> متنی بنویسید؛ همان است که جاهایی که زمان نشان داده نمی‌شود دیده می‌شود.'
+
+const NO_TAGS = 'این متن قالب‌بندی ندارد و تگ‌ها همان‌طور که نوشته شده‌اند نشان داده می‌شوند؛ آن‌ها را بردارید. تنها تگی که پذیرفته می‌شود ایموجی پرمیوم (<tg-emoji>) است.'
+const FORM = 'ایموجی پرمیوم را همان‌طور بنویسید که «ایموجی پرمیوم» می‌گذارد؛ مثلا <tg-emoji emoji-id="5368324170671202286">👍</tg-emoji>.'
+const BUTTON_PLACE = 'دکمه فقط یک ایموجی پرمیوم می‌گیرد، آن هم اول متن: تلگرام آن را آیکون دکمه، پیش از متن آن، نشان می‌دهد.'
+const BUTTON_WORDS = 'کنار ایموجی پرمیوم، متنی هم برای دکمه بنویسید.'
+
+/**
+ * What is wrong with the premium emoji of a popup's or a button's wording, or null (PlainWording::problem()): a tag but a
+ * premium emoji, one written otherwise than the picker writes it, one that holds no single plain emoji — and a button's:
+ * more than one, one anywhere but at the start of the label, or one with no words beside it.
+ */
+function plainProblem(kind: BotTextKind, value: string): string | null {
+  const tags = [...value.matchAll(PLAIN_PREMIUM)]
+  if (tags.some((tag) => !isEmoji(tag[2] ?? ''))) return EMOJI_CONTENT
+  const rest = value.replace(PLAIN_PREMIUM, '')
+  if (/<\/?tg-emoji\b/i.test(rest)) return FORM
+  if (ANY_TAG.test(rest)) return NO_TAGS
+  const first = tags[0]
+  if (kind !== 'button' || first === undefined) return null
+  if (tags.length > 1 || first.index !== 0) return BUTTON_PLACE
+  return value.slice(first[0].length).replace(INVISIBLE, '') === '' ? BUTTON_WORDS : null
+}
 
 /** PHP's ctype_space: the ASCII spaces. */
 const isSpace = (char: string | undefined): boolean => char !== undefined && ' \t\n\r\v\f'.includes(char)
@@ -340,7 +379,7 @@ function premiumEmoji(text: string, end: number, found: Map<string, string>): st
 }
 
 /** One emoji — a pictograph with its modifiers and joiners, a flag, a keycap — rather than text. */
-function isEmoji(text: string): boolean {
+export function isEmoji(text: string): boolean {
   if (text === '' || [...text].length > 16 || /[\s\p{L}<>&]/u.test(text)) return false
   // A digit, a sign or a bare arrow is text; a keycap (1️⃣) and an emoji arrow (↔️) carry their marks.
   if (/^[\p{N}\p{P}\p{Sm}]+$/u.test(text)) return false

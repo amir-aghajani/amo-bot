@@ -10,7 +10,7 @@ import { json, refusal, server } from '@/test/server'
  * not know —, and says the bot's rule as the bot keeps it: the category step comes as soon as one category is active.
  */
 
-const MONTHLY: PlanCategoryRow = { id: 1, name: 'ماهانه', is_active: true, sort: 1, counts: { plans: 2 }, created_at: '2026-10-01T10:00:00Z', updated_at: '2026-10-01T10:00:00Z' }
+const MONTHLY: PlanCategoryRow = { id: 1, name: 'ماهانه', emoji_id: null, is_active: true, sort: 1, counts: { plans: 2 }, created_at: '2026-10-01T10:00:00Z', updated_at: '2026-10-01T10:00:00Z' }
 
 function open(answer = json({ categories: [MONTHLY] } satisfies PlanCategoriesResponse)) {
   server().on('GET', '/api/admin/plans/categories', answer)

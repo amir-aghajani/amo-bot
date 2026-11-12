@@ -2,8 +2,8 @@
 
 # Store API: the account
 
-The signed-in customer's own account: who they are, how they sign in, their devices — and two accounts of theirs made
-one. Paths are under the [base address](Store-API.md#the-base-address); every one here takes the customer's bearer
+The signed-in customer's own account: who they are, how they sign in, this session and their devices — and two accounts
+of theirs made one. Paths are under the [base address](Store-API.md#the-base-address); every one here takes the customer's bearer
 token ([tokens and sessions](Store-API-Sign-In.md#tokens-and-sessions)).
 
 ## The account
@@ -30,7 +30,8 @@ token ([tokens and sessions](Store-API-Sign-In.md#tokens-and-sessions)).
     "tier": { "id": 2, "name": "نقره‌ای", "discount_percent": 3, "cashback_percent": 1 },
     "spent": "750000.00",
     "next": { "name": "طلایی", "min_spent": "2000000.00", "missing": "1250000.00" }
-  }
+  },
+  "session": { "method": "password_2fa", "biometric": false, "recent_until": null }
 }
 ```
 
@@ -43,16 +44,17 @@ token ([tokens and sessions](Store-API-Sign-In.md#tokens-and-sessions)).
 | `google` | a Google account signs them in |
 | `has_password` | their email and a password sign them in |
 | `two_factor` | the password sign-in asks a second step ([two-factor sign-in](#two-factor-sign-in)) |
-| `phone` | E.164, as they shared it with the bot; `null` without one |
+| `phone` | their verified mobile in E.164 — as they shared it with the bot, or proved by a texted code on the website; while the website signs in by SMS it is a way in ([ways in](#ways-in-adding-and-removing)); `null` without one |
 | `balance` | the wallet in Toman; below zero an agent's debt |
 | `created_at` | since when they are the shop's customer |
 | `unread_notifications` | the count for the site's bell ([notifications](Store-API-Notifications.md)) |
-| `staff` | what the shop's admin API lets them do — their grants, whether this session is signed in strongly enough, until when it works the admin API and until when it counts as recent —; `null` for a customer who is no admin of the shop, and while the website lets no admin in ([the shop's admins](Store-API-Admins.md#signing-in)) |
+| `staff` | what the shop's admin API lets them do — their grants, whether this session is signed in strongly enough, until when it works the admin API and until when it counts as recent —; `null` for a customer who is no admin of the shop, while the website lets no admin in, through the mini app, which has no admin API, and for a session the mini app signed in, which the admin API refuses on the website too ([the shop's admins](Store-API-Admins.md#signing-in)) |
 | `loyalty` | their loyalty tier — `tier` (its name, the discount it gives at their checkouts and the extra cashback it adds) or `null` below the first —, what they `spent` (purchases, renewals and extras paid and not given back, Toman), and the `next` tier with what is still `missing` to reach it, `null` at the top; a shop with no tier has both `null` ([loyalty tiers](Loyalty-Cashback-And-Draws.md#loyalty-tiers)) |
+| `session` | this session: `method`, how it was signed in or the stronger way proven on it since (`telegram`, `mini_app`, `google`, `phone`, `password`, `password_2fa` — or `preview`, a panel's look at the mini app as this customer: read only, through the mini app's key alone, for 30 minutes, [a panel's preview](Store-API-Sign-In.md#a-panels-preview)); `biometric`, whether the mini app keeps a fingerprint secret for it ([fingerprint or face](#fingerprint-or-face)); and `recent_until`, until when it counts as recently signed in — `null` once that has passed: prove a way in again before what asks it ([a recent sign-in](#a-recent-sign-in)) |
 
 `PATCH /me` answers as `GET /me` does. `PUT /me/password`, `POST /me/2fa/disable`, a way in added or removed (the `200`s
 of `/me/identities/*`) and `POST /me/merge` answer `{ "customer": … }` alone — the same `customer` object, without
-the count, `staff` or `loyalty`. The rest answer what they make: a secret to set up, recovery codes, how long a code
+the count, `staff`, `loyalty` or `session`. The rest answer what they make: a secret to set up, recovery codes, how long a code
 or a proof lasts, a merge offer.
 
 ## A recent sign-in
@@ -64,8 +66,9 @@ session than its token, so a token that leaked takes no account over and gives n
 |---|---|
 | `PUT /me/password` | [password](#password) |
 | `POST /me/2fa/setup`, `POST /me/2fa/enable`, `POST /me/2fa/disable` | [two-factor sign-in](#two-factor-sign-in) |
-| `POST /me/identities/telegram`, `…/google`, `…/email`, `…/email/verify`, and `DELETE /me/identities/{kind}` | [ways in](#ways-in-adding-and-removing) |
+| `POST /me/identities/telegram`, `…/google`, `…/email`, `…/email/verify`, `…/phone`, `…/phone/verify`, and `DELETE /me/identities/{kind}` | [ways in](#ways-in-adding-and-removing) |
 | `POST /me/merge` | [the merge offer](#the-merge-offer) |
+| `PUT /me/biometric`, which makes a secret that proves a way in (the mini app's alone) | [fingerprint or face](#fingerprint-or-face) |
 | `POST /subscriptions/{id}/transfer`, which gives a service away | [handing a service to another customer](Store-API-After-Buying.md#handing-a-service-to-another-customer) |
 | `POST /wallet/transfer`, which sends money away | [sending money to another customer](Store-API-After-Buying.md#sending-money-to-another-customer) |
 
@@ -86,6 +89,24 @@ Offer the ways the account has:
 | `password` | `{ method, password, code? }` — `code` the app's code or a recovery code, as the second step takes it ([a password and the second step](Store-API-Sign-In.md#a-password-and-the-second-step)), required while `two_factor` is on; a recovery code used here is spent, as at a sign-in | `has_password` |
 | `telegram` | the popup's `{ method, id_token, nonce }` ([the popup](Store-API-Sign-In.md#telegram-the-popup)), or — while `GET /`'s `sign_in.telegram.redirect` is true — the redirect's `{ method, code, state, code_verifier }` with a state this very session asked `POST /me/telegram/authorize` for ([the redirect](Store-API-Sign-In.md#telegram-the-redirect)) | `customer.telegram` is not `null`, and `GET /` offers Telegram |
 | `google` | `{ method, id_token, nonce }` ([Google](Store-API-Sign-In.md#google)) | `google`, and `GET /` offers Google |
+| `phone` | `{ method, code }` — the six-digit code `POST /me/reauthenticate/phone` texted to the account's mobile for this very session (below) | `phone` is an Iranian mobile, `two_factor` is off, and `GET /` offers `sign_in.phone` |
+| `mini_app` | `{ method, init_data }` — the launch data Telegram handed the mini app ([the mini app](Store-API-Sign-In.md#the-mini-app)), made at most 15 minutes ago: the session counts as recent from its `auth_date`, never less recent than it was | in the mini app, while its launch is fresh — never on a website |
+| `biometric` | `{ method, token }` — this session's fingerprint secret, as Telegram hands it back once the fingerprint or face matched ([fingerprint or face](#fingerprint-or-face)) | in the mini app, while `session.biometric` is true — never on a website |
+
+The last two are the mini app's alone: under a website's key they are refused on `method`, however well the proof
+holds.
+
+`phone` takes two steps. `POST /me/reauthenticate/phone` (no body) texts a code to the account's own mobile and answers
+`202` `{ "sent": true, "expires_in": 300, "resend_in": 60 }`, as `POST /auth/phone` does
+([a code by SMS](Store-API-Sign-In.md#a-code-by-sms)); then `POST /me/reauthenticate` `{ "method": "phone", "code": … }`
+proves it. The code is this session's alone — another device of the customer's proves nothing by it —, lives five
+minutes and takes five tries. A website's way: under the mini app's key the first step is no route and `phone` the
+website's switch refused. It is `422` on `method` for an account without an Iranian mobile
+(`این حساب شماره موبایلی ندارد که پیامک به آن برسد؛ با روش ورود دیگری تایید کنید.`) and for one with two-factor
+sign-in on, whose password and code prove it (`این حساب ورود دو مرحله‌ای دارد؛ با رمز عبور و کد برنامه احراز هویت تایید کنید.`:
+a SIM swapped, or a number given to someone else, reads a texted code), `422` with no field while the
+website does not sign in by SMS, and its sends are held to the SMS budgets — a customer asks for ten codes a day, numbers
+added and proven again together.
 
 `POST /me/reauthenticate` request
 ```json
@@ -106,9 +127,16 @@ The refusals:
     کنید.`);
   - a Telegram or Google proof that does not hold (on `id_token`, or the redirect's `code`), or that proves another
     account (`این ورود مال حساب دیگری است؛ با یکی از روش‌های ورود همین حساب تایید کنید.`);
-  - a `method` none of the three, on `method`.
+  - launch data that does not hold or is over 15 minutes old, on `init_data` (`ورود از مینی‌اپ تایید نشد؛ مینی‌اپ را
+    ببندید و دوباره از ربات باز کنید.`), or that is another Telegram account's — an account without Telegram among them
+    — (`این ورود مال حساب دیگری است؛ …`);
+  - a fingerprint secret that is not this session's, on `token` (`تایید با اثر انگشت یا چهره درست نبود؛ مینی‌اپ را
+    ببندید و دوباره از ربات باز کنید.`): another session's, one replaced or forgotten, or none kept;
+  - a texted code that is wrong, expired, spent or another session's, on `code` (`کد درست نیست یا منقضی شده است.`);
+  - a `method` none of the six, on `method`; `mini_app` or `biometric` under a website's key, on `method` too
+    (`این روش تایید فقط در مینی‌اپ فروشگاه کار می‌کند؛ با روش ورود دیگری تایید کنید.`).
 - `422` with no field: a way the website switched off since `GET /` was read (`ورود با تلگرام برای این وب‌سایت فعال
-  نیست.`, `ورود با Google برای این وب‌سایت فعال نیست.`).
+  نیست.`, `ورود با Google برای این وب‌سایت فعال نیست.`, `ورود با شماره موبایل برای این وب‌سایت فعال نیست.`).
 - `429`: each failed proof counts as a failed sign-in — a code against the second step's budget too — under the
   [limits and lifetimes](Store-API-Sign-In.md#limits-and-lifetimes).
 - `502`: the provider out of reach.
@@ -116,10 +144,13 @@ The refusals:
 Adding a way in ([ways in](#ways-in-adding-and-removing)) proves only the way being added: it does not renew the 15
 minutes.
 
-A session remembers how it was signed in, too. One signed in with a password alone becomes a strong one — what the
-shop's admin API asks of its admins ([the shop's admins](Store-API-Admins.md#signing-in)) — once a strong way is proven
-on it here: Telegram, Google, or the password with its code. A password proven again alone renews the sign-in — the 15
-minutes, and the 12 hours an admin's session works the admin API — but does not make it a strong one.
+A session remembers how it was signed in, too. One signed in with a password or a texted code alone becomes a strong
+one — what the shop's admin API asks of its admins ([the shop's admins](Store-API-Admins.md#signing-in)) — once a strong
+way is proven on it here: Telegram, Google, the mini app's launch data, or the password with its code. A password or a
+texted code proven again alone renews the sign-in — the 15 minutes, and the 12 hours an admin's session works the admin
+API — but does not make it a strong one; nor does the fingerprint secret, which proves the session's own holder again and leaves its `method` as it
+was. A strong `method` stays for the session's life, `mini_app` among them — and a session whose `method` is `mini_app`
+works no admin API, the mini app being the customer side alone.
 
 The site's part: send the change; on that `403`, ask the customer to prove a way in, then send the change again —
 refused before it ran, it now runs for the first time.
@@ -139,9 +170,9 @@ export async function withRecentSignIn<T>(change: () => Promise<T>, reprove: () 
 // await withRecentSignIn(() => store('/me/identities/google', { method: 'DELETE' }), askToProve)
 ```
 
-A change that goes through Telegram or Google — adding one, or the redirect — is smoother proven before it starts: keep
-when the session last proved itself (its sign-in, or a re-proof's `expires_in`) and ask first once 15 minutes have gone,
-so the customer meets one prompt rather than a provider's window and then another.
+A change that goes through Telegram or Google — adding one, or the redirect — is smoother proven before it starts:
+`GET /me`'s `session.recent_until` says until when the session counts as recent (a re-proof's `expires_in` says it too);
+once it is `null`, ask first, so the customer meets one prompt rather than a provider's window and then another.
 
 **Every such change is told the customer** — a way in added or taken away, a password set or changed, two-factor
 sign-in turned on or off, two accounts merged, the second step failed until it waits, the codes emailed to their address
@@ -218,33 +249,63 @@ in Telegram and by email. An admin's own two-factor sign-in is turned off from t
 Newest first, 20 at most ([tokens and sessions](Store-API-Sign-In.md#tokens-and-sessions)); `device` is what the
 browser said it is, in words; `ip` the address it signed in from; `current` is the device asking; `last_used_at` is
 written every few minutes, not on each request. `DELETE /me/sessions/{id}` ends one (`204`) — ending `current` signs this
-device out, like `POST /auth/logout`. Another customer's session is `404`.
+device out, like `POST /auth/logout`. Another customer's session is `404`. A panel's preview of the mini app
+([a panel's preview](Store-API-Sign-In.md#a-panels-preview)) is none of their devices: it is not listed here, and its id
+is a `404` here too.
+
+## Fingerprint or face
+
+The mini app can prove a way in again by the device's fingerprint or face, through Telegram's `BiometricManager`, without
+the shop ever seeing either: the shop gives the session a secret, Telegram keeps it in the device's secure storage and
+hands it back only once the fingerprint or face matches, and the app sends it to `POST /me/reauthenticate` as
+`{ "method": "biometric", "token": … }` ([a recent sign-in](#a-recent-sign-in)).
+
+`PUT /me/biometric` (no body), with a recent sign-in → `200`
+```json
+{ "token": "4f9c2d7e1a8b3f6c0e5d9a2b7c4f1e8d3a6b0c9f2e5d8a1b4c7f0e3d6a9b2c5f" }
+```
+
+- The `token` — 64 hex characters, shown this once — goes to `BiometricManager.updateBiometricToken`. Only its sha256 is
+  kept, on this session alone: it proves nothing on the customer's other sessions, and a new `PUT` replaces it.
+- Making one asks a recent sign-in, since proving it again proves a way in: a `403` with the challenge otherwise. It is
+  made only on a session the mini app signed in (`session.method` `mini_app`): another session's token, used through
+  the mini app's key, is a `422` — it would keep itself recent for as long as it lasts.
+- `DELETE /me/biometric` (`204`) forgets it; so does the session's end. `GET /me`'s `session.biometric` says whether one
+  is kept.
+- Both are the mini app's alone: under a website's key they are `404`, as if they were not there, and
+  `POST /me/reauthenticate` refuses `biometric` there on `method`. A website has no fingerprint to keep the secret
+  behind — kept beside the bearer token, the pair would keep the session recent for as long as it lasts.
+- Proving it renews the session's 15 minutes from now; failed, it counts as a failed sign-in of the address
+  ([limits and lifetimes](Store-API-Sign-In.md#limits-and-lifetimes)).
 
 ## Ways in: adding and removing
 
-An account has at most one of each: a Telegram account, a Google account, an email (with its password). Each is proven
-the way it signs in; adding and removing one ask a recent sign-in ([a recent sign-in](#a-recent-sign-in)):
+An account has at most one of each: a Telegram account, a Google account, an email (with its password), a mobile
+number. Each is proven the way it signs in; adding and removing one ask a recent sign-in
+([a recent sign-in](#a-recent-sign-in)):
 
 | Add | Request | Answers |
 |---|---|---|
 | Telegram | `POST /me/identities/telegram` — the popup's `{ id_token, nonce }`, or the redirect's `{ code, state, code_verifier }` with a state this very session asked `POST /me/telegram/authorize` for ([the popup](Store-API-Sign-In.md#telegram-the-popup), [the redirect](Store-API-Sign-In.md#telegram-the-redirect)) | `200` `{ customer }`, or `202` a merge offer |
 | Google | `POST /me/identities/google` — `{ id_token, nonce }` ([Google](Store-API-Sign-In.md#google)) | `200` `{ customer }`, or `202` a merge offer |
 | Email | `POST /me/identities/email` — `{ email, password }`: a code to the address; then `POST /me/identities/email/verify` — `{ email, code }` | `202` `{ expires_in }`; then `200` `{ customer }`, or `202` a merge offer |
+| Mobile | `POST /me/identities/phone` — `{ phone }`: a code to the number by SMS; then `POST /me/identities/phone/verify` — `{ phone, code }` (a website's, while `sign_in.phone` is true) | `202` `{ sent, expires_in, resend_in }`; then `200` `{ customer }`, or `202` a merge offer |
 
 - `200` — added (the customer told: `way_in_added`), or it was this account's already. Telegram brings its handle and
   its names, in place of the names the account had (a Telegram account without a last name leaves none), and
   `PATCH /me` refuses them from then on; Google brings the address it speaks for ([Google](Store-API-Sign-In.md#google))
   when the account has none and nobody else has it; an email comes with the password chosen with it (told as the way in
-  added, not as a password changed).
+  added, not as a password changed); a number signs in by SMS from then on.
 - `202` — it belongs to another account of this shop: a merge offer ([the merge offer](#the-merge-offer)). For Google,
   that is also when the Google account is new to the shop but the address it speaks for is another account's.
 - `422` — the account has another of that kind (`این حساب به حساب تلگرام دیگری وصل است؛ اول آن را جدا کنید.`,
-  `این حساب به حساب گوگل دیگری وصل است؛ اول آن را جدا کنید.`, `این حساب ایمیل دارد.`), a merge the rules refuse
-  ([the merge offer](#the-merge-offer)), the website's Telegram or Google sign-in switched off, or Telegram's redirect not
+  `این حساب به حساب گوگل دیگری وصل است؛ اول آن را جدا کنید.`, `این حساب ایمیل دارد.`,
+  `این حساب شماره موبایل دارد؛ برای شماره تازه، اول آن را جدا کنید.`), a merge the rules refuse
+  ([the merge offer](#the-merge-offer)), the website's Telegram, Google or SMS sign-in switched off, or Telegram's redirect not
   set up (`ورود با redirect برای این وب‌سایت آماده نیست؛ Client Secret تلگرام در پنل وارد نشده است.`) — those three with
   no field —, or a proof that did not hold: a Telegram or Google proof on `id_token` (or the redirect's `code`, a state
-  another session asked for among them) — never a `401`, the session is fine —, an emailed code on `code`
-  (`کد درست نیست یا منقضی شده است.`).
+  another session asked for among them) — never a `401`, the session is fine —, an emailed or texted code on `code`
+  (`کد درست نیست یا منقضی شده است.`), a number that is no Iranian mobile on `phone`.
 - The email's first step is also `503` while the shop's email does not go out, or its budget of sign-in emails is spent
   (`فعلا ایمیلی از این فروشگاه فرستاده نمی‌شود؛ کمی بعد دوباره امتحان کنید یا از راه دیگری وارد شوید.`), and `502` when
   the mail server did not take the email (`ایمیل فرستاده نشد؛ کمی بعد دوباره امتحان کنید.`). `GET /`'s `sign_in.email`
@@ -255,15 +316,24 @@ alone (another customer's code for the same address stays as it is), and it goes
 ([limits and lifetimes](Store-API-Sign-In.md#limits-and-lifetimes)) plus one of its own: a customer asks for five such
 codes a day. Wrong codes count against the address's budget and this account's.
 
-`DELETE /me/identities/{telegram|google|email}` removes one and answers `{ customer }` (the customer told:
-`way_in_removed`) — never the last (`422` `حداقل یک روش ورود باید بماند.`; one the account does not have, `422` `این روش
+The number's code goes the same way: whether or not another account has the number, this account's alone, under the
+SMS budgets of `POST /auth/phone` ([a code by SMS](Store-API-Sign-In.md#a-code-by-sms)) plus ten codes a day a customer
+asks for. Its first step is also `502` when the SMS provider did not take it and `503` while the SMS budget is spent.
+
+`DELETE /me/identities/{telegram|google|email|phone}` removes one and answers `{ customer }` (the customer told:
+`way_in_removed`) — never the last (`422` `حداقل یک روش ورود باید بماند.`; a mobile number counts as a way in that
+stays only where a sign-in by SMS opens this very account by it: under a website's key while it signs in by SMS, an
+Iranian mobile, and of the accounts holding the number the one such a sign-in opens; one the account does not have, `422` `این روش
 ورود به حساب وصل نیست.`). An email counts as a way in whether or not it has a password, so an account that signed up
 with Google keeps its address when Google goes: without a password (`has_password` false) it then signs in only by
 setting one through a forgotten password's code, or with Google again — say so before the customer removes Google. An
 email goes with its password and two-factor sign-in, and the address is emailed that it is no way in any more. Removing
 Telegram leaves the services with this account, and the bot will know that Telegram account as a new customer from its
-next message — say so before the customer confirms. There is no "change email": remove it (another way in must remain)
-and add the new one.
+next message — say so before the customer confirms. Through the mini app's key it is refused, a `422` on `kind`
+(`حساب تلگرام از داخل مینی‌اپ جدا نمی‌شود؛ …`): the app and the bot know the customer by that account — the website
+removes it. Removing the number in a shop whose bot asks every customer's number (`shop.phone_required`) has the bot
+ask it again. There is no "change email" nor "change number": remove it (another way in must remain) and add the new
+one.
 
 ## The merge offer
 
@@ -283,7 +353,8 @@ A way in being added that is another account's of the same shop answers `202`:
       "balance": "15000.00",
       "telegram": true,
       "email": false,
-      "google": false
+      "google": false,
+      "phone": true
     },
     "keeps": "other"
   }
@@ -291,7 +362,8 @@ A way in being added that is another account's of the same shop answers `202`:
 ```
 
 Show the customer the other account so they can tell it is theirs — its name (`null` without one), since when, its
-running `services`, its `orders`, its `balance`, the ways it signs in — and what a merge means:
+running `services`, its `orders`, its `balance`, the ways it signs in (`phone`: it has a verified mobile) — and what
+a merge means:
 
 - **The older account always stays.** `keeps: "this"` — the account signed in stays and the other merges into it.
   `keeps: "other"` — the signed-in account merges into the other one; the customer stays signed in, as that account,
@@ -299,7 +371,7 @@ running `services`, its `orders`, its `balance`, the ways it signs in — and wh
 - **Everything moves to the account that stays:** orders and their payments, services, the wallet (one ledger, the
   balances added up), every device signed in, the notices, the support tickets, the reviews, the customers it brought,
   an agency request. Its ways in, names, phone and invite code fill the empty places of the account that stays, and so does what
-  was being added: the Telegram or Google account, or the email. The password chosen with an email becomes the password
+  was being added: the Telegram or Google account, the email, or the number. The password chosen with an email becomes the password
   of the account that stays whenever that email is its address — replacing one it had — and ends every other session of
   that account. The other account is gone.
 
@@ -317,11 +389,16 @@ Refused at the offer, with no ticket (`422`): either account is banned; both hav
 (`هر دو حساب به یک نوع روش ورود متفاوت وصل هستند (تلگرام)؛ اول یکی را جدا کنید.` — one must be removed first); both are
 agents; or the other account was reached through its email alone — an emailed code, or the address Google speaks for —
 and has two-factor sign-in on (`این ایمیل به حسابی با ورود دو مرحله‌ای وصل است؛ برای یکی کردن دو حساب، با همان ایمیل
-وارد شوید و روش ورود این حساب را از آنجا وصل کنید.`): the customer signs in to that account and adds this one's way in
-from there. At `POST /me/merge`, `422` `این پیشنهاد ادغام دیگر معتبر نیست؛ دوباره تلاش کنید.` means the ticket is spent,
-expired or not this account's, or the other account no longer has that way in: start over. The merge is judged again
-there too, so the refusals of the offer may come back — the other account banned, or given a way in of a kind this one
-has, or reached by its address and its two-factor sign-in turned on since —, each a `422` in the same words.
+وارد شوید و روش ورود این حساب را از آنجا وصل کنید.`), or through its mobile number alone, a texted code
+(`این شماره به حسابی با ورود دو مرحله‌ای وصل است؛ برای یکی کردن دو حساب، به همان حساب وارد شوید و روش ورود این حساب را از آنجا وصل کنید.`):
+the customer signs in to that account and adds this one's way in from there. At `POST /me/merge`, `422`
+`این پیشنهاد ادغام دیگر معتبر نیست؛ دوباره تلاش کنید.` means the ticket is spent, expired or not this account's, or the
+other account no longer has that way in: start over. The merge is judged again there too, so the refusals of the offer
+may come back — the other account banned, or given a way in of a kind this one has, or reached by its address and its
+two-factor sign-in turned on since —, each a `422` in the same words.
+
+A sign-in by SMS offers a merge too, beside its token, when another account of the shop holds the number
+([a code by SMS](Store-API-Sign-In.md#a-code-by-sms)): the same `merge`, taken the same way with the new token.
 
 The shop keeps a record of every merge — the account that stays, the merged one's former number and ways in, what
 moved —, which support sees on the customer's page in the panel.

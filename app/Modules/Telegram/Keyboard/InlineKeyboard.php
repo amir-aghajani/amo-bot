@@ -31,9 +31,20 @@ final class InlineKeyboard
      */
     public static function callback(string $text, string $data, ?string $style = null, ?string $icon = null): array
     {
-        $button = $style === null ? ['text' => $text, 'callback_data' => $data] : ['text' => $text, 'callback_data' => $data, 'style' => $style];
+        return self::styled(['text' => $text, 'callback_data' => $data], $style, $icon);
+    }
 
-        return $icon === null ? $button : $button + ['icon_custom_emoji_id' => $icon];
+    /**
+     * A button that opens a web app — the shop's mini app — inside Telegram, with the customer's launch data. Inline
+     * only: Telegram gives an app opened from a reply keyboard's button no launch data to sign in with.
+     *
+     * @param string|null $style One of KeyboardLayout::STYLES; null = the client's default
+     * @param string|null $icon A premium emoji's id, shown before the text; null = none
+     * @return array<string, mixed>
+     */
+    public static function webApp(string $text, string $url, ?string $style = null, ?string $icon = null): array
+    {
+        return self::styled(['text' => $text, 'web_app' => ['url' => $url]], $style, $icon);
     }
 
     /** @return array<string, mixed> */
@@ -104,5 +115,18 @@ final class InlineKeyboard
     public function build(): array
     {
         return ['inline_keyboard' => $this->rows];
+    }
+
+    /**
+     * `$button` with its colour and premium emoji icon, when it has them.
+     *
+     * @param array<string, mixed> $button
+     * @return array<string, mixed>
+     */
+    private static function styled(array $button, ?string $style, ?string $icon): array
+    {
+        $button = $style === null ? $button : $button + ['style' => $style];
+
+        return $icon === null ? $button : $button + ['icon_custom_emoji_id' => $icon];
     }
 }

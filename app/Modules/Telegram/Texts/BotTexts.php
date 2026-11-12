@@ -17,8 +17,10 @@ use App\Support\Validation;
  * stored (length, variables, Telegram HTML): a text Telegram refuses would leave the customer with nothing.
  *
  * Escaping happens here alone: a value is plain text, escaped into an HTML text and left as it is in a popup or a
- * button; a part (an Html, from part()) goes into another text as it is. A value that starts with a handle or a row's
- * number takes a left-to-right mark where words come before it on its line (marked()).
+ * button; a part (an Html, from part()) goes into another text as it is. A popup or a button may carry premium emoji
+ * (PlainWording): a button's becomes its icon as it is sent, a popup shows their plain emoji. A plan's or a category's
+ * name comes as a PremiumText: escaped with its premium emoji kept where Telegram reads HTML, as it is elsewhere. A value that starts with a
+ * handle or a row's number takes a left-to-right mark where words come before it on its line (marked()).
  */
 final class BotTexts
 {
@@ -38,15 +40,26 @@ final class BotTexts
     /** A text without variables, ready for a message: a popup's text, sent as a message instead, is escaped. */
     public function message(BotText $text): string
     {
-        $value = $this->get($text);
+        return $text->spec()->kind->html() ? $this->get($text) : $this->inMessage($text)->html;
+    }
 
-        return $text->spec()->kind->html() ? $value : htmlspecialchars($value);
+    /**
+     * A popup's or a button's text without variables, to go into a message as a variable's value (a button's label named in
+     * a text): escaped, its premium emoji kept.
+     */
+    public function inMessage(BotText $text): Html
+    {
+        if ($text->spec()->kind->html()) {
+            throw new \LogicException("The bot text \"{$text->value}\" is HTML already: get() it.");
+        }
+
+        return Html::of(PlainWording::html($this->get($text)));
     }
 
     /**
      * The text with exactly its declared variables filled in (a mismatch is the code's mistake, a LogicException).
      *
-     * @param array<string, scalar|Html> $values
+     * @param array<string, scalar|Html|PremiumText> $values
      */
     public function render(BotText $text, array $values): string
     {
@@ -57,7 +70,7 @@ final class BotTexts
      * A part (TextKind::Part) with its variables filled, as Html for another text to take in; empty when the admin
      * emptied it.
      *
-     * @param array<string, scalar|Html> $values
+     * @param array<string, scalar|Html|PremiumText> $values
      */
     public function part(BotText $text, array $values = []): Html
     {
@@ -127,8 +140,9 @@ final class BotTexts
 
     /**
      * What is wrong with a wording, worded for the admin, or null — the first of, in order: empty; too long; a button on
-     * two lines; a variable it does not have, or one it must keep, missing; tags where there is no formatting, or HTML
-     * Telegram would not take; blank as Telegram reads it (blank()).
+     * two lines; a variable it does not have, or one it must keep, missing; a tag but a premium emoji where there is no
+     * formatting, or a premium emoji there where it cannot be (PlainWording::problem()), or HTML Telegram would not take;
+     * blank as Telegram reads it (blank()).
      */
     public static function problem(TextSpec $spec, string $value): ?string
     {
@@ -136,8 +150,8 @@ final class BotTexts
         if ($value === '' && $kind !== TextKind::Part) {
             return self::EMPTY;
         }
-        // Counted as Telegram counts what the customer sees: UTF-16 units, tags free.
-        if (($kind->html() ? TelegramHtml::visibleLength($value) : Limits::length($value)) > $kind->limit()) {
+        // Counted as Telegram counts what the customer sees: UTF-16 units, tags free (a premium emoji as its plain one).
+        if (($kind->html() ? TelegramHtml::visibleLength($value) : Limits::length(PlainWording::shown($value))) > $kind->limit()) {
             return Validation::tooLong('متن', $kind->limit());
         }
         if ($kind === TextKind::Button && str_contains($value, "\n")) {
@@ -158,9 +172,7 @@ final class BotTexts
             }
         }
 
-        $markup = $kind->html()
-            ? TelegramHtml::problem($value)
-            : (preg_match('/<\/?[a-z][a-z-]*[^>]*>/i', $value) === 1 ? 'این متن قالب‌بندی ندارد و تگ‌ها همان‌طور که نوشته شده‌اند نشان داده می‌شوند؛ آن‌ها را بردارید.' : null);
+        $markup = $kind->html() ? TelegramHtml::problem($value) : PlainWording::problem($kind, $value);
         if ($markup !== null) {
             return $markup;
         }
@@ -176,7 +188,7 @@ final class BotTexts
      */
     private static function blank(TextKind $kind, string $value): bool
     {
-        return Text::blank($kind->html() ? TelegramHtml::visible($value) : $value);
+        return Text::blank($kind->html() ? TelegramHtml::visible($value) : PlainWording::shown($value));
     }
 
     /**
@@ -241,7 +253,7 @@ final class BotTexts
     /**
      * The wording in use with its variables filled and escaped by the text's kind (get(), render() and part()).
      *
-     * @param array<string, scalar|Html> $values
+     * @param array<string, scalar|Html|PremiumText> $values
      */
     private function compose(BotText $text, array $values): string
     {
@@ -262,6 +274,7 @@ final class BotTexts
         foreach ($values as $name => $value) {
             $filled[$name] = match (true) {
                 $value instanceof Html => $html ? $value->html : throw new \LogicException("The bot text \"{$text->value}\" is shown as typed: %{$name}% takes plain text."),
+                $value instanceof PremiumText => $html ? PlainWording::html($value->text) : $value->text,
                 $html => htmlspecialchars((string) $value),
                 default => (string) $value,
             };

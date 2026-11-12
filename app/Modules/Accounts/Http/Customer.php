@@ -14,6 +14,12 @@ final class Customer
     /** The request attribute it is put under. */
     public const ATTRIBUTE = 'customer';
 
+    /**
+     * The request attribute the site it came through is put under — a Contracts\SignInSite, put there by whoever opens
+     * the door (the Store API's StoreMiddleware) —, which tells CustomerAuthMiddleware whether it is the mini app.
+     */
+    public const SITE = 'customer.site';
+
     public function __construct(
         public readonly CustomerSession $session,
         public readonly User $user,

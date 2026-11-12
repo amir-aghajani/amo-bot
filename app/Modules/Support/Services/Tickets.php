@@ -29,6 +29,7 @@ use App\Support\Input;
 use App\Support\Persian;
 use App\Support\Validation;
 use Illuminate\Database\ConnectionInterface;
+use Illuminate\Database\Eloquent\Builder;
 use Psr\Http\Message\UploadedFileInterface;
 use Psr\Log\LoggerInterface;
 
@@ -181,7 +182,8 @@ final class Tickets
 
     /**
      * Support answers — from a panel, the website's admin API or the report group; the message's channel follows the
-     * actor (TicketChannel::of()). The ticket becomes answered and unread by the customer (a closed one opens again so).
+     * actor (TicketChannel::of()). The ticket becomes answered, unread by the customer (a closed one opens again so) and
+     * read by support (`support_read_at`).
      * The customer is notified on every channel; the report group hears an answer written elsewhere. Under the request's
      * Idempotency-Key `$key` (a panel's or the website's admin API's, when it sends one), the same answer again — the
      * same words, the same picture by its name — finds the one the key wrote: nothing written, nobody told again.
@@ -207,7 +209,9 @@ final class Tickets
             }
             self::assertNotFull($ticket);
             $message = $this->message($ticket, TicketAuthor::Support, $actor->name(), $body, $attachment, $channel, $kept, $key);
-            $answered = ['last_message_at' => now(), 'customer_unread' => true];
+            // Answering it is reading it: the customer's messages so far read as read.
+            $now = now();
+            $answered = ['last_message_at' => $now, 'customer_unread' => true, 'support_read_at' => $now];
             if ($ticket->status === TicketStatus::Answered) {
                 $ticket->forceFill($answered)->save();
             } else {
@@ -320,6 +324,27 @@ final class Tickets
         Notification::query()->where('user_id', $ticket->user_id)->whereNull('read_at')
             ->where('subject_type', NoticeSubject::Ticket->value)->where('subject_id', $ticket->id)
             ->update(['read_at' => now()]);
+    }
+
+    /**
+     * Support read the ticket (a panel or the website's admin API opened it): the customer's messages so far read as read
+     * on their side (`support_read_at`). Written only when a message came since support last read it — opening it again
+     * writes nothing —, and quietly: the panels' own poll would read the ticket again for its own reading, and again.
+     */
+    public function readBySupport(Ticket $ticket): void
+    {
+        $read = $ticket->support_read_at;
+        if ($read !== null && ($ticket->last_message_at === null || $read->gte($ticket->last_message_at))) {
+            return;
+        }
+
+        $now = now();
+        $written = $this->feed->quietly(static fn(): int => Ticket::query()->whereKey($ticket->id)
+            ->where(static fn(Builder $unread) => $unread->whereNull('support_read_at')->orWhereColumn('support_read_at', '<', 'last_message_at'))
+            ->update(['support_read_at' => $now]));
+        if ($written > 0) {
+            $ticket->forceFill(['support_read_at' => $now])->syncOriginalAttribute('support_read_at');
+        }
     }
 
     /**

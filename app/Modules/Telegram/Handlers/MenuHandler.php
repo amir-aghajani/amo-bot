@@ -17,6 +17,7 @@ use App\Modules\Subscriptions\Models\Subscription;
 use App\Modules\Subscriptions\Services\CustomerRenewal;
 use App\Modules\Subscriptions\Services\ServiceClaims;
 use App\Modules\Telegram\Context;
+use App\Modules\Telegram\Contracts\MiniAppAddress;
 use App\Modules\Telegram\Handler;
 use App\Modules\Telegram\Keyboard\Buttons;
 use App\Modules\Telegram\Keyboard\InlineKeyboard;
@@ -25,6 +26,7 @@ use App\Modules\Telegram\Messages;
 use App\Modules\Telegram\Texts\BotText;
 use App\Modules\Telegram\Texts\BotTexts;
 use App\Modules\Telegram\Texts\Html;
+use App\Modules\Telegram\Texts\PremiumText;
 use App\Modules\Telegram\Update\CallbackData;
 use App\Modules\Users\Enums\WalletTransactionType;
 use App\Modules\Users\Models\WalletTransaction;
@@ -35,9 +37,9 @@ use Illuminate\Database\Eloquent\Collection;
 
 /**
  * The main menu's screens, reached from a reply-keyboard label or a `menu:*` callback: the plan list (by category when
- * the shop has any), «سرویس‌های من» and the renewals list (paged), the wallet, the referral screen and «آموزش». The
- * agency, support, gift-code, wheel and free-test screens are their own handlers' home(). With an inline menu every
- * screen carries «بازگشت» to it (MainMenu::screen()).
+ * the shop has any), «سرویس‌های من» and the renewals list (paged), the wallet, the referral screen, «آموزش» and the way
+ * into the shop's mini app. The agency, support, gift-code, wheel and free-test screens are their own handlers' home().
+ * With an inline menu every screen carries «بازگشت» to it (MainMenu::screen()).
  */
 final class MenuHandler implements Handler
 {
@@ -66,6 +68,7 @@ final class MenuHandler implements Handler
         private readonly WalletTransferHandler $walletSends,
         private readonly Loyalty $loyalty,
         private readonly ServiceClaims $claims,
+        private readonly MiniAppAddress $miniApp,
     ) {}
 
     /** The plan list of a category, or of the uncategorised plans ("سایر پلن‌ها") for null — at that page. */
@@ -123,6 +126,7 @@ final class MenuHandler implements Handler
             $screen === MainMenu::WHEEL => $this->wheelScreens->home($ctx),
             $tests !== null => $this->testScreens->home($ctx, page: (int) ($tests[0] ?? 1)),
             $screen === MainMenu::TUTORIAL => $this->menu->screen($ctx, $this->texts->get(BotText::Tutorial)),
+            $screen === MainMenu::APP => $this->app($ctx),
             default => $this->home($ctx),
         };
     }
@@ -132,6 +136,25 @@ final class MenuHandler implements Handler
     {
         $text = $this->texts->welcome($ctx->user->name());
         $ctx->edit($text, $this->menu->isInline() ? ['reply_markup' => $this->menu->markup($ctx->user)] : []);
+    }
+
+    /**
+     * «📱 اپلیکیشن فروشگاه» — from a reply keyboard: an inline menu's button opens the app itself. Telegram gives an app
+     * opened from a reply keyboard's button no launch data to sign the customer in with, so this screen carries the
+     * inline button that opens it; once the app gives no address (switched off since the menu was drawn), it says the
+     * app is not available.
+     */
+    private function app(Context $ctx): void
+    {
+        $url = $this->miniApp->url();
+        if ($url === null) {
+            $this->menu->screen($ctx, $this->texts->get(BotText::AppUnavailable));
+
+            return;
+        }
+
+        $open = InlineKeyboard::webApp($this->texts->get(BotText::AppButton), $url, 'primary');
+        $this->menu->screen($ctx, $this->texts->get(BotText::AppScreen), InlineKeyboard::make()->row($open));
     }
 
     /**
@@ -164,7 +187,9 @@ final class MenuHandler implements Handler
         $buttons = [];
         foreach ($shown as $group) {
             $category = $group['category'];
-            $buttons[] = InlineKeyboard::callback($category->name ?? $this->texts->get(BotText::CategoryOther), self::categoryCallback($category?->id));
+            // A category's premium emoji is its button's icon (BotApi, PlainWording).
+            $name = $category === null ? $this->texts->get(BotText::CategoryOther) : PremiumText::category($category)->text;
+            $buttons[] = InlineKeyboard::callback($name, self::categoryCallback($category?->id));
         }
 
         $keyboard = InlineKeyboard::make()->grid($buttons, 1);
@@ -190,7 +215,7 @@ final class MenuHandler implements Handler
                 continue;
             }
             if ($group['plans']->isEmpty()) {
-                $name = $group['category']->name ?? $this->texts->get(BotText::CategoryOther);
+                $name = $group['category'] === null ? $this->texts->inMessage(BotText::CategoryOther) : PremiumText::category($group['category']);
                 $ctx->edit($this->texts->render(BotText::CategoryEmpty, ['category' => $name]), ['reply_markup' => $this->buttons->backOnly(MainMenu::PLANS)]);
 
                 return;
@@ -221,7 +246,7 @@ final class MenuHandler implements Handler
 
         $title = $this->buttons->paged(
             $keyboard,
-            $category !== null ? $this->texts->render(BotText::CategoryPlans, ['category' => $category->name]) : $this->texts->get(BotText::PlansTitle),
+            $category !== null ? $this->texts->render(BotText::CategoryPlans, ['category' => PremiumText::category($category)]) : $this->texts->get(BotText::PlansTitle),
             $page,
             $pages,
             $grouped ? static fn(int $at): string => self::categoryCallback($category?->id, $at) : self::plansCallback(...),
@@ -287,8 +312,9 @@ final class MenuHandler implements Handler
     }
 
     /**
-     * A page of the customer's services: a button per service under its panel name, «بعدی» / «قبلی» and the page number
-     * when there is more than one page, the row `$below` (on the empty screen too), and a red «بازگشت».
+     * A page of the customer's services: a button per service under its name as they know it (Subscription::shownAs():
+     * their own name for it beside its client name), «بعدی» / «قبلی» and the page number when there is more than one page,
+     * the row `$below` (on the empty screen too), and a red «بازگشت».
      *
      * @param Builder<Subscription> $services
      * @param \Closure(Subscription, int): string $open What a service's button opens, from the page it is on
@@ -308,7 +334,7 @@ final class MenuHandler implements Handler
 
         $keyboard = InlineKeyboard::make();
         foreach ($services->forPage($page, self::SUBSCRIPTIONS_PER_PAGE)->get() as $subscription) {
-            $label = $this->texts->render(BotText::ServiceButton, ['client' => $subscription->remote_name]);
+            $label = $this->texts->render(BotText::ServiceButton, ['client' => $subscription->shownAs()]);
             $keyboard->row(InlineKeyboard::callback($label, $open($subscription, $page)));
         }
 
@@ -423,7 +449,7 @@ final class MenuHandler implements Handler
 
         $plan = $settings->rewardEvery() > 0 && $settings->rewardPlanId() !== null ? Plan::query()->find($settings->rewardPlanId()) : null;
         if ($plan !== null) {
-            $parts[] = $this->texts->part(BotText::ReferralTermsReward, ['invites' => Persian::number($settings->rewardEvery()), 'plan' => $plan->name]);
+            $parts[] = $this->texts->part(BotText::ReferralTermsReward, ['invites' => Persian::number($settings->rewardEvery()), 'plan' => PremiumText::plan($plan)]);
         }
 
         // A part the admin emptied leaves no line behind.

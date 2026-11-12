@@ -1,3 +1,4 @@
+import { NameEmoji } from '@/components/bot-texts/name-emoji'
 import { Disclosure } from '@/components/disclosure'
 import { isSecretState, leftBehind, NOTHING_KEPT, shownFields, type DriverDraft } from '@/components/driver-form/draft'
 import { Field, FieldGroup } from '@/components/field'
@@ -38,7 +39,8 @@ interface DriverFieldsProps {
 
 /**
  * A driver's form drawn from its description alone: each shown field by its type (a choice of three or fewer side by
- * side, more in a list; a secret kept unless typed again or cleared; a card number in groups of four), Latin content
+ * side, more in a list; a secret kept unless typed again or cleared; a card number in groups of four; a premium emoji
+ * picked for the name it is bound to, its plain emoji put at that name's start), Latin content
  * left to right, the `advanced` fields under «تنظیمات پیشرفته». A kept secret whose bound field moved shows the server's
  * `moved` words before the save would be refused.
  */
@@ -138,6 +140,25 @@ function DriverField({ id, field, draft, set, error, stored, movedHint }: Driver
           <Textarea dir={field.ltr ? 'ltr' : undefined} value={text} onChange={(e) => set(field.name, e.target.value)} placeholder={field.placeholder ?? undefined} />
         </Field>
       )
+    case 'premium_emoji': {
+      // For the name it is bound to (a server's): picked, its plain emoji leads that name.
+      const named = field.bound_to[0] ?? 'name'
+      const name = draft[named]
+      return (
+        <div className="sm:col-span-2">
+          <NameEmoji
+            id={id}
+            name={typeof name === 'string' ? name : ''}
+            emojiId={text === '' ? null : text}
+            error={error}
+            onChange={(changes) => {
+              if (changes.name !== undefined) set(named, changes.name)
+              set(field.name, changes.emoji_id ?? '')
+            }}
+          />
+        </div>
+      )
+    }
     case 'card':
       // As the card is printed — its digits in groups of four, typed on a phone's number pad —, kept as its digits alone.
       return (

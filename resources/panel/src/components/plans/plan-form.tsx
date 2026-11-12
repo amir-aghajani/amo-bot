@@ -2,6 +2,7 @@ import { useId, useState, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Coins, Package, PackagePlus, Server } from 'lucide-react'
 import { toast } from 'sonner'
+import { NameEmoji } from '@/components/bot-texts/name-emoji'
 import { extraPricesAs, extraPricesDraft, extraPricesIn, extraPricesRead, extraPricesRequest, NO_EXTRA_PRICES } from '@/components/extras/draft'
 import { Field, FieldGroup } from '@/components/field'
 import { FormActions } from '@/components/form-footer'
@@ -10,6 +11,7 @@ import { BUTTON_STYLES, styleOptions } from '@/components/keyboards/styles'
 import { MoneyField } from '@/components/money-field'
 import { NoteInput } from '@/components/note-input'
 import { PageTabs, tabPanel, type PageTab } from '@/components/page-tabs'
+import { badgeOf, PLAN_BADGES } from '@/components/plans/plan-badge'
 import { PLAN_EXTRAS, PlanExtras, type PlanExtrasValues } from '@/components/plans/plan-extras'
 import { ServerEntries, type ServerEntryDraft } from '@/components/plans/server-entries'
 import { SwitchRow } from '@/components/switch-row'
@@ -17,7 +19,7 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { api } from '@/lib/api'
-import type { ButtonStyle, PlanRequest, PlanRow } from '@/lib/api-types'
+import type { ButtonStyle, PlanBadge, PlanRequest, PlanRow } from '@/lib/api-types'
 import { useMainShop } from '@/lib/auth'
 import { amountDraft, MONEY_UNIT, wholeOf } from '@/lib/format'
 import { planOptionsQuery } from '@/lib/queries'
@@ -37,6 +39,8 @@ interface TermDraft {
 
 type Values = {
   name: string
+  /** The premium emoji the bot draws for the name's leading emoji; null — none. */
+  emoji_id: string | null
   /** "" = no category. */
   category_id: string
   description: string
@@ -50,6 +54,8 @@ type Values = {
   /** Its button's colour in the bot's plan list; null — the client's own. */
   button_style: ButtonStyle | null
   button_row: ButtonRow
+  /** The label its card wears in the mini app and on the website; '' — none. */
+  badge: PlanBadge | ''
   /** The term as typed — the request's `duration_hours`, the name the server refuses it under. */
   duration_hours: TermDraft
   traffic_gb: string
@@ -63,11 +69,13 @@ type Section = 'details' | 'quota' | 'servers' | 'extras'
 /** Which section each field lives in, so a validation error can point at its tab — a price list's own (`extras.traffic_price`) by its head. */
 const SECTION_OF: Record<string, Section> = {
   name: 'details',
+  emoji_id: 'details',
   category_id: 'details',
   description: 'details',
   checkout_note: 'details',
   button_style: 'details',
   button_row: 'details',
+  badge: 'details',
   is_active: 'details',
   price: 'quota',
   first_purchase_price: 'quota',
@@ -91,6 +99,9 @@ const HOURS_IN_DAY = 24
 
 /** The longest checkout note the server keeps (PlanService). */
 const CHECKOUT_NOTE_MAX = 500
+
+/** The badge choice's «بدون برچسب»: a select holds no blank value. */
+const NO_BADGE = 'none'
 
 const BUTTON_ROWS: PageTab<ButtonRow>[] = [
   { value: '1', label: 'یک ردیف کامل' },
@@ -123,6 +134,7 @@ function initialValues(plan: PlanRow | null): Values {
   const extras = plan?.extras ?? null
   return {
     name: plan?.name ?? '',
+    emoji_id: plan?.emoji_id ?? null,
     category_id: plan?.category ? String(plan.category.id) : '',
     description: plan?.description ?? '',
     price: plan ? amountDraft(plan.price) : '',
@@ -132,6 +144,7 @@ function initialValues(plan: PlanRow | null): Values {
     checkout_note: plan?.checkout_note ?? '',
     button_style: plan?.button_style ?? null,
     button_row: buttonRow(plan?.button_row),
+    badge: plan?.badge ?? '',
     duration_hours: termDraft(plan?.duration_hours ?? 30 * HOURS_IN_DAY),
     traffic_gb: plan ? String(plan.traffic_gb) : '',
     ip_limit: String(plan?.ip_limit ?? 1),
@@ -144,14 +157,15 @@ function initialValues(plan: PlanRow | null): Values {
 }
 
 /**
- * The request: fields as typed, except the term (in hours), the optional prices and checkout note (`null` while blank),
- * the button row (a number) and the price list (`null` for the shop's prices).
+ * The request: fields as typed, except the term (in hours), the optional prices, checkout note and badge (`null` while
+ * blank), the button row (a number) and the price list (`null` for the shop's prices).
  */
 function requestOf(values: Values): PlanRequest {
   const { name, category_id, description, price, traffic_gb, ip_limit, servers, is_active, button_style } = values
   const extras = values.extras === 'own' ? extraPricesRequest(extraPricesIn(PLAN_EXTRAS, values)) : null
   return {
     name,
+    emoji_id: values.emoji_id,
     category_id,
     description,
     price,
@@ -160,6 +174,7 @@ function requestOf(values: Values): PlanRequest {
     checkout_note: values.checkout_note.trim() === '' ? null : values.checkout_note,
     button_style,
     button_row: Number(values.button_row),
+    badge: values.badge === '' ? null : values.badge,
     duration_hours: termHours(values.duration_hours),
     traffic_gb,
     ip_limit,
@@ -194,9 +209,9 @@ interface PlanFormProps {
 }
 
 /**
- * Create/edit form for one plan, in four tabs: details (with its checkout note and bot button), prices and quota (with
- * the first-purchase and agent prices, the term in days or hours), servers, and extras. A refused save jumps to the first
- * tab with an error.
+ * Create/edit form for one plan, in four tabs: details (with its checkout note, bot button and badge), prices and quota
+ * (with the first-purchase and agent prices, the term in days or hours), servers, and extras. A refused save jumps to the
+ * first tab with an error.
  */
 export function PlanForm({ plan, addServers, onSaved, onCancel }: PlanFormProps) {
   // An agent's shop sells the traffic it bought: a plan there must have some (the server refuses one without).
@@ -268,6 +283,7 @@ export function PlanForm({ plan, addServers, onSaved, onCancel }: PlanFormProps)
             <Field id="plan_name" label="نام پلن" error={error('name')} hint="همان‌طور که مشتری در ربات می‌بیند.">
               <Input value={values.name} onChange={(e) => set('name', e.target.value)} placeholder="یک‌ماهه ۳۰ گیگ" autoFocus={!plan} />
             </Field>
+            <NameEmoji id="plan_emoji_picker" name={values.name} emojiId={values.emoji_id} error={error('emoji_id')} onChange={patch} />
 
             <Field
               id="plan_category"
@@ -307,6 +323,24 @@ export function PlanForm({ plan, addServers, onSaved, onCancel }: PlanFormProps)
             </Field>
 
             <PlanButton values={values} set={set} error={error} />
+
+            <Field id="plan_badge" label="برچسب" optional error={error('badge')} hint="روی کارت پلن در مینی‌اپ و وب‌سایت؛ مثلا پلنی که بیشتر از همه فروخته می‌شود.">
+              {(control) => (
+                <Select value={values.badge || NO_BADGE} onValueChange={(value) => set('badge', badgeOf(value))}>
+                  <SelectTrigger {...control} className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={NO_BADGE}>بدون برچسب</SelectItem>
+                    {Object.entries(PLAN_BADGES).map(([badge, label]) => (
+                      <SelectItem key={badge} value={badge}>
+                        {label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            </Field>
 
             <SwitchRow
               label="قابل خرید"

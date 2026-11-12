@@ -19,7 +19,7 @@ export type FailureKind =
   | 'offline'
   /** No answer: the network, or the server down — or a proxy's 502, PHP behind it not answering. */
   | 'unreachable'
-  /** No answer in time: the panel's 90 seconds, or a proxy's 504. */
+  /** No answer in time: the panel's 90 seconds (a backup's 15 minutes), or a proxy's 504. */
   | 'timeout'
   | 'unauthorized'
   /** A 403: a refusal of the server's, or a host's firewall (ModSecurity) in front of it. */

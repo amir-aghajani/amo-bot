@@ -61,6 +61,7 @@ use App\Modules\Rewards\Models\GiftCode;
 use App\Modules\Rewards\Models\WheelPrize;
 use App\Modules\Rewards\Models\WheelSpin;
 use App\Modules\Settings\Services\BotSettingsScreen;
+use App\Modules\Store\Models\MiniApp;
 use App\Modules\Store\Models\Website;
 use App\Modules\Subscriptions\Enums\ExtraKind;
 use App\Modules\Subscriptions\Enums\SubscriptionStatus;
@@ -791,6 +792,27 @@ trait Fixtures
             'telegram_login' => true,
             'telegram_client_id' => self::WEBSITE_CLIENT_ID,
         ]);
+    }
+
+    /**
+     * The current shop's Telegram mini app, switched on — with a key of its own.
+     *
+     * @param array<string, mixed> $overrides
+     */
+    protected function miniApp(array $overrides = []): MiniApp
+    {
+        return MiniApp::query()->create($overrides + ['key' => bin2hex(random_bytes(12)), 'enabled' => true]);
+    }
+
+    /**
+     * The launch data Telegram hands the shop's mini app it opens for `$telegramId` (`Telegram.WebApp.initData`), made
+     * now unless `$madeAt` says when, from a link that carried `$startParam` when one is given — signed with the main
+     * bot's token (FakeTelegram::TOKEN, which telegram() configures), or an agent's bot's (`$token`:
+     * FakeTelegram::AGENT_TOKEN, agentBot()'s).
+     */
+    protected function launchData(int $telegramId = self::TELEGRAM_ID, ?Carbon $madeAt = null, ?string $startParam = null, string $token = FakeTelegram::TOKEN): string
+    {
+        return TelegramLaunch::initData($telegramId, $madeAt ?? now(), $token, $startParam);
     }
 
     /**

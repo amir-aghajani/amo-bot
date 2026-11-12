@@ -10,6 +10,7 @@ use App\Modules\Telegram\Gates\PhoneGate;
 use App\Modules\Telegram\Handlers\AgencyHandler;
 use App\Modules\Telegram\Handlers\BroadcastHandler;
 use App\Modules\Telegram\Handlers\ClientNameHandler;
+use App\Modules\Telegram\Handlers\ContactHandler;
 use App\Modules\Telegram\Handlers\CustomEmojiHandler;
 use App\Modules\Telegram\Handlers\CustomServiceHandler;
 use App\Modules\Telegram\Handlers\DiscountCodeHandler;
@@ -34,11 +35,18 @@ use App\Modules\Telegram\Handlers\WalletTransferHandler;
 use App\Modules\Telegram\Handlers\WheelHandler;
 use App\Modules\Telegram\Keyboard\MainMenu;
 use App\Modules\Telegram\Reports\AgencyReview;
+use App\Modules\Telegram\Reports\Customers\CustomerAccount;
+use App\Modules\Telegram\Reports\Customers\CustomerDiscount;
+use App\Modules\Telegram\Reports\Customers\CustomerHistory;
+use App\Modules\Telegram\Reports\Customers\CustomerOrder;
+use App\Modules\Telegram\Reports\Customers\CustomerServices;
+use App\Modules\Telegram\Reports\Customers\CustomerWallet;
 use App\Modules\Telegram\Reports\DeliveryRetry;
 use App\Modules\Telegram\Reports\ReceiptReview;
 use App\Modules\Telegram\Reports\ReportGroupConnect;
 use App\Modules\Telegram\Reports\ReportGroupUpdates;
 use App\Modules\Telegram\Reports\TicketClose;
+use App\Modules\Telegram\Reports\UserManagement;
 use App\Modules\Telegram\Update\Dispatcher;
 
 /*
@@ -53,8 +61,9 @@ return static function (Dispatcher $bot): void {
 
     $bot->command('start', StartHandler::class);
     $bot->command('menu', StartHandler::class);
-    // A contact card that passed the gates (the phone gate just took it) lands on the menu.
-    $bot->contact(StartHandler::class);
+    // A contact card that passed the gates: the one the phone gate just took lands on the menu; any other (the mini
+    // app's «share my number») gets a word, the chat left at its step.
+    $bot->contact(ContactHandler::class);
     $bot->callback(JoinPrompt::CHECK, JoinHandler::class);
 
     // The main menu: the reply keyboard's labels (read per update: the admin edits them) and the inline `menu:*` taps.
@@ -122,12 +131,21 @@ return static function (Dispatcher $bot): void {
 
     $bot->fallback(FallbackHandler::class);
 
-    // The report group: the connect command, the buttons under its reports (bot admins only, each handler checks), and
-    // the rest — the bot's membership, the title, replies answering a ticket or giving a rejection its reason.
+    // The report group: the connect command, /manage and a customer's card, the buttons under its reports (bot admins
+    // only, each handler checks), and the rest — the bot's membership, the title, replies answering a ticket or giving a
+    // rejection its reason.
     $bot->groupCommand('start', ReportGroupConnect::class);
+    $bot->groupCommand(UserManagement::COMMAND, UserManagement::class);
     $bot->groupCallback(ReceiptReview::PREFIX, ReceiptReview::class);
     $bot->groupCallback(DeliveryRetry::PREFIX, DeliveryRetry::class);
     $bot->groupCallback(AgencyReview::PREFIX, AgencyReview::class);
     $bot->groupCallback(TicketClose::PREFIX, TicketClose::class);
+    $bot->groupCallback(UserManagement::PREFIX, UserManagement::class);
+    $bot->groupCallback(CustomerServices::PREFIX, CustomerServices::class);
+    $bot->groupCallback(CustomerWallet::PREFIX, CustomerWallet::class);
+    $bot->groupCallback(CustomerDiscount::PREFIX, CustomerDiscount::class);
+    $bot->groupCallback(CustomerHistory::PREFIX, CustomerHistory::class);
+    $bot->groupCallback(CustomerAccount::PREFIX, CustomerAccount::class);
+    $bot->groupCallback(CustomerOrder::PREFIX, CustomerOrder::class);
     $bot->group(ReportGroupUpdates::class);
 };

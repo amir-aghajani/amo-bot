@@ -32,6 +32,19 @@ interface SignInSite extends CaptchaSite
     /** Whether customers may sign up with an email and a password (signing in and a reset do not ask it). */
     public function allowsEmailSignUp(): bool;
 
+    /**
+     * Whether customers sign in with a code texted to their mobile (Services\PhoneSignIn), add a number to their account
+     * and prove it again by one: the site's switch is on, the installation sends SMS, and its shop is the main one or the
+     * owner lets agents' websites text codes too (on the owner's account).
+     */
+    public function allowsPhoneSignIn(): bool;
+
     /** Whether a page on `$origin` (as a browser sends it) is the site's: its own origin, or one it lists. */
     public function allowsOrigin(string $origin): bool;
+
+    /**
+     * Whether it is the shop's Telegram mini app, not a website: only there does a customer prove a way in again by the
+     * launch data Telegram hands the app, or by the device's fingerprint or face (Reauthentication).
+     */
+    public function isMiniApp(): bool;
 }

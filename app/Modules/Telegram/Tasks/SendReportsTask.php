@@ -6,6 +6,7 @@ namespace App\Modules\Telegram\Tasks;
 
 use App\Core\Scheduling\Budget;
 use App\Core\Scheduling\Task;
+use App\Modules\Settings\Services\ScheduleSettings;
 use App\Modules\Telegram\Reports\ReportSender;
 
 /**
@@ -17,11 +18,12 @@ final class SendReportsTask implements Task
     public function __construct(
         private readonly ReportSender $reports,
         private readonly Budget $budget,
+        private readonly ScheduleSettings $schedule,
     ) {}
 
     public function run(): void
     {
         $this->reports->flush($this->budget->seconds());
-        $this->reports->prune();
+        $this->reports->prune($this->schedule->reportDays(), $this->schedule->reportWaitHours());
     }
 }

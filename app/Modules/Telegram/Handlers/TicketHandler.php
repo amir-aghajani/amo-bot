@@ -144,13 +144,13 @@ final class TicketHandler implements Handler
     {
         TicketMessageHandler::awaitNew($ctx->session, $service->id);
 
-        $ctx->edit($this->texts->render(BotText::TicketReportAsk, ['client' => $service->remote_name]), ['reply_markup' => $this->buttons->backOnly(SubscriptionHandler::serviceCallback($service->id))]);
+        $ctx->edit($this->texts->render(BotText::TicketReportAsk, ['client' => $service->shownAs()]), ['reply_markup' => $this->buttons->backOnly(SubscriptionHandler::serviceCallback($service->id))]);
     }
 
     /** «📨 تیکت جدید»: which running service it is about, or «بدون سرویس مشخص»; without any, straight on to the message. */
     private function services(Context $ctx): void
     {
-        $services = CustomerServices::running($ctx->user->id)->limit(self::NEW_SERVICES)->get(['id', 'remote_name']);
+        $services = CustomerServices::running($ctx->user->id)->limit(self::NEW_SERVICES)->get(['id', 'remote_name', 'label']);
         if ($services->isEmpty()) {
             $this->ask($ctx, 0, MainMenu::SUPPORT);
 
@@ -159,7 +159,7 @@ final class TicketHandler implements Handler
 
         $keyboard = InlineKeyboard::make();
         foreach ($services as $service) {
-            $keyboard->row(InlineKeyboard::callback($this->texts->render(BotText::ServiceButton, ['client' => $service->remote_name]), CallbackData::build(self::PREFIX, self::NEW, $service->id)));
+            $keyboard->row(InlineKeyboard::callback($this->texts->render(BotText::ServiceButton, ['client' => $service->shownAs()]), CallbackData::build(self::PREFIX, self::NEW, $service->id)));
         }
         $keyboard->row(InlineKeyboard::callback($this->texts->get(BotText::TicketNoService), CallbackData::build(self::PREFIX, self::NEW, 0)))
             ->row($this->buttons->back(MainMenu::SUPPORT));
@@ -174,7 +174,7 @@ final class TicketHandler implements Handler
         TicketMessageHandler::awaitNew($ctx->session, $service?->id);
 
         $ctx->edit($this->texts->render(BotText::TicketAsk, [
-            'service' => $service !== null ? $this->texts->part(BotText::TicketService, ['client' => $service->remote_name]) : '',
+            'service' => $service !== null ? $this->texts->part(BotText::TicketService, ['client' => $service->shownAs()]) : '',
         ]), ['reply_markup' => $this->buttons->backOnly($back)]);
     }
 
@@ -337,7 +337,7 @@ final class TicketHandler implements Handler
                 TicketStatus::Answered => BotText::TicketStatusAnswered,
                 TicketStatus::Closed => BotText::TicketStatusClosed,
             }),
-            'service' => $service !== null ? $this->texts->part(BotText::TicketService, ['client' => $service->remote_name]) : '',
+            'service' => $service !== null ? $this->texts->part(BotText::TicketService, ['client' => $service->shownAs()]) : '',
             'rated' => $ticket->rating !== null ? $this->texts->part(BotText::TicketRating, ['rating' => Persian::digits($ticket->rating)]) : '',
         ];
         $room = Limits::MESSAGE - self::ROOM;

@@ -21,6 +21,7 @@ use App\Modules\Telegram\Messages;
 use App\Modules\Telegram\Texts\BotText;
 use App\Modules\Telegram\Texts\BotTexts;
 use App\Modules\Telegram\Texts\Html;
+use App\Modules\Telegram\Texts\PremiumText;
 use App\Modules\Telegram\Update\CallbackData;
 use App\Support\Money;
 use App\Support\Persian;
@@ -149,11 +150,11 @@ final class WheelHandler implements Handler
             ]),
             RewardKind::Traffic, RewardKind::Days => $this->texts->part(BotText::WheelGivenService, [
                 'extra' => $reward->words(),
-                'client' => (string) $spun->given->subscription?->remote_name,
+                'client' => (string) $spun->given->subscription?->shownAs(),
             ]),
             RewardKind::Plan => $spun->given->order?->status === OrderStatus::Fulfilled
-                ? $this->texts->part(BotText::WheelGivenPlan, ['plan' => (string) $reward->plan?->name])
-                : $this->texts->part(BotText::WheelGivenPlanPending, ['plan' => (string) $reward->plan?->name, 'order' => (string) $spun->given->order?->id]),
+                ? $this->texts->part(BotText::WheelGivenPlan, ['plan' => $reward->plan === null ? '' : PremiumText::plan($reward->plan)])
+                : $this->texts->part(BotText::WheelGivenPlanPending, ['plan' => $reward->plan === null ? '' : PremiumText::plan($reward->plan), 'order' => (string) $spun->given->order?->id]),
         };
 
         return $given === null

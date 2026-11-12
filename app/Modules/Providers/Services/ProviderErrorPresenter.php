@@ -32,7 +32,7 @@ final class ProviderErrorPresenter
             $e instanceof UnexpectedResponseException => [self::withHint(self::unexpected($e), $e->hint), $e->isRedirect() ? '' : $e->excerpt],
             $e instanceof NotFoundException => ['موردی که خواسته شد روی پنل پیدا نشد.', $e->getMessage()],
             $e instanceof UnsupportedOperationException => ['این پنل چنین امکانی ندارد.', $e->getMessage()],
-            $e instanceof PanelApiException => ['پنل درخواست را رد کرد.', $e->panelMessage !== '' ? $e->panelMessage : self::http($e->httpStatus)],
+            $e instanceof PanelApiException => [self::withHint('پنل درخواست را رد کرد.', $e->hint), $e->panelMessage !== '' ? $e->panelMessage : self::http($e->httpStatus)],
             default => ['ارتباط با پنل به مشکل خورد.', $e->getMessage()],
         };
 

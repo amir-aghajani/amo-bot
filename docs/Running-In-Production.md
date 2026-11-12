@@ -38,26 +38,74 @@ The shop's timed work runs in the scheduler, which the host's cron starts every 
 
 One run goes at a time (a lock), and its time — 45 seconds — is shared out over its tasks, so a run does not grow with
 the number of agents' bots. A task that belongs to a shop runs in every shop in turn, each with its own rules. The
-dashboard's «وضعیت سیستم» card says when the scheduler last ran. What runs, and how often:
+dashboard's «وضعیت سیستم» card says when the scheduler last ran. Every task, and how often it runs — yours to set:
+[the task schedule](#the-task-schedule).
 
-| Every | What runs |
-|---|---|
-| minute | Card-to-card receipts nobody reviewed within their method's window, approved ([Payment methods](Payment-Methods.md#approving-receipts-by-themselves)) |
-| minute | Online payments not paid yet, asked about at their gateway — a few each run, in case a gateway's callback never came ([Payment methods](Payment-Methods.md#every-online-gateway)) |
-| minute | Paid orders that a process left undelivered when it died, delivered (a failed delivery waits for support) |
-| minute | Broadcasts, a batch at a time |
-| minute | «افزودن زمان و حجم» and «هدیه همگانی» that no open screen is working on, a batch at a time |
-| minute | «انتقال سرویس‌ها» that no open page is working on, a batch at a time; then the clients a rescue left on a panel that answers again, removed ([Servers](Servers.md#moving-its-services)) |
-| minute | The report groups' messages, at Telegram's pace |
-| 10 minutes | Unpaid orders nobody touched for 48 hours, cancelled — one made with a discount code sooner, once the code's hold is over; never one whose money may be with support ([Orders and payments](Orders-And-Payments.md)) |
-| 10 minutes | A renewed service's next period, begun where the paid one ended |
-| 10 minutes | «قرعه‌کشی شبانه», once the shop's clock has passed the hour of the draw — once a day ([Loyalty, cashback and draws](Loyalty-Cashback-And-Draws.md)) |
-| 15 minutes | Every running service read from its panel, then «یادآوری» for the services near their end or low on traffic |
-| 15 minutes | The services that are done with, removed from their panels by each shop's rules: ended services the set hours after their end, where the shop removes them ([Bot settings](Bot-Settings.md#ended-services)), and free tests that ended or never connected ([Test accounts](Test-Accounts.md#the-clean-up)) — a stopped agent's shop too |
-| 30 minutes | «تمدید خودکار» |
-| hour | The agents' terms: an agency's end and a month's minimum purchase warned of ahead, then the agent's selling suspended — or allowed again once the month's minimum is met ([Agency](Agency.md)) |
-| hour | Housekeeping: the updates the bots took (kept 48 hours, so an update Telegram sends again is served once), the websites' ended sessions and expired sign-in challenges, notices half a year old, the pictures of tickets closed a month ago, and the report groups' week-old reports of closed tickets |
-| day | AmoBot's newest release, read from GitHub, so the dashboard says when one is out ([Upgrading](Upgrading.md)) |
+### The task schedule
+
+«تنظیمات پنل › زمان‌بندی کارها», the owner's: every scheduled task in the order a run takes them — what it does, whether
+it runs in each shop, when it last ran and when it is next due — with how often it runs and, for a few, the times it
+decides by. One for the whole installation, kept with the main shop: one scheduler runs every shop's work, an agent's
+too. The page is saved as one form — every value checked, and all kept or none.
+
+How often a task runs is 1 to 10080 minutes (a week). The cron starts the scheduler once a minute, so 1 is as often as
+any task can run; its next run counts from its last. While the database cannot be read, every task runs at its default.
+
+| Task | What it does | Runs by default every |
+|---|---|---|
+| «تایید خودکار رسیدها» | Card-to-card receipts nobody reviewed within their method's window, approved ([Payment methods](Payment-Methods.md#approving-receipts-by-themselves)) | minute |
+| «بررسی پرداخت‌های آنلاین» | Online payments not paid yet, asked about at their gateway — a few each run, in case a gateway's callback never came ([Payment methods](Payment-Methods.md#every-online-gateway)) | minute |
+| «ادامه تحویل‌های نیمه‌کاره» | Paid orders that a process left undelivered when it died, delivered (a failed delivery waits for support) | minute |
+| «کنار گذاشتن سفارش‌های رهاشده» | Unpaid orders nobody touched for a while, cancelled — one made with a discount code sooner, once the code's hold is over; never one whose money may be with support ([Orders and payments](Orders-And-Payments.md#what-runs-by-itself)) | 10 minutes |
+| «ارسال پیام‌های همگانی» | Broadcasts, a batch at a time | minute |
+| «تمدید خودکار» | The services whose «تمدید خودکار» is on and whose end is near, renewed from the wallet ([Services](Services.md#what-runs-by-itself)) | 30 minutes |
+| «شروع دوره تمدیدشده» | A renewed service's next period, begun where the paid one ended | 10 minutes |
+| «افزودن زمان و حجم و هدیه همگانی» | «افزودن زمان و حجم» and «هدیه همگانی» that no open screen is working on, a batch at a time | minute |
+| «انتقال سرویس‌ها» | «انتقال سرویس‌ها» that no open page is working on, a batch at a time; then the clients a rescue left on a panel that answers again, removed ([Servers](Servers.md#moving-its-services)) | minute |
+| «همگام‌سازی سرویس‌ها» | Every running service read from its panel — usage, end, link —, one call per server | 15 minutes |
+| «یادآوری‌ها» | «یادآوری» for the services near their end or low on traffic ([Bot settings](Bot-Settings.md#reminders)) | 15 minutes |
+| «حذف سرویس‌های تمام‌شده» | The services that are done with, removed from their panels by each shop's rules: ended services the set hours after their end, where the shop removes them ([Bot settings](Bot-Settings.md#ended-services)), and free tests that ended or never connected ([Test accounts](Test-Accounts.md#the-clean-up)) — a stopped agent's shop too | 15 minutes |
+| «شرایط نمایندگی» | The agents' terms: an agency's end and a month's minimum purchase warned of ahead, then the agent's selling suspended — or allowed again once the month's minimum is met ([Agency](Agency.md)) | hour (60 minutes) |
+| «پاک‌سازی سابقه پیام‌های ربات» | The updates the bots took, forgotten once Telegram can no longer send them again | hour |
+| «پاک‌سازی حساب‌های وب‌سایت» | The websites' ended sessions, expired sign-in codes and old notices, removed | hour |
+| «پاک‌سازی تیکت‌ها» | The pictures of closed tickets and the report groups' old reports of closed tickets, removed | hour |
+| «قرعه‌کشی شبانه» | Once the shop's clock has passed the hour of the draw, the day's draw — once a day, so the interval only sets how soon after the hour it comes ([Loyalty, cashback and draws](Loyalty-Cashback-And-Draws.md#the-nightly-draw)) | 10 minutes |
+| «ارسال پشتیبان به گروه» | Each shop's backup, sent to its report group's «پشتیبان‌گیری» topic: the main shop's group gets the whole installation's, an agent's group its own shop's — in every shop whose group is connected and whose topic is on ([Backups](Backups.md#in-the-report-group)) | day (1440 minutes) |
+| «بررسی نسخه تازه» | AmoBot's newest release, read from GitHub, so the dashboard says when one is out ([Upgrading](Upgrading.md)) | day (1440 minutes) |
+| «ارسال گزارش‌ها» | The report groups' queued messages, at Telegram's pace ([Report group](Telegram-Group.md#pace)) | minute |
+
+A task's interval is also how late its work may come. «تمدید خودکار» by «ریست زمان + انتقال حجم» waits for the last run
+before a service's end — its interval and 5 minutes ahead at most —, and the term it starts afresh throws away no more
+than that: a longer interval renews such a service earlier ([Bot settings](Bot-Settings.md#renewal)).
+
+The times the tasks decide by, each under its task:
+
+| Task | Setting | Default | From – to |
+|---|---|---|---|
+| «کنار گذاشتن سفارش‌های رهاشده» | «مهلت سفارش پرداخت‌نشده» — an unpaid order nobody touched for this long is cancelled; never one whose money is with support | 48 hours | 1 – 720 hours |
+| «بررسی پرداخت‌های آنلاین» | «فاصله پرسیدن، صفحه پرداخت باز» — while a gateway's page is open, its payment is asked about this often | 3 minutes | 1 – 60 minutes |
+| «بررسی پرداخت‌های آنلاین» | «پرسیدن پس از بسته شدن صفحه» — still asked about this long after its page closed: a gateway may take the money late | 2 hours | 0 – 72 hours |
+| «بررسی پرداخت‌های آنلاین» | «فاصله پرسیدن، صفحه بسته» — after its page closed, asked about this often | 15 minutes | 1 – 1440 minutes |
+| «بررسی پرداخت‌های آنلاین» | «مهلت پول تسویه‌نشده» — one on which the gateway has money it has not settled is asked about until this long after its page closed, then held for support | 48 hours | 1 – 720 hours, never less than «پرسیدن پس از بسته شدن صفحه» |
+| «پاک‌سازی حساب‌های وب‌سایت» | «نگه‌داری اعلان‌های وب‌سایت» — a customer's notices on the website kept this long | 180 days | 1 – 3650 days |
+| «پاک‌سازی تیکت‌ها» | «نگه‌داری تصویرهای تیکت بسته» — the pictures uploaded to a ticket kept this long after it closed | 30 days | 1 – 3650 days |
+| «ارسال گزارش‌ها» | «نگه‌داری گزارش‌های فرستاده‌شده» — the report group's messages kept this long, so a reply to one is still known; an open ticket's always | 7 days | 1 – 365 days |
+| «ارسال گزارش‌ها» | «مهلت ارسال گزارش» — a report still queued after this long is given up | 24 hours | 1 – 168 hours |
+
+**A value equal to its default is kept as none**: the field shows the default, and when a later version of AmoBot
+changes a default, the shop follows it. A value you set stays until you set another.
+
+**What stays fixed**, since what keeps the shop from doing a thing twice rests on it:
+
+- an update the bots took is remembered 48 hours, so one Telegram sends again is served once (Telegram keeps an update a
+  day);
+- a checkout's request key answers again for a week, so a retry never buys twice
+  ([the Idempotency-Key](Store-API-Buying.md#the-idempotency-key));
+- a delivery left half-way counts as stuck after 10 minutes paid and not started, or 18 minutes with no sign of life, so
+  one still running is never delivered again;
+- a test a process left half-made is given back to the quota 30 minutes after it was claimed, so one still being made
+  is never given back ([Test accounts](Test-Accounts.md#the-clean-up));
+- how much of its work a task takes in one run (its batch), so a run keeps to its 45 seconds.
 
 ## Checklist
 
@@ -76,7 +124,9 @@ dashboard's «وضعیت سیستم» card says when the scheduler last ran. Wha
 - **PHP is current**: the newest release of its branch. While the host runs one with known security holes, a strip over
   every page of the owner's panel says so ([what you need](Installation.md#what-you-need)).
 - **PHP takes the pictures customers send**: `upload_max_filesize` `10M` and `post_max_size` `12M`
-  ([what you need](Installation.md#what-you-need)).
+  ([what you need](Installation.md#what-you-need)) — more to restore a backup larger than that.
+- **The shop is backed up**: the report group's «پشتیبان‌گیری» topic gets a backup every day, and `config.php` and
+  `storage/uploads/` are kept beside them ([Backups](Backups.md)).
 
 ## File ownership
 
@@ -101,7 +151,7 @@ the user PHP runs as:
 - The host's cron and its terminal run as your account — the user PHP runs as in the first case. Under `mod_php` a
   command run there would leave files the web server's PHP cannot write (the scheduler's state, the day's log): have the
   cron call the cron address instead ([the scheduler](#the-scheduler)).
-- Files restored from a backup must belong to that user too.
+- Files put back by hand from a backup must belong to that user too.
 
 ## Uploads and the host's disk
 
@@ -116,8 +166,12 @@ its pixels. The shop holds uploads to what a host can bear:
 - **The disk**: no picture is taken while less than 200 MB is free on the disk `storage/` is on (a `503`, and a line in
   the log).
 
+**Backups** take room on the same disk, in `storage/backups/`: a backup made for a download (deleted after an hour), a
+file uploaded to restore (30 minutes), and the last three states kept from before a restore of each kind — the whole
+installation's, and each shop's, each about as large as a backup of it ([Backups](Backups.md#limits)).
+
 Pictures sent in the bot stay on Telegram: the shop keeps only their reference. A closed ticket's uploaded pictures are
-removed a month after it closed ([the scheduler](#the-scheduler)). The shop's sign-in emails have budgets of their own
+removed 30 days after it closed by default ([the task schedule](#the-task-schedule)). The shop's sign-in emails have budgets of their own
 too — a shop's hour and day, and the whole installation's ([limits](Store-API-Sign-In.md#limits-and-lifetimes)).
 
 ## Health and logs

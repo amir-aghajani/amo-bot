@@ -19,18 +19,27 @@ final class AccountRefusedException extends DomainRuleException
     public const OTHER_TELEGRAM = 'این حساب به حساب تلگرام دیگری وصل است؛ اول آن را جدا کنید.';
     public const OTHER_GOOGLE = 'این حساب به حساب گوگل دیگری وصل است؛ اول آن را جدا کنید.';
     public const HAS_EMAIL = 'این حساب ایمیل دارد.';
+    public const HAS_PHONE = 'این حساب شماره موبایل دارد؛ برای شماره تازه، اول آن را جدا کنید.';
     public const NOT_LINKED = 'این روش ورود به حساب وصل نیست.';
     public const LAST_WAY_IN = 'حداقل یک روش ورود باید بماند.';
     public const OFFER_GONE = 'این پیشنهاد ادغام دیگر معتبر نیست؛ دوباره تلاش کنید.';
     public const TWO_FACTOR_ACCOUNT = 'این ایمیل به حسابی با ورود دو مرحله‌ای وصل است؛ برای یکی کردن دو حساب، با همان ایمیل وارد شوید و روش ورود این حساب را از آنجا وصل کنید.';
+    public const TWO_FACTOR_NUMBER = 'این شماره به حسابی با ورود دو مرحله‌ای وصل است؛ برای یکی کردن دو حساب، به همان حساب وارد شوید و روش ورود این حساب را از آنجا وصل کنید.';
     public const SAME_ACCOUNT = 'هر دو یک حساب هستند؛ چیزی برای ادغام نیست.';
     public const BANNED = 'یکی از دو حساب مسدود است؛ ادغام انجام نمی‌شود.';
     public const BOTH_HAVE = 'هر دو حساب به یک نوع روش ورود متفاوت وصل هستند (%s)؛ اول یکی را جدا کنید.';
     public const BOTH_AGENTS = 'هر دو حساب نماینده هستند؛ دو نماینده با هم ادغام نمی‌شوند.';
+    public const NOT_MINI_APP_SESSION = 'تایید با اثر انگشت فقط برای ورودی است که با خود مینی‌اپ انجام شده باشد.';
 
     private function __construct(string $message)
     {
         parent::__construct($message);
+    }
+
+    /** A fingerprint secret asked for on a session the mini app's launch data did not sign in. */
+    public static function notMiniAppSession(): self
+    {
+        return new self(self::NOT_MINI_APP_SESSION);
     }
 
     public static function twoFactorNeedsPassword(): self
@@ -68,6 +77,11 @@ final class AccountRefusedException extends DomainRuleException
         return new self(self::HAS_EMAIL);
     }
 
+    public static function hasPhone(): self
+    {
+        return new self(self::HAS_PHONE);
+    }
+
     public static function notLinked(): self
     {
         return new self(self::NOT_LINKED);
@@ -83,9 +97,10 @@ final class AccountRefusedException extends DomainRuleException
         return new self(self::OFFER_GONE);
     }
 
-    public static function twoFactorAccount(): self
+    /** A merge by an email address — or, `$byNumber`, a mobile number — alone, which would get past the other account's second step. */
+    public static function twoFactorAccount(bool $byNumber = false): self
     {
-        return new self(self::TWO_FACTOR_ACCOUNT);
+        return new self($byNumber ? self::TWO_FACTOR_NUMBER : self::TWO_FACTOR_ACCOUNT);
     }
 
     public static function sameAccount(): self

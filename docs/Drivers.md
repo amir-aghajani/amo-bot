@@ -3,16 +3,18 @@
 # Drivers
 
 What the shop does through someone else is a **driver** of a family: a VPN panel it sells on, a way it takes money, the
-database it runs on, the way its email goes out, the captcha a website's forms ask. Every family stands on one small
+database it runs on, the way its email goes out, the way its sign-in codes go out by SMS, the captcha a website's
+forms ask. Every family stands on one small
 kernel, so a new driver is a class, its registration and its request shape — the panels draw its form from its
 description, with no code of their own but where a family says so below.
 
 | Family | The interface | Registry (`bootstrap/container.php`) | Lives in | Today | Panel code for a new one |
 |---|---|---|---|---|---|
-| VPN panels | `Providers\Contracts\PanelDriver` (and its client, `ProviderInterface`) | `panel.drivers` | `app/Modules/Providers/Drivers/<Name>/` | `3x-ui`, `pasarguard` | none |
+| VPN panels | `Providers\Contracts\PanelDriver` (and its client, `ProviderInterface`) | `panel.drivers` | `app/Modules/Providers/Drivers/<Name>/` | `3x-ui`, `pasarguard`, `hmpanel` | none |
 | Payment gateways | `Payments\Contracts\GatewayDriver` (and its gateway, `GatewayInterface`) | `payment.drivers` | `app/Modules/Payments/Drivers/<Name>/` | `wallet`, `outside` (paid outside the shop), `manual` (card to card), `cubepay`, `zarinpal`, `atlaspay`, `abangateway`, `plisio`, `aqayepardakht`, `variza` | an icon |
 | Databases | `Core\Database\Drivers\DatabaseDriver` | `database.drivers` | `app/Core/Database/Drivers/` | `mysql`, `sqlite` | none |
 | Mail | `Core\Mail\MailDriver` | `mail.drivers` | `app/Core/Mail/Drivers/` | `smtp`, `native`, `resend` | none |
+| SMS | `Core\Sms\SmsDriver` | `sms.drivers` | `app/Core/Sms/Drivers/` | `ippanel` | none |
 | Captchas | `Core\Captcha\CaptchaDriver` | `captcha.drivers` | `app/Core/Captcha/Drivers/` | `turnstile`, `altcha` | none |
 
 ## The kernel
@@ -56,7 +58,7 @@ one picked described under it) and `draft.ts` (the draft a form starts from, and
 **The API** describes each family's request as a `oneOf`, one closed shape per driver, in
 `resources/api/openapi.yaml` — so a request is checked against exactly its driver's fields — and
 `tests/Unit/Drivers/DriverFormsTest` holds each shape to its driver's form, both ways: the same fields, the same ones
-required, a shape for every driver registered and for nothing else. It covers the database, mail, panel connector,
+required, a shape for every driver registered and for nothing else. It covers the database, mail, SMS, panel connector,
 payment method and captcha requests, and holds the description's list of field types and of captchas to the code's.
 After an edit to the description, `pnpm api:types` regenerates the panels' types.
 
@@ -77,7 +79,7 @@ folder but its registration and its request shape.
      shares: `Support\PanelConnection::address(hint, placeholder, pages, pagesRefusal)` (the panel's address, refusing
      the panel's own pages your connector names — 3X-UI's `/panel`, PasarGuard's `/dashboard`), then
      `...Support\PanelCredentials::fields(token, tokenHint, tokenPattern, tokenMismatch, loginHint)` (an API token, or
-     an admin's username and password), then fields of its own — one for the password way only takes
+     an admin's username and password — a `loginHint` of `null` offers the token alone), then fields of its own — one for the password way only takes
      `when: PanelCredentials::WITH_PASSWORD`, a secret `boundTo: PanelConnection::bound()` (the panel's address by its
      origin, the proxy's host and port, and the TLS check; a proxy switched off changes nothing) with `moved` starting
      `PanelConnection::MOVED` —, then
@@ -148,7 +150,7 @@ folder but its registration and its request shape.
 8. **Try it** on a real panel from a shell: `php bin/console panel:probe <key> <url> -t <token>`
    ([Console commands](Console-Commands.md)).
 
-The two that exist:
+The three that exist:
 
 - **3X-UI** (`Drivers/ThreeXui`) targets the v3 panel API: `ThreeXuiClient` (an API token as a bearer, or a cookie
   login — the CSRF token replayed, a TOTP code when a secret is kept — signed in again once on a refusal), `ThreeXuiApi`
@@ -160,6 +162,15 @@ The two that exist:
   a plan's device count is not enforced there. A username is 3 to 128 letters, digits and `_ - . @`, never two of
   those side by side; a user kept switched off by an update is `disabled` with its term (one still on hold keeps its
   duration for the switch back on).
+- **HMPanel** (`Drivers/HmPanel`, 2.5+), a panel over several 3x-ui panels: `HmPanelClient` (its key API under
+  `/api/v1`, an `hmp_…` key as the bearer — the one way in: `PanelCredentials::fields()` with no `loginHint` offers the
+  token alone) and `HmPanelProvider`. A client is found by name through `/v1/clients/lookup` and then called by
+  HMPanel's own id, which the client keeps; inbounds are those of its 3x-ui panels, keyed `<panel id>:<inbound id>`, and
+  a sale on two panels' inbounds is refused before it is sent (a client lives on one). Its term and device limit are
+  3x-ui's, passed on (`ThreeXui\Support\ExpiryTime`). No status (its key API has no host statistics) and no rotation; a
+  link claimed is looked up by the panel and counts only by one of the client's secrets — its token, subscription id
+  or UUID —, never its name. The key answers 60 calls a minute by default: a 429 is an `HmPanelApiException` that
+  counts as the panel out of reach, so the server backs off.
 
 ## A payment gateway
 
@@ -223,7 +234,8 @@ what came of it. Its gateway implements `Contracts\OnlineGateway` (the kind `onl
 - `check($payment)` asks the gateway what came of it — `OnlineVerdict::paid()` (with its reference), `waiting()` or
   `closed()` — never believing what a callback said. `waiting(moneyIn: true)` says the gateway took money on it that
   it has not settled yet (a receipt in review, a sum paid in part): the shop marks the payment (`invoice.money_in`) and
-  asks about it past the usual two hours, up to 48 after its page closed — then it holds it for support. A payment so
+  asks about it past the usual two hours, up to 48 after its page closed — then it holds it for support (both the
+  defaults of the owner's [«زمان‌بندی کارها»](Running-In-Production.md#the-task-schedule)). A payment so
   marked that the gateway then answers `closed()` is held for support at once;
 - `initiate($payment)` and `settle()` are the same for every online gateway, so they come from one trait,
   `Drivers\OnlinePage`: `initiate()` reads what `open()` kept and calls nothing — `PaymentInitiation::link()` with a
@@ -245,7 +257,7 @@ other holds —,
 the callback address `/payments/callback/{payment}/{secret}` — a secret of the payment's own; a call there only makes
 the shop ask the gateway, a few times a minute at most for one payment, and one past that is answered from the payment
 as it stands —, the scheduler asking about every one not paid yet now and then (`Tasks\OnlinePaymentsTask`) until two
-hours after its page closed — a gateway may take money late —, the bot's and the website's «check» for the customer
+hours after its page closed by default — a gateway may take money late —, the bot's and the website's «check» for the customer
 and the panels' for support; a paid one settles its order once and tells the customer once, and money the gateway took
 after its order closed goes to the customer's wallet. A test puts a fake of the gateway's API under the shop's outgoing
 client, as `Tests\Support\FakeCubePay`, `FakeZarinpal`, `FakeAtlasPay`, `FakeAban`, `FakePlisio`,
@@ -334,6 +346,36 @@ Telegram cannot reach.
    request to its form by itself.
 5. **Regenerate the reference**: `php scripts/docs.php` adds its settings to the
    [config.php reference](Config-Reference.md#mail).
+
+## An SMS driver
+
+A way the shop's one-time codes go out by SMS — a website's sign-in by phone number ([SMS](Sms.md)).
+
+1. **The driver** — `app/Core/Sms/Drivers/<Name>.php`, implementing `SmsDriver`:
+   - `key()` — what `SMS_DRIVER` holds (`none` is no driver: no SMS);
+   - `describe()` — its label, description and notes, and its form: its own `SMS_*` settings, each kept under its
+     `config.php` setting — a key a `Secret` with `missing`, bound to the API's address when the form has one (as
+     IPPanel's is, `Secret::byOrigin()`);
+   - `sender(values)` — the `SmsSender` those settings make, or an `SmsSettingsException` when they make none (the log
+     says why, and no code goes out). Its `sendCode($to, $code)` sends the code alone — the words around it are the
+     provider's approved pattern, `$to` in E.164 — over the shop's one outgoing client, `GuzzleHttp\ClientInterface`
+     (as `Core\Sms\IpPanelSender` does: no redirect followed, a timeout a visitor can wait out), and throws
+     `SmsFailedException::because($reason)` when the provider does not take it: its words, short, never the key — nor
+     the client's exception, which carries the request and so the key. A sender whose provider tells the account's
+     credit implements `ReportsCredit` too (`credit()`, an `SmsCredit` in the provider's unit), which «تنظیمات پنل ›
+     پیامک» shows.
+2. **Register it** in `bootstrap/container.php`: add it to `sms.drivers`. `SmsSenders::fromConfig()` builds the sender
+   `config.php` names, once a process: the container's `sms.sender`, which `Core\Sms\Sms` sends through.
+3. **Describe its request**: its key in `SmsDriver`'s enum, and a `Sms<Name>Request` in `ConfigSmsRequest`'s `oneOf`
+   (`driver`, its fields and `agents`), then `pnpm api:types`. «تنظیمات پنل › پیامک» draws it from its description.
+4. **Tests**: a unit test like `tests/Unit/Core/Sms/IpPanelTest.php` — its card and form, the request it sends (its
+   address, its headers, its body), the provider's answers and refusals, out of reach, the key in no failure —, its
+   sender built from `config.php` in `tests/Unit/Core/Sms/SmsSendersTest.php`, and a save in
+   `tests/Feature/SmsSettingsApiTest.php`. Everywhere else the tests send through `Tests\Fakes\RecordingSmsSender`, the
+   container's `sms.sender` in every test (`TestCase::sms()`). `DriverFormsTest` holds its request to its form by
+   itself.
+5. **Regenerate the reference**: `php scripts/docs.php` adds its settings to the
+   [config.php reference](Config-Reference.md#sms).
 
 ## A captcha driver
 

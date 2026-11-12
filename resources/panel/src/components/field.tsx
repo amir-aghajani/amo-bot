@@ -43,8 +43,9 @@ export function Field({ id, label, hint, error, optional, className, children }:
 
   return (
     // content-start: in a multi-column form the cells stretch to the tallest one; without it grid would
-    // spread that extra height over the rows and push this field's control below its neighbours'.
-    <div className={cn('grid min-w-0 content-start gap-1.5', className)}>
+    // spread that extra height over the rows and push this field's control below its neighbours'. `data-field`: the box
+    // the settings search marks on arriving at it (components/settings-search/arrival).
+    <div data-field="" className={cn('grid min-w-0 content-start gap-1.5', className)}>
       <Label htmlFor={id} className="flex items-baseline gap-1.5">
         {label}
         {optional && <span className="text-caption font-normal text-faint">(اختیاری)</span>}
@@ -93,6 +94,7 @@ export function FieldGroup({ label, optional, description, hint, error, classNam
       aria-labelledby={`${id}-label`}
       aria-describedby={described || undefined}
       data-invalid={invalid ? '' : undefined}
+      data-field=""
       tabIndex={invalid ? -1 : undefined}
       className={cn('grid min-w-0 content-start gap-1.5 rounded-md outline-none focus-visible:focus-ring', className)}
     >

@@ -80,6 +80,12 @@ final class Actor
         return $this->grants === null || in_array($grant->value, $this->grants, true);
     }
 
+    /** One of the shop's admins deciding in its report group. */
+    public function isGroupAdmin(): bool
+    {
+        return $this->kind === ActorKind::GroupAdmin;
+    }
+
     /** A customer about their own, not support. */
     public function isCustomer(): bool
     {

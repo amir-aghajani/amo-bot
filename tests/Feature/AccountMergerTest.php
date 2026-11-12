@@ -76,7 +76,7 @@ final class AccountMergerTest extends DatabaseTestCase
 
         Carbon::setTestNow('2026-09-12 10:00:00');
         $pinnedBoth = $this->broadcast($ali);
-        $this->service(Identities::class)->remove($sara->refresh(), WayIn::Telegram);
+        $this->service(Identities::class)->remove($this->website(), $sara->refresh(), WayIn::Telegram);
         $pinnedAli = $this->broadcast($ali);
         $this->customerGroup('VIP', [$sara, $ali]);
         $team = $this->customerGroup('Team', [$ali]);

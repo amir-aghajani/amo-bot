@@ -26,6 +26,9 @@ use Psr\Log\LoggerInterface;
  * - What a website's sign-in costs before anything is tried (issuing(): nonces, states, captcha tokens), and each email
  *   (emailing(): the address's turn and day, the asking network's hour, a signed-in customer's day, the shop's and the
  *   installation's hour and day — the last two a 503, sparing the host's mail quota).
+ * - Each code by SMS, which the owner pays for (texting(): the number's turn, its hour and day, the asking network's
+ *   hour, a signed-in customer's day, the shop's and the installation's hour and day), and the texted codes tried while
+ *   one waits (textedCode(): the emailed codes' windows, per number — they never stop a code going).
  * - A website backend's captcha checks (verifyingCaptcha()), never the sign-ins' budget.
  */
 final class SignInThrottle
@@ -83,6 +86,27 @@ final class SignInThrottle
 
     public const CODE_FAILURES_DAILY = 20;
 
+    /** The codes one mobile number gets by SMS from every shop's website together, in an hour and in a day. */
+    public const SMS_NUMBER_HOURLY = 5;
+
+    public const SMS_NUMBER_DAILY = 10;
+
+    /** The codes a website's sign-ins text at the asking of one address network, in an hour. */
+    public const SMS_NETWORK_HOURLY = 20;
+
+    /** The codes one signed-in customer asks by SMS — a number added to their account, their own proven again — in a day. */
+    public const SMS_ACCOUNT_DAILY = 10;
+
+    /** The codes one shop's website texts, in an hour and in a day: the owner pays for every one. */
+    public const SMS_SHOP_HOURLY = 60;
+
+    public const SMS_SHOP_DAILY = 300;
+
+    /** The codes all websites together text, in an hour and in a day. */
+    public const SMS_INSTALLATION_HOURLY = 150;
+
+    public const SMS_INSTALLATION_DAILY = 1000;
+
     /** Tokens a website's backend may have judged in CAPTCHA_SECONDS — generous: it is one address for all visitors. */
     public const CAPTCHA_CHECKS = 3000;
 
@@ -96,6 +120,9 @@ final class SignInThrottle
 
     /** The wrong codes' refusal, its wait added. */
     private const CODES_FAILED = 'کد اشتباه زیادی برای این ایمیل وارد شد';
+
+    /** The wrong codes of a mobile number's refusal, its wait added. */
+    private const PHONE_CODES_FAILED = 'کد اشتباه زیادی برای این شماره وارد شد';
 
     private const HOUR = 3600;
 
@@ -259,21 +286,7 @@ final class SignInThrottle
             throw TooManyAttemptsException::wait(self::CODES_FAILED, $cooling);
         }
         $this->issuing($request);
-
-        $counted = [];
-        try {
-            foreach ($this->emailBudgets($request, $address, $askedBy) as [$windows, $refusal]) {
-                $wait = $this->limiter->attempt($windows);
-                if ($wait > 0) {
-                    throw $refusal($wait, $windows);
-                }
-                $counted = [...$counted, ...$windows];
-            }
-        } catch (\Throwable $e) {
-            $this->giveBack($counted);
-
-            throw $e;
-        }
+        $this->spend($this->emailBudgets($request, $address, $askedBy));
     }
 
     /** Give back what emailing() counted for an email that did not go. */
@@ -282,6 +295,55 @@ final class SignInThrottle
         foreach ($this->emailBudgets($request, $address, $askedBy) as [$windows]) {
             $this->giveBack($windows);
         }
+    }
+
+    /**
+     * Count a code a website is about to text to `$phone` (E.164) against every budget before it goes — the owner pays
+     * for each: the network's issuing, the number's turn (CODE_EVERY_SECONDS) in its shop, its hour and day across every
+     * shop, the network's hour and a signed-in customer's day (`$askedBy`) are each a 429; the shop's and the
+     * installation's hour and day a 503 (logged once a window). The number's wrong codes never stop a code going: they
+     * stop its codes being tried (textedCode()), so guesses lock its holder out of nothing but a code's tries. Counted
+     * whether or not the number has an account; a refusal gives back what this code counted before it (all but the
+     * network's ask).
+     *
+     * @throws TooManyAttemptsException 429
+     * @throws SignInRefusedException 503: the shop's or the installation's budget is spent
+     */
+    public function texting(ServerRequestInterface $request, string $phone, ?int $askedBy = null): void
+    {
+        $this->issuing($request);
+        $this->spend($this->smsBudgets($request, $phone, $askedBy));
+    }
+
+    /** Give back what texting() counted for a code the SMS provider did not take. */
+    public function textNotSent(ServerRequestInterface $request, string $phone, ?int $askedBy = null): void
+    {
+        foreach ($this->smsBudgets($request, $phone, $askedBy) as [$windows]) {
+            $this->giveBack($windows);
+        }
+    }
+
+    /**
+     * Count a try at a code texted to `$phone` (to sign in, or for account `$account` adding it or proving it again)
+     * before it is judged, against the number in its shop and the account, an hour's and a day's — the emailed codes'
+     * windows, CODE_FAILURES_HOURLY and CODE_FAILURES_DAILY. Spent: a 429. Asked only while a code is waiting to be tried
+     * (Accounts\Services\PhoneSignIn): a guess at a number nobody texted costs its holder nothing. Nobody is notified:
+     * every code that went told the number's holder a code was asked.
+     *
+     * @throws TooManyAttemptsException
+     */
+    public function textedCode(string $phone, ?int $account): void
+    {
+        $wait = $this->limiter->attempt(self::codeWindows($phone, $account));
+        if ($wait > 0) {
+            throw TooManyAttemptsException::wait(self::PHONE_CODES_FAILED, $wait);
+        }
+    }
+
+    /** Give back the count of a texted code that was right. */
+    public function textedCodeOpened(string $phone, ?int $account): void
+    {
+        $this->giveBack(self::codeWindows($phone, $account));
     }
 
     /**
@@ -361,24 +423,94 @@ final class SignInThrottle
     }
 
     /**
+     * The budgets a code texted to `$phone` spends, in counting order, each with its refusal.
+     *
+     * @return list<array{non-empty-list<array{string, int, int}>, \Closure(int, non-empty-list<array{string, int, int}>): \Throwable}>
+     */
+    private function smsBudgets(ServerRequestInterface $request, string $phone, ?int $askedBy): array
+    {
+        $shop = CurrentBot::id();
+        $asking = [['sms|network|' . $this->origin->clientNetwork($request), self::SMS_NETWORK_HOURLY, self::HOUR]];
+        if ($askedBy !== null) {
+            $asking[] = ["sms|account|{$askedBy}", self::SMS_ACCOUNT_DAILY, self::DAY];
+        }
+
+        return [
+            [[["sms|turn|{$shop}|{$phone}", 1, self::CODE_EVERY_SECONDS]], static fn(int $wait): \Throwable => new TooManyAttemptsException(sprintf('برای این شماره همین حالا کد فرستاده شد؛ %s ثانیه دیگر دوباره امتحان کنید.', Persian::digits((string) $wait)), $wait)],
+            [[
+                ["sms|to|hour|{$phone}", self::SMS_NUMBER_HOURLY, self::HOUR],
+                ["sms|to|day|{$phone}", self::SMS_NUMBER_DAILY, self::DAY],
+            ], static fn(int $wait): \Throwable => TooManyAttemptsException::wait('برای این شماره پیامک زیادی فرستاده شد', $wait)],
+            [$asking, static fn(int $wait): \Throwable => TooManyAttemptsException::wait('پیامک زیادی درخواست کرده‌اید', $wait)],
+            [[
+                ["sms|shop|hour|{$shop}", self::SMS_SHOP_HOURLY, self::HOUR],
+                ["sms|shop|day|{$shop}", self::SMS_SHOP_DAILY, self::DAY],
+                ['sms|installation|hour', self::SMS_INSTALLATION_HOURLY, self::HOUR],
+                ['sms|installation|day', self::SMS_INSTALLATION_DAILY, self::DAY],
+            ], $this->smsSpent(...)],
+        ];
+    }
+
+    /**
+     * Count one try in each budget, in order (emailBudgets(), smsBudgets()); a refusal gives back what the budgets before
+     * it counted, and is thrown.
+     *
+     * @param list<array{non-empty-list<array{string, int, int}>, \Closure(int, non-empty-list<array{string, int, int}>): \Throwable}> $budgets
+     */
+    private function spend(array $budgets): void
+    {
+        $counted = [];
+        try {
+            foreach ($budgets as [$windows, $refusal]) {
+                $wait = $this->limiter->attempt($windows);
+                if ($wait > 0) {
+                    throw $refusal($wait, $windows);
+                }
+                $counted = [...$counted, ...$windows];
+            }
+        } catch (\Throwable $e) {
+            $this->giveBack($counted);
+
+            throw $e;
+        }
+    }
+
+    /**
      * The 503 of a spent shop or installation email budget, logging each spent window once while it lasts.
      *
      * @param non-empty-list<array{string, int, int}> $windows
      */
     private function mailSpent(int $wait, array $windows): \Throwable
     {
-        foreach ($windows as [$key, $max, $seconds]) {
-            if ($this->limiter->availableIn($key, $max) > 0 && $this->limiter->hit("{$key}|logged", $seconds) === 1) {
-                $this->logger->warning('The websites\' sign-in emails reached a budget ({budget}: {max} in {seconds} seconds): no code goes out for {wait} seconds', [
-                    'budget' => $key,
-                    'max' => $max,
-                    'seconds' => $seconds,
-                    'wait' => $wait,
-                ]);
-            }
-        }
+        $this->logSpent($windows, $wait, 'The websites\' sign-in emails reached a budget ({budget}: {max} in {seconds} seconds): no code goes out for {wait} seconds');
 
         return SignInRefusedException::mailOff();
+    }
+
+    /**
+     * The 503 of a spent shop or installation SMS budget, logging each spent window once while it lasts.
+     *
+     * @param non-empty-list<array{string, int, int}> $windows
+     */
+    private function smsSpent(int $wait, array $windows): \Throwable
+    {
+        $this->logSpent($windows, $wait, 'The websites\' sign-in codes by SMS reached a budget ({budget}: {max} in {seconds} seconds): no code goes out for {wait} seconds');
+
+        return SignInRefusedException::smsOff();
+    }
+
+    /**
+     * Log `$message` for each of `$windows` that is spent, once while it lasts.
+     *
+     * @param non-empty-list<array{string, int, int}> $windows
+     */
+    private function logSpent(array $windows, int $wait, string $message): void
+    {
+        foreach ($windows as [$key, $max, $seconds]) {
+            if ($this->limiter->availableIn($key, $max) > 0 && $this->limiter->hit("{$key}|logged", $seconds) === 1) {
+                $this->logger->warning($message, ['budget' => $key, 'max' => $max, 'seconds' => $seconds, 'wait' => $wait]);
+            }
+        }
     }
 
     /** @param list<array{string, int, int}> $windows Each given back what one try counted in it. */

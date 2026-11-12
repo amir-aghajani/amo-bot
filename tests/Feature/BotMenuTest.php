@@ -19,8 +19,9 @@ use Tests\BotTestCase;
  * The main menu as the admin laid it out — a reply keyboard under the text field or buttons under a message, a button's
  * colour and premium emoji icon, a relabelled button routing by its new label, a stored layout the editor would refuse
  * never taking the menu away, one kept with a button the bot no longer has read without it, «بازگشت» putting the
- * greeting back in place of a screen — and the screens it opens that no flow of their own covers: support, «آموزش» in
- * the admin's words, and an agent's wallet with their credit.
+ * greeting back in place of a screen, the mini app's button there while Telegram can open the app — and the screens it
+ * opens that no flow of their own covers: the mini app's, support, «آموزش» in the admin's words, and an agent's wallet
+ * with their credit.
  */
 final class BotMenuTest extends BotTestCase
 {
@@ -152,6 +153,56 @@ final class BotMenuTest extends BotTestCase
 
         $this->send($this->message('🔑 اکانت تست'));
         self::assertSame([self::text(BotText::Unknown)], $this->said(), 'its label is no button any more');
+    }
+
+    public function testTheMiniAppsButtonOpensItInlineAndOnAReplyKeyboardItsScreenCarriesTheButtonThatDoes(): void
+    {
+        $this->config(['app.url' => 'https://shop.example']);
+        $address = 'https://shop.example/app/' . $this->miniApp()->key . '/';
+
+        // A reply keyboard: its own row under «خرید اشتراک», a label like any other.
+        $this->send($this->message('/start'));
+        self::assertSame([[Messages::MENU_BUY], [Messages::MENU_APP], [Messages::MENU_RENEW, Messages::MENU_SERVICES], [Messages::MENU_WALLET, Messages::MENU_TUTORIAL], [Messages::MENU_SUPPORT]], $this->replyKeyboard(0));
+        self::assertSame([['text' => Messages::MENU_APP]], $this->markup(0)['keyboard'][1], 'no web app button: Telegram would open the app without the launch data that signs the customer in');
+
+        // Its tap: a word, and the inline button that opens the app.
+        $this->send($this->message(Messages::MENU_APP));
+        self::assertSame([self::text(BotText::AppScreen)], $this->said());
+        self::assertSame([[['text' => self::text(BotText::AppButton), 'web_app' => ['url' => $address], 'style' => 'primary']]], $this->inlineKeyboard(0), 'no inline «بازگشت» while the menu is under the field');
+
+        // Inline: the menu's button opens the app itself, in the admin's colour.
+        $this->inlineStartMenu([[['action' => 'app', 'label' => 'اپلیکیشن', 'style' => 'success'], ['action' => 'buy', 'label' => 'خرید']]]);
+        $this->send($this->message('/start'));
+        self::assertSame([[['text' => 'خرید', 'callback_data' => MainMenu::PLANS], ['text' => 'اپلیکیشن', 'web_app' => ['url' => $address], 'style' => 'success']]], $this->inlineKeyboard(1));
+
+        // A message of the screen's from before: in place of it, with the way back to the menu.
+        $this->send($this->tap(MainMenu::APP));
+        self::assertSame([[['text' => self::text(BotText::AppButton), 'web_app' => ['url' => $address], 'style' => 'primary']], [['text' => self::text(BotText::Back), 'callback_data' => MainMenu::HOME]]], $this->inlineKeyboard(0));
+    }
+
+    public function testTheMiniAppsButtonWaitsForAnAppTelegramCanOpenAndItsScreenSaysWhenItCannot(): void
+    {
+        $app = $this->miniApp();
+
+        // On, but the shop's address is no https one: Telegram would not open it.
+        $this->send($this->message('/start'));
+        self::assertNotContains([Messages::MENU_APP], $this->replyKeyboard(0));
+
+        // On https, but switched off.
+        $this->config(['app.url' => 'https://shop.example']);
+        $app->update(['enabled' => false]);
+        $this->send($this->message('/start'));
+        self::assertNotContains([Messages::MENU_APP], $this->replyKeyboard(0));
+
+        // A keyboard drawn while it was on: its label still routes, to the word that it is not there now.
+        $this->send($this->message(Messages::MENU_APP));
+        self::assertSame([self::text(BotText::AppUnavailable)], $this->said());
+        self::assertArrayNotHasKey('reply_markup', $this->params(0));
+
+        // A layout of nothing else stands in with the built-in menu, as for a program switched off.
+        $this->inlineStartMenu([[['action' => 'app', 'label' => 'اپلیکیشن']]]);
+        $this->send($this->message('/start'));
+        self::assertSame([MainMenu::PLANS, MainMenu::RENEW, MainMenu::SUBSCRIPTIONS, MainMenu::WALLET, MainMenu::TUTORIAL, MainMenu::SUPPORT], $this->callbacks(1));
     }
 
     public function testSupportShowsTheContactTheAdminGave(): void

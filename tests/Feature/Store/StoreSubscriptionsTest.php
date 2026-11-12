@@ -84,11 +84,13 @@ final class StoreSubscriptionsTest extends HttpTestCase
             'download_bytes' => 2 * Traffic::GIGABYTE,
             'last_synced_at' => now()->subMinutes(3),
             'auto_renew' => true,
+            'label' => 'گوشی من',
         ]);
 
         self::assertSame(['subscription' => [
             'id' => $subscription->id,
             'name' => 'ali_1',
+            'label' => 'گوشی من',
             'status' => 'active',
             'is_test' => false,
             'claimed_at' => null,
@@ -368,10 +370,13 @@ final class StoreSubscriptionsTest extends HttpTestCase
         self::assertSame(422, $this->patchJson($path, ['auto_renew' => false])->getStatusCode());
         self::assertTrue($running->refresh()->auto_renew);
 
-        foreach ([['auto_renew' => 'yes'], ['auto_renew' => null], []] as $body) {
+        foreach ([['auto_renew' => 'yes'], ['auto_renew' => null]] as $body) {
             $response = $this->unchecked()->patchJson($path, $body);
             self::assertSame([422, ['auto_renew' => [Validation::NOT_A_SWITCH]]], [$response->getStatusCode(), $this->decode($response)['errors']], json_encode($body) ?: '');
         }
+        $nothing = $this->unchecked()->patchJson($path, []);
+        self::assertSame([422, CustomerSubscriptions::NOTHING_TO_CHANGE], [$nothing->getStatusCode(), $this->decode($nothing)['message']], 'nothing to change: neither the switch nor a name sent');
+        self::assertTrue($running->refresh()->auto_renew);
     }
 
     public function testAutoRenewIsNotOfferedAtAPriceTheWalletDoesNotTake(): void

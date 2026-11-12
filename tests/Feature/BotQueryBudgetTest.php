@@ -20,7 +20,8 @@ use Tests\Fakes\FakeProvider;
  * What an update costs the bot, in queries and in calls to Telegram — a budget for each screen a customer meets most.
  * Every update claims its id, reads its chat's pace (a chat faster than a person goes unanswered: ReceivedUpdates) and
  * reads the customer and their chat, a query each, writing nothing unless something changed; a screen then reads its
- * own rows in a fixed few queries however many there are; the settings — every text,
+ * own rows in a fixed few queries however many there are — the menu, the shop's mini app's row: whether its «📱
+ * اپلیکیشن فروشگاه» shows, which a panel's own card switches, not the bot's settings; the settings — every text,
  * keyboard and rule — are not read per update at all, but once each time the poller reads them afresh. A message is
  * answered in one call, a tap in two (the screen put in place, the tap answered). A budget raised is a decision: say
  * what the new query buys.
@@ -43,17 +44,18 @@ final class BotQueryBudgetTest extends BotTestCase
     public function testAStartIsTheUpdateTheCustomerAndTheirChat(): void
     {
         [$queries, $calls] = $this->cost($this->message('/start'));
-        // A newcomer: their row made (and counted for the panel), their arrival offered to the report group, their chat made.
-        self::assertLessThanOrEqual(9, count($queries), self::listed($queries));
+        // A newcomer: their row made (and counted for the panel), their arrival offered to the report group, their chat made
+        // — and the menu's mini app, whether its button shows.
+        self::assertLessThanOrEqual(10, count($queries), self::listed($queries));
         self::assertSame(['sendMessage'], $calls);
 
         [$queries, $calls] = $this->cost($this->message('/start'));
-        self::assertLessThanOrEqual(4, count($queries), self::listed($queries));
+        self::assertLessThanOrEqual(5, count($queries), self::listed($queries));
         self::assertSame(['telegram_updates'], self::written($queries), 'a customer back: nothing written but the update\'s id');
         self::assertSame(['sendMessage'], $calls);
 
         [$queries, $calls] = $this->cost($this->message('سلام'));
-        self::assertLessThanOrEqual(4, count($queries), 'any other text shows the menu: ' . self::listed($queries));
+        self::assertLessThanOrEqual(5, count($queries), 'any other text shows the menu: ' . self::listed($queries));
         self::assertSame(['sendMessage'], $calls);
     }
 
@@ -62,8 +64,9 @@ final class BotQueryBudgetTest extends BotTestCase
         $this->send($this->message('/start'));
         $this->service(Settings::class)->refresh();
 
-        self::assertCount(5, $this->cost($this->message('/start'))[0], 'read afresh: one query for every one of them');
-        self::assertCount(4, $this->cost($this->message('/start'))[0], 'then none, until the next time');
+        // The update's four and the menu's mini app (testAStartIsTheUpdateTheCustomerAndTheirChat()), and the settings.
+        self::assertCount(6, $this->cost($this->message('/start'))[0], 'read afresh: one query for every one of them');
+        self::assertCount(5, $this->cost($this->message('/start'))[0], 'then none, until the next time');
     }
 
     public function testEachScreenReadsItsRowsInAFixedFewQueriesWhateverTheirNumber(): void

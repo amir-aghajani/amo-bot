@@ -13,7 +13,8 @@ use Psr\Log\LoggerInterface;
  * An interval scheduler ticked every minute from outside (a cron's `schedule:run`, the /cron address, bot:poll). When
  * each task last ran is kept in a JSON file (`schedule.state`): no queue, no daemon. A shop's task (`eachBot`) runs once
  * in every shop; the rest (servers, grants) once across all of them. A run's RUN_SECONDS are shared out as it goes:
- * each turn gets what is left divided by the turns still to come (Budget).
+ * each turn gets what is left divided by the turns still to come (Budget). How often a task runs is the owner's
+ * («زمان‌بندی کارها», Intervals), bootstrap/schedule.php's minutes its default.
  */
 final class Scheduler
 {
@@ -22,7 +23,7 @@ final class Scheduler
 
     private const LAST_RUN_KEY = '_last_run';
 
-    /** @var array<string, array{task: class-string<Task>, interval: int, eachBot: bool}> */
+    /** @var array<string, array{task: class-string<Task>, key: string, interval: int, eachBot: bool}> */
     private array $tasks = [];
 
     public function __construct(
@@ -31,23 +32,82 @@ final class Scheduler
         private readonly Budget $budget,
         private readonly LoggerInterface $logger,
         private readonly string $stateFile,
+        /** The owner's intervals; none: each task's default */
+        private readonly ?Intervals $intervals = null,
     ) {}
 
     /**
+     * @param int $minutes Its default interval: the owner may set another (Intervals)
      * @param class-string<Task> $task
      * @param bool $eachBot A shop's task, run in every shop in turn; otherwise across all of them at once
      */
     public function everyMinutes(int $minutes, string $task, bool $eachBot = false): self
     {
-        $this->tasks[$task] = ['task' => $task, 'interval' => max(1, $minutes) * 60, 'eachBot' => $eachBot];
+        $this->tasks[$task] = ['task' => $task, 'key' => self::key($task), 'interval' => max(1, $minutes) * 60, 'eachBot' => $eachBot];
 
         return $this;
     }
 
-    /** @return array<string, array{task: class-string<Task>, interval: int, eachBot: bool}> */
+    /**
+     * The tasks in the order a run takes them, each with its key and its default interval in seconds.
+     *
+     * @return array<string, array{task: class-string<Task>, key: string, interval: int, eachBot: bool}>
+     */
     public function tasks(): array
     {
         return $this->tasks;
+    }
+
+    /**
+     * A task's name where the owner sets it: its class's own, without «Task», in snake case (SyncSubscriptionsTask:
+     * sync_subscriptions).
+     *
+     * @param class-string<Task> $task
+     */
+    public static function key(string $task): string
+    {
+        $name = (string) preg_replace('/Task$/', '', substr($task, (int) strrpos('\\' . $task, '\\')));
+
+        return strtolower((string) preg_replace('/(?<!^)[A-Z]/', '_$0', $name));
+    }
+
+    /**
+     * Seconds between two runs of a listed task: the owner's interval (Intervals), its default while they set none — or
+     * while the settings cannot be read (the database is down): the work goes on at its usual pace.
+     *
+     * @param class-string<Task> $task
+     */
+    public function interval(string $task): int
+    {
+        $definition = $this->tasks[$task] ?? throw new \LogicException("{$task} is not scheduled.");
+        if ($this->intervals === null) {
+            return $definition['interval'];
+        }
+
+        try {
+            return max(1, $this->intervals->minutes($definition['key'], intdiv($definition['interval'], 60))) * 60;
+        } catch (\Throwable $e) {
+            $this->logger->warning('The interval of {task} cannot be read, so it runs at its default: {message}', ['task' => $task, 'message' => $e->getMessage()]);
+
+            return $definition['interval'];
+        }
+    }
+
+    /**
+     * When each task last ran, by its class; one that never did is not here.
+     *
+     * @return array<string, \DateTimeImmutable>
+     */
+    public function lastRuns(): array
+    {
+        $runs = [];
+        foreach ($this->loadState() as $task => $timestamp) {
+            if ($task !== self::LAST_RUN_KEY && (int) $timestamp > 0) {
+                $runs[$task] = (new \DateTimeImmutable())->setTimestamp((int) $timestamp);
+            }
+        }
+
+        return $runs;
     }
 
     /** When a run last went through, whatever ran in it; null when none ever did. */
@@ -84,7 +144,7 @@ final class Scheduler
     private function runDue(bool $force): array
     {
         $state = $this->loadState();
-        $due = array_filter($this->tasks, static fn(array $task): bool => $force || time() - (int) ($state[$task['task']] ?? 0) >= $task['interval']);
+        $due = array_filter($this->tasks, fn(array $task): bool => $force || time() - (int) ($state[$task['task']] ?? 0) >= $this->interval($task['task']));
         $shops = $this->shopsFor($due);
         if ($shops === null) {
             $due = array_filter($due, static fn(array $task): bool => !$task['eachBot']);
@@ -134,7 +194,7 @@ final class Scheduler
      * The shops to run the due shop tasks in; null when they cannot be read (the database is down) — those tasks then
      * wait for the next tick, unmarked.
      *
-     * @param array<string, array{task: class-string<Task>, interval: int, eachBot: bool}> $due
+     * @param array<string, array{task: class-string<Task>, key: string, interval: int, eachBot: bool}> $due
      * @return list<int>|null
      */
     private function shopsFor(array $due): ?array

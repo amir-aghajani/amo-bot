@@ -22,6 +22,9 @@ use Tests\HttpTestCase;
  */
 final class StoreApiTest extends HttpTestCase
 {
+    /** The programs a shop runs none of until its admin switches each on (`shop.programs`). */
+    private const NO_PROGRAMS = ['test_accounts' => false, 'wheel' => false, 'lottery' => false, 'gift_codes' => false, 'loyalty' => false, 'cashback' => false, 'wallet_transfers' => false, 'reviews' => false];
+
     public function testTheShopIsIntroducedAsItsWebsiteShowsIt(): void
     {
         $this->config(['app.name' => 'آب‌سردکن', 'telegram.username' => 'amo_shop_bot']);
@@ -30,17 +33,21 @@ final class StoreApiTest extends HttpTestCase
         $website = $this->website();
 
         self::assertSame([
-            'shop' => ['name' => 'آب‌سردکن', 'bot' => ['username' => 'amo_shop_bot', 'url' => 'https://t.me/amo_shop_bot'], 'taking_orders' => true, 'service_claims' => false, 'service_transfers' => false, 'custom_services' => false, 'name_modes' => ['sequential']],
+            'shop' => ['name' => 'آب‌سردکن', 'bot' => ['username' => 'amo_shop_bot', 'url' => 'https://t.me/amo_shop_bot'], 'taking_orders' => true, 'phone_required' => false, 'service_claims' => false, 'service_transfers' => false, 'custom_services' => false, 'name_modes' => ['sequential'], 'programs' => self::NO_PROGRAMS],
             'support' => ['url' => 'https://t.me/amo_support'],
-            'sign_in' => ['telegram' => ['client_id' => self::WEBSITE_CLIENT_ID, 'redirect' => false], 'google' => null, 'email' => false],
+            'sign_in' => ['telegram' => ['client_id' => self::WEBSITE_CLIENT_ID, 'redirect' => false], 'google' => null, 'email' => false, 'phone' => false, 'mini_app' => false],
             'captcha' => null,
             'referral' => ['enabled' => true, 'rate' => 15, 'first_only' => true],
+            'app' => null,
         ], $this->decode($this->get($this->storeApi($website))));
 
         $website->forceFill(['telegram_client_secret' => 'tg-secret-1'])->save();
         self::assertTrue($this->decode($this->get($this->storeApi($website)))['sign_in']['telegram']['redirect'], 'with a secret, the redirect flow too');
         $website->forceFill(['telegram_login' => false])->save();
         self::assertNull($this->decode($this->get($this->storeApi($website)))['sign_in']['telegram'], 'switched off, no Telegram sign-in');
+
+        $this->botSettings('general', ['enabled' => true, 'phone_required' => true, 'support_contact' => '@amo_support']);
+        self::assertTrue($this->decode($this->get($this->storeApi($website)))['shop']['phone_required'], 'the bot asks for the phone number first');
 
         $this->botSettings('general', ['enabled' => false, 'phone_required' => false, 'support_contact' => '@amo_support']);
         self::assertFalse($this->decode($this->get($this->storeApi($website)))['shop']['taking_orders'], 'the bot switched off: no orders taken');
@@ -51,12 +58,12 @@ final class StoreApiTest extends HttpTestCase
         $website = $this->website(['email_signup' => true, 'google_client_id' => self::GOOGLE_CLIENT_ID]);
         $shop = fn(): array => $this->decode($this->get($this->storeApi($website)));
 
-        self::assertSame(['google' => ['client_id' => self::GOOGLE_CLIENT_ID], 'email' => false], array_slice($shop()['sign_in'], 1), 'no email goes out: no email sign-up to offer');
+        self::assertSame(['google' => ['client_id' => self::GOOGLE_CLIENT_ID], 'email' => false, 'phone' => false, 'mini_app' => false], array_slice($shop()['sign_in'], 1), 'no email goes out: no email sign-up to offer');
         self::assertNull($shop()['captcha'], 'no captcha asked');
 
         $this->mail();
         $website->forceFill(['captcha_driver' => 'turnstile', 'captcha_config' => ['site_key' => '0x4AAAAAAAsitekey', 'secret_key' => '0x4AAAAAAAsecret']])->save();
-        self::assertSame(['google' => ['client_id' => self::GOOGLE_CLIENT_ID], 'email' => true], array_slice($shop()['sign_in'], 1));
+        self::assertSame(['google' => ['client_id' => self::GOOGLE_CLIENT_ID], 'email' => true, 'phone' => false, 'mini_app' => false], array_slice($shop()['sign_in'], 1));
         self::assertSame(['driver' => 'turnstile', 'site_key' => '0x4AAAAAAAsitekey', 'challenge_url' => null], $shop()['captcha'], "Turnstile's widget, drawn with its site key — never its secret");
 
         $website->forceFill(['captcha_driver' => 'altcha', 'captcha_config' => null])->save();
@@ -78,7 +85,7 @@ final class StoreApiTest extends HttpTestCase
 
         $shop = $this->decode($this->get($this->storeApi($website)));
 
-        self::assertSame(['name' => 'فروشگاه نماینده', 'bot' => ['username' => 'agent_shop_bot', 'url' => 'https://t.me/agent_shop_bot'], 'taking_orders' => true, 'service_claims' => false, 'service_transfers' => false, 'custom_services' => false, 'name_modes' => ['sequential']], $shop['shop']);
+        self::assertSame(['name' => 'فروشگاه نماینده', 'bot' => ['username' => 'agent_shop_bot', 'url' => 'https://t.me/agent_shop_bot'], 'taking_orders' => true, 'phone_required' => false, 'service_claims' => false, 'service_transfers' => false, 'custom_services' => false, 'name_modes' => ['sequential'], 'programs' => self::NO_PROGRAMS], $shop['shop']);
         self::assertNull($shop['support'], 'no contact set in their shop');
     }
 

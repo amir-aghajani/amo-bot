@@ -15,6 +15,7 @@ use App\Modules\Subscriptions\Enums\TestRefusal;
 use App\Modules\Subscriptions\Exceptions\TestAccountRefusedException;
 use App\Modules\Subscriptions\Models\Subscription;
 use App\Modules\Subscriptions\Models\TestAccount;
+use App\Modules\Telegram\Reports\ShopReports;
 use App\Modules\Users\Models\User;
 use App\Support\LocalTime;
 use Illuminate\Database\ConnectionInterface;
@@ -41,6 +42,7 @@ final class TestAccounts
         private readonly TestServers $servers,
         private readonly ProvisioningService $provisioning,
         private readonly TrafficPool $pool,
+        private readonly ShopReports $reports,
         private readonly ConnectionInterface $db,
     ) {}
 
@@ -59,8 +61,8 @@ final class TestAccounts
 
     /**
      * Take a test on the server for the customer: the quota judged again and claimed under the lock, then the client made
-     * on the panel, and the service, the claim issued and — in an agent's shop — the traffic drawn from the agent's pool
-     * written in one transaction. A failure gives the claim back (the client is taken back off the panel) and is thrown
+     * on the panel, and the service, the claim issued, — in an agent's shop — the traffic drawn from the agent's pool and
+     * the report group's word of it (ShopReports::testTaken()) written in one transaction. A failure gives the claim back (the client is taken back off the panel) and is thrown
      * as it came; an agent's pool short at that moment is a refusal.
      *
      * @throws TestAccountRefusedException before anything was made
@@ -80,6 +82,7 @@ final class TestAccounts
                     $this->pool->drawTest($shop, $terms->bytes, $subscription->remote_name);
                 }
                 $claim->forceFill(['subscription_id' => $subscription->id, 'issued_at' => now()])->save();
+                $this->reports->testTaken($subscription);
             });
         } catch (\Throwable $e) {
             $claim->newQuery()->whereKey($claim->id)->whereNull('issued_at')->delete();

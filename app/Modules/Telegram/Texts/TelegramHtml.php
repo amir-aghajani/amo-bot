@@ -52,7 +52,7 @@ final class TelegramHtml
     private const ALLOWED = 'b، i، u، s، code، pre، a، blockquote، tg-spoiler، tg-emoji و tg-time';
     private const STRAY = 'نماد < فقط برای شروع تگ است؛ برای نوشتن خودش &lt; بنویسید.';
     private const EMOJI_ID = 'تگ <tg-emoji> باید شناسه عددی ایموجی پرمیوم را داشته باشد؛ مثلا <tg-emoji emoji-id="5368324170671202286">👍</tg-emoji>.';
-    private const EMOJI_CONTENT = 'داخل <tg-emoji> فقط یک ایموجی معمولی می‌آید — همانی که جاهایی که ایموجی پرمیوم نشان داده نمی‌شود دیده می‌شود.';
+    public const EMOJI_CONTENT = 'داخل <tg-emoji> فقط یک ایموجی معمولی می‌آید — همانی که جاهایی که ایموجی پرمیوم نشان داده نمی‌شود دیده می‌شود.';
     private const TIME_UNIX = 'تگ <tg-time> باید زمان را به ثانیه‌های یونیکس در unix داشته باشد؛ مثلا <tg-time unix="1767225600" format="D">۱۱ دی ۱۴۰۴</tg-time>.';
     private const TIME_FORMAT_REFUSED = 'مقدار format در تگ <tg-time> یا r است، یا از w، سپس d یا D، سپس t یا T ساخته می‌شود (مثلا wDT)؛ یا format را ننویسید تا متن همان‌طور که هست نشان داده شود.';
     private const TIME_FORMAT_BARE = 'مقدار format در تگ <tg-time> را داخل "…" بنویسید؛ بدون آن تلگرام حروف بزرگ آن را کوچک می‌خواند.';
@@ -313,7 +313,7 @@ final class TelegramHtml
     }
 
     /** One emoji — a pictograph with its modifiers and joiners, a flag, a keycap — rather than text. */
-    private static function isEmoji(string $text): bool
+    public static function isEmoji(string $text): bool
     {
         if ($text === '' || mb_strlen($text) > 16 || preg_match('/[\s\p{L}<>&]/u', $text) === 1) {
             return false;

@@ -33,6 +33,7 @@ use Illuminate\Support\Carbon;
  *                                   a client the shop did not sell, with no plan until a renewal gives it one
  * @property int $server_id
  * @property string $remote_name
+ * @property string|null $label the customer's own name for it («نام دلخواه»), shown beside its client name; null for none
  * @property string $subscription_url
  * @property SubscriptionStatus $status
  * @property int $traffic_limit_bytes 0 = unlimited
@@ -84,6 +85,7 @@ class Subscription extends Model
         'claimed_at',
         'server_id',
         'remote_name',
+        'label',
         'subscription_url',
         'status',
         'traffic_limit_bytes',
@@ -131,6 +133,18 @@ class Subscription extends Model
         'ip_limit_reset_at' => 'datetime',
         'leased_until' => 'datetime',
     ];
+
+    /**
+     * The service as its customer knows it in the screens they open: their own name for it beside its client name,
+     * «گوشی من (amir_1)», or the client name alone. Marks keep it in order inside a Persian line whatever its letters: a
+     * right-to-left mark (U+200F) after the name and after the bracket — a Latin name («iPhone») would take the bracket
+     * with it —, and a left-to-right one (U+200E) before the client name, which may start with digits («1234_a»). The
+     * panels, the report group and a card's line to copy name a service by its client.
+     */
+    public function shownAs(): string
+    {
+        return ($this->label ?? '') === '' ? $this->remote_name : "{$this->label}\u{200F} (\u{200E}{$this->remote_name})\u{200F}";
+    }
 
     public function usedBytes(): int
     {

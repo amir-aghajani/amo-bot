@@ -1,5 +1,6 @@
 import type { QueryKey } from '@tanstack/react-query'
 import { toast } from 'sonner'
+import { NameEmoji } from '@/components/bot-texts/name-emoji'
 import { Field } from '@/components/field'
 import { FormActions } from '@/components/form-footer'
 import { SwitchRow } from '@/components/switch-row'
@@ -18,7 +19,11 @@ interface CategoryFormProps {
 
 /** Create/edit form for one plan category; the caller puts it in a modal. */
 export function CategoryForm({ category, invalidates, onSaved, onCancel }: CategoryFormProps) {
-  const { values, set, revert, error, formError, busy, dirty, submit, handleSubmit } = useForm({ name: category?.name ?? '', is_active: category?.is_active ?? true })
+  const { values, set, patch, revert, error, formError, busy, dirty, submit, handleSubmit } = useForm<{ name: string; emoji_id: string | null; is_active: boolean }>({
+    name: category?.name ?? '',
+    emoji_id: category?.emoji_id ?? null,
+    is_active: category?.is_active ?? true,
+  })
 
   const save = handleSubmit(async () => {
     const data = await submit(() => (category ? api.put(`/plans/categories/${category.id}`, values) : api.post('/plans/categories', values)), { invalidates })
@@ -33,6 +38,7 @@ export function CategoryForm({ category, invalidates, onSaved, onCancel }: Categ
       <Field id="category_name" label="نام دسته" error={error('name')} hint="همان‌طور که مشتری هنگام انتخاب دسته می‌بیند؛ مثلا «ماهانه» یا «اقتصادی».">
         <Input value={values.name} onChange={(e) => set('name', e.target.value)} placeholder="اقتصادی" autoFocus={!category} />
       </Field>
+      <NameEmoji id="category_emoji_picker" name={values.name} emojiId={values.emoji_id} error={error('emoji_id')} onChange={patch} />
 
       <SwitchRow
         label="فعال"

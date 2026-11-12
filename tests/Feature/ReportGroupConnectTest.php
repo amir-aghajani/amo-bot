@@ -56,10 +56,10 @@ final class ReportGroupConnectTest extends BotTestCase
 
         $made = array_map(fn(int $i): array => $this->params($i), range(2, 1 + $topics));
         self::assertSame(array_map(static fn(Topic $topic): string => $topic->title(), Topic::cases()), array_column($made, 'name'));
-        self::assertSame(['9367192', '7322096', '16766590', '13338331', '16749490', '16478047', '7322096', '16766590', '13338331'], array_column($made, 'icon_color'), "Telegram's own six colours");
+        self::assertSame(['9367192', '7322096', '16749490', '16478047', '16766590', '13338331', '16749490', '16478047', '7322096', '16766590', '13338331', '9367192'], array_column($made, 'icon_color'), "Telegram's own six colours");
         self::assertSame('icon-cart', $made[0]['icon_custom_emoji_id']);
-        self::assertSame('icon-money', $made[2]['icon_custom_emoji_id']);
-        self::assertSame('icon-warning', $made[5]['icon_custom_emoji_id'], 'matched whether or not the emoji carries its variation selector');
+        self::assertSame('icon-money', $made[4]['icon_custom_emoji_id']);
+        self::assertSame('icon-warning', $made[7]['icon_custom_emoji_id'], 'matched whether or not the emoji carries its variation selector');
         self::assertArrayNotHasKey('icon_custom_emoji_id', $made[1], 'no fitting icon: the colour alone');
         foreach ($made as $params) {
             self::assertSame((string) self::REPORT_GROUP, $params['chat_id']);
@@ -282,20 +282,20 @@ final class ReportGroupConnectTest extends BotTestCase
         $this->send($this->groupText('/start@' . self::BOT . ' reports_' . $code));
 
         self::assertSame(['getChatMember', 'getForumTopicIconStickers', 'createForumTopic', 'createForumTopic', 'createForumTopic', 'sendMessage'], $this->calls(), 'the flood limit would refuse the rest too');
-        $missing = array_map(static fn(Topic $topic): string => '«' . $topic->title() . '»', [Topic::Wallet, Topic::Receipts, Topic::Users, Topic::Errors, Topic::Agency]);
+        $missing = array_map(static fn(Topic $topic): string => '«' . $topic->title() . '»', [Topic::Tests, Topic::Deletions, Topic::Wallet, Topic::Receipts, Topic::Users]);
         self::assertStringContainsString(implode('، ', $missing), $this->telegram()->sentTo(self::REPORT_GROUP)[0], 'the group is told which are still to come');
         $state = $this->service(ReportGroupState::class);
         self::assertSame(self::REPORT_GROUP, $state->chatId(), 'connected all the same');
         self::assertNotNull($state->pausedUntil());
-        self::assertSame([Topic::Purchases->value => 501, Topic::Renewals->value => 502, Topic::Wallet->value => null], ReportTopic::query()->oldest('id')->pluck('thread_id', 'topic')->all());
-        self::assertNull(ReportTopic::query()->where('topic', Topic::Wallet->value)->value('lease_token'), 'the hold on the topic was let go');
+        self::assertSame([Topic::Purchases->value => 501, Topic::Renewals->value => 502, Topic::Tests->value => null], ReportTopic::query()->oldest('id')->pluck('thread_id', 'topic')->all());
+        self::assertNull(ReportTopic::query()->where('topic', Topic::Tests->value)->value('lease_token'), 'the hold on the topic was let go');
 
-        // Once the wait is over, the wallet's first report makes its topic.
+        // Once the wait is over, the tests' first report makes their topic.
         Carbon::setTestNow(now()->addSeconds(31));
-        $this->service(ShopReports::class)->notice(Topic::Wallet, 'کیف پول');
+        $this->service(ShopReports::class)->notice(Topic::Tests, 'اکانت تست');
         $this->telegram()->reset();
         $this->service(ReportSender::class)->flush(30);
-        self::assertSame(['sendMessage', 'sendMessage', 'getForumTopicIconStickers', 'createForumTopic', 'sendMessage'], array_slice($this->calls(), 0, 5), 'the two introductions, then the wallet topic made for its own');
+        self::assertSame(['sendMessage', 'sendMessage', 'getForumTopicIconStickers', 'createForumTopic', 'sendMessage'], array_slice($this->calls(), 0, 5), 'the two introductions, then the tests topic made for its own');
         self::assertSame((string) $this->thread, $this->params(4)['message_thread_id']);
     }
 

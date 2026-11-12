@@ -32,7 +32,9 @@
   - [Bot texts and keyboards](Bot-Texts-And-Keyboards.md)
   - [Bot texts reference](Bot-Texts-Reference.md)
   - [Website](Website.md)
+  - [Mini app](Mini-App.md)
   - [Panel settings](Panel-Settings.md)
+  - [SMS](Sms.md)
 - Bot guide
   - [For customers and admins](Bot-Guide.md)
 - Store API
@@ -59,6 +61,7 @@
   - [Internals: Telegram bot](Internals-Telegram-Bot.md)
   - [Internals: website API](Internals-Website-API.md)
   - [Internals: panels](Internals-Panels.md)
+  - [Internals: mini app](Internals-Mini-App.md)
   - [Drivers](Drivers.md)
   - [Extending](Extending.md)
   - [Development](Development.md)

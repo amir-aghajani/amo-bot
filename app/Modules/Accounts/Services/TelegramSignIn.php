@@ -119,8 +119,7 @@ final class TelegramSignIn
     public function signIn(SignInSite $site, ServerRequestInterface $request, array $input): SignedIn
     {
         $account = $this->account($site, $request, $input);
-        $code = Input::text($input, 'referral_code');
-        $user = $this->customers->byTelegram($account->id, $account->profile, $code === '' ? null : $code);
+        $user = $this->customers->byTelegram($account->id, $account->profile, ProviderSignIn::referralCode($input));
 
         return $this->provider->open($user, $request, SignInMethod::Telegram);
     }

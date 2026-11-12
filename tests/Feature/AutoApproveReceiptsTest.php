@@ -51,7 +51,7 @@ final class AutoApproveReceiptsTest extends DatabaseTestCase
     public function testTheTimerLooksEveryMinuteInEveryShop(): void
     {
         self::assertSame(
-            ['task' => AutoApproveReceiptsTask::class, 'interval' => 60, 'eachBot' => true],
+            ['task' => AutoApproveReceiptsTask::class, 'key' => 'auto_approve_receipts', 'interval' => 60, 'eachBot' => true],
             $this->service(Scheduler::class)->tasks()[AutoApproveReceiptsTask::class],
         );
     }

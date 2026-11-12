@@ -47,6 +47,7 @@ final class SubscriptionPresenter
         return [
             'id' => $subscription->id,
             'name' => $subscription->remote_name,
+            'label' => $subscription->label,
             'status' => $subscription->status->value,
             'is_test' => $subscription->is_test,
             'claimed_at' => $subscription->claimed_at?->toIso8601String(),

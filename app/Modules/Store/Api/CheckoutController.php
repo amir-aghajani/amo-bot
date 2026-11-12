@@ -15,9 +15,11 @@ use App\Modules\Payments\DTO\CheckoutResult;
 use App\Modules\Payments\Exceptions\PaymentHeldException;
 use App\Modules\Store\Exceptions\CheckoutRefusedException;
 use App\Modules\Store\Http\IdempotencyKey;
+use App\Modules\Store\Http\StoreMiddleware;
 use App\Modules\Store\Presenters\OrderPresenter;
 use App\Modules\Store\Presenters\SubscriptionPresenter;
 use App\Modules\Store\Services\CustomerCheckout;
+use App\Modules\Store\Services\CustomerGates;
 use App\Modules\Store\Services\CustomerOnlinePayments;
 use App\Modules\Store\Services\CustomerReceipts;
 use App\Modules\Store\Services\CustomerSubscriptions;
@@ -30,8 +32,9 @@ use Psr\Http\Message\ServerRequestInterface as Request;
 /**
  * A signed-in customer's checkout (Store\Services\CustomerCheckout): the ways to pay, a purchase, a renewal, its
  * preview and the plans it may be on, a service's extras, a discount code checked, a wallet top-up — each ordering
- * request with its Idempotency-Key, read before anything else —, a card transfer's receipt
- * (Store\Services\CustomerReceipts) and an online payment asked about (Store\Services\CustomerOnlinePayments).
+ * request with its Idempotency-Key, read before anything else, and through the mini app held to the bot's gates
+ * (ordering()) —, a card transfer's receipt (Store\Services\CustomerReceipts) and an online payment asked about
+ * (Store\Services\CustomerOnlinePayments).
  */
 final class CheckoutController extends ApiController
 {
@@ -40,6 +43,7 @@ final class CheckoutController extends ApiController
         private readonly CustomerReceipts $receipts,
         private readonly CustomerOnlinePayments $online,
         private readonly CustomerSubscriptions $subscriptions,
+        private readonly CustomerGates $gates,
         private readonly OrderPresenter $orders,
     ) {}
 
@@ -64,7 +68,7 @@ final class CheckoutController extends ApiController
      */
     public function purchase(Request $request, Response $response): Response
     {
-        $key = IdempotencyKey::of($request);
+        $key = $this->ordering($request);
 
         return $this->answer($request, $response, $this->checkout->purchase(Customer::of($request)->user, $this->input($request), $key));
     }
@@ -110,7 +114,7 @@ final class CheckoutController extends ApiController
      */
     public function renew(Request $request, Response $response, array $args): Response
     {
-        $key = IdempotencyKey::of($request);
+        $key = $this->ordering($request);
         $subscription = $this->own($request, $args);
 
         return $this->answer($request, $response, $this->checkout->renew(Customer::of($request)->user, $subscription, $this->input($request), $key));
@@ -194,7 +198,7 @@ final class CheckoutController extends ApiController
      */
     public function topUp(Request $request, Response $response): Response
     {
-        $key = IdempotencyKey::of($request);
+        $key = $this->ordering($request);
 
         return $this->answer($request, $response, $this->checkout->topUp(Customer::of($request)->user, $this->input($request), $key));
     }
@@ -240,10 +244,25 @@ final class CheckoutController extends ApiController
      */
     private function extra(Request $request, Response $response, array $args, ExtraKind $kind): Response
     {
-        $key = IdempotencyKey::of($request);
+        $key = $this->ordering($request);
         $subscription = $this->own($request, $args);
 
         return $this->answer($request, $response, $this->checkout->extra(Customer::of($request)->user, $subscription, $kind, $this->input($request), $key));
+    }
+
+    /**
+     * An ordering request begun: its Idempotency-Key, read before anything else — then, through the mini app, what the
+     * bot's gates ask of a customer before an order (CustomerGates::holdBack()).
+     *
+     * @throws RequestKeyReusedException 422 on `idempotency_key`
+     * @throws ValidationException 422 on `status`
+     */
+    private function ordering(Request $request): string
+    {
+        $key = IdempotencyKey::of($request);
+        $this->gates->holdBack(StoreMiddleware::door($request), Customer::of($request)->user);
+
+        return $key;
     }
 
     /** @throws CheckoutRefusedException */

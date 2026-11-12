@@ -2,7 +2,8 @@
 
 # Store API: after buying
 
-A signed-in customer's services, orders and payments, wallet and referral program — the customer's own alone: another
+A signed-in customer's services, orders and payments, wallet and referral program, and the shop's programs — free test
+accounts, the lucky wheel, the nightly draw — the customer's own alone: another
 customer's service or order is a `404`, as one that never was. Paths are under the
 [base address](Store-API.md#the-base-address); every one here takes the customer's bearer token.
 
@@ -11,7 +12,7 @@ customer's service or order is a `404`, as one that never was. Paths are under t
 `GET /subscriptions?status=&page=` lists the customer's services, newest first (`status`: `active`, `expired`,
 `disabled`, `deleted`; anything else is every one); `GET /subscriptions/{id}` answers `{ "subscription": … }`. Both
 show the service as the shop last read it from its server (`synced_at`; the shop reads every running service about
-every 15 minutes).
+every 15 minutes by default — the owner's [«زمان‌بندی کارها»](Running-In-Production.md#the-task-schedule)).
 
 `GET /subscriptions/{id}` → `200`
 ```json
@@ -19,6 +20,7 @@ every 15 minutes).
   "subscription": {
     "id": 9,
     "name": "ali_1",
+    "label": "گوشی من",
     "status": "active",
     "is_test": false,
     "claimed_at": null,
@@ -48,16 +50,17 @@ every 15 minutes).
 | Field | Meaning |
 |---|---|
 | `name` | its name on the server (`ali_1`, `USER_7`) — what the customer quotes to support |
+| `label` | the customer's own name for it («نام دلخواه»), `null` for none ([a name of their own](#a-name-of-their-own)) — show it beside `name`, as the bot does |
 | `status` | `active` running (or waiting for its first connection); `expired` its time or traffic ran out; `disabled` switched off by support; `deleted` gone from its server |
-| `is_test` | a free test account the customer took in the bot ([Test accounts](Test-Accounts.md)): no plan, `renewable` and `picks_plan` false, every `extras` false, `auto_renew.offered` false (the field is there) — and once it ends, or if it is never connected, the shop may remove it, quietly (`removes_at`) |
+| `is_test` | a free test account the customer took, in the bot or here ([test accounts](#test-accounts), [Test accounts](Test-Accounts.md)): no plan, `renewable` and `picks_plan` false, every `extras` false, `auto_renew.offered` false (the field is there) — and once it ends, or if it is never connected, the shop may remove it, quietly (`removes_at`) |
 | `claimed_at` | when the customer added it to their account by its link ([adding a service by its link](#adding-a-service-by-its-link)): a service support made on its server by hand. `null` for every other service |
 | `plan` | the plan it was sold or last renewed on; `null` for a free test, for one added by its link or built by the customer until it is renewed on a plan |
 | `server` | where it is («لوکیشن») |
-| `link` | the one subscription link the customer adds to their app — show it with a copy button and a QR code the site draws; `null` once `deleted` |
+| `link` | the one subscription link the customer adds to their app — show it with a copy button and a QR code, the site's own or the shop's card ([the QR card](#the-qr-card)); `null` once `deleted` |
 | `traffic` | `limit_bytes` (`0` unlimited), `used_bytes`, `remaining_bytes` (`null` when unlimited) |
 | `term` | `duration_hours` the term exactly, in hours (`0` never ends — a one-hour test says `1`, a month `720`), `duration_days` the same in whole days, rounded up (kept for the sites made before `duration_hours`), `starts_at` (the first connection), `expires_at`, `awaits_first_use` |
 | `ended_at` | when it ended — the deadline it passed, else when its server said its traffic was used up or it was gone; `null` while it runs (a renewal or an extra that brings it back clears it) |
-| `removes_at` | when the shop removes it by itself, from its server and the shop: an ended service while the shop's automatic removal is on, a free test by the shop's rules for tests; `null` when it does not. Show it on an ended service — "renew before … to keep it" — and drop the service from your screens once it is gone (`404`). A moment already passed means it goes at the shop's next check (every 15 minutes); an order about it still open makes it wait |
+| `removes_at` | when the shop removes it by itself, from its server and the shop: an ended service while the shop's automatic removal is on, a free test by the shop's rules for tests; `null` when it does not. Show it on an ended service — "renew before … to keep it" — and drop the service from your screens once it is gone (`404`). A moment already passed means it goes at the shop's next check (every 15 minutes by default); an order about it still open makes it wait |
 | `auto_renew` | `on` the customer's switch, `offered` whether it may be set, `days_before` how many days before its end the wallet renews it — the shop's rule, one for every service ([automatic renewal](#automatic-renewal)) |
 | `renewable` | it may be renewed now on its own plan ([a renewal](Store-API-Buying.md#a-renewal)): active or ended, its plan still there and renewing something — in an agent's shop covered by their traffic. False for a service without a plan |
 | `picks_plan` | it may be renewed now on what the customer picks: it has no plan (added by its link, or built; never a free test), it is active or ended, and a plan on sale is sold on its server or the shop's builder is offered — list the choices with `GET …/renewal-plans`, send the plan picked as `plan_id` ([a renewal](Store-API-Buying.md#a-renewal)), or a package built as `gb` and `days` ([renewing with a package built](Store-API-Buying.md#renewing-with-a-package-built)). Renewed on a plan it has that plan, and `renewable` holds instead; renewed with a package it still picks |
@@ -98,6 +101,24 @@ as well. With it on, the shop renews the service from the wallet `auto_renew.day
 plan at that plan's price. The customer hears of it: `auto_renewed`, `auto_renew_short` (the wallet does not cover it —
 said once, and tried again until it does), or `renewal_failed`.
 
+## A name of their own
+
+`PATCH /subscriptions/{id}` `{ "label": "گوشی من" }` gives the service the customer's own name («نام دلخواه») and
+answers `{ "subscription": … }`. Its name on the server (`name`) stays as it is; the bot shows the label beside it in
+the screens the customer opens and on their buttons — «گوشی من (ali_1)» —, while a service's card keeps the client name
+alone on its line to copy. The same request may switch `auto_renew` too: send
+either or both, and both are judged before either changes ([automatic renewal](#automatic-renewal)).
+
+- The label is trimmed, 32 characters at most, one line: a line break, a tab, another control character or a mark that
+  turns the text's direction is refused (the zero-width non-joiner Persian is written with is fine).
+- `null`, `""`, or text that shows nothing clears it.
+- It is the customer's alone: a service handed to another customer loses it
+  ([handing a service to another customer](#handing-a-service-to-another-customer)).
+
+Refused, a `422`: neither field sent (`چیزی برای تغییر فرستاده نشد؛ تمدید خودکار یا نام دلخواه سرویس را بفرستید.`,
+no field); on `label`, anything but text (`نام دلخواه را به صورت متن بفرستید.`), too long, or a control character
+(`نام دلخواه باید یک خط متن باشد، بدون کاراکترهای کنترلی.`). A service handed on in that very moment is a `404`.
+
 ## A new link
 
 `POST /subscriptions/{id}/rotate-link` gives the service a new link (no body) and answers it; every device on the old
@@ -107,6 +128,17 @@ link is cut off — ask the customer to confirm first. Offer it while `link_rota
 `errors.panel` too) when its server failed it — read the service again before showing a link; `429` past 5 requests an
 hour, the refused and the failed ones counted too (`لینک سرویس را زیاد عوض کرده‌اید؛ …`). The bot does not announce a
 new link.
+
+## The QR card
+
+`GET /subscriptions/{id}/qr` answers the service's QR card — its link as a QR code on the shop's background picture, the
+card the bot sends with a delivery — as a JPEG, with `Cache-Control: private, no-cache` (a new link draws a new card),
+whether or not the bot sends cards (that switch is the bot's alone).
+It needs the bearer token, which an `<img src>` cannot send: fetch it and show an object URL, as a ticket's picture
+([the conversation](Store-API-Support-Tickets.md#the-conversation)). A `404` for a service without a link (`deleted`);
+a `503` (`تصویر QR این سرویس الان ساخته نشد؛ لینک اشتراک را کپی کنید.`) when the server cannot draw it — no GD, or a
+background it cannot read —: show the link to copy instead. A customer draws 30 cards a minute at most, then a `429`
+(`تصویر QR سرویس را زیاد خواسته‌اید؛ …`).
 
 ## Handing a service to another customer
 
@@ -125,8 +157,9 @@ any shop. The recipient must have started the bot once.
    `GET /subscriptions/{id}` is a `404` after it, so drop it from the page. It keeps its link, end and traffic, and its
    `name` on the server — by the shop's default pattern the giver's Telegram username and a number (`ali_1`), with
    `{tg_id}` the giver's id ([service usernames](Bot-Settings.md#service-usernames)): a client is not renamed on its
-   server. Its «تمدید خودکار» goes off. The recipient is told in the bot and among their notices (`service_received`); the customer
-   is not — the answer is theirs. The report group hears of every one.
+   server. Its «تمدید خودکار» goes off, and the giver's own name for it (`label`) goes. The recipient is told in the bot
+   and among their notices (`service_received`); the customer is not — the answer is theirs. The report group hears of
+   every one.
 
 The link goes with the service, so the giver's devices stay connected until the recipient changes it
 ([a new link](#a-new-link)): tell the giver so before they confirm. Where its server can change a link
@@ -136,7 +169,7 @@ Every refusal is a `422`, in words to show as they are:
 
 | Under | When |
 |---|---|
-| `errors.status` | the shop does not offer it now (`انتقال سرویس در این فروشگاه فعال نیست.`); a free test; a service gone from its server; one with an order the customer made still open — a renewal or an extra waiting for its payment or receipt, or being delivered (`سفارشی از این سرویس هنوز باز است …`; an unpaid one is dropped by itself after 48 hours); one whose delivery failed, which support settles — a retry or the money back (`تحویل سفارشی از این سرویس ناموفق بوده و منتظر پشتیبانی است؛ …`) |
+| `errors.status` | the shop does not offer it now (`انتقال سرویس در این فروشگاه فعال نیست.`); a free test; a service gone from its server; one with an order the customer made still open — a renewal or an extra waiting for its payment or receipt, or being delivered (`سفارشی از این سرویس هنوز باز است …`; an unpaid one is dropped by itself after 48 hours by default); one whose delivery failed, which support settles — a retry or the money back (`تحویل سفارشی از این سرویس ناموفق بوده و منتظر پشتیبانی است؛ …`) |
 | `errors.telegram_id` | no number (`شناسه عددی تلگرام را وارد کنید: …`); no customer of this shop has it (`مشتری‌ای با این شناسه تلگرام در این فروشگاه نیست؛ …`); the customer themselves; a banned account |
 
 Each `GET` — and each `POST`, which looks the recipient up again — counts: at most 10 in 10 minutes per customer,
@@ -205,7 +238,7 @@ service's own, `null` for the rest (an agent's `traffic` order says its traffic 
 | `processing` | paid; the delivery is under way |
 | `fulfilled` | delivered (`fulfilled_at`; `subscription` the service delivered, renewed or given its extras) |
 | `failed` | paid, but not delivered — `failure` says why: `delivery` (support delivers it), `first_purchase_used` or `service_changed_hands` (never delivered: support settles the payment with the customer) — [why an order failed](Store-API-Buying.md#why-an-order-failed) |
-| `cancelled` | cancelled by support, or left unpaid for 48 hours |
+| `cancelled` | cancelled by support, or left unpaid for 48 hours (by default) |
 | `refunded` | the money went back — a purchase's, a renewal's or extras' into the wallet, a delivered top-up's out of it again |
 
 | Payment `status` | |
@@ -224,6 +257,12 @@ cancellation or a refund, or the shop's own (`سفارش با روش دیگری 
 whatever its status, `پرداخت سفارش #53 برای بررسی به پشتیبانی رسیده است؛ …` in place of the shop's words to support on
 why). Show it under the payment. Support's internal notes on an order are never in the API: a `failed` order's
 `failure` says why in a word.
+
+A payment's `held` is `true` while it is an online payment held for support and still waiting — its order paid no
+other way meanwhile: send the customer to support ([a payment held for support](Store-API-Buying.md#a-payment-held-for-support)) —,
+else `false`. Its `reference` is an online payment's tracking code at its gateway, from when its page opened — the
+customer quotes it to the gateway or to support ([paying online](Store-API-Buying.md#paying-online)) —, `null` where
+there is none.
 
 ## The wallet
 
@@ -388,3 +427,124 @@ customer of the shop, the bot's «🎁 کد هدیه» and the website alike ([g
 - Every try counts against the customer and the address network it came from until it names one of the shop's codes:
   10 wrong ones an hour for a customer, 30 for a network, then a `429` whose `Retry-After` says the wait — so codes are
   not guessed.
+
+## Test accounts
+
+A free test account («اکانت تست») is a short service of a server's terms, taken once in a while — the bot's
+«🧪 اکانت تست» and this API alike, under one quota ([Test accounts](Test-Accounts.md)). Offer it while
+`shop.programs.test_accounts` of `GET /` is true; while it is not, both requests are a `404`
+(`این فروشگاه فعلا اکانت تست نمی‌دهد.`).
+
+`GET /test-account` → `200`
+```json
+{
+  "offers": [
+    { "server": { "id": 1, "name": "آلمان" }, "traffic_mb": 500, "duration_hours": 24, "on_hold": true }
+  ],
+  "refusal": null
+}
+```
+
+`offers` are the servers giving the customer a test now, in the shop's order: `traffic_mb` megabytes (`0` no limit),
+`duration_hours` hours (`0` no limit), counted from the first connection while `on_hold`, else from when it is taken.
+When they can take none, `offers` is empty and `refusal` says why in the bot's words — their quota spent (and from when
+the next one is theirs), the day's tests given out, tests for newcomers alone.
+
+First, as the bot asks before it gives anything for free, the account must have a Telegram account (the bot's quotas
+count people by it: `این بخش برای حساب‌هایی است که به تلگرام وصل‌اند؛ …`), its own phone number while the shop asks
+one (`shop.phone_required`: `اول در ربات فروشگاه شماره موبایل خود را تایید کنید و بعد دوباره امتحان کنید.`) and the
+shop's required channels joined, as Telegram says now (`اول در «…» عضو شوید و بعد دوباره امتحان کنید.`). The shop's
+admins pass. Short of any, `GET` answers it as `refusal` with no offers, and `POST` as a `422` on `status` in
+the same words.
+
+`POST /test-account` `{ "server_id": 1 }` takes one there: `201` with `{ "subscription": … }`, the service as
+[services](#services) shows it, `is_test` true, made at once and counted against the quota. Nothing is sent in
+Telegram: show it. Refused: a `422` on `server_id` for a server that gives none now
+(`این سرور الان اکانت تست نمی‌دهد؛ صفحه را دوباره باز کنید.`) or cannot make one now; a `422` on `status` when the
+bot's first questions or the quota refuse, in their words; a `502` when the server's panel failed (`اکانت تست ساخته نشد: …`) — nothing of the quota
+spent.
+
+## The lucky wheel
+
+The lucky wheel («گردونه شانس») is the bot's «🎡 گردونه شانس», spun from here
+([the lucky wheel](Gift-Codes-And-Lucky-Wheel.md#the-lucky-wheel)): one cooldown and one wallet for both. Offer it while
+`shop.programs.wheel` is true.
+
+`GET /wheel` → `200`
+```json
+{
+  "slices": [
+    { "label": "۵۰ هزار تومان", "kind": "wallet" },
+    { "label": "پوچ", "kind": "nothing" },
+    { "label": "۵ گیگ حجم", "kind": "traffic" }
+  ],
+  "cost": "10000.00",
+  "cooldown_hours": 24,
+  "next_spin_at": null
+}
+```
+
+`slices` are the wheel's slices in order, each its words and its `kind` — `nothing` («پوچ»), `wallet`, `traffic`,
+`days` (on one of the customer's running services) or `plan` (a free service); `cost` a spin's price from the wallet
+(`"0.00"` free); `next_spin_at` when they may spin next, `null` now.
+
+`POST /wheel/spin` (no body) spins it: the cost comes off the wallet, the shop draws a slice among those that can reach
+the customer now, and gives its prize at once.
+
+`POST /wheel/spin` → `200`
+```json
+{
+  "slices": [
+    { "label": "۵۰ هزار تومان", "kind": "wallet" },
+    { "label": "پوچ", "kind": "nothing" },
+    { "label": "۵ گیگ حجم", "kind": "traffic" }
+  ],
+  "landed": 0,
+  "given": true,
+  "words": "بردی: ۵۰ هزار تومان. ۵۰٬۰۰۰ تومان به کیف پول شما اضافه شد؛ موجودی: ۹۰٬۰۰۰ تومان.",
+  "failure": null,
+  "refunded": false,
+  "next_spin_at": "2026-10-09T09:30:00+00:00",
+  "balance": "90000.00"
+}
+```
+
+- `landed` is the index in `slices` the wheel stopped at: turn the wheel to it, then show `words`. The shop decides;
+  the page only draws what it decided.
+- `given` — the prize was given (a `nothing` slice gives nothing and says so). A plan's service is delivered as any
+  order; once it is, it is among their services.
+- A prize that could not be given gives the cost back (`refunded`) and starts no cooldown: `failure` says why, and
+  `words` that they may spin again.
+- `balance` is the wallet after it. Nothing is sent in Telegram: show `words`.
+
+Refused before anything is spent, a `422` on `status` in the bot's words — `GET /wheel` too for the second and the
+third: what the bot asks before a free spin, as it does before a free test ([test accounts](#test-accounts)); the wheel
+switched off; for buyers only, and they have bought nothing; too soon (and from when they may spin); no slice that can
+reach them now; the wallet short of the cost (what a spin costs, and how much is missing).
+
+## The nightly draw
+
+The nightly draw («قرعه‌کشی شبانه») picks its winners once a day, at the shop's hour, among those who paid since the
+last draw ([nightly draws](Loyalty-Cashback-And-Draws.md#the-nightly-draw)). `GET /lottery` is the customer's view of it,
+while `shop.programs.lottery` is true (else a `404`, `این فروشگاه فعلا قرعه‌کشی شبانه ندارد.`):
+
+`GET /lottery` → `200`
+```json
+{
+  "next_draw_at": "2026-10-08T18:30:00+00:00",
+  "winners": 3,
+  "prize": "۵۰٬۰۰۰ تومان شارژ کیف پول",
+  "per_buyer": false,
+  "entries": 2,
+  "last_draw": {
+    "drawn_at": "2026-10-07T18:30:05+00:00",
+    "winners": [{ "name": "علی ر***", "me": false }, { "name": "کاربر ***", "me": true }]
+  }
+}
+```
+
+`next_draw_at` is the shop's hour today, or tomorrow once today's is drawn; `winners` how many each draw picks; `prize`
+each winner's, in words (`null` while none is set); `entries` the customer's entries in the next draw so far, counted
+as the draw will count them — one per paid order, or one in all with `per_buyer` (none for a shop admin, or an agent
+while the draw leaves agents out); `last_draw` the last draw's winners — a first name and the next name's first letter,
+the rest hidden, `me` the customer themselves — `null` before the first.

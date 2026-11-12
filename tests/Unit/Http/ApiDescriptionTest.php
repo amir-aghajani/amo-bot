@@ -9,7 +9,9 @@ use App\Modules\Accounts\Enums\CaptchaAction;
 use App\Modules\Auth\NamedShop;
 use App\Modules\Auth\StaffGrant;
 use App\Modules\Reviews\Services\Reviews;
+use App\Modules\Store\Http\MiniAppOnlyMiddleware;
 use App\Modules\Store\Http\StaffMiddleware;
+use App\Modules\Store\Http\WebsiteOnlyMiddleware;
 use cebe\openapi\spec\MediaType;
 use cebe\openapi\spec\OpenApi;
 use cebe\openapi\spec\Parameter;
@@ -18,6 +20,8 @@ use cebe\openapi\spec\RequestBody;
 use cebe\openapi\spec\Schema;
 use League\OpenAPIValidation\PSR7\PathFinder;
 use League\OpenAPIValidation\PSR7\ValidatorBuilder;
+use Slim\Routing\Route;
+use Slim\Routing\RouteGroup;
 use Tests\HttpTestCase;
 use Tests\Support\ApiDescription;
 use Tests\TestCase;
@@ -28,18 +32,29 @@ use Tests\TestCase;
  * route the app has — and none it does not — and what each change takes. A screen both panels have is described once,
  * under `/api/{panel}/…`: it stands for one route per panel its `panel` parameter names — and, marked `x-staff`, for its
  * route on the shops' websites' admin API too (Support\ApiDescription adds it), exactly the operations routes/api.php
- * mounts there, each asking the grant its marker names.
+ * mounts there, each asking the grant its marker names. What only one door of the Store API has — a website, or the
+ * mini app — is marked `x-door`, exactly the routes behind that door's guard.
  */
 final class ApiDescriptionTest extends TestCase
 {
-    /** What a website answers its visitor before they sign in, under its base address: the shop, what it sells, its reviews, the ways in. */
+    /** The Store API's base address, as the description names its paths. */
+    private const STORE = '/api/store/v1/{store}';
+
+    /**
+     * What a website or the mini app answers its visitor before they sign in, under its base address: the shop, what it
+     * sells and on sale now, its guide, its reviews, the ways in — and the mini app's logo.
+     */
     private const STORE_PUBLIC = [
         '',
         '/plans',
         '/plans/{id}',
         '/status',
+        '/sales',
+        '/tutorial',
         '/custom-services',
         '/reviews',
+        '/auth/mini-app',
+        '/app/logo',
         '/auth/nonce',
         '/auth/telegram/authorize',
         '/auth/telegram',
@@ -50,6 +65,8 @@ final class ApiDescriptionTest extends TestCase
         '/auth/login/2fa',
         '/auth/password/forgot',
         '/auth/password/reset',
+        '/auth/phone',
+        '/auth/phone/verify',
         '/captcha/challenge',
         '/captcha/verify',
     ];
@@ -333,6 +350,66 @@ final class ApiDescriptionTest extends TestCase
                 self::assertTrue($marker === true || in_array($marker, $grants, true), "{$method} {$path}: x-staff is true or a StaffGrant");
             }
         }
+    }
+
+    /**
+     * The Store API's two doors (Store\Http\StoreMiddleware): what only a website has (WebsiteOnlyMiddleware) or only the
+     * mini app (MiniAppOnlyMiddleware) is exactly what the file marks `x-door` — `website` or `mini_app` —, the website's
+     * admin API aside (its `/admin`, the operations marked `x-staff`, all of it the website's). The door is each such
+     * route's first guard — the outermost of the group right under the Store API's own —, so under the other door's key
+     * the route is the router's 404 before a token or a recent sign-in is asked (MiniAppDoorTest walks it).
+     */
+    public function testWhatOnlyOneDoorHasIsWhatTheFileMarksForItAndItsFirstGuard(): void
+    {
+        $doors = [WebsiteOnlyMiddleware::class => 'website', MiniAppOnlyMiddleware::class => 'mini_app'];
+        $middleware = new \ReflectionProperty(RouteGroup::class, 'middleware');
+        $routes = [];
+        $staff = 0;
+        foreach ($this->app()->http()->getRouteCollector()->getRoutes() as $route) {
+            $path = (string) preg_replace(Urls::PLACEHOLDER, '{$1}', $route->getPattern());
+            if (!$route instanceof Route || ($path !== self::STORE && !str_starts_with($path, self::STORE . '/'))) {
+                continue;
+            }
+            $guards = array_map(static fn(RouteGroup $group): array => $middleware->getValue($group), array_values(array_filter($route->getGroups(), static fn($group): bool => $group instanceof RouteGroup)));
+            $door = null;
+            foreach ($guards as $depth => $group) {
+                foreach ($group as $position => $guard) {
+                    if (is_string($guard) && isset($doors[$guard])) {
+                        self::assertNull($door, "{$path}: one door");
+                        self::assertSame([1, count($group) - 1], [$depth, $position], "{$path}: the door is the first guard under the Store API's own");
+                        $door = $doors[$guard];
+                    }
+                }
+            }
+            if (str_starts_with($path, ApiDescription::STAFF . '/')) {
+                $staff++;
+                self::assertSame('website', $door, "{$path}: the admin API is the website's");
+
+                continue;
+            }
+            foreach ($door === null ? [] : $route->getMethods() as $method) {
+                $routes[] = strtolower($method) . ' ' . $path . ' ' . $door;
+            }
+        }
+
+        $marked = [];
+        foreach (ApiDescription::read()['paths'] as $path => $item) {
+            foreach ($item as $method => $operation) {
+                $door = is_array($operation) ? $operation['x-door'] ?? null : null;
+                if ($door !== null) {
+                    self::assertStringStartsWith(self::STORE, $path, "{$method} {$path}: a door is the Store API's");
+                    self::assertContains($door, $doors, "{$method} {$path}: x-door is website or mini_app");
+                    $marked[] = $method . ' ' . $path . ' ' . $door;
+                }
+            }
+        }
+
+        sort($routes);
+        sort($marked);
+        self::assertGreaterThan(50, $staff);
+        self::assertContains('post ' . self::STORE . '/auth/mini-app mini_app', $routes);
+        self::assertContains('post ' . self::STORE . '/me/identities/google website', $routes);
+        self::assertSame($routes, $marked, 'routes/api.php puts behind one door exactly what resources/api/openapi.yaml marks x-door for it');
     }
 
     /**

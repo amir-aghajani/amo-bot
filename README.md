@@ -4,8 +4,8 @@
 
 AmoBot is an open-source shop for selling VPN subscriptions. Customers buy, pay for and manage their services in a
 Telegram bot; the owner runs the shop from a web panel; and AmoBot makes each service on the owner's own VPN panels
-(3X-UI or PasarGuard). It is a PHP application built for ordinary shared hosting: you upload a release zip and set it
-up in the browser, with no shell.
+(3X-UI, PasarGuard or HMPanel). It is a PHP application built for ordinary shared hosting: you upload a release zip and
+set it up in the browser, with no shell.
 
 Everything a customer, an agent or a shop owner sees is Persian and right to left, by design: prices in Toman, dates in
 the Jalali calendar. The code is English; the documentation is English and Persian.
@@ -31,8 +31,8 @@ the Jalali calendar. The code is English; the documentation is English and Persi
 
 ## Who it is for
 
-- **Shop owners** who sell VPN services through Telegram, run their own 3X-UI or PasarGuard servers, and want the shop
-  on an ordinary shared host.
+- **Shop owners** who sell VPN services through Telegram, run their own 3X-UI, PasarGuard or HMPanel servers, and want
+  the shop on an ordinary shared host.
 - **Agents** — a shop's resellers. The owner approves them, and each gets a bot, a shop and a panel of their own on the
   same installation: they install nothing.
 - **Website developers** who build a shop's own website on the Store API.
@@ -51,7 +51,17 @@ the Jalali calendar. The code is English; the documentation is English and Persi
   server's own terms.
 - A wallet, with top-ups and money sent to another customer; reminders before a service ends or runs out of traffic;
   referrals; support tickets.
-- Every text the bot says, and its whole menu, are the owner's to reword.
+- Every text the bot says, and its whole menu, are the owner's to reword — premium emoji in its buttons and in the
+  names of plans, categories and servers.
+
+### The Telegram mini app
+
+The shop inside Telegram, opened from the bot without leaving it: the same account, services, wallet, prices and rules
+as the bot — buying and paying, each service with its QR card and a tap that adds it to a VPN app, renewals and extras,
+the wallet, the lucky wheel and the nightly draw, support as a chat. Telegram signs customers in, with no password;
+their fingerprint or face may confirm what moves money or a service away. AmoBot ships it ready, on the shop's own
+address: every shop has its own, each agent's too, and the panel shows it as a customer you pick sees it
+([Mini app](docs/Mini-App.md)).
 
 ### Payments
 
@@ -84,9 +94,14 @@ the Jalali calendar. The code is English; the documentation is English and Persi
   another server in the background — even from a panel that is down.
 - Services extended, switched off, moved or handed on; an order made by hand for a customer; receipts reviewed one
   after another, or rejected in bulk.
-- Lists, counts and the dashboard follow the shop live. Light and dark, and usable on a phone.
-- **A report group**: sales, receipts with approve and reject buttons, failed deliveries, agency requests and support
-  tickets, each in its topic of a Telegram group, acted on from there.
+- Lists, counts and the dashboard follow the shop live. Light and dark, and usable on a phone. «جستجوی تنظیمات»
+  (Ctrl+K) finds any setting by its words and opens it.
+- **Backups and restore**: the shop downloaded as one signed file and put back from one — the whole installation in the
+  owner's panel, an agent's own shop in theirs —, and a daily backup sent to the report group.
+- **«زمان‌بندی کارها»**: how often each scheduled task runs, and the times they decide by.
+- **A report group**: sales, receipts with approve and reject buttons, failed deliveries, free tests, deleted services,
+  agency requests, support tickets and the daily backup, each in its topic of a Telegram group, acted on from there —
+  and a customer's card (`/manage`) to manage their services, wallet and account from the group.
 - **One-press updates** from the panel, which installs only a signed release (where the host allows it; otherwise the
   shop is updated by hand).
 
@@ -107,14 +122,16 @@ the Jalali calendar. The code is English; the documentation is English and Persi
 ### The Store API, for a shop's own website
 
 AmoBot has no storefront of its own: it gives the shop's website an API. There, customers sign in with Telegram,
-Google, or an email and a password (with two-factor sign-in and a captcha), browse the catalogue, buy and pay, manage
+Google, an email and a password (with two-factor sign-in and a captcha), or a code texted to their mobile number (SMS,
+through IPPanel), browse the catalogue, buy and pay, manage
 their services and wallet, read the shop's notices, open support tickets and write reviews. The shop's admins can do
 its daily work there too, once the owner lets them in. Every operation is described in OpenAPI
 (`resources/api/openapi.yaml`). Every shop can have a website of its own: the main shop and each agent's.
 
 ### VPN panels and drivers
 
-- **3X-UI** (v3 and later, MHSanaei's) and **PasarGuard** (3.1 and later).
+- **3X-UI** (v3 and later, MHSanaei's), **PasarGuard** (3.1 and later) and **HMPanel** (2.5 and later, through its API
+  key: the inbounds of the 3X-UI panels beneath it).
 - Each VPN panel, payment gateway, database, mail service and captcha is a driver: a new one is a class and its
   registration ([Drivers](docs/Drivers.md)). Other panels — Marzban, Hiddify — are on the [Roadmap](docs/Roadmap.md).
 
@@ -132,7 +149,7 @@ To run a shop — [Installation](docs/Installation.md#what-you-need) has the det
 | What | Needed |
 |---|---|
 | Hosting | Shared hosting with cPanel, DirectAdmin or the like — the one supported way to run a shop |
-| PHP | 8.3.36, 8.4.27 or 8.5.12, or a later release of the same branch, with `pdo_mysql`, `curl`, `mbstring`, `openssl`, `bcmath` and `fileinfo`, and a `memory_limit` of 64M or more |
+| PHP | 8.3.36, 8.4.27 or 8.5.12, or a later release of the same branch, with `pdo_mysql`, `curl`, `mbstring`, `openssl`, `bcmath`, `fileinfo` and `zlib`, and a `memory_limit` of 64M or more |
 | Optional PHP extensions | `gd` for the QR card (without it, the bot sends the link as text); `zip` and `sodium` to update from the panel (without them, you update by hand) |
 | Database | MySQL 5.7.8+ or MariaDB 10.3+: an empty database, and a user with every privilege on it |
 | Domain | HTTPS — Telegram sends its webhooks only to `https://` addresses |
@@ -170,7 +187,7 @@ No step needs a console: each is done in the browser or in your host's control p
 git clone https://github.com/amir-aghajani/amo-bot.git
 cd amo-bot
 composer install
-pnpm install && pnpm build   # the panels -> public/admin, public/agent, public/assets
+pnpm install && pnpm build   # the panels and the mini app -> public/admin, public/agent, public/assets, public/app
 composer serve               # http://127.0.0.1:8080 — the web installer, until the shop is installed
 ```
 
@@ -198,6 +215,8 @@ A release zip carries no `docs/`: read them there.
 | Set the shop up and run it: servers, plans, payments, customers, agents and the rest | [Owner's guide](docs/Owners-Guide.md) |
 | See what customers and the bot's admins see in the bot | [Bot guide](docs/Bot-Guide.md) |
 | Connect the shop's own website | [Website](docs/Website.md) |
+| Open the shop inside Telegram | [Mini app](docs/Mini-App.md) |
+| Send the website's sign-in codes by SMS | [SMS](docs/Sms.md) |
 | Change the installation's settings (`config.php`) | [Configuration](docs/Configuration.md) |
 | Install a new version | [Upgrading](docs/Upgrading.md) |
 | Back the shop up | [Backups](docs/Backups.md) |
@@ -218,7 +237,7 @@ A release zip carries no `docs/`: read them there.
 
 | To | Read |
 |---|---|
-| Learn the system | [Architecture](docs/Architecture.md), then [Database](docs/Database.md), [API contract](docs/API-Contract.md) and the internals of the area you touch: [commerce](docs/Internals-Commerce.md), [services](docs/Internals-Services.md), [the Telegram bot](docs/Internals-Telegram-Bot.md), [the website API](docs/Internals-Website-API.md), [the panels](docs/Internals-Panels.md) |
+| Learn the system | [Architecture](docs/Architecture.md), then [Database](docs/Database.md), [API contract](docs/API-Contract.md) and the internals of the area you touch: [commerce](docs/Internals-Commerce.md), [services](docs/Internals-Services.md), [the Telegram bot](docs/Internals-Telegram-Bot.md), [the website API](docs/Internals-Website-API.md), [the panels](docs/Internals-Panels.md), [the mini app](docs/Internals-Mini-App.md) |
 | Set up, run and check the code | [Development](docs/Development.md) |
 | Write and run the tests | [Testing](docs/Testing.md) |
 | Write code like the code around it | [Conventions](docs/Conventions.md) |

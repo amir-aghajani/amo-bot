@@ -36,6 +36,12 @@ written from the same file.
     operation under `/api/store/v1/{store}/admin/…` (the store key in place of the panel, the customer bearer scheme,
     its 401 and 403). See [the shop's admins](Store-API-Admins.md).
   - `x-captcha` on a body with a `captcha` field: the action the token must be solved for.
+  - `x-door` on a Store API operation only one door has ([two doors](Store-API.md#two-doors)): `website` (its ways in,
+    a code by SMS among them, its captcha, a signed-in customer's Telegram, Google and mobile sign-ins added, a mobile
+    proved again by a code) or `mini_app` (the launch data's sign-in, the mini app's logo, the fingerprint secret).
+    Under the other door's key such a path is no route at all: the router's 404. The generated references write it as
+    a **Door** line under the operation. The website's admin API (`/admin/*`) is the website's too, unmarked: its paths
+    are the `x-staff` operations, never written out.
 - **The Store API's promise**: v1 only gains fields — none is removed, renamed or retyped, and a request takes what it
   took. A breaking change comes as v2, beside v1.
 
@@ -54,9 +60,13 @@ written from the same file.
   - every object is closed, or a map (`testEveryObjectIsClosed`);
   - every owner's path takes `X-Shop`, and the store's paths declare their key and token;
   - a body with a `captcha` says its action;
-  - `routes/api.php` mounts for the websites' admins exactly the marked operations, with their grants.
+  - `routes/api.php` mounts for the websites' admins exactly the marked operations, with their grants;
+  - what `routes/api.php` puts behind `WebsiteOnlyMiddleware` or `MiniAppOnlyMiddleware` is exactly what is marked
+    `x-door` for that door, the website's admin API aside (all of it behind the website's guard, and unmarked), and
+    `x-door` says nothing but `website` or `mini_app`.
 - **`tests/Feature/RouteGuardsTest`** walks every route with a field no operation takes, every guard in order, and
-  another shop's row (a 404).
+  another shop's row (a 404); `tests/Feature/Store/MiniAppDoorTest` asks every Store API route under each door's key
+  and finds missing exactly what `x-door` marks for the other.
 - **`tests/Unit/Drivers/DriverFormsTest`** holds each driver family's request shapes to the registered drivers' forms,
   both ways.
 
@@ -84,8 +94,8 @@ subset of OpenAPI the file uses and fails loudly on a keyword it does not know.
 ## Changing the API
 
 - **A new endpoint**: the route in `routes/api.php`, the operation in the description (its body or `x-no-body`, its
-  answer, `x-staff` if the website's admins should have it), then `pnpm api:types`, then the panel code TypeScript
-  points at.
+  answer, `x-staff` if the website's admins should have it, `x-door` if only one door of the Store API has it), then
+  `pnpm api:types`, then the panel code TypeScript points at.
 - **A changed answer**: the presenter, the schema, `pnpm api:types`.
 - **A changed request**: the service that reads it, its request schema, `pnpm api:types`, the screen that sends it.
 - After any edit of the description, `php scripts/docs.php` regenerates the reference pages and `docs/openapi.json`.

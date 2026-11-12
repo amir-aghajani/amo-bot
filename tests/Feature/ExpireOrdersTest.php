@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Core\Scheduling\Scheduler;
+use App\Modules\Bots\Models\Bot;
 use App\Modules\Orders\Enums\OrderStatus;
 use App\Modules\Orders\Models\Order;
 use App\Modules\Orders\Services\OrderService;
@@ -14,14 +15,17 @@ use App\Modules\Payments\Enums\PaymentStatus;
 use App\Modules\Payments\Models\PaymentMethod;
 use App\Modules\Payments\Services\PaymentActions;
 use App\Modules\Payments\Services\PaymentService;
+use App\Modules\Settings\Services\ScheduleSettings;
+use App\Modules\Settings\Services\Settings;
 use App\Modules\Users\Models\User;
 use Illuminate\Support\Carbon;
 use Tests\DatabaseTestCase;
 
 /**
- * Expiring unpaid orders: an order untouched (with its payments) for EXPIRE_HOURS is cancelled quietly with its unpaid
- * payments, in every shop; a receipt waiting for support, a card transfer taken in support's private chat, a payment
- * that moved within the window, or a receipt that arrived after the task read the order keeps it.
+ * Expiring unpaid orders: an order untouched (with its payments) for the shop's order hours
+ * (ScheduleSettings::orderHours(), ORDER_HOURS unless set otherwise in «زمان‌بندی کارها») is cancelled quietly with its
+ * unpaid payments, in every shop; a receipt waiting for support, a card transfer taken in support's private chat, a
+ * payment that moved within the window, or a receipt that arrived after the task read the order keeps it.
  */
 final class ExpireOrdersTest extends DatabaseTestCase
 {
@@ -43,7 +47,7 @@ final class ExpireOrdersTest extends DatabaseTestCase
     public function testTheTaskLooksEveryTenMinutesInEveryShop(): void
     {
         self::assertSame(
-            ['task' => ExpireOrdersTask::class, 'interval' => 10 * 60, 'eachBot' => true],
+            ['task' => ExpireOrdersTask::class, 'key' => 'expire_orders', 'interval' => 10 * 60, 'eachBot' => true],
             $this->service(Scheduler::class)->tasks()[ExpireOrdersTask::class],
         );
     }
@@ -56,14 +60,26 @@ final class ExpireOrdersTest extends DatabaseTestCase
         $this->service(PaymentActions::class)->reject($refused, $this->panelActor(), 'ناخوانا');
         $this->telegram()->reset();
 
-        $this->runAfter(ExpireOrdersTask::EXPIRE_HOURS * 60 - 1);
+        $this->runAfter(ScheduleSettings::ORDER_HOURS * 60 - 1);
         self::assertSame(OrderStatus::Pending, $order->refresh()->status, 'a minute short of the window');
 
-        $this->runAfter(ExpireOrdersTask::EXPIRE_HOURS * 60);
+        $this->runAfter(ScheduleSettings::ORDER_HOURS * 60);
         self::assertSame([OrderStatus::Cancelled, OrderService::NOTE_EXPIRED], [$order->refresh()->status, $order->notes]);
         self::assertSame([PaymentStatus::Cancelled, OrderService::NOTE_EXPIRED], [$unfinished->refresh()->status, $unfinished->note]);
         self::assertSame([PaymentStatus::Cancelled, 'ناخوانا'], [$refused->refresh()->status, $refused->note], 'a refused receipt keeps the reason its customer was told');
         self::assertSame([], $this->telegram()->calls(), 'the customer walked away: nobody is told');
+    }
+
+    public function testTheOwnersHoursTakeTheDefaultsPlace(): void
+    {
+        $this->service(Settings::class)->set('schedule.expire_orders_hours', 3, Bot::MAIN);
+        $order = $this->topUpOrder($this->ali, '50000.00');
+        $this->cardPayment($order, $this->card);
+
+        $this->runAfter(3 * 60 - 1);
+        self::assertSame(OrderStatus::Pending, $order->refresh()->status, 'a minute short of the owner\'s three hours');
+        $this->runAfter(3 * 60);
+        self::assertSame(OrderStatus::Cancelled, $order->refresh()->status, 'long before the default two days');
     }
 
     public function testAReceiptWaitingForSupportKeepsItsOrderWhateverItsAge(): void
@@ -108,10 +124,10 @@ final class ExpireOrdersTest extends DatabaseTestCase
         Carbon::setTestNow(Carbon::parse(self::OPENED)->addDay());
         $this->service(PaymentActions::class)->reject($payment, $this->panelActor(), null);
 
-        $this->runAfter((ExpireOrdersTask::EXPIRE_HOURS + 2) * 60);
+        $this->runAfter((ScheduleSettings::ORDER_HOURS + 2) * 60);
         self::assertSame(OrderStatus::Pending, $order->refresh()->status, 'idle itself, but its payment moved within the window');
 
-        $this->runAfter((24 + ExpireOrdersTask::EXPIRE_HOURS) * 60);
+        $this->runAfter((24 + ScheduleSettings::ORDER_HOURS) * 60);
         self::assertSame(OrderStatus::Cancelled, $order->refresh()->status, 'two days after the refusal, it goes');
     }
 
@@ -119,12 +135,12 @@ final class ExpireOrdersTest extends DatabaseTestCase
     {
         $order = $this->topUpOrder($this->ali, '50000.00');
         $payment = $this->cardPayment($order, $this->card);
-        Carbon::setTestNow(Carbon::parse(self::OPENED)->addHours(ExpireOrdersTask::EXPIRE_HOURS + 1));
+        Carbon::setTestNow(Carbon::parse(self::OPENED)->addHours(ScheduleSettings::ORDER_HOURS + 1));
         // The task read the order idle, with its payments; the customer's receipt landed before it got to it.
         $read = Order::payable()->with('payments')->findOrFail($order->id);
         $this->receipt($payment);
 
-        self::assertFalse($this->service(PaymentService::class)->expire($read, now()->subHours(ExpireOrdersTask::EXPIRE_HOURS)));
+        self::assertFalse($this->service(PaymentService::class)->expire($read, now()->subHours(ScheduleSettings::ORDER_HOURS)));
 
         self::assertSame(OrderStatus::Pending, $order->refresh()->status);
         self::assertSame(PaymentStatus::AwaitingReview, $payment->refresh()->status, 'the receipt waits for support');

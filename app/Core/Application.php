@@ -28,7 +28,7 @@ use Symfony\Component\Console\Application as ConsoleApplication;
 final class Application
 {
     public const NAME = 'AmoBot';
-    public const VERSION = '0.7.2';
+    public const VERSION = '0.8.0';
 
     private Config $config;
     private Container $container;

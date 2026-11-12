@@ -22,6 +22,7 @@ Everything lives in `app/Modules/Telegram`, the routes in `routes/bot.php`.
 | `Api/` | `BotApi`, `Refusal` (the one reading of Telegram's errors), `Limits`, `Pacer`, `BotToken` |
 | `Polling/`, `Controllers/`, `Services/` | `bot:poll`'s loop, the webhook endpoint, webhook and identity management |
 | `Notifications/`, `Qr/`, `Emoji/` | `ServiceCard` (a service as a QR card or text), the QR picture, premium emoji |
+| `Contracts/` | What the bot asks of another module through an interface of its own: `MiniAppAddress`, the shop's mini app's address |
 
 Open first: `routes/bot.php`, `Update/Dispatcher.php`, `Context.php`, `Handlers/CheckoutScreen.php`,
 `Texts/BotTexts.php` and `Reports/ShopReports.php`.
@@ -238,6 +239,20 @@ line breaks, zero-width or filler characters left (`Support\Text::blank()`) — 
 The panel's preview and its own check (`resources/panel/src/components/bot-texts/wording-problem.ts`) mirror these
 rules.
 
+**Premium emoji in names and in what Telegram shows as typed.** A plan's, a category's or a server's name stays plain
+everywhere — the panels, the mini app, the website, the reports —; the premium emoji the shop picked for its leading
+emoji is kept beside it (`emoji_id`; a server's in its `meta`, through `Emoji\PremiumEmojiField`, a field of the
+generic form of type `premium_emoji` whose `bound_to` names the name field, so the panel draws its picker beside it).
+`Texts\PremiumText` is such a name as a bot text's value (`plan()`, `category()`, `server()`): `BotTexts` fills it in
+with its leading emoji as a `<tg-emoji>`, and `nameEmoji()` judges a request's `emoji_id` — digits, a name that starts
+with an emoji, never the tag written into the name itself. A wording Telegram shows as typed — a button's label, a
+popup's notice (`TextKind::html()` false) — reads no tag, so `Texts\PlainWording` turns each premium emoji into what it
+can show: a button's one premium emoji at the start of its label — or right after the label's own leading emoji, which
+it then takes the place of («🌍 %server%») — becomes the button's icon, which the API client sets as it sends
+(`icons()`, Telegram's `icon_custom_emoji_id`); a notice shows its plain emoji (`shown()`); and the same words sent as a
+message keep it (`html()`). Its `problem()` refuses any other tag in such a wording, and in a button's label more than
+one premium emoji, one anywhere but at the start, or one with no words beside it.
+
 Lengths are counted as Telegram counts them: UTF-16 units of what is shown (`Api\Limits`,
 `TelegramHtml::visibleLength()`). `Messages` keeps what the admin does not reword: the formatters' units, the default menu labels, and
 the admins' own words (/broadcast, /emoji, the report group). `WebText` turns a text into plain text or safe HTML for the
@@ -274,12 +289,46 @@ The **gates** (`MaintenanceGate`, `PhoneGate`, `ChannelGate`, in that order) run
 update back answers it itself, and bot admins pass them all. A `/start` link a gate held back is kept as the chat fact
 `_start` (`Dispatcher::keepStartLink()`) — only what a t.me link can carry (Latin letters, digits, `_` and `-`, 64 at
 most), with when it was kept — and taken by the update that gets through within the hour — the contact card, a later
-`/start` or `/menu` (`StartHandler`), or «عضو شدم» (`JoinHandler`) —, so a newcomer the gates stopped still lands
+`/start` or `/menu` (`StartHandler`, which `ContactHandler` hands the card to), or «عضو شدم» (`JoinHandler`) —, so a
+newcomer the gates stopped still lands
 where the link leads (`ChatSession::takeStartLink()`; an older one goes unopened). `ChannelMembership` trusts a
 confirmed membership for a few minutes (`RECHECK_AFTER`). A channel Telegram cannot answer for counts as joined, because
 a broken channel must not lock the shop; it is flagged for the admin only when the channel itself is the reason — not
 a moment's outage, nor a refusal about this one customer (an id Telegram does not know there:
 `Api\Refusal::aboutTheUser()`).
+
+## The mini app
+
+The shop's Telegram mini app is the Store module's ([Internals: website API](Internals-Website-API.md#mini-app-settings),
+[Internals: mini app](Internals-Mini-App.md)); the bot only opens it. It learns where through its own interface,
+`Contracts\MiniAppAddress` — `url()`, the app's address while it is switched on and on https, else `null` —, which
+`Store\Services\MiniApps` implements (bound in `bootstrap/container.php`), so no Telegram file names a Store class.
+
+- **The menu button** beside the message box is set by the Store module as the owner saves the mini app
+  (`MiniApps::applyMenuButton()`, `BotApi::setChatMenuButton` and `getChatMenuButton`), never by a handler.
+- **The main menu's `app` action** («📱 اپلیکیشن فروشگاه», `MainMenu::APP`, `menu:app`) is in a fresh shop's layout
+  under «خرید اشتراک», and switched like a program's: `MainMenu::markup()` leaves it out while `url()` gives none. In an
+  inline menu `KeyboardLayout::markup($opens)` makes its button a `web_app` button (`InlineKeyboard::webApp()`), which
+  opens the app with the customer's launch data. On a reply keyboard it is a label like any other — Telegram hands an
+  app opened from a reply keyboard's button no launch data to sign in with —, so its tap draws a screen
+  (`MenuHandler::app()`, `BotText::AppScreen`) with that inline button under it (`AppButton`), or, the app gone since the
+  menu was drawn, `AppUnavailable`.
+- **A contact card** that passed the gates goes to `ContactHandler` (the `contact` route). The card the phone gate took
+  on this very update (the customer's phone just changed) opens the bot as `/start` does, the flow left. Any other — the
+  mini app's «share my number» (Telegram's `requestContact`) sends the customer's own card whenever it is tapped, at
+  whatever step the chat is — gets a word alone, the chat left at its step: `PhoneVerified` for their own card with a
+  number on file, else `PhoneNotNeeded`. Only the phone gate stores a number, so nothing the shop did not ask for is
+  kept.
+- **A service's name** as its customer reads it in the screens they open is `Subscription::shownAs()`: their own name
+  for it (`label`, set from the mini app or a website) beside its client name — «گوشی من (ali_1)» —, or the client name
+  alone. Direction marks keep it in order inside a Persian line whatever its letters: a right-to-left mark after the
+  name and after the bracket, so a Latin name keeps its brackets, and a left-to-right one before the client name, which
+  may start with digits. The services list and the screens a service opens — a renewal, extras, a transfer, a ticket's
+  service — and their buttons use it. A service's card (`ServiceCard::values()`: a delivery, the service's details, the
+  reminders and the notices built from it) fills `%client%` with the client name alone, its line to copy; the panels
+  and the report group name a service by its client too.
+- **The query budget**: every menu reads the shop's mini app row once, to know whether its button shows — one query more
+  on `/start` and on any message that lands on the menu (`BotQueryBudgetTest`).
 
 ## Delivering a service
 
@@ -327,6 +376,35 @@ updates), its topics `ReportTopics` (each made under a lease, so two processes n
   id the bot recorded, never by that message's words, which may be a customer's. An agency request's approval refused
   as it stands — the admin's own request, or an agency the program's term would end past the last day the shop keeps —
   leaves its buttons in place for another try; only a request decided meanwhile takes them away.
+- **The backup** — `Topic::Backups` has no queued report: `Backups\Tasks\SendBackupsTask` sends the shop's file to
+  its thread itself, at its own time, apart from the queue and its pace ([Architecture](Architecture.md#backups)).
+
+### A customer's card
+
+The panel's customer page, in the group: `Reports\UserManagement` is the card's front — «⚙️ مدیریت کاربر» under a
+newcomer's report posts one under it, and `/manage <who>` (`COMMAND`) anywhere in the group answers with one, `<who>` a
+Telegram id, an @username or the customer's number in the shop (`#12`). The front says who they are and opens the
+sections, each a handler of its own callback prefix under `Reports\Customers` that rewrites the card in place, with
+«⬅️ بازگشت» back to the front: `CustomerServices` (a service's sync, time and traffic, switch off and on, deletion),
+`CustomerWallet` (an increase or a decrease with a note), `CustomerOrder` (a service made by hand, as the panel's
+«افزودن سفارش»: `ManualOrders`, the confirm button carrying a nonce as the order's key), `CustomerDiscount`,
+`CustomerHistory` (orders, payments, tickets, referrals — reading only) and `CustomerAccount` (the website's sign-in:
+two-factor off, every device signed out); the groups, the role and the ban are the front's own.
+
+- **What every section shares** is `Customers\CustomerCards`: `press()` checks a press once for all — in the shop's
+  connected report group, by one of its bot admins (`GroupButtons::admin()`, never the button's data), about a customer
+  of the shop — and hands the section a `CardPress`; `header()`, `back()`, `show()` and `refused()` are the card's look;
+  `mayChange()` and `lockOf()` the report group's own rule: never the admin's own account nor an agent's (the panel's),
+  which the card only reads.
+- **Typed input** — an amount, a percent, a price — is a question: `ask()` posts it under the card as a ForceReply and
+  records it as a `report_messages` row whose `ref` names the section, the kind, the admin, the card and its arguments.
+  `ReportGroupUpdates` routes a reply to it back through `reply()` — by the message id it answers, written by one of the
+  bot's admins — as a `CardReply` to that section (`AnswersPrompts::answer()`), which ends it with `done()` (the card
+  rewritten, the question deleted) or `retry()` (a word under the reply, the question kept).
+- **Every change** goes through the service the panel uses, under the admin's name (`Actor::groupAdmin()`), by its
+  rules — `UserActions` (a wallet, the role, the ban, the groups, the sign-in), `SubscriptionActions`,
+  `PersonalDiscounts::set()`, `ManualOrders` — and a refusal is a popup. Never an admin banned, put in a «همکار»
+  group, or their discount or website sign-in changed.
 
 ## Broadcasts
 
@@ -364,5 +442,6 @@ cannot run on its row.
 Bot flows extend `Tests\BotTestCase`: `send($this->message(...)|tap(...)|contact(...))` drives the real dispatcher
 against the fake Telegram, and `said()`, `popup()`, `calls()`, `inlineKeyboard()` read what the bot did; the report
 group has `groupTap()`, `groupReply()` and `botMembership()`. `BotQueryBudgetTest` holds each common screen to a fixed
-budget of queries and Telegram calls — a budget raised says what the new query buys. Unit tests of the API, texts and
+budget of queries and Telegram calls — a budget raised says what the new query buys (the menu's mini app row, for one).
+`miniApp()` switches the shop's mini app on for a test of its button (`BotMenuTest`). Unit tests of the API, texts and
 keyboards are in `tests/Unit/Telegram`. See [Testing](Testing.md).

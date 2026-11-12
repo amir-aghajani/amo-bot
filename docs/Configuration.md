@@ -18,7 +18,8 @@ environment; there is no `.env`.
   the web — with any copy an editor left beside it, such as `config.php.bak` — even without mod_rewrite.
 - Every save renders the whole file anew, section by section, each setting under a comment that says what it is for. A
   setting the file does not set is written commented out at its default — `// 'APP_TIMEZONE' => 'UTC',` — for you to
-  see and set. The database's and the mail driver's own settings (`DB_HOST`, `MAIL_HOST` …) end their section; a
+  see and set. The database's, the mail driver's and the SMS driver's own settings (`DB_HOST`, `MAIL_HOST`,
+  `SMS_IPPANEL_FROM` …) end their section; a
   setting no section knows goes under `Other settings` at the end.
 - The file is written whole, never half, and under a lock, so two saves at once take turns. The installer makes it
   readable by the shop's own user alone (`0600`, or `0644` where PHP runs as another user:
@@ -48,6 +49,7 @@ The owner's panel edits most of it, in «تنظیمات» at the foot of the sid
 | «دیتابیس» | `DB_CONNECTION` and its driver's settings, written only once the database answers to them |
 | «برنامه» | `APP_NAME`, `APP_URL`, `APP_DEBUG`, `APP_TIMEZONE` |
 | «ایمیل» | `MAIL_TRANSPORT` and its driver's settings, `MAIL_FROM_ADDRESS`, `MAIL_FROM_NAME` — with a test send |
+| «پیامک» | `SMS_DRIVER` and its driver's settings, `SMS_AGENTS` — with a test send and the account's credit ([SMS](Sms.md)) |
 | «ورود به پنل» | `ADMIN_USERNAME` and `ADMIN_PASSWORD_HASH` ([the panel's login](Running-In-Production.md#the-panels-login)) |
 | «پیشرفته» | `LOG_LEVEL`, `SESSION_LIFETIME`, `SESSION_SECURE_COOKIE`, `OUTGOING_HTTP_TIMEOUT`, `CRON_TOKEN` |
 

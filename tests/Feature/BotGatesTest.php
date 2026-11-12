@@ -14,7 +14,7 @@ use Tests\BotTestCase;
 /**
  * The admin's bot settings as the customer meets them: the master switch and phone verification are
  * gates every update passes before any handler — each answers what it holds back itself, and a bot admin
- * passes them all.
+ * passes them all. A contact card nothing asked for (the mini app's «share my number») gets a word, never the menu.
  */
 final class BotGatesTest extends BotTestCase
 {
@@ -133,12 +133,44 @@ final class BotGatesTest extends BotTestCase
         self::assertSame(self::text(BotText::Welcome, ['name' => 'Ali']), $this->params(0)['text']);
     }
 
-    public function testWithoutTheSwitchAContactJustOpensTheMenuAndStoresNothing(): void
+    public function testWithoutTheSwitchAContactGetsAWordAndStoresNothing(): void
     {
+        $this->send($this->message('/start'));
+
+        // The mini app's «share my number» sends the customer's own card into the chat.
         $this->send($this->contact('+989120000000', userId: self::CHAT));
 
         self::assertSame(['sendMessage'], $this->calls());
-        self::assertSame(self::text(BotText::Welcome, ['name' => 'Ali']), $this->params(0)['text']);
+        self::assertSame(self::text(BotText::PhoneNotNeeded), $this->params(0)['text']);
+        self::assertArrayNotHasKey('reply_markup', $this->params(0), 'no menu again: the chat has it');
         self::assertNull(User::query()->where('telegram_id', self::CHAT)->firstOrFail()->phone, 'nothing is stored the customer was not asked for');
+    }
+
+    public function testACardSentAgainOnceVerifiedIsConfirmedWithoutTheMenu(): void
+    {
+        $this->customer(['phone' => '+989350000000']);
+        $this->botSettings('general', ['enabled' => true, 'phone_required' => true]);
+        $this->send($this->message('/start'));
+
+        $this->send($this->contact('+989350000000', userId: self::CHAT));
+        self::assertSame([self::text(BotText::PhoneVerified)], $this->said());
+        self::assertArrayNotHasKey('reply_markup', $this->params(0), 'the menu stays as it is');
+
+        // Someone else's card proves nothing, and is not kept.
+        $this->send($this->contact('+989120000000', userId: 777));
+        self::assertSame([self::text(BotText::PhoneNotNeeded)], $this->said());
+        self::assertSame('+989350000000', User::query()->where('telegram_id', self::CHAT)->firstOrFail()->phone);
+    }
+
+    public function testTheMiniAppsCardFirstThroughThePhoneGateOpensTheMenu(): void
+    {
+        $this->botSettings('general', ['enabled' => true, 'phone_required' => true]);
+
+        // The customer's own card before the bot ever asked: the mini app's «share my number».
+        $this->send($this->contact('+989120000000', userId: self::CHAT));
+
+        self::assertSame([self::text(BotText::PhoneVerified), self::text(BotText::Welcome, ['name' => 'Ali'])], $this->said());
+        self::assertNotSame([], $this->replyKeyboard(1), 'the bot opens to them: the menu');
+        self::assertSame('+989120000000', User::query()->where('telegram_id', self::CHAT)->firstOrFail()->phone);
     }
 }

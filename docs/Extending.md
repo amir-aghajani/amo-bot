@@ -31,7 +31,10 @@ Every shop feature is an API endpoint and a screen:
      panels' alone.
 3. The React page — `resources/panel/src/pages` for both panels (each its own chunk, through `pages/lazy.ts`), or an
    app's own (`src/apps/<panel>/pages`) — built from the shared components, its route in each app's `app.tsx` and its
-   entry in each app's `nav.ts`.
+   entry in each app's `nav.ts`. The settings search finds a page and its sections by the nav as they are; a section
+   of settings is added to `SECTIONS` in `scripts/settings-index.mjs` too — its address, and the components that draw
+   it, `file#Export` —, then `pnpm settings:index`, so its single settings are found
+   ([the checks](Development.md#the-checks)); the search's tests hold every address there to one the nav has.
 4. Its tests: an `HttpTestCase` for the endpoint — and a new list's reads in `ListQueriesTest`, which holds every list to
    a few queries however many rows it has; a route that takes a row's id gets its kind in `RouteGuardsTest`'s
    `ROW_KINDS`, which tries it with another shop's row — and a Vitest test beside the page.
@@ -76,11 +79,21 @@ to date, and the [Store API](Store-API.md) pages say how to use it.
   registered on the bot's settings screen in `bootstrap/container.php` (`BotSettingsScreen`), its group's request in
   `resources/api/openapi.yaml`, and its card is a section of the panel's «تنظیمات ربات» (`components/bot/settings/`,
   on `useBotSettingsGroup`) — [Bot settings](Bot-Settings.md).
+- Either way, the panel's settings search finds the field by the words its section's source writes — its label, its
+  hint, its card and fold —: after adding or rewording one, `pnpm settings:index` (`pnpm check` fails while
+  `lib/settings-search/settings.generated.ts` is stale). Words the panel does not write itself — a label the server
+  sends (a driver's fields, the schedule's tasks, the report group's topics), the English term, the ways owners spell
+  it («بک آپ») — go in `lib/settings-search/keywords.ts`, under the entry's id; its tests check every id there is one a
+  panel's index has.
 
 ## A scheduled job
 
-A class implementing `App\Core\Scheduling\Task`, added in `bootstrap/schedule.php` with its interval — `eachBot: true`
-for a shop's work, run in every shop in turn. A task that works through a queue stops at its share of the run's time
+A class implementing `App\Core\Scheduling\Task`, added in `bootstrap/schedule.php` with its default interval —
+`eachBot: true` for a shop's work, run in every shop in turn. Its title and what it does, as the owner reads them, go in
+`ScheduleSettings::TASKS` under its key (`Scheduler::key()`: the class's name without `Task`, in snake case), so
+«زمان‌بندی کارها» lists it and the owner may set another interval there ([the task schedule](Running-In-Production.md#the-task-schedule));
+a time it decides by that the owner should set too is a `Number` of `ScheduleSettings::timingFields()`, its default the
+value the task ran with before. A task that works through a queue stops at its share of the run's time
 (`Core\Scheduling\Budget`).
 
 ## A console command
@@ -93,4 +106,7 @@ Edit `database/schema.php` and run `php bin/console db:rebuild` on your database
 the same change as an upgrade for the shops already installed: `database/upgrades/<version>.php`
 ([Database](Database.md#upgrades)). A test installs the first release's database, runs every upgrade on it and holds
 it to a fresh install's, table by table: a change without its upgrade fails it. A column that points at a customer joins
-`AccountMerger::REFERENCES`, so a merge carries it (a test fails until it does).
+`AccountMerger::REFERENCES`, so a merge carries it (a test fails until it does). A new table joins one of
+`Backups\BackupTables`' kinds — a shop's own, a shop's by its parent, the owner's, or what is true only now —, and a
+foreign key between a shop's rows and the owner's its references, so a backup holds it and a shop's restore knows what
+to do with it (`BackupTablesTest` fails until they do; [Architecture](Architecture.md#backups)).

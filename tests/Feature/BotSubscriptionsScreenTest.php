@@ -13,8 +13,8 @@ use App\Modules\Telegram\Texts\BotText;
 use Tests\BotTestCase;
 
 /**
- * "سرویس‌های من": the customer's running services, newest first, as buttons named like the panel names them, five to
- * a page with «بعدی» / «قبلی» under them (next on the left: forward is leftward for a right-to-left reader) and «صفحه x
+ * "سرویس‌های من": the customer's running services, newest first, as buttons named like the panel names them — with the
+ * customer's own name for one beside it —, five to a page with «بعدی» / «قبلی» under them (next on the left: forward is leftward for a right-to-left reader) and «صفحه x
  * از y» in the text, and a red «بازگشت» — no search button.
  */
 final class BotSubscriptionsScreenTest extends BotTestCase
@@ -95,6 +95,17 @@ final class BotSubscriptionsScreenTest extends BotTestCase
         $keyboard = $this->inlineKeyboard(0);
         self::assertSame(self::buttons('ali_3', 'ali_2', 'ali_1'), self::labels(array_slice($keyboard, 0, 3)));
         self::assertSame([[MainMenu::HOME]], array_map(static fn(array $row): array => array_column($row, 'callback_data'), array_slice($keyboard, 3)), 'and the back button alone');
+    }
+
+    public function testAServiceTheCustomerNamedShowsTheirNameBesideItsClientName(): void
+    {
+        $this->sold(2);
+        // Named in the mini app; the customer's words, never markup.
+        $this->services[2]->update(['label' => '<b>گوشی</b>']);
+
+        $this->send($this->tap(MainMenu::SUBSCRIPTIONS));
+
+        self::assertSame(self::buttons("<b>گوشی</b>\u{200F} (\u{200E}ali_2)\u{200F}", 'ali_1'), self::labels(array_slice($this->inlineKeyboard(0), 0, 2)), 'a button is plain text: the name as it was typed');
     }
 
     public function testAServicesWayBackIsThePageItIsOn(): void

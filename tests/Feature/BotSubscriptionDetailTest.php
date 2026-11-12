@@ -94,6 +94,18 @@ final class BotSubscriptionDetailTest extends BotTestCase
         self::assertSame(Traffic::GIGABYTE, $this->subscription->refresh()->download_bytes);
     }
 
+    public function testTheCustomersOwnNameForTheServiceStandsBesideItsClientNameButNeverInTheLineToCopy(): void
+    {
+        // Named in the mini app: the customer's words, escaped into the screen's HTML.
+        $this->subscription->update(['label' => '<b>گوشی</b> & تبلت']);
+
+        $this->send($this->tap($this->screenButton()));
+        self::assertSame($this->screen($this->asThePanelSays(online: false)), $this->params(0)['text'], 'the username line support asks for stays the client name');
+
+        $this->send($this->tap($this->screenButton('rotate')));
+        self::assertStringContainsString("&lt;b&gt;گوشی&lt;/b&gt; &amp; تبلت\u{200F} (\u{200E}ali_1)\u{200F}", $this->params(0)['text'], 'a screen naming the service names it as they do');
+    }
+
     public function testAPanelThatCannotRotateCredentialsGetsNoChangeLinkButton(): void
     {
         FakeProvider::$capabilities = new Capabilities(linkRotation: false);

@@ -1,15 +1,16 @@
 # The panels are static files (pnpm build): the owner's page under admin/, an agent's under agent/, and the hashed
-# files both pages share under assets/. PHP answers the rest — the API, the Telegram webhook, the cron URL — as JSON.
+# files both pages share under assets/ — and the shops' Telegram mini app under app/, with its own hashed files in
+# app/assets/. PHP answers the rest — the API, the Telegram webhook, the cron URL — as JSON.
 <IfModule mod_rewrite.c>
     RewriteEngine On
 
-    # The panels: their files as they are; a build file that is not there is a 404 (a tab opened before an upgrade asks
-    # for the old build's files, and must not get a page instead); any other address under admin/ or agent/ is that
-    # panel's page.
+    # The panels and the mini app: their files as they are; a build file that is not there is a 404 (a tab opened before
+    # an upgrade asks for the old build's files, and must not get a page instead); any other address under admin/,
+    # agent/ or app/ (a shop's mini app is app/{its store key}/) is that page.
     RewriteCond %{REQUEST_FILENAME} !-f
-    RewriteRule ^assets/ - [R=404,L]
+    RewriteRule ^(app/)?assets/ - [R=404,L]
     RewriteCond %{REQUEST_FILENAME} !-f
-    RewriteRule ^(admin|agent)(/.*)?$ $1/index.html [L]
+    RewriteRule ^(admin|agent|app)(/.*)?$ $1/index.html [L]
 
     # Everything else that is not a real file goes to the front controller.
     RewriteCond %{REQUEST_FILENAME} !-f
@@ -23,7 +24,8 @@
     Header set Referrer-Policy "same-origin"
 
     # A panel's page must always be asked for again (it names the build's files); the files themselves never change —
-    # the build writes assets/.htaccess, which lets a browser keep them for good.
+    # the build writes assets/.htaccess, which lets a browser keep them for good. The mini app's folder lets Telegram's
+    # web client frame it (app/.htaccess, written by the build too).
     <FilesMatch "^index\.html$">
         Header set Cache-Control "no-cache"
     </FilesMatch>

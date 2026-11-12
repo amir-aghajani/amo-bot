@@ -11,7 +11,7 @@ of them is in [Servers](Servers.md), [Services](Services.md), [Test accounts](Te
 
 | Module | Holds |
 |---|---|
-| `app/Modules/Providers` | Servers, the connector contract, the 3X-UI and PasarGuard connectors, panel health |
+| `app/Modules/Providers` | Servers, the connector contract, the 3X-UI, PasarGuard and HMPanel connectors, panel health |
 | `app/Modules/Subscriptions` | Services, provisioning, the operations, grants, renewals, extras, reminders, free test accounts, the automatic removal, the sync |
 | `app/Modules/Bots` | The bots, `CurrentBot` and the shop scope |
 | `app/Modules/Notifications` | Every notice a customer gets, kept for their website and sent by Telegram or email |
@@ -40,6 +40,9 @@ limit the panel enforces).
 - **PasarGuard** (`Drivers/PasarGuard`, 3.1+): `PasarGuardClient` (API key, or a password traded for a kept token) →
   `PasarGuardProvider`. Its groups are the shop's inbounds; a term from the first connection is "on hold"; it has no IP
   limit.
+- **HMPanel** (`Drivers/HmPanel`, 2.5+): `HmPanelClient` (its `hmp_…` API key, the one way in) → `HmPanelProvider`. The
+  inbounds of the 3x-ui panels beneath it, one panel a client; clients found by name through lookup, then called by
+  HMPanel's id; 3x-ui's term and IP limit passed on; no status, no rotation; a key's calls per minute kept few.
 - **Shared** (`Providers/Support`): `PanelConnection` and `PanelCredentials` (the fields every connector's form shares,
   and how a stored server reads them back), `PanelHttp` (the one request shape — the connection's TLS rule and
   timeouts, redirects never followed — and the readings of an answer that is not the API), `Raw` (defensive readers
@@ -391,12 +394,13 @@ recipient), the panels and the website's admins (`Admin\Api\SubscriptionsControl
   purchase's, parameterised by the service; once its amounts hold, it hands the checkout and the payment to
   `RenewalHandler::checkout()` and `pay()` with the `CustomPrice` — so the window, the methods, the code and the
   under-way popup are the plan's.
-- **Automatic renewal** (`AutoRenewal`, every `AutoRenewTask::INTERVAL_MINUTES`, 30): the customer's switch, renewed
+- **Automatic renewal** (`AutoRenewal`, at the owner's interval — «زمان‌بندی کارها», `AutoRenewTask::INTERVAL_MINUTES`,
+  30, by default): the customer's switch, renewed
   from the wallet within the admin's days of the deadline, by the admin's default method
   (`RenewalSettings::defaultMethod()`, passed to `OrderService::createRenewal()`); the customer's window does not hold
   it back. The panel is read first (its deadline is the truth). By ResetTime, which starts the term afresh from the
-  renewal and drops what was left of it, it waits for the last run before the deadline (`LAST_RUN_MINUTES`: the
-  interval and 5 minutes for a late run — `opensAt()`, `renewsNow()`), its panel not read meanwhile, so it loses that
+  renewal and drops what was left of it, it waits for the last run before the deadline (`lastRunMinutes()`: the
+  owner's interval and `LATE_RUN_MINUTES`, 5, for a late run — `opensAt()`, `renewsNow()`), its panel not read meanwhile, so it loses that
   much at most; a short wallet is still told from the window's start, whatever the method. `claim()` makes the order
   under a lock on the service row, only while the switch is still on, the service is still the customer's the run read
   (one handed to another since would be paid from the wrong wallet), the row is still due by the method (another
@@ -435,7 +439,7 @@ recipient), the panels and the website's admins (`Admin\Api\SubscriptionsControl
 `Grants` gives days and traffic to many services: a server's «افزودن زمان و حجم» or the [mass gift](Broadcasts.md#the-mass-gift).
 A grant is split into one `GrantPart` per server, each worked through **one service at a time past a cursor** by
 whoever holds the part's lease — the open screen a few seconds a request (`run()`, `runPart()`, until
-`Core\Scheduling\Budget::screen()`), or `GrantsTask` every minute — so it finishes however many services there are, and an
+`Core\Scheduling\Budget::screen()`), or `GrantsTask` every minute by default — so it finishes however many services there are, and an
 unreachable panel holds up only its own server (`waiting_reason`). The loop is `Core\Database\Lease::work()`: the service
 past the cursor (`next`), its turn (`step`, false when the part must wait or is no longer this call's), the end
 (`finish`), the lease let go however it ended. Each service is claimed (the cursor moved) before its panel is touched,
@@ -457,7 +461,7 @@ another server, each by `ProvisioningService::move()`. A job (`ServerMigration`)
 was started (`upto_subscription_id`) — active ones, those switched off with `include_disabled`, of `plan_ids` when given —
 and is worked through like a grant's part (`Lease::work()`, its `start` turning a queued job running): one service at a
 time past a cursor, by whoever holds the job's lease (the page's `run()` a few seconds a request, `MigrationsTask` every
-minute), each service claimed before any panel is touched.
+minute by default), each service claimed before any panel is touched.
 Its status is queued (until its first turn), running, paused, then done, cancelled or failed; the database allows one open
 job (queued, running, paused) per source (`open_source_id`, a generated unique column — `ServerService::delete()` removes
 a server's jobs itself, as for grant parts, and refuses a server an open job is from or to). The lease holds while the
@@ -601,7 +605,7 @@ hours count from `ended_at`, else that passed deadline, else the row's last chan
   second renewal).
 - `stillDue()` — `removesAt()` passed and still no open order, judged on the row as its panel has it now.
 
-`Tasks\CleanupServicesTask` (every 15 minutes, right after the sync) is no `eachBot` task: it finds the shops with
+`Tasks\CleanupServicesTask` (every 15 minutes by default, right after the sync) is no `eachBot` task: it finds the shops with
 services over, test services or unissued test claims across every bot (`Subscription::acrossShops()`) — an agent's bot
 that stopped running too, since its services sit on the installation's panels — and works each in its own shop
 (`CurrentBot::run()`), within the run's share of the scheduler's time. In each it deletes the test claims a dead
@@ -613,8 +617,8 @@ no other. Nobody is told. The orders and the `test_accounts` rows lose their lin
 
 ## The sync and the tasks
 
-`SyncSubscriptionsTask` reads every running service from its panel every 15 minutes: one `listClients()` per server,
-then `apply()` per row — counters, quota, term, link and the IP limit where the panel keeps one (`ClientInfo::$ipLimit`;
+`SyncSubscriptionsTask` reads every running service from its panel every 15 minutes by default: one `listClients()` per
+server, then `apply()` per row — counters, quota, term, link and the IP limit where the panel keeps one (`ClientInfo::$ipLimit`;
 PasarGuard's null leaves the shop's), so what was changed by hand on the panel is what the next renewal, extra or
 grant builds on. A client missing from the list is asked for on its own; only that answer marks a service
 deleted, never a list that came back short. Every task that talks to panels skips servers in backoff and stops at its
@@ -637,7 +641,8 @@ through (`shops()`, behind `Scheduling\BotShops` so Core names no module).
 with balances read in that shop. That is why every method hands `tell()` a closure instead of finished words — the
 words and the values (a balance, support's note as a bot-text part) must be worked out inside that shop.
 
-`Notices::deliver()` keeps every notice for the customer's website feed (`notifications`, half a year), linked to the
+`Notices::deliver()` keeps every notice for the customer's website feed (`notifications`, `ScheduleSettings::noticeDays()`:
+the default `ScheduleSettings::NOTICE_DAYS`, 180), linked to the
 order, service or ticket it is about, then sends it: Telegram through `CustomerChats` (which remembers a customer who
 blocked the bot and stops writing to them), else email when the customer has an address and the shop's email works.
 Changes of how an account is signed in to go to Telegram **and** email (`everyDoor`), since whoever made the change may
@@ -661,7 +666,8 @@ against their windows (tickets an hour, messages per ten minutes, and uploads in
 with receipts) only once the request passed its checks.
 
 `TicketAttachments` keeps a message's picture: an upload judged by its bytes and kept until its ticket has been closed
-30 days (then deleted, the message keeping its name), or a Telegram file id, which Telegram keeps.
+`ScheduleSettings::pictureDays()` (the default `ScheduleSettings::PICTURE_DAYS`, 30; then deleted, the message keeping its
+name), or a Telegram file id, which Telegram keeps.
 
 ## Reviews
 

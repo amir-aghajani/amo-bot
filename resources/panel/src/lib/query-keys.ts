@@ -21,6 +21,10 @@ export const queryKeys = {
   system: ['system'] as const,
   /** AmoBot's own update (the owner's): the newest release, and the update under way. */
   update: ['update'] as const,
+  /** «زمان‌بندی کارها» (the owner's): every scheduled task, when it ran and is due, and the numbers it runs by. */
+  schedule: ['schedule'] as const,
+  /** «پشتیبان‌گیری» (both panels'): what the panel's backups hold, their sending to the report group, the states kept from before a restore. */
+  backups: ['backups'] as const,
   plans: ['plans'] as const,
   planCategories: ['plan-categories'] as const,
   planOptions: ['plan-options'] as const,
@@ -118,5 +122,13 @@ export const queryKeys = {
   pictureCheck: (path: string) => ['picture-check', path] as const,
   /** The shop's website (its settings' page): every save and a new key answer it whole, put back in place of the read. */
   website: ['website'] as const,
+  /** The shop's Telegram mini app (its settings' page): every save, and a logo changed, answer it whole in place of the read. */
+  miniApp: ['mini-app'] as const,
+  /** The customers the mini app's preview may open as, by what is searched (components/mini-app/preview/customer-picker). */
+  previewCustomers: (search: string) => ['preview-customers', search] as const,
   configSettings: ['config-settings'] as const,
+  /** The SMS account's credit, asked of its provider with the key as saved («تنظیمات پنل › پیامک»): a save or a test send reads it again. */
+  smsCredit: ['sms-credit'] as const,
+  /** What the panel's user keeps for themselves on every device: their favorites in the settings search (components/settings-search). */
+  preferences: ['preferences'] as const,
 }

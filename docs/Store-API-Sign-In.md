@@ -2,8 +2,9 @@
 
 # Store API: signing in
 
-How a customer signs in to a shop's website, and what a session is. Paths are under the
-[base address](Store-API.md#the-base-address); the samples use the [minimal client](Store-API.md#a-minimal-client).
+How a customer signs in to a shop's website — and to its Telegram mini app ([the mini app](#the-mini-app)) —, and what a
+session is. Paths are under the [base address](Store-API.md#the-base-address); the samples use the
+[minimal client](Store-API.md#a-minimal-client).
 
 ## Tokens and sessions
 
@@ -52,8 +53,12 @@ Every successful sign-in answers the same shape:
   ```
 - A sign-in is *recent* for 15 minutes: what changes how the account is signed in to asks that of the session
   ([a recent sign-in](Store-API-Account.md#a-recent-sign-in)). And it is *strong* when it came by Telegram, by Google,
-  or by a password with its second step — what the shop's admin API asks of its admins
-  ([the shop's admins](Store-API-Admins.md#signing-in)).
+  by the mini app's launch data, or by a password or a code texted to the account's mobile with its second step — what
+  the shop's admin API asks of its admins ([the shop's admins](Store-API-Admins.md#signing-in)). A code by SMS alone
+  is not: a SIM swapped, or a number the carrier gave someone else, reads it.
+- A session is the shop's, whichever door opened it ([two doors](Store-API.md#two-doors)): a token the mini app signed
+  in opens the website's customer endpoints too, and the other way round — all but a panel's preview, which opens the
+  mini app's key alone, and only to read ([a panel's preview](#a-panels-preview)).
 - Keep a customer's token in the browser (`localStorage`, so they stay signed in) and send it nowhere but the API. Any
   script on your pages can read it, so keep the site free of XSS — a Content-Security-Policy, no untrusted HTML (the
   notices' `html` is safe already). An admin's token is kept in memory or `sessionStorage`, never `localStorage`
@@ -72,9 +77,18 @@ offers:
 - `email` — whether signing up with an email is offered (it is on, and the shop's email goes out). A customer who has
   an email and a password signs in with them whatever this says: always show the password sign-in and the
   forgotten-password link.
+- `phone` — whether signing in with a code texted to a mobile is offered ([a code by SMS](#a-code-by-sms)): the
+  website's switch is on and SMS goes out for it — the installation sends it, and an agent's site only while the owner
+  lets it. Draw the mobile number form only while it is true.
+- `mini_app` — `false` under a website's key. Under the mini app's it is `true`, and the four above are off: the
+  launch data is its one way in ([the mini app](#the-mini-app)).
 
-Beside it, `GET /`'s `captcha` says whether a sign-up, a password sign-in and a password reset must carry the website's
-captcha, and how to draw it ([the captcha](#the-captcha)).
+`POST /auth/phone`, `POST /auth/phone/verify` and a signed-in customer's own (`POST /me/identities/phone`,
+`…/phone/verify`, `POST /me/reauthenticate/phone`) are a website's: under the mini app's key they are no route at
+all.
+
+Beside it, `GET /`'s `captcha` says whether a sign-up, a password sign-in, a password reset and a code by SMS must carry
+the website's captcha, and how to draw it ([the captcha](#the-captcha)).
 
 ## Telegram: the popup
 
@@ -423,7 +437,7 @@ account in the meantime: send the customer to the password sign-in. `503` means 
 
 The second step posts the challenge with the six-digit code the app shows now — or one of the account's recovery codes
 ([two-factor sign-in](Store-API-Account.md#two-factor-sign-in)). Persian digits, spaces and dashes are fine; recovery
-codes take any case.
+codes take any case. A sign-in by SMS of such an account asks the same step ([a code by SMS](#a-code-by-sms)).
 
 `POST /auth/login/2fa` request
 ```json
@@ -476,9 +490,121 @@ This works for every account with an email, whatever `sign_in.email` says — an
 with Google, and never set a password, gets one. A wrong code is `422` on `code`, counted against the address's budget
 of wrong codes as a sign-up's is; the password follows the sign-up's rule.
 
+## A code by SMS
+
+Offered while `sign_in.phone` is true: the website's switch is on and SMS goes out for it. Two steps, and one answer
+whether or not the number has an account:
+
+`POST /auth/phone` request
+```json
+{ "phone": "۰۹۱۲ ۳۴۵ ۶۷۸۹", "captcha": "0.mT9z3bVr2Q8yKp1sWnA4hD7eLc" }
+```
+
+`POST /auth/phone` → `202`
+```json
+{ "sent": true, "expires_in": 300, "resend_in": 60 }
+```
+
+`phone` is an Iranian mobile however the customer types it — `09123456789`, `9123456789`, `+989123456789`,
+`00989123456789`, Persian or Arabic digits, spaces, dashes and brackets between the groups; the shop keeps it in E.164
+(`+989123456789`). Anything else — a landline, another country's number — is `422` on `phone`
+(`شماره موبایل درست نیست؛ یک شماره موبایل ایران را مثل 09121234567 بنویسید.`; blank: `شماره موبایل را وارد کنید.`).
+A six-digit code goes to the number by SMS whether or not it has an account: the answer tells nothing. It lives
+`expires_in` seconds (5 minutes) and takes five tries; `resend_in` (60) is how long the same number waits for another —
+asked sooner, `429` with `Retry-After` (`برای این شماره همین حالا کد فرستاده شد؛ … ثانیه دیگر دوباره امتحان کنید.`). A
+new code replaces the last once the SMS provider took it: one that did not go leaves the last one working.
+
+`POST /auth/phone/verify` request
+```json
+{ "phone": "09123456789", "code": "۴۸۲۹۱۳", "referral_code": "k7m2xq9p" }
+```
+
+`200` answers the token ([tokens and sessions](#tokens-and-sessions)): the shop's customer whose verified mobile it is
+— the number they shared with the bot, or proved on the website — is signed in, with their services and wallet; a
+number new to the shop makes a new account with the number alone (`first_name` and `last_name` `null`: let them add
+their names, `PATCH /me` — [names](Store-API-Account.md#names)), reported to the shop and its invite code's owner told.
+Of two accounts holding one number — one shared with the bot changed hands, or a website newcomer by phone whose
+number the bot later kept on a new Telegram account —, the one with a Telegram account signs in, then the one seen
+last; and the answer carries `merge`, the offer to make the other one with it, since the code proved the number for
+both ([the merge offer](Store-API-Account.md#the-merge-offer)). Show it as when a way in being added is another
+account's, and send `POST /me/merge` with the new token if the customer says that account is theirs too: otherwise it
+has no way in left. There is none when the merge is not allowed (a banned account, two of one kind of way in, two
+agents) or the other account has two-factor sign-in on.
+
+`POST /auth/phone/verify` → `200`, another account holding the number
+```json
+{
+  "token": "…",
+  "customer": { "id": 4210, "telegram": { "id": 123456789, "username": "ali" }, "phone": "+989123456789", "…": "…" },
+  "merge": {
+    "token": "c1f0…",
+    "expires_in": 900,
+    "account": { "name": null, "created_at": "2026-09-01T10:00:00+00:00", "services": 1, "orders": 2, "balance": "0.00", "telegram": false, "email": false, "google": false, "phone": true },
+    "keeps": "other"
+  }
+}
+```
+
+A code by SMS is a weaker way in than Telegram or Google: a SIM swapped, or a number the carrier gave someone else,
+reads it. So an account with two-factor sign-in answers `202` with a challenge instead, as after its password
+([a password and the second step](#a-password-and-the-second-step)): `POST /auth/login/2fa` with the authenticator
+app's code opens the session (`session.method` `phone_2fa`, with `merge` when there is one). A session signed in by SMS
+alone (`session.method` `phone`) is no strong sign-in for the shop's admin API.
+
+Draw it in two steps: the number (with the captcha, while `GET /` asks one), then six boxes for the code with a
+countdown from `resend_in` — «ارسال دوباره» enabled once it reaches zero, sending `POST /auth/phone` again — and a link
+back to change the number. A code that is not six digits is refused as a wrong one, counted as a failed sign-in: take
+out any space before sending it.
+
+```ts
+async function askCode(phone: string, captcha?: string): Promise<number> {
+  const sent = await store<S['StoreSmsSentResponse']>('/auth/phone', { method: 'POST', json: { phone, captcha } })
+  return sent.resend_in // the «ارسال دوباره» countdown, in seconds
+}
+
+async function signInByCode(phone: string, code: string): Promise<S['StoreCustomer']> {
+  let answer = await store<S['StoreSignInResponse'] | S['StoreTwoFactorResponse']>('/auth/phone/verify', {
+    method: 'POST',
+    json: { phone, code, referral_code: localStorage.getItem('referral-code') ?? undefined },
+  })
+  if ('two_factor' in answer) {
+    const appCode = await askForCode() // your form: six digits, or a recovery code
+    answer = await store<S['StoreSignInResponse']>('/auth/login/2fa', {
+      method: 'POST',
+      json: { challenge: answer.two_factor.challenge, code: appCode },
+    })
+  }
+  keepToken(answer.token)
+  if (answer.merge) await offerMerge(answer.merge) // your dialog: the other account; POST /me/merge on «yes»
+  return answer.customer
+}
+```
+
+The refusals:
+
+- `422` with no field while the website takes no sign-in by SMS (`ورود با شماره موبایل برای این وب‌سایت فعال نیست.`):
+  switched off, SMS not set up, or an agent's site the owner does not text codes for — read `GET /` again;
+- `422` on `phone`, on `captcha` ([the captcha](#the-captcha)), and on `code` — wrong, expired, used or tried five
+  times (`کد درست نیست یا منقضی شده است.`; none: `کدی را که با پیامک فرستاده شد وارد کنید.`);
+- `429` from `POST /auth/phone` — the number had a code a moment ago, had its five this hour or ten today (every shop
+  together), or this network asked for its twenty this hour;
+- `429` from `POST /auth/phone/verify` — this network failed too often, or the number's wrong codes are spent
+  (`کد اشتباه زیادی برای این شماره وارد شد؛ …`: ten an hour and twenty a day, each counted before it is checked). A code
+  is counted only while one waits for the number: a stranger guessing at a number nobody texted costs its holder
+  nothing, and wrong codes never stop a new code going — they stop the number's codes being tried until there is room;
+- `502` — the SMS provider did not take it (`پیامک فرستاده نشد؛ کمی بعد دوباره امتحان کنید.`): nothing was counted and
+  the code sent before, if any, still works; ask again at once; why is in the shop's log, the number masked;
+- `503` — the shop's or the installation's SMS budget is spent for now (`فعلا پیامکی از این فروشگاه فرستاده نمی‌شود؛ …`),
+  or the captcha could not be judged;
+- `403` — banned (once the code held).
+
+A signed-in customer adds a number to their account, takes it off, and proves it again by a code
+([ways in](Store-API-Account.md#ways-in-adding-and-removing), [a recent sign-in](Store-API-Account.md#a-recent-sign-in)).
+SMS is the installation's ([SMS](Sms.md)).
+
 ## The captcha
 
-While `GET /`'s `captcha` is not `null`, four forms must carry `captcha`, the widget's token, solved for the form's
+While `GET /`'s `captcha` is not `null`, five forms must carry `captcha`, the widget's token, solved for the form's
 own action (the contract's `x-captcha`):
 
 | Form | Action |
@@ -486,6 +612,7 @@ own action (the contract's `x-captcha`):
 | `POST /auth/register` | `sign_up` |
 | `POST /auth/login` | `sign_in` |
 | `POST /auth/password/forgot` | `password_reset` |
+| `POST /auth/phone` | `phone_sign_in` |
 | `POST /reviews` | `review` ([reviews](Store-API-Reviews.md#writing-one)) — without a captcha, the website takes its signed-in customers' reviews alone |
 
 None, or a token that does not pass — solved for another action, on a host that is not the website's (its address and
@@ -571,9 +698,92 @@ This is the website's own budget: nothing asked here touches what the sign-ins m
 your forms keeps nobody from signing in. Send `remoteip`, so a bot spends its own network's 120 rather than every
 visitor's, and hold your form's own submissions to a pace of your own before asking the shop.
 
+## The mini app
+
+The shop's Telegram mini app ([two doors](Store-API.md#two-doors)) signs its customer in by what Telegram hands it as it
+opens: its launch data, `Telegram.WebApp.initData`, which Telegram signs with the shop's bot's token. Only Telegram,
+holding that token, makes such a signature; the app only carries it. Under the mini app's key this is the one way in;
+under a website's key `POST /auth/mini-app` is no route (`404`).
+
+`POST /auth/mini-app` request
+```json
+{
+  "init_data": "query_id=AAHdF6IQAAAAAN0XohDhrOrc&user=%7B%22id%22%3A123456789%2C%22first_name%22%3A%22Ali%22%7D&auth_date=1793000000&hash=8b1e3c0a7f5d2e9b4c6a1f0e3d7b9c2a5e8f1d4b7a0c3e6f9b2d5a8c1e4f7b0a",
+  "referral_code": "k7m2xq9p"
+}
+```
+
+`200` answers the token ([tokens and sessions](#tokens-and-sessions)). The customer is the shop's customer with that
+Telegram account — the bot's own, services and wallet included — or a newcomer, registered exactly as the bot
+registers one.
+
+**How it is checked**, as Telegram's documentation says:
+
+- `init_data` goes exactly as Telegram handed it, 4096 bytes at most. Every field but `hash`, sorted by name, as
+  `name=value` lines with the values decoded, is signed with HMAC-SHA256 under a key that is the HMAC-SHA256 of the
+  bot's token keyed with `WebAppData`; `hash` must be that signature in hex. A field sent twice, no `hash`, or a
+  signature of another bot's token does not hold.
+- `auth_date`, when Telegram made it, may be at most a day old (86,400 seconds), and at most 60 seconds ahead of the
+  shop's clock.
+- `user.id` is the Telegram account: the numeric id the bot knows its customers by.
+
+**Lifetimes.** Launch data signs in for a day after the app opened, but the session counts as proven when Telegram made
+it, not when it reached the shop: `GET /me`'s `session.recent_until` is 15 minutes after `auth_date` — `null` once
+they have passed. A sign-in with
+older data changes nothing a recent sign-in guards until a way in is proven again — fresh launch data, or the
+fingerprint secret ([a recent sign-in](Store-API-Account.md#a-recent-sign-in)). The session itself lives as any
+([tokens and sessions](#tokens-and-sessions)); its `method` is `mini_app`, a strong way in. Keep its token and go on
+with it at the next launch (check it with `GET /me`, and that the account's `telegram.id` is the launch's): a sign-in
+each launch would open a session each time.
+
+**The invite code** is what follows `ref_` in the start parameter the app was opened with
+(`Telegram.WebApp.initDataUnsafe.start_param`, `ref_k7m2xq9p`): send it as `referral_code`. As at any sign-in
+([invite codes at sign-up](#invite-codes-at-sign-up)), only a newcomer becomes its owner's referral.
+
+Refusals:
+
+- `401` `ورود از مینی‌اپ تایید نشد؛ مینی‌اپ را ببندید و دوباره از ربات باز کنید.` — the data does not hold: another
+  bot's, changed, more than a day old, or made ahead of the shop's clock. Trying again with the same data does not
+  help; only a new launch does.
+- `403` — banned.
+- `422` on `init_data` when none is sent.
+- `429` — every refusal counts as a failed sign-in of the address ([limits and lifetimes](#limits-and-lifetimes)).
+- `404` `این فروشگاه فعلا در دسترس نیست.` — the mini app is switched off (or its agent's shop closed); a website
+  switched off answers the same.
+
+Opened in a browser, outside Telegram, the page has no launch data and signs nobody in.
+
+## A panel's preview
+
+The owner, or an agent in their own shop, can open the mini app in the panel as one of the shop's customers sees it —
+to look, never to act, on a live shop. The panel asks for it (`POST /api/{panel}/mini-app/preview` with the customer's
+`user_id`: anyone who is not the shop's customer, or is banned, is a `422`) and hands the mini app a token of a session
+of that customer's, whose `GET /me` says `session.method` `preview` ([the account](Store-API-Account.md#the-account)).
+The app carries it on every request, as it carries its own.
+
+- **The mini app's key alone.** Under a website's key the token opens nothing: a customer endpoint answers `401`, one a
+  guest may use (the catalogue, `POST /reviews`) answers as if no token came, and the shop's admin API never takes it.
+- **Only to read.** Any request but `GET` or `HEAD` is a `403` before anything runs — no order, payment, receipt,
+  ticket or "read" mark, no spin, test account, gift code, transfer or review, no proof of a way in, no change of the
+  account or of how it signs in, not even signing out:
+  ```json
+  { "message": "این پیش‌نمایش است؛ در آن چیزی ذخیره یا فرستاده نمی‌شود.", "request_id": "c8e2f4a6b0d1e3f5" }
+  ```
+  One is let through: a built service's price (`POST /custom-services/quote`), which the builder asks by itself as the
+  customer builds and which only works it out — but not with a `discount_code`, since a code that does not hold spends
+  one of the customer's own tries.
+- **30 minutes.** It ends 30 minutes after it opened, whatever its use — never extended —, and then answers `401` as
+  any ended session does. It proves no way in: `session.recent_until` is `null`, and it is never strong.
+- **None of the customer's.** It counts as no visit of theirs, is not among their devices
+  ([devices](Store-API-Account.md#devices)) nor counted with them, pushes none of theirs out, and they are told nothing
+  of it. The shop's log keeps who opened it, and as whom.
+- **A mini app switched off** opens to it all the same: under the app's key, a request that carries a live preview's
+  token — `GET /` included — is answered as if the app were on, so the owner tries it before switching it on. Without
+  one it stays `404` `این فروشگاه فعلا در دسترس نیست.`.
+
 ## Invite codes at sign-up
 
-`POST /auth/telegram`, `/auth/google` and `/auth/register` take `referral_code`, a customer's invite code
+`POST /auth/telegram`, `/auth/google`, `/auth/register`, `/auth/phone/verify` and `/auth/mini-app` take `referral_code`, a customer's invite code
 ([the referral program](Store-API-After-Buying.md#the-referral-program)). Only a newcomer — an account the sign-in makes
 — becomes the code's owner's referral; a customer the shop knew already is never attributed again. The code is read in
 any case, Persian digits too. An unknown code, a banned customer's, or the program switched off at that moment, is
@@ -590,8 +800,8 @@ if (ref) localStorage.setItem('referral-code', ref)
 
 | What | Limit |
 |---|---|
-| Failed sign-ins of every way — Telegram, Google, a password, an emailed code, a second step's code, the password typed again before a change, a way in proven again | 30 per client address in 15 minutes; the window opens with the first failure, and a success does not close it. IPv6 counts by its /64 |
-| Failed passwords and codes for one email address | 50 in 15 minutes, every address together |
+| Failed sign-ins of every way — Telegram, Google, a password, an emailed or texted code, a second step's code, the mini app's launch data, the password typed again before a change, a way in proven again (the fingerprint secret among them) | 30 per client address in 15 minutes; the window opens with the first failure, and a success does not close it. IPv6 counts by its /64 |
+| Failed passwords and codes for one email address — or one mobile number, while a code waits for it | 50 in 15 minutes, every address together |
 | Second-step codes for one account | 10 wrong an hour and 20 a day, every address together ([a password and the second step](#a-password-and-the-second-step)) |
 | Wrong codes emailed to one address — and tried by the account adding an email | 10 an hour and 20 a day, each counted before it is checked; then no new code goes to the address until it has room, and its account is told once a day |
 | What a sign-in costs the shop: nonces, redirect states, emails asked for, a sign-in form's captcha tokens refused | 120 per client address in 10 minutes |
@@ -599,18 +809,26 @@ if (ref) localStorage.setItem('referral-code', ref)
 | Emails to one address | one a minute, and 10 a day from every shop together |
 | Codes a signed-in customer asks for, adding an email | 5 a day |
 | An email telling an address it has no account | once a day |
+| Codes by SMS to one number | one a minute in a shop, and 5 an hour and 10 a day from every shop together |
+| Codes by SMS one client address network asks for | 20 an hour |
+| Codes by SMS a signed-in customer asks for — a number added, theirs proven again | 10 a day |
+| Wrong texted codes for one number — and tried by the account adding it or proving it | 10 an hour and 20 a day, each counted before it is checked, only while a code waits for the number; then its codes are refused until it has room — a new one still goes |
+| The codes by SMS the shop sends | 60 an hour and 300 a day; every shop of the installation together, 150 an hour and 1,000 a day. Spent, no code goes out until there is room (`503`) |
 | The sign-in emails the shop sends | 60 an hour and 300 a day; every shop of the installation together, 150 an hour and 1,000 a day. Spent, no code goes out until there is room (`503`) |
 | The sign-ins a shop begins (nonces; redirect states, a sign-in's and a signed-in customer's together) | 5,000 nonces in 30 minutes and, apart, 5,000 states in 10 minutes, counted as they are issued; past either, `503` until its window ends |
 | Captcha tokens the site's backend asks the shop to judge | 3,000 a website in 10 minutes, and 120 refused ones of a visitor's network (`remoteip`'s, else the backend's) in the same window — never the sign-ins' budget above |
 | A nonce | 30 minutes, one use |
 | A redirect's state | 10 minutes |
 | An emailed code | 15 minutes, 5 tries; a new one replaces it |
+| A texted code | 5 minutes, 5 tries; a new one replaces it once the provider took it — one to prove the account again is good on the session that asked alone |
 | A second step's challenge | 5 minutes, 5 codes |
 | An authenticator secret waiting for its first code | 15 minutes, 5 tries |
 | An ALTCHA challenge | 15 minutes, one use |
-| A recent sign-in | 15 minutes from the sign-in, or from the last `POST /me/reauthenticate` ([a recent sign-in](Store-API-Account.md#a-recent-sign-in)) |
+| The mini app's launch data | a day after the app opened, to sign in; 15 minutes, to prove a way in again |
+| A recent sign-in | 15 minutes from the sign-in, or from the last `POST /me/reauthenticate` — from the launch data's `auth_date` where that proved it ([a recent sign-in](Store-API-Account.md#a-recent-sign-in)) |
 | A merge offer | 15 minutes, one use |
 | A session | 30 days unused, 180 days at most; 20 a customer |
+| A panel's preview of the mini app | 30 minutes from its opening, whatever its use ([a panel's preview](#a-panels-preview)) |
 
 A `429` carries `Retry-After` in seconds and says the wait in its message. The address limits are loose on purpose — a
 mobile carrier puts many customers behind one address — and the account limits are what stops a guesser; still, ask
@@ -629,11 +847,17 @@ for a nonce only when a customer is about to sign in, not on every page view.
   (blank turns Google sign-in off).
 - **Email** — the installation's email must go out: «تنظیمات پنل › ایمیل» in the owner's panel, with a test send. Then
   switch on «ورود با ایمیل › ثبت‌نام با ایمیل». In an agent's shop, the owner sets the email up.
+- **SMS** — the installation's SMS must go out: «تنظیمات پنل › پیامک» in the owner's panel, with a test send
+  ([SMS](Sms.md)). Then switch on «تنظیمات وب‌سایت › ورود با موبایل». An agent's website texts codes only while the owner
+  lets agents' websites (on the owner's credit).
 - **Captcha** — «تنظیمات وب‌سایت › ورود با ایمیل», the «تایید امنیتی» card: ALTCHA needs nothing more; for Cloudflare
   Turnstile, add a widget for the site's hostname in the Cloudflare dashboard (Turnstile) and enter its Site Key and
   Secret Key there.
 - **Reviews** — «تنظیمات وب‌سایت › نظرات»: switch «نظرات در وب‌سایت» on, or `/reviews` answers `404`; guests write
   reviews only while the captcha is on ([reviews](Store-API-Reviews.md)).
+- **The mini app** — «مینی‌اپ تلگرام» in the panel: switch it on. Telegram opens a mini app only from an https address,
+  so the shop's own address (`APP_URL`) must be https first. It needs nothing at @BotFather: the bot's token signs its
+  launch data, and the shop sets the bot's menu button itself.
 
 Telegram's popup opens only on a site @BotFather lists; Google's button only on a listed origin. If BotFather does not
 take your development address, try Telegram on a staging domain and use email sign-in locally.

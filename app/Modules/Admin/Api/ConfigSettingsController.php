@@ -12,7 +12,8 @@ use Psr\Http\Message\ServerRequestInterface as Request;
 
 /**
  * The installation's configuration (config.php) on the owner's settings screen: its groups, the checks offered before a
- * save, and the cron trigger's full address for the copy button.
+ * save and after it (a test email, a test SMS, the SMS account's credit), and the cron trigger's full address for the
+ * copy button.
  */
 final class ConfigSettingsController extends ApiController
 {
@@ -25,7 +26,7 @@ final class ConfigSettingsController extends ApiController
     }
 
     /**
-     * PUT /settings/config/{group} — app, database, telegram, mail or advanced, as the screen shows it; the main bot's,
+     * PUT /settings/config/{group} — app, database, telegram, mail, sms or advanced, as the screen shows it; the main bot's,
      * moving the Bot API's address, with the owner's current password
      *
      * @param array<string, string> $args
@@ -53,6 +54,18 @@ final class ConfigSettingsController extends ApiController
         $this->settings->testMail(Input::text($this->input($request), 'to'));
 
         return $this->json($response, ['sent' => true]);
+    }
+
+    /** POST /settings/config/sms/test — {to}: a test code by the SMS settings as saved, and the code sent — or why none went */
+    public function testSms(Request $request, Response $response): Response
+    {
+        return $this->json($response, ['sent' => true] + $this->settings->testSms(Input::text($this->input($request), 'to')));
+    }
+
+    /** GET /settings/config/sms/credit — the SMS account's credit by the saved settings (null: its driver tells none) */
+    public function smsCredit(Request $request, Response $response): Response
+    {
+        return $this->json($response, ['credit' => $this->settings->smsCredit()?->toArray()]);
     }
 
     /** GET /settings/config/cron-url — the trigger's whole address (the screen shows it masked) */

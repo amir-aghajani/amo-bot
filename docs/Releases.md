@@ -13,6 +13,257 @@ While a version is being made its changes collect under **Unreleased**; releasin
 
 Nothing yet.
 
+## Version 0.8.0
+
+### Security
+
+- **Symfony's mail parts patched**: symfony/mime 7.4.22, which the shop's emails are built with, closes a header
+  injection through a parameter's name (CVE-2026-45070). The build tools' symfony/filesystem and symfony/yaml 7.4.23
+  (their own advisories of 4 November 2026) never reach a shop.
+
+### Added
+
+- **The shop's Telegram mini app** («مینی‌اپ تلگرام», in both panels, after «تنظیمات وب‌سایت») — the customer side of the
+  shop inside Telegram: the same account, services, wallet, prices and rules as the bot and the website, opened from the
+  bot without leaving Telegram ([Mini app](Mini-App.md)). AmoBot ships it ready, on the shop's own address
+  (`<APP_URL>/app/<key>/`); every shop has its own, each agent's too. It needs «آدرس سایت» (`APP_URL`) on `https://`,
+  the one kind of address Telegram opens.
+  - **What customers do in it**: a home of their services, wallet, the shop's banners — timed sales with the time left,
+    your announcement, the lucky wheel, the nightly draw, invitations — and shortcuts; buying by category and location,
+    with each plan's label and the customer's own price, discount codes, the custom builder and the free test; paying by
+    the wallet, card-to-card with the receipt photographed on the phone, or the shop's online gateways — no new way to
+    pay; each service's page with its QR card, its link and «اتصال سریع», which adds it to v2rayNG, Happ, Hiddify or
+    Streisand with a tap (v2rayN by its steps and the link to copy), renewing — early too —, extras, a new link, a name
+    of their own, handing it over, and adding a service by its link; the wallet's top-up, history, invoices saved as a
+    picture, gift codes and transfers; «باشگاه مشتریان» — the loyalty tier, cashback, the wheel, the nightly draw and
+    the invite link shared through Telegram; support as a chat; the bot's «آموزش» and the app's own guides to the VPN
+    apps; reviews; and «حساب من» — an email added, the fingerprint or face, the devices signed in, and the phone number
+    while the shop asks for it.
+  - **Signed in by Telegram**, no password: Telegram hands the app a proof of the customer signed with the bot's token.
+    What moves a service or money away, or changes how the account signs in, asks a recent sign-in: the app's first 15
+    minutes after it opened, then the customer's fingerprint or face once they switch it on, else reopening the app.
+  - **The page**: «اتصال» — «مینی‌اپ روشن باشد», «دکمه منوی ربات» and «متن دکمه منو», the app's address, and how to make
+    it the bot's main mini app in `@BotFather`; «ظاهر» — its name, colour, logo, full screen, an announcement with its
+    link, and «نظرات در مینی‌اپ».
+  - **«پیش‌نمایش»**, the page's third part: the app inside a phone drawn as Telegram draws one — its header and back
+    button, the main button, full screen with Telegram's floating controls, its popups, the fingerprint prompt —, as a
+    customer you pick sees it, in a light or dark Telegram theme and two phone sizes, opened afresh when you save the
+    other parts. It only shows: nothing in it buys, pays, sends, spins or changes anything, nor counts as the customer's
+    visit or tells them anything; it lasts 30 minutes, and it opens while the app is still off — to see it before
+    customers do.
+  - **The bot's menu button**, beside the message box, opens the app while it is on. Saving the app off, or the button
+    off, gives Telegram's own button back — only in place of one that opens this app: a button you set in `@BotFather`
+    stays. When Telegram does not take the button, the save stands and the page says why. «تنظیم دوباره دکمه منو», on
+    the «آدرس مینی‌اپ» card, sets it again as the app stands.
+  - **Everything loads from the shop's address** — the app's code bundled, Telegram's script and the fonts included —,
+    so a customer whose network does not reach telegram.org still opens it. Only the customer's Telegram profile photo
+    comes from t.me; where it does not load, their initials show in its place.
+- **«📱 اپلیکیشن فروشگاه» in the bot's menu** — the action «اپلیکیشن» of «ربات › کیبوردها», shown while the mini app is on
+  and on https. As inline buttons it opens the app at once; on the keyboard under the text field, it answers a screen
+  with «📱 باز کردن اپلیکیشن», since Telegram signs no one in to an app opened from a keyboard's button. Three new texts
+  in «متن‌های ربات»: «اپلیکیشن فروشگاه», «دکمه باز کردن اپلیکیشن» and «اپلیکیشن در دسترس نیست»
+  ([Bot texts and keyboards](Bot-Texts-And-Keyboards.md#the-mini-apps-button)).
+- **A plan's label** («برچسب», on the plan's «مشخصات») — «پرفروش‌ترین», «پیشنهاد ما» or «VIP» on the plan's card in the
+  mini app and on the website, and beside its name on the plans list; you set it, nothing does by itself
+  ([Plans](Plans.md#a-plan)).
+- **A customer's own name for a service** («نام دلخواه», 32 characters), given in the mini app or on the website. The
+  bot shows it beside the client's name — «گوشی من (amir_1)» — in «سرویس‌های من», the questions and confirmations about
+  the service and the short notices about it; the texts with the service's details (its screen, its delivery, the
+  reminders) keep the client's name, the username to copy. A service that changes hands leaves it behind
+  ([Services](Services.md#a-customers-own-name-for-a-service)).
+- **Read ticks on tickets** — the mini app shows each of the customer's messages with one tick once sent and two once
+  support has read it: the ticket's page opened in a panel (or by a bot admin on the website), or an answer from
+  anywhere ([Support tickets](Support-Tickets.md#read-ticks)).
+- **A new text, «شماره لازم نیست»** — the bot's word to a contact card it did not ask for (the mini app's «ثبت شماره
+  تلفن» while the shop asks for no number, or someone else's card): nothing is kept.
+- **Premium emoji in buttons' and notices' texts** («دکمه» and «اعلان» in «متن‌های ربات»), which refused every tag. A
+  button's editor has «آیکون دکمه», as the keyboards' buttons have: the premium emoji goes at the start of the label and
+  the bot sends it as the button's icon. A notice takes them anywhere; Telegram draws none on a notice, so each shows its
+  plain emoji there, and the premium one where the same words go as a message
+  ([Bot texts and keyboards](Bot-Texts-And-Keyboards.md#premium-emoji)).
+- **A premium emoji for a plan's, a category's or a server's name** («ایموجی پرمیوم نام», under the name on its form):
+  its plain emoji leads the name, and the bot draws it premium — the button's icon in «خرید اشتراک» and among a plan's
+  locations (there in place of the button's «🌍»), in its place in the texts that name it. Everywhere else the name shows
+  its plain emoji ([Plans](Plans.md#a-plan), [Servers](Servers.md)).
+- **«زمان‌بندی کارها»** («تنظیمات پنل», the owner's): how often each scheduled task runs — the sync of the services, the
+  reminders, the automatic renewals and removals, the online payments' checks, the report group, the housekeeping… —
+  and the times the tasks decide by: when an unpaid order is dropped (48 hours), how often and how long the online
+  gateways are asked about a payment, and how long the website's notices, the tickets' pictures and the report group's
+  messages are kept. Each has its default — what the shop ran with until now —, its bounds and when it last ran; one
+  for the whole installation. What keeps the shop safe stays fixed
+  ([Running in production](Running-In-Production.md#the-scheduler)).
+- **Backups and restore** («تنظیمات پنل › پشتیبان‌گیری», in both panels): a backup file downloaded with one press, and
+  one uploaded to put the shop back as it was — checked first (made by this shop and unchanged, by this version or an
+  older one), described (when, of what, each table's rows, what a restore would leave out), then restored on your yes,
+  all of it or nothing, the state just before kept to download. The owner in the main shop backs up the whole
+  installation — every shop, the servers, the agents' terms —; an agent, or the owner working an agent's shop, that
+  shop's own rows alone: its customers, plans, services, orders, payments, wallets, tickets and settings, nothing of the
+  owner's or of another shop, and its restore touches nothing else (its customers sign in again on its website and
+  mini app; the whole installation's signs every shop's customers out, and the panels stay signed in). Each file is
+  signed with the installation's key (`APP_KEY`): one changed, cut short or made by another installation is refused,
+  and so is another shop's ([Backups](Backups.md)).
+  - **To the report group**: a new topic, «پشتیبان‌گیری», gets the backup once a day (the owner's «زمان‌بندی کارها» says
+    how often) — the main shop's group the whole installation's, an agent's group their shop's alone. A file larger
+    than Telegram takes from a bot (50 MB) is said in a line instead, to download from the panel. The page shows when it
+    last went, or what kept it.
+- **«جستجوی تنظیمات»**, in both panels — Ctrl+K (⌘+K on a Mac) on any page, «/» outside a field, the top bar or the top
+  of the settings' column: every page, section and single setting by its words — its label, its hint, where it sits,
+  and the words owners use («بک آپ», «کرون», `smtp`) —, whatever ی or ک, half-space or digits were typed, a word typed
+  with the keyboard in the other language, or one with a letter wrong. Choosing a setting opens its section, unfolds
+  the fold it sits in, puts the cursor in it and marks it. «اخیر» keeps what you opened last, in this browser; the star
+  puts a row in «علاقه‌مندی‌ها», in your order — kept on the server, so on every browser and phone: the owner's one list
+  for every shop, each agent their own ([Panels](Panels.md#searching-the-settings)).
+- **Two report group topics: «اکانت‌های تست» and «حذف سرویس‌ها»** (each with its switch in «بخش‌های گزارش», on). The first
+  hears of every free test taken — on the bot, the website or the mini app —: the customer, the service, its location,
+  traffic and end, and how many tests the customer has taken. The second hears of every service support deletes — what
+  it still had, who of support and their note, a client left on its panel —, a purchase's service a refund takes back,
+  and, in one report a run, the ended services «حذف خودکار سرویس‌های منقضی‌شده» removes; a test the clean-up removes is
+  not reported ([Telegram group](Telegram-Group.md#the-topics)).
+- **A customer's card in the report group** — «⚙️ مدیریت کاربر» under every newcomer's report, and `/manage` with a
+  Telegram id, a username or a number in the shop (`/manage #12`) for anyone else: the panel's customer page, from the
+  group. Their services (sync, days and traffic, switch off and on, delete), their wallet (increase and decrease with a
+  note), a service made for them by hand (plan, server, free, from the wallet or paid outside), their own discount,
+  their groups, their latest orders, payments, tickets and referrals, their website sign-in (two-factor off, every
+  device signed out), their role and ban — what is typed (an amount, a percent) as a reply to the bot's question. For
+  the bot's admins, in the report group alone; never their own account nor an agent's, never an admin banned, put in a
+  «همکار» group, or their discount or website sign-in changed ([Telegram group](Telegram-Group.md#a-customers-card)).
+- **HMPanel, a third VPN panel** («HMPanel (HMray)» in «افزودن سرور», version 2.5 and later) — a panel that runs several
+  3X-UI panels beneath it, reached through its API key: the whole `hmp_…` key made in its «تنظیمات ← API» with the
+  scope `*` (or `clients.read`, `clients.write`, `clients.renew` and `inbounds.read`), the one way in. «تست اتصال» reads
+  the key and names a scope it lacks. The inbounds of its 3X-UI panels are sold, each named after its panel, a service
+  on one panel's inbounds; its term from the first connection, IP limit and link are those of the 3X-UI beneath, the
+  link HMPanel's own (`/s/…`) or «آدرس اشتراک». No «تغییر لینک» and no CPU, RAM or disk on it. A key answers 60 calls
+  a minute unless made with more: past that the server waits a few minutes, and says why
+  ([Servers](Servers.md#the-three-connectors)).
+- **SMS, for a website's sign-in by phone number** («تنظیمات پنل › پیامک», the owner's) — the shop's one-time codes go
+  out by SMS through **IPPanel** (ippanel.com), the first SMS provider: its access key, one of the account's lines, and
+  a pattern approved in IPPanel's panel whose one variable is the code — the words are the pattern's, the shop sends the
+  code alone. «ارسال پیامک آزمایشی» sends a test code to a number you type and shows it; «اعتبار حساب» shows the
+  account's credit, in Rial, as IPPanel tells it — and so whether the key works. Off at first; agents' websites send
+  codes only once you switch «سایت نماینده‌ها هم بتوانند کد ورود پیامکی بفرستند» on — every SMS is paid from your
+  account ([SMS](Sms.md)).
+- **Signing in to the website by phone number** («تنظیمات وب‌سایت › ورود با موبایل», «ورود با شماره موبایل (پیامک)»,
+  off at first) — the customer types their mobile number (an Iranian one), gets a six-digit code by SMS and types it
+  back: a customer who shared that number with the bot signs in to that very account, with their services and wallet,
+  and a new number makes a new account. On their account, customers add a number, take it off and prove it again by a
+  code. It needs SMS set up; an agent's website texts codes only while you let agents' websites, and the card says why
+  it cannot be switched on until then. A code lives five minutes and takes five tries; a number gets a code a minute,
+  five an hour and ten a day; a shop's website sends at most 60 an hour and 300 a day
+  ([Website](Website.md#signing-in-by-sms)).
+
+### Changed
+
+- **A contact card sent at any step** leaves the step only when the bot's phone check takes it — the customer's number
+  verified just now, the greeting and the menu after it. Any other card gets a word («تایید شماره» for their own number
+  already verified, else «شماره لازم نیست») and the chat stays where it was; before, every card went to the menu.
+- **`%client%` in the bot's texts** names the service as its customer knows it — their own name for it and, beside it,
+  the client's name; the client's name alone while they gave it none — in the services list, the questions and
+  confirmations and the short notices. The texts that carry the service's details — its screen, its delivery, a new
+  link, a renewal or an extra done, the reminders, a service moved to another server, handed to the customer or given
+  time — keep the client's name alone: the username the customer copies and support asks for.
+- **Reviews come from the mini app too**, while its «نظرات در مینی‌اپ» is on — a switch of its own, off at first. They
+  wait on «نظرات» as the website's do, and one approved shows through both ([Reviews](Reviews.md)).
+- **Opening a ticket in a panel** — or a bot admin opening it on the website — now counts as support reading it: the
+  customer's messages so far show two ticks in the mini app. They are still told nothing until you answer.
+- **A renewal not open yet** names its traffic share as every other percent is written: «وقتی ۲۰٪ از حجم یا کمتر مانده
+  باشد» (was «٪۲۰»), in the bot, its `%opens%` and the Store API's refusal.
+
+### Upgrading
+
+- **The database gains the mini apps** (a table, `mini_apps`, a row a shop, made switched off the first time its page
+  opens), the fingerprint secret of a customer's session, a plan's label, the premium emoji of a plan's and a category's
+  name (`plans.emoji_id`, `plan_categories.emoji_id`), a customer's name for a service, when support last read a ticket,
+  a website's switch for signing in by SMS (`websites.phone_login`), and an index on `users (bot_id, phone)` that finds
+  a customer by their mobile. The panel's update runs this upgrade by itself (after an upgrade by hand, «ادامه
+  به‌روزرسانی» does). Since it changes the database, going back to 0.7.2 afterwards takes your backup
+  ([Upgrading](Upgrading.md)).
+- **A daily backup goes to your report group** from this version on: the «پشتیبان‌گیری» topic is on in every shop whose
+  report group is connected — the main shop's group gets the whole installation's file, each agent's group their own
+  shop's. It holds your customers' data: switch it off on «پشتیبان‌گیری», or among the report group's topics, if the
+  group's members should not have it. A backup is restored by the installation that made it: keep `config.php` (its
+  `APP_KEY`) safe beside your backups — a new install with another key refuses them.
+- **A menu you saved yourself** in «ربات › کیبوردها» has no «📱 اپلیکیشن فروشگاه»: add it once the mini app is on. A
+  menu left at the shop's layout gets it in its second row.
+- **The mini app needs `APP_URL` on `https://`.** The bot's menu button keeps the address it was last set with: after
+  the shop moves to another address, or the bot gets a new token, press «تنظیم دوباره دکمه منو» on the «آدرس مینی‌اپ»
+  card, and give `@BotFather` the new address if the app is the bot's main mini app.
+- Tools of your own that write through the panels' API: `GET` and `PATCH /mini-app` (the app's settings, answered with
+  `menu_button_error`: why Telegram did not take the menu button, `null` when it did), `GET`, `POST` and
+  `DELETE /mini-app/logo`, and `POST /mini-app/preview` (`user_id`: a read-only preview session as that customer, its
+  token given once); a plan row and request gain `badge` (`bestseller`, `recommended`, `vip` or `null`), and a plan's
+  and a category's row and request `emoji_id` (the premium emoji of the name, `null` for none) — a server's form takes
+  it as a field of the new `FieldType` `premium_emoji`, whose `bound_to` names the name field it is for; a keyboard's
+  actions gain `app`; `GET /tickets/{id}` now records that support read the ticket; `GET /backups`,
+  `PUT /backups/auto`, `GET /backups/download`, `POST /backups/inspect`, `POST /backups/restore` and
+  `GET /backups/kept/{name}` are new, and so are `GET /preferences` and `PUT /preferences/favorites` (the settings
+  search's favorites) and the owner's `GET` and `PUT /api/admin/schedule` («زمان‌بندی کارها»: `ScheduleResponse`,
+  `ScheduleRequest`); the bot's settings gain `report_backups`, `report_tests` and `report_deletions`; the report
+  group's topics (`ReportTopicKey`) gain `tests`, `deletions` and `backups`; a website's settings gain `phone`
+  (`WebsiteResponse`: whether it signs in by SMS, and whether SMS goes out for it) and `phone_login`
+  (`WebsiteRequest`); a server's request and its test take
+  `driver: hmpanel` (`ServerHmPanelRequest`: `auth_mode: token` alone, the `hmp_…` key as `api_token`, no username or
+  password); `GET /settings/config` gains `groups.sms`, `PUT /settings/config/sms` saves it (`SmsNoneRequest`,
+  `SmsIppanelRequest`), and `POST /settings/config/sms/test` and `GET /settings/config/sms/credit` are new.
+
+### For website developers
+
+- **A second door.** The shop's mini app opens the Store API under a store key of its own, on the shop's own address:
+  the same customers, sessions, catalogue and rules. A token signed in through one door opens the other's customer
+  endpoints. What one door alone has is marked `x-door` in the API description — `website` (its ways in, the phone's
+  `POST /auth/phone` and `/auth/phone/verify` among them, its captcha, `POST /me/telegram/authorize`,
+  `POST /me/identities/telegram`, `/google`, `/phone` and `…/phone/verify`, `POST /me/reauthenticate/phone`) or
+  `mini_app` (`POST /auth/mini-app`, `GET /app/logo`, `PUT` and `DELETE /me/biometric`) — and is the router's `404`
+  under the other key; `/admin/*` is the website's too, without the mark
+  ([Store API: two doors](Store-API.md#two-doors)). Through the mini app's key, `DELETE /me/identities/telegram` is a
+  `422` on `kind`: the Telegram account the app signs in with stays. `/admin/*` refuses a session the mini app's launch
+  data signed in (a `403`), though its token comes through the website's key: the mini app is the customer side only.
+- **Signing in by launch data**: `POST /auth/mini-app` takes `init_data` — `Telegram.WebApp.initData` as Telegram handed
+  it, signed with the bot's token, at most a day old — and an optional `referral_code`. The session's `method` is
+  `mini_app`, a strong way in, counted as proven when Telegram made the data
+  ([Store API: signing in](Store-API-Sign-In.md#the-mini-app)).
+- **A recent sign-in in the mini app**: `POST /me/reauthenticate` takes `{method: "mini_app", init_data}` (data at most
+  15 minutes old) and `{method: "biometric", token}` — the secret `PUT /me/biometric` makes for the session (it needs a
+  recent sign-in and a session the mini app signed in, a `422` otherwise; shown once, kept as a hash) and
+  `DELETE /me/biometric` forgets —, both through the mini app's key only: through a website's they are a `422` on
+  `method`. `GET /me` gains `session`: its `method`, whether it keeps a fingerprint secret (`biometric`) and
+  `recent_until`; its `staff` is `null` through the mini app. A `method` of `preview` is a panel's look at the mini app
+  as one of its customers (`POST /api/{panel}/mini-app/preview`): read only — a `403` on anything but `GET` or `HEAD` —,
+  through the mini app's key alone, for 30 minutes; a website never sees one.
+- **`GET /`** gains `shop.programs` (which of `test_accounts`, `wheel`, `lottery`, `gift_codes`, `loyalty`, `cashback`
+  and `wallet_transfers` run now, and `reviews`: whether this door shows the reviews), `shop.phone_required`,
+  `sign_in.mini_app`, and `app` — the mini app's title, colour, logo address, announcement, full screen and the shop's
+  time zone; `null` through a website.
+- **New endpoints**: `GET /sales` (the timed sales running, the soonest to end first), `GET /tutorial` (the bot's
+  «آموزش», in Telegram's HTML), `GET` and `POST /test-account` (a free test, `404` while the shop gives none),
+  `GET /wheel` and `POST /wheel/spin` (the shop draws the slice: `landed` is for the animation), `GET /lottery` (the
+  nightly draw, `404` while it does not run), and `GET /subscriptions/{id}/qr` (the service's QR card as a JPEG; `503`
+  when the server cannot draw it, `429` past 30 a minute). A free test and a spin first ask what the bot asks: a
+  Telegram account linked to the customer's, their verified number while the shop requires one, and the shop's channels
+  joined — `POST /test-account` and `POST /wheel/spin` are a `422` on `status` until then, and `GET /test-account` gives
+  the same words as its `refusal`.
+- **`PATCH /subscriptions/{id}`** takes `label` beside `auto_renew` — at least one of them; `null` or blank clears it —,
+  and `StoreSubscription` gains `label`.
+- **`badge`** on each plan (`StorePlan`): `bestseller`, `recommended`, `vip`, or `null`.
+- **`seen`** on each of the customer's ticket messages (`StoreTicketMessage`): support has read it; `null` on support's.
+- **`reference` and `held`** on each payment (`StorePayment`): `reference` is an online payment's tracking code at its
+  gateway, as the gateway gave it — what the customer quotes to the gateway or to support —, `null` for every other way
+  to pay and before its page opened; `held` is `true` while an online payment is held for support and still waiting
+  (its order is paid no more meanwhile: send the customer to support), else `false`.
+- **A store key that opens nothing** — its website or mini app switched off, the key replaced, an agent's shop closed —
+  now answers its `404` with «این فروشگاه فعلا در دسترس نیست.» (it read «این فروشگاه وب‌سایت فعالی ندارد.»).
+- **Reviews follow the door**: `/reviews` answers under the mini app's key while its own switch is on, and is a `404`
+  while it is off, as under a website's.
+- **Signing in by a code texted to a mobile**, while `GET /`'s new `sign_in.phone` is true: `POST /auth/phone`
+  `{phone, captcha?}` (its captcha action `phone_sign_in`) answers `202` `{sent, expires_in, resend_in}` whether or not
+  the number has an account, and `POST /auth/phone/verify` `{phone, code, referral_code?}` signs in as the other ways do
+  — the session's `method` is `phone`, a strong way in. A signed-in customer adds a number with
+  `POST /me/identities/phone` and `…/phone/verify` (another account's number is a merge offer, whose `account` gains
+  `phone`), removes it with `DELETE /me/identities/phone`, and proves it again with `POST /me/reauthenticate/phone`,
+  then `POST /me/reauthenticate` `{method: "phone", code}` — all but the removal the website's (`x-door: website`).
+  `StoreCustomer`'s `phone` is now any verified mobile, a way in while the website signs in by SMS. The admin API's
+  strong sign-in takes `phone` too: its `WWW-Authenticate` names `acr_values="telegram google phone password_2fa"`
+  ([Store API: signing in](Store-API-Sign-In.md#a-code-by-sms)).
+
 ## Version 0.7.2
 
 ### Fixed

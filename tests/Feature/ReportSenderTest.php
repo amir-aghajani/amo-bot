@@ -5,7 +5,10 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Core\Database\Lease;
+use App\Modules\Bots\Models\Bot;
 use App\Modules\Payments\Services\PaymentService;
+use App\Modules\Settings\Services\ScheduleSettings;
+use App\Modules\Settings\Services\Settings;
 use App\Modules\Telegram\Models\ReportMessage;
 use App\Modules\Telegram\Models\ReportTopic;
 use App\Modules\Telegram\Reports\GroupProblem;
@@ -502,10 +505,30 @@ final class ReportSenderTest extends DatabaseTestCase
         self::assertSame(['تازه'], ReportMessage::query()->pluck('text')->all(), 'a week on, what was sent or dropped is forgotten');
 
         Carbon::setTestNow(now()->addHours(25));
-        $this->sender()->prune();
+        $this->sender()->prune(ScheduleSettings::REPORT_DAYS, ScheduleSettings::REPORT_WAIT_HOURS);
         $stale = ReportMessage::query()->sole();
         self::assertSame([true, null], [$stale->failed_at !== null, $stale->sent_at], 'a day in the queue is too long: given up on, never sent');
         self::assertSame(0, ReportMessage::waiting()->count());
+    }
+
+    public function testTheTaskKeepsAndWaitsAsLongAsTheOwnerSays(): void
+    {
+        $settings = $this->service(Settings::class);
+        $settings->set('schedule.reports_keep_days', 2, Bot::MAIN);
+        $settings->set('schedule.reports_wait_hours', 3, Bot::MAIN);
+        $this->reports()->notice(Topic::Errors, 'فرستاده');
+        $this->service(SendReportsTask::class)->run();
+
+        Carbon::setTestNow(now()->addDays(3));
+        $this->reports()->notice(Topic::Errors, 'تازه');
+        $this->service(ReportGroupState::class)->pause(600);
+        $this->service(SendReportsTask::class)->run();
+        self::assertSame(['تازه'], ReportMessage::query()->pluck('text')->all(), 'three days on, past the owner\'s two: forgotten');
+
+        Carbon::setTestNow(now()->addHours(4));
+        $this->service(ReportGroupState::class)->pause(600);
+        $this->service(SendReportsTask::class)->run();
+        self::assertNotNull(ReportMessage::query()->sole()->failed_at, 'four hours in the queue, past the owner\'s three: given up on');
     }
 
     private function reports(): ShopReports

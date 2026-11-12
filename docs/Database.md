@@ -54,8 +54,17 @@ An upgrade file:
   then add its indexes, then its foreign keys, each guarded on its own — Laravel issues them as separate statements on
   MySQL, so guarding the table alone would leave an index missing forever. Indexes come
   before foreign keys because MySQL gives a foreign key without a usable index an index of its own. A data step must be
-  safe to repeat: copy only what is not there yet, compute from a column that is still there.
-  `database/upgrades/0.2.0.php` is the model: four small guarded helpers and a section per feature.
+  safe to repeat: copy only what is not there yet, compute from a column that is still there. An upgrade that moves data
+  from one column to another also raises `BackupTables::OLDEST_RESTORABLE` to its version: a restore cuts a file's rows
+  to today's columns before the upgrades run, so a backup made before it would lose that data ([Backups](Backups.md)).
+  `database/upgrades/0.2.0.php` is the model: four small guarded helpers and a section per feature. Each file's
+  comment says what its release brings — `0.8.0.php`, for one, the shops' Telegram mini apps (`mini_apps`, one row a
+  bot, with its own store key), six nullable columns — a session's fingerprint secret
+  (`customer_sessions.biometric_hash`), a plan's label (`plans.badge`), the premium emoji of a plan's and a category's
+  name (`plans.emoji_id`, `plan_categories.emoji_id`), a customer's own name for a service (`subscriptions.label`) and
+  when support last read a ticket (`tickets.support_read_at`) —, a seventh column, a website's switch for sign-in by
+  SMS (`websites.phone_login`, a boolean false by default), and the index a sign-in by SMS finds a customer's mobile by
+  (`users`: `bot_id`, `phone`), each added only while it is missing.
 
 `Core\Database\Upgrades` runs, in version order, the upgrades newer than the version the database is at and not newer
 than the code's. The database's version lives in the installation lock (`storage/installed.lock`, `Core\Installation`):
@@ -79,7 +88,10 @@ To change a table:
 2. Add the same change to `database/upgrades/<the next version>.php` (create it if the release has none yet).
 3. A column that points at `users` joins `AccountMerger::REFERENCES`, so a merge of two accounts carries it
    (`AccountMergerReferencesTest` fails until it does).
-4. Run `vendor/bin/phpunit tests/Unit/Database`.
+4. A new table joins one of `Backups\BackupTables`' kinds, and a foreign key between a shop's rows and the owner's its
+   `OWNERS_REFERENCES` or `SHOP_REFERENCES`, so backups hold it rightly (`BackupTablesTest` fails until they do;
+   [Architecture](Architecture.md#backups)).
+5. Run `vendor/bin/phpunit tests/Unit/Database tests/Feature/Backups`.
 
 ## What the schema must keep
 
@@ -115,6 +127,8 @@ measured on MySQL and MariaDB:
   agency's tables belong to the installation as a whole — see [Architecture](Architecture.md#many-bots-one-database).
 - **Secrets** (panel passwords, bot tokens, TOTP secrets, a website's captcha settings) are encrypted at rest by the
   `Encrypted` and `EncryptedArray` casts under `APP_KEY`; a value that no longer decrypts reads as empty and is logged.
+  What only proves its holder — a customer session's bearer token, the mini app's fingerprint secret for a session — is
+  kept as its sha256 alone (`customer_sessions.token_hash`, `biometric_hash`), hidden from the model's arrays.
 - **Settings** a panel changes live in the `settings` table, a JSON value per key and bot (`Settings\Services\Settings`);
   the installation's own configuration is `config.php`, never the database ([Configuration](Configuration.md)).
 - **Rows written outside AmoBot** — imported, or added by hand in phpMyAdmin — may lack what AmoBot always writes: a

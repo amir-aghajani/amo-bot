@@ -121,7 +121,8 @@ A test is a service marked as one, with no plan: one client on every inbound the
 pattern ([Bot settings](Bot-Settings.md#service-usernames)) — by default `test_` and the customer's usual name on the
 panel (`test_amir_3`, or `test_USER_17` for a customer without a username) —, with their Telegram id in its comment, no
 limit on devices, and the server's traffic and term. Moved to a server that has its name already, it gets the next name
-the test pattern gives there.
+the test pattern gives there. Each one taken is reported in the report group's «اکانت‌های تست»: whose, which client and
+where, its traffic and end, and how many tests the customer has taken ([Telegram group](Telegram-Group.md#the-topics)).
 
 It is not a purchase, and gets nothing a purchase gets:
 
@@ -143,12 +144,18 @@ tests alone with «اکانت تست»; «سرویس عادی» is the services 
 still work it like any service: read it, switch it off or on, move it, give it days and traffic, delete it. On the
 shop's website its service says `is_test` ([Store API](Store-API-After-Buying.md#services)).
 
+The [mini app](Mini-App.md) and the shop's website give tests too, from the same quota — and ask first what the bot asks:
+a Telegram account linked to the customer's account, their own number while «تایید شماره موبایل» is on, and the shop's
+required channels joined. A customer short of one is told which, and offered no test until it is done; bot admins pass.
+
 ## The clean-up
 
-Every 15 minutes, right after the services are read from their panels, in every shop that has tests — an agent's bot
+Every 15 minutes by default ([the task schedule](Running-In-Production.md#the-task-schedule)), right after the services
+are read from their panels, in every shop that has tests — an agent's bot
 that stopped running too, since its tests sit on your panels —, each by its own shop's rules, while that shop's
 «اکانت‌های تمام‌شده حذف شوند» is on, whether or not it still gives tests. The same run removes the shop's other ended
-services, by their own rule ([Services](Services.md#what-runs-by-itself)); a test goes by this one alone.
+services, by their own rule ([Services](Services.md#what-runs-by-itself)); a test goes by this one alone. A test it
+removes is not reported in the report group — its taking was.
 
 - **A test that ended** — its time or traffic ran out, or its panel no longer has it — is removed once it has been over
   «فاصله حذف» hours, counted from when it ended: its deadline, else when its panel said its traffic was used up or its

@@ -40,6 +40,7 @@ final class PlanPresenter
         ]) + [
             'category_id' => $category?->id,
             'locations' => array_map(static fn(array $choice): array => ['id' => $choice['server']->id, 'name' => $choice['server']->name], $choices),
+            'badge' => $plan->badge?->value,
         ];
     }
 

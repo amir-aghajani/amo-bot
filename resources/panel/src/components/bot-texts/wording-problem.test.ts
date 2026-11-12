@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { blankWording, keptWording, telegramDecode, wordingProblem } from '@/components/bot-texts/wording-problem'
+import { blankWording, keptWording, leadingPremium, plainShown, telegramDecode, wordingProblem } from '@/components/bot-texts/wording-problem'
 import type { BotTextRow } from '@/lib/api-types'
 
 /*
@@ -183,6 +183,47 @@ describe('a wording', () => {
     expect(wordingProblem({ kind: 'button', html: false, variables: [] }, 'خرید\nسرویس')).toBe('متن دکمه باید یک خط باشد.')
     expect(wordingProblem({ kind: 'button', html: false, variables: [] }, '<b>خرید</b>')).toContain('قالب‌بندی ندارد')
     expect(wordingProblem(MESSAGE, '<b>%subscription%')).toContain('تگ <b> بسته نشده است')
+  })
+})
+
+describe('a popup’s or a button’s premium emoji', () => {
+  const STAR = '<tg-emoji emoji-id="5368324170671202286">⭐</tg-emoji>'
+  const BUTTON: Pick<BotTextRow, 'kind' | 'html' | 'variables'> = { kind: 'button', html: false, variables: [{ name: 'rating', description: '', sample: '۵', html: false, required: false }] }
+  const POPUP: Pick<BotTextRow, 'kind' | 'html' | 'variables'> = { kind: 'popup', html: false, variables: [] }
+  const NO_TAGS = 'این متن قالب‌بندی ندارد و تگ‌ها همان‌طور که نوشته شده‌اند نشان داده می‌شوند؛ آن‌ها را بردارید. تنها تگی که پذیرفته می‌شود ایموجی پرمیوم (<tg-emoji>) است.'
+  const FORM = 'ایموجی پرمیوم را همان‌طور بنویسید که «ایموجی پرمیوم» می‌گذارد؛ مثلا <tg-emoji emoji-id="5368324170671202286">👍</tg-emoji>.'
+  const PLACE = 'دکمه فقط یک ایموجی پرمیوم می‌گیرد، آن هم اول متن: تلگرام آن را آیکون دکمه، پیش از متن آن، نشان می‌دهد.'
+  const WORDS = 'کنار ایموجی پرمیوم، متنی هم برای دکمه بنویسید.'
+  const CONTENT = 'داخل <tg-emoji> فقط یک ایموجی معمولی می‌آید — همانی که جاهایی که ایموجی پرمیوم نشان داده نمی‌شود دیده می‌شود.'
+
+  // The PHP tests' own cases (tests/Unit/Telegram/PlainWordingTest::wordings).
+  it('are taken as the picker writes them: a button’s one at the start of its label, a popup’s anywhere', () => {
+    expect(wordingProblem(BUTTON, `${STAR} انصراف`)).toBeNull()
+    expect(wordingProblem(BUTTON, `${STAR} %rating%`)).toBeNull()
+    expect(wordingProblem(POPUP, `ثبت شد ${STAR} ممنون ${STAR}`)).toBeNull()
+    expect(wordingProblem(POPUP, '۸ < ۹ & <3 و ۱۰ > ۹')).toBeNull()
+  })
+
+  it('are refused in the server’s words otherwise', () => {
+    expect(wordingProblem(BUTTON, `انصراف ${STAR}`)).toBe(PLACE)
+    expect(wordingProblem(BUTTON, `${STAR}${STAR} انصراف`)).toBe(PLACE)
+    expect(wordingProblem(BUTTON, STAR)).toBe(WORDS)
+    expect(wordingProblem(BUTTON, `${STAR}\u{00A0}`)).toBe(WORDS)
+    expect(wordingProblem(POPUP, '<tg-emoji emoji-id="5">ستاره</tg-emoji>')).toBe(CONTENT)
+    expect(wordingProblem(BUTTON, '<tg-emoji emoji-id="5"></tg-emoji> انصراف')).toBe(CONTENT)
+    expect(wordingProblem(BUTTON, '<tg-emoji emoji-id="x">⭐</tg-emoji> انصراف')).toBe(FORM)
+    expect(wordingProblem(POPUP, '<TG-EMOJI emoji-id="5">⭐</TG-EMOJI>')).toBe(FORM)
+    expect(wordingProblem(POPUP, '<tg-emoji emoji-id="5">⭐ ثبت شد')).toBe(FORM)
+    expect(wordingProblem(POPUP, '<b>ثبت شد</b>')).toBe(NO_TAGS)
+    expect(wordingProblem(BUTTON, `${STAR} <i>انصراف</i>`)).toBe(NO_TAGS)
+  })
+
+  it('show as their plain emoji on a notice; a button’s leading one is its icon', () => {
+    expect(plainShown(`${STAR} ثبت شد ${STAR}`)).toBe('⭐ ثبت شد ⭐')
+    expect(leadingPremium(`${STAR} انصراف`)).toEqual({ id: '5368324170671202286', emoji: '⭐', tag: STAR })
+    expect(leadingPremium(`انصراف ${STAR}`)).toBeNull()
+    // Counted as the customer sees it: the plain emoji, not the tag's markup.
+    expect(blankWording(BUTTON, STAR)).toBe(false)
   })
 })
 

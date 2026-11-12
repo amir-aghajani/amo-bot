@@ -6,18 +6,23 @@ A map of the system for someone new to the code: the parts, how a request, a Tel
 background work travel through them, and the few ideas everything else leans on. Each area's own page goes deeper:
 [Database](Database.md), [Conventions](Conventions.md), [API contract](API-Contract.md), [Drivers](Drivers.md), and the
 Internals pages — [commerce](Internals-Commerce.md), [services](Internals-Services.md),
-[the Telegram bot](Internals-Telegram-Bot.md), [the website API](Internals-Website-API.md), [the panels](Internals-Panels.md).
+[the Telegram bot](Internals-Telegram-Bot.md), [the website API](Internals-Website-API.md), [the panels](Internals-Panels.md),
+[the mini app](Internals-Mini-App.md).
 
 ## The shape of it
 
 AmoBot is a PHP 8.3 application (Slim 4, PHP-DI, Eloquent, Symfony Console) that renders no HTML but one small page —
 the one a customer's browser comes back to from an online payment gateway (`Payments\Controllers\ReturnPage`). It has
-four faces:
+five faces:
 
 - **Two panels** — the owner's at `/admin/` and an agent's at `/agent/` — one React project (`resources/panel`) built
   to static files the web server serves as they are. They talk to PHP only through the JSON API.
+- **The shops' Telegram mini app** — each shop's customer side inside Telegram, at `/app/{its store key}/` — a third
+  page of the same React project, built apart to static files of its own (`public/app`). It talks to PHP only through
+  the Store API ([Internals: mini app](Internals-Mini-App.md)).
 - **The Telegram bots** — the main bot and every agent's — fed by webhooks or long polling.
-- **The Store API** (`/api/store/v1/{store}`), which a shop's own website calls from its visitors' browsers.
+- **The Store API** (`/api/store/v1/{store}`), which a shop's own website calls from its visitors' browsers, and the
+  shop's mini app from Telegram — each under a store key of its own.
 - **Background work**, ticked every minute by a cron, an external pinger or the poller.
 
 Everything must run on shared hosting (cPanel and the like): no shell for the owner, no daemons, no cache server, no
@@ -56,8 +61,8 @@ walks every route to prove it.
 | `/api/admin` (the owner's panel) | installed › CSRF header on a change › session › the owner signed in › the shop the request names |
 | `/api/agent` (an agent's panel) | installed › CSRF header on a change › session › an agent signed in, in their bot's shop |
 | `/api/install` | not installed yet › CSRF header on a change › the install key |
-| `/api/store/v1/{store}` | installed › the website the key opens › JSON bodies › (a customer's bearer token) |
-| `…/admin` under the store | › a customer's token › one of the shop's admins, let in, signed in recently enough |
+| `/api/store/v1/{store}` | installed › the website or the mini app the key opens › JSON bodies › (what one door alone has: that door) › (a customer's bearer token) |
+| `…/admin` under the store | › the website's door › a customer's token › one of the shop's admins, let in, on a session that is not the mini app's, signed in recently enough |
 | `/webhooks/…`, `/cron/{token}`, `/payments/callback/{payment}/{secret}` (an online gateway's callback) | installed (a secret in the address authenticates) |
 | `/payments/webhooks/{driver}` (the webhook a gateway signs: Variza's) | installed (the signature authenticates) |
 | `/`, `/health`, `/api/app` | nothing: they answer before installation too |
@@ -102,7 +107,7 @@ module implements: `Core\Scheduling\Shops` is the Bots module's `BotShops`.
 
 | Module | What it is |
 |---|---|
-| Providers | The VPN panels: connectors (3X-UI, PasarGuard), servers and their health |
+| Providers | The VPN panels: connectors (3X-UI, PasarGuard, HMPanel), servers and their health |
 | Catalog | Plans, categories, and which servers can sell a plan today |
 | Subscriptions | A customer's service on a panel: provisioning, sync, renewal, moves, grants, extras, reminders |
 | Orders, Payments | The order's lifecycle; payment methods, the checkout the bot and the website share, the settlement |
@@ -110,29 +115,31 @@ module implements: `Core\Scheduling\Shops` is the Bots module's `BotShops`.
 | Users, Referrals | Customers, wallets, groups and pictures; invite links and commissions |
 | Agency, Bots | Agents, their levels and traffic; the bots, and whose shop the code works in |
 | Telegram | The bots: update dispatch, handlers, gates, texts, keyboards, broadcasts, the report group |
-| Accounts, Store | Website customers' sign-in and accounts; the websites' API |
+| Accounts, Store | Customers' sign-in on a website or the mini app, and their accounts; the Store API, its two doors, and the mini app's settings |
 | Notifications, Support, Reviews | What the shop tells a customer; support tickets; customers' reviews |
 | Auth | The panels' sign-in, the throttle, principals and actors, the grants a shop gives its website's admins (`StaffGrant`) |
 | Admin | The panels' controllers, the dashboard and the queues |
 | Settings, Installer, Updates | The settings screens; the web installer; the one-press update |
+| Backups | A whole installation's or one shop's backup: written, checked and restored, and sent to the report group ([below](#backups)) |
 
 Which modules each module may name is one map, `MODULES` in `tests/Unit/Core/LayersTest.php`, held to the code
 exactly: a new dependency between modules fails the test until the map says so, with a comment saying why where it is
 more than a plain use of the other's services. A module another leans on does not lean back: Store calls Accounts, and
-Accounts asks what it needs of a website through its own interface (`Accounts\Contracts\SignInSite`). The doors to the
-whole shop — Admin, Store, Telegram — name most of it.
+Accounts asks what it needs of a website through its own interface (`Accounts\Contracts\SignInSite`); Store keeps the
+mini app, and the bot asks it for the app's address through Telegram's own interface
+(`Telegram\Contracts\MiniAppAddress`). The doors to the whole shop — Admin, Store, Telegram — name most of it.
 
 ## Many bots, one database
 
 One installation runs the main bot and every agent's bot, **each with a shop of its own** — customers, plans,
 categories, payment methods, orders, payments, services, settings, texts, keyboards, report group, broadcasts,
-website, tickets — in the same database. The servers, grants, the agency and the bots themselves belong to the
+website, mini app, tickets — in the same database. The servers, grants, the agency and the bots themselves belong to the
 installation as a whole.
 
 - A shop's row carries `bot_id`, and its model uses `Bots\Models\Concerns\BelongsToBot`: a global scope holds every
   query to the current shop and a new row is filled in with it. Another shop's row is simply not found — a 404.
 - `Bots\CurrentBot` says whose shop the code works in: the bot an update came to, the shop a panel request names, the
-  website a store key opens, each shop in turn for a scheduled task. `CurrentBot::run($bot, $work)` works in a shop and
+  website or the mini app a store key opens, each shop in turn for a scheduled task. `CurrentBot::run($bot, $work)` works in a shop and
   comes back; `CurrentBot::everywhere($work)` lifts the scope for work on the servers.
 - Everything per shop follows: `BotApi` speaks as the current bot, `Settings` reads its rows, a notification runs in
   its recipient's shop, a report goes to the group of the bot it is about.
@@ -165,13 +172,15 @@ callback or conversation step to; then the report group's queue is sent. The det
 
 ## Background work
 
-`Core\Scheduling\Scheduler` runs the tasks `bootstrap/schedule.php` lists, at their intervals. It is ticked every
+`Core\Scheduling\Scheduler` runs the tasks `bootstrap/schedule.php` lists, at their intervals: the owner's, set in
+«زمان‌بندی کارها» (`Core\Scheduling\Intervals`, which the Settings module's `ScheduleSettings` implements, so Core names
+no module), the list's minutes the defaults — and the defaults while the database cannot be read. It is ticked every
 minute by `bin/console schedule:run` from a cron, by the `/cron/{token}` address for a host whose cron can only call a
 URL, or by `bot:poll` (in a process of its own, so the polls go on). One run at a time (a file lock); a task's time is
 written before it runs, so one that kills the process does not run again every minute. A shop's task runs once in
 every shop; the servers' tasks run once across all of them. A run's 45 seconds are shared over its turns
 (`Core\Scheduling\Budget`), and a task working through a queue stops at its share, so a run does not grow with the
-number of agents. [Running in production](Running-In-Production.md#the-scheduler) lists the tasks.
+number of agents. [Running in production](Running-In-Production.md#the-task-schedule) lists the tasks.
 
 ## The change feed
 
@@ -198,6 +207,52 @@ Each write counts twice: for the installation, and for the shop it was made in (
 ledgers, states are compare-and-swap columns, and every list loads what its rows show in a fixed number of queries.
 See [Database](Database.md).
 
+## Backups
+
+The Backups module saves the database to a file and puts it back (the owner's side: [Backups](Backups.md)). A backup is
+of a **scope** (`BackupScope::for()`): the whole installation for the owner in the main shop, one shop in any other
+panel. `BackupTables` says whose each table of `schema.php` is, one of four kinds: a shop's own (`SHOP`, found by its
+`bot_id`), a shop's by its parent (`CHILDREN`: a plan's servers, a ticket's messages), the owner's (`OWNER`: the bots,
+the servers, the agency, grants, moves, the agents' traffic — in the whole installation's backup alone), and what is
+true only now (`TRANSIENT`: sessions, sign-in challenges, chat states, the report queue, request keys, the bots' update
+dedupe, the change feed — never in a backup). **A new table joins one of them**: `BackupTablesTest` fails until it does,
+and holds a shop's own to a `bot_id` and a child to a parent that reaches one.
+
+- **The file** (`BackupWriter`) is gzip of JSON lines: a header (the format and its version, the app's version, the
+  scope and its shop, when), each table as a line of its name and columns followed by its rows as arrays, the rows each
+  table held, and last an HMAC-SHA256 over every line before it, keyed from `APP_KEY`
+  (`Encrypter::macKey('amobot-backup')`). Rows are read and written a batch at a time — a table without an `id` by its
+  primary key —, encrypted columns as they are stored. A shop's file holds nothing only the owner reads:
+  `OWNER_ONLY_COLUMNS` are written empty (an order's `diagnosis`), and `REVIEWER_COLUMNS` — who of support decided —
+  as «پشتیبانی», as the agent sees them everywhere else. Every write and the gzip's close are checked, and the file's
+  ending against what was written, before it takes its name: a full disk leaves no half file behind.
+- **Reading** (`BackupReader`) checks a file whole before anything moves: the signature — only this installation's key
+  signs a file its restore takes, so nobody writes rows of another shop's, or of the owner's, into one —, the row
+  counts, a version no newer than the code's, only the tables its scope holds and, a shop's, only that shop's rows
+  (`ShopRows`: each own row under its `bot_id`, each child under a parent row read before it).
+- **Restoring** (`Restorer`) is one transaction with the foreign keys out of the way (`ForeignKeys::without()`): the
+  scope's rows deleted in the reverse of the schema's order and inserted in its order, a batch at a time, in the columns
+  the table has now (a dropped column left out, an added one at its default). It also empties the transient tables but
+  `KEPT_ON_RESTORE` (the change feed's counters, the update dedupe) — every row for the whole installation, the shop's
+  own (by `bot_id`) for a shop: its customers sign in again on its website and mini app. The panels' sign-ins are files,
+  never in the database: no restore signs anyone out of a panel. A shop's keeps the owner's part: `OWNERS_COLUMNS` read
+  first and written back (a plan's `hidden_by_owner`), `OWNERS_REFERENCES` pointed again at the rows the file brought
+  back, or at none; `SHOP_REFERENCES` say what becomes of a shop's row naming an owner's row gone since — `drop` it,
+  `null` the column, or `refuse` the file (`analyse()`, whose `BackupAnalysis` words the warnings shown before the
+  restore). The owner's part is repaired by a few statements over sets of rows, so a shop of any size restores. A
+  shop's restore also puts back the owner's own values where the file holds them empty or «پشتیبانی». A file of an
+  older version then goes through `Core\Database\Upgrades` from its version, after the restore's commit (not one with
+  it); one older than `BackupTables::OLDEST_RESTORABLE` is refused — an upgrade that moves data from one column to
+  another raises it, since the restore cuts rows to today's columns before the upgrades run.
+- **The service** (`Backups`) keeps its files in `storage/backups/`: `made/` for a download (an hour), `uploads/` for a
+  checked file waiting under a random token beside its description (30 minutes), `kept/<scope>/` for the states written
+  just before a restore (the last `KEEP`, 3, pruned only once the restore succeeded). `SendBackupsTask` (`send_backups`,
+  a day, in each shop) prunes the folder, then sends the scope's file to the report group's `Topic::Backups` thread,
+  streamed from the disk — a line instead when it is over Telegram's 50 MB —, begins no backup once the run's time is
+  used up, puts the shops a run left out first at the next (`backups.begun`), and keeps when it tried and what Telegram
+  said (`Backups::LAST_SENT`). The panels reach it through `Admin\Api\BackupsController`, in
+  both panels' `$configuration` group.
+
 ## Files the app writes
 
 Shared hosting has no cache server or lock service, so the app keeps its state in files under `storage/`, each a
@@ -213,9 +268,10 @@ container entry so the test suite points it at a folder of its own:
 | The locks that let one process at a time ask a gateway about an online payment: 32 lock files, a payment's picked by its id | `storage/cache/payment-turns/` (`payments.turns`) |
 | Short-lived copies of pictures Telegram keeps | `storage/cache/files/` (`files.cache`) |
 | The OpenID providers' keys; the router's table | `storage/cache/jwks/`, `storage/cache/routes/` |
-| Uploaded receipts, tickets' pictures, QR backgrounds | `storage/uploads/{receipts,tickets,qr}` |
+| Uploaded receipts, tickets' pictures, QR backgrounds, the mini apps' logos | `storage/uploads/{receipts,tickets,qr,logos}` (`miniapp.logos` for the logos) |
 | Sessions, logs | `storage/sessions/`, `storage/logs/` |
 | The updater's work and the maintenance flag | `storage/updates/`, `storage/updating.flag` |
+| Backups made for a download, uploaded to restore, kept from before a restore | `storage/backups/{made,uploads,kept}` |
 
 Writes are atomic (a temporary file renamed over the real one) or done under a file lock (`Core\Support\Files`,
 `FileLock`), so a reader never sees half a file. `storage/` is refused to the web by its `.htaccess`.

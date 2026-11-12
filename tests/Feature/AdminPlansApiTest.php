@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Modules\Bots\CurrentBot;
+use App\Modules\Catalog\Enums\PlanBadge;
 use App\Modules\Catalog\Models\Plan;
 use App\Modules\Catalog\Services\PlanService;
 use App\Modules\Catalog\Services\ServerSelector;
@@ -13,6 +14,7 @@ use App\Modules\Providers\Models\Server;
 use App\Modules\Providers\Models\ServerInbound;
 use App\Modules\Subscriptions\Enums\SubscriptionStatus;
 use App\Modules\Subscriptions\Services\ExtrasSettings;
+use App\Modules\Telegram\Texts\PremiumText;
 use App\Modules\Users\Models\User;
 use App\Support\Validation;
 use Illuminate\Database\Events\QueryExecuted;
@@ -20,8 +22,8 @@ use Tests\HttpTestCase;
 
 /**
  * The plans screen: field validation (Persian digits taken), server entries (whole server or pinned inbounds, unsellable
- * ones flagged with why), a plan's own extras prices, ordering, the switch, duplicating, and deletion refused once a plan
- * has history.
+ * ones flagged with why), a plan's own extras prices, its badge, ordering, the switch, duplicating, and deletion refused
+ * once a plan has history.
  */
 final class AdminPlansApiTest extends HttpTestCase
 {
@@ -286,6 +288,28 @@ final class AdminPlansApiTest extends HttpTestCase
         self::assertSame(['checkout_note' => ['یادداشت پیش‌فاکتور حداکثر 500 کاراکتر است.']], $this->decode($long)['errors'] ?? null);
     }
 
+    public function testItsNamesLeadingEmojiMayBePremiumInTheBot(): void
+    {
+        $plan = $this->decode($this->postJson('/api/admin/plans', $this->input(['name' => '🔥 طلایی', 'emoji_id' => '5368324170671202286'])))['plan'];
+        self::assertSame(['🔥 طلایی', '5368324170671202286'], [$plan['name'], $plan['emoji_id']], 'the name plain, its premium emoji beside it');
+        self::assertSame(['5368324170671202286'], array_column($this->decode($this->get('/api/admin/plans'))['plans'], 'emoji_id'));
+        self::assertSame('5368324170671202286', $this->decode($this->postJson("/api/admin/plans/{$plan['id']}/duplicate"))['plan']['emoji_id'], 'a copy keeps it');
+
+        $put = fn(array $overrides): mixed => $this->decode($this->putJson("/api/admin/plans/{$plan['id']}", $this->input($overrides)))['plan']['emoji_id'];
+        self::assertSame('5368324170671202286', $put(['name' => '🔥 طلایی']), 'changed without it: its own stays');
+        self::assertNull($put(['name' => '🔥 طلایی', 'emoji_id' => '']), 'blank: none');
+        self::assertSame('42', $put(['name' => '💎 طلایی', 'emoji_id' => '42']));
+        self::assertNull($put(['name' => 'طلایی']), 'its name without an emoji now: nothing left for it to stand for');
+
+        $refused = $this->putJson("/api/admin/plans/{$plan['id']}", $this->input(['name' => 'طلایی', 'emoji_id' => '42']));
+        self::assertSame(['name' => [PremiumText::NO_EMOJI]], $this->decode($refused)['errors'] ?? null);
+        $refused = $this->putJson("/api/admin/plans/{$plan['id']}", $this->input(['name' => '🔥 طلایی', 'emoji_id' => 'fire']));
+        self::assertSame(['emoji_id' => [PremiumText::ID_REFUSED]], $this->decode($refused)['errors'] ?? null);
+        $refused = $this->putJson("/api/admin/plans/{$plan['id']}", $this->input(['name' => '<tg-emoji emoji-id="42">🔥</tg-emoji> طلایی']));
+        self::assertSame(['name' => [PremiumText::TAG_IN_NAME]], $this->decode($refused)['errors'] ?? null);
+        self::assertSame(['طلایی', null], [Plan::query()->findOrFail($plan['id'])->name, Plan::query()->findOrFail($plan['id'])->emoji_id], 'refused: kept as it was');
+    }
+
     public function testItsButtonInTheBotHasAColourAndARowWidth(): void
     {
         $plan = $this->decode($this->postJson('/api/admin/plans', $this->input()))['plan'];
@@ -301,6 +325,30 @@ final class AdminPlansApiTest extends HttpTestCase
             'button_style' => ['رنگ دکمه را از میان آبی، سبز و قرمز انتخاب کنید، یا پیش‌فرض تلگرام.'],
             'button_row' => ['جای دکمه یک ردیف کامل، دو یا سه دکمه در ردیف است.'],
         ], $this->decode($refused)['errors'] ?? null);
+    }
+
+    public function testItsBadgeIsOneOfTheShopsLabelsOrNoneAndGoesWithACopy(): void
+    {
+        $plan = $this->decode($this->postJson('/api/admin/plans', $this->input()))['plan'];
+        self::assertNull($plan['badge'], 'a new plan wears none');
+
+        $put = fn(array $overrides): mixed => $this->decode($this->putJson("/api/admin/plans/{$plan['id']}", $this->input($overrides)))['plan']['badge'];
+        self::assertSame('bestseller', $put(['badge' => 'bestseller']));
+        self::assertSame('bestseller', $put([]), 'changed without it: its own stays');
+        self::assertSame(PlanBadge::Bestseller, Plan::query()->findOrFail($plan['id'])->badge);
+        self::assertSame(['bestseller'], array_column($this->decode($this->get('/api/admin/plans'))['plans'], 'badge'), 'the list wears it');
+
+        $copy = $this->decode($this->postJson("/api/admin/plans/{$plan['id']}/duplicate"))['plan'];
+        self::assertSame('bestseller', $copy['badge'], 'a copy wears its plan\'s');
+
+        self::assertSame('vip', $put(['badge' => 'vip']));
+        self::assertNull($put(['badge' => '']), 'blank: none');
+        self::assertSame('recommended', $put(['badge' => 'recommended']));
+        self::assertNull($put(['badge' => null]), 'null: none');
+
+        $refused = $this->unchecked()->putJson("/api/admin/plans/{$plan['id']}", $this->input(['badge' => 'hot']));
+        self::assertSame(['badge' => ['برچسب را از میان «پرفروش‌ترین»، «پیشنهاد ما» و «VIP» انتخاب کنید، یا بدون برچسب بگذارید.']], $this->decode($refused)['errors'] ?? null);
+        self::assertNull(Plan::query()->findOrFail($plan['id'])->badge, 'refused: kept as it was');
     }
 
     public function testWholeServerEntrySellsWhateverIsSelectableRightNow(): void

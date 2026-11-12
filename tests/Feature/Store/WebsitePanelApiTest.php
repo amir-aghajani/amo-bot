@@ -50,6 +50,7 @@ final class WebsitePanelApiTest extends HttpTestCase
             'origins' => [],
             'telegram' => ['enabled' => false, 'client_id' => null, 'bot_id' => FakeTelegram::BOT_ID, 'has_secret' => false],
             'email' => ['enabled' => false, 'mail_ready' => false],
+            'phone' => ['enabled' => false, 'sms' => Websites::SMS_NOT_SET_UP],
             'google' => ['client_id' => null],
             'reviews' => ['enabled' => false],
             'staff' => ['enabled' => false, 'strong_sign_in' => true, 'grants' => []],
@@ -267,6 +268,50 @@ final class WebsitePanelApiTest extends HttpTestCase
         self::assertSame(['enabled' => true, 'mail_ready' => false], $this->decode($kept)['website']['email'], 'the panel says no email goes out');
         self::assertSame(['enabled' => true, 'mail_ready' => false], $this->decode($this->patchJson(self::URL, self::FORM))['website']['email'], 'left out, as it is');
         self::assertSame(['enabled' => false, 'mail_ready' => false], $this->decode($this->patchJson(self::URL, ['email_signup' => false]))['website']['email'], 'switched off whatever the email does');
+    }
+
+    public function testSignInBySmsIsNotSwitchedOnWhileNoSmsGoesOut(): void
+    {
+        $this->loginAsAdmin();
+
+        $refused = $this->patchJson(self::URL, ['phone_login' => true]);
+
+        self::assertSame(422, $refused->getStatusCode());
+        self::assertSame(['phone_login' => [Websites::SMS_OFF]], $this->decode($refused)['errors']);
+        self::assertSame(['enabled' => false, 'sms' => Websites::SMS_NOT_SET_UP], $this->decode($this->get(self::URL))['website']['phone'], 'the panel says why');
+        self::assertFalse(Website::query()->sole()->phone_login);
+
+        $this->sms();
+        $website = $this->decode($this->patchJson(self::URL, ['phone_login' => true]))['website'];
+        self::assertSame(['enabled' => true, 'sms' => Websites::SMS_READY], $website['phone']);
+
+        $this->config(['sms.driver' => 'none']);
+        $kept = $this->patchJson(self::URL, self::FORM + ['phone_login' => true]);
+        self::assertSame(200, $kept->getStatusCode(), 'on already, sending it on again switches nothing on');
+        self::assertSame(['enabled' => true, 'sms' => Websites::SMS_NOT_SET_UP], $this->decode($kept)['website']['phone'], 'kept on, the panel says no SMS goes out');
+        self::assertFalse($this->decode($this->get('/api/store/v1/' . $website['key']))['sign_in']['phone'], 'and the site offers no sign-in by SMS meanwhile');
+        self::assertSame(['enabled' => false, 'sms' => Websites::SMS_NOT_SET_UP], $this->decode($this->patchJson(self::URL, ['phone_login' => false]))['website']['phone'], 'switched off whatever the SMS does');
+    }
+
+    public function testAnAgentsSiteSignsInBySmsOnlyWhileTheOwnerLetsAgentsSites(): void
+    {
+        $this->telegram();
+        $bot = $this->agentBot();
+        $this->sms();
+        $this->loginAsAgent($bot);
+
+        $refused = $this->patchJson('/api/agent/website', ['phone_login' => true]);
+        self::assertSame(['phone_login' => [Websites::SMS_NOT_FOR_AGENTS]], $this->decode($refused)['errors'], "the owner pays for every code: an agent's site texts none until they let it");
+        self::assertSame(['enabled' => false, 'sms' => Websites::SMS_AGENTS_SHUT], $this->decode($this->get('/api/agent/website'))['website']['phone']);
+
+        $this->sms(forAgents: true);
+        $website = $this->decode($this->patchJson('/api/agent/website', self::FORM + ['phone_login' => true]))['website'];
+        self::assertSame(['enabled' => true, 'sms' => Websites::SMS_READY], $website['phone']);
+        self::assertTrue($this->decode($this->get('/api/store/v1/' . $website['key']))['sign_in']['phone']);
+
+        $this->sms();
+        self::assertSame(['enabled' => true, 'sms' => Websites::SMS_AGENTS_SHUT], $this->decode($this->get('/api/agent/website'))['website']['phone'], 'the leave taken back: kept on, it texts nothing');
+        self::assertFalse($this->decode($this->get('/api/store/v1/' . $website['key']))['sign_in']['phone']);
     }
 
     public function testGoogleSignInTakesTheClientIdGoogleCloudShows(): void

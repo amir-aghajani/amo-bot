@@ -57,7 +57,16 @@ final class Bots
     /** Whether the bot has a token to run on. */
     public function hasToken(Bot $bot): bool
     {
-        return $bot->isMain() ? (string) $this->config->get('telegram.token', '') !== '' : ($bot->token ?? '') !== '';
+        return $this->token($bot) !== '';
+    }
+
+    /**
+     * The bot's token — the main bot's in config.php, an agent's as handed over —; '' while it has none. What Telegram
+     * signs a mini app's launch data with (Accounts\Services\MiniAppSignIn).
+     */
+    public function token(Bot $bot): string
+    {
+        return $bot->isMain() ? (string) $this->config->get('telegram.token', '') : (string) ($bot->token ?? '');
     }
 
     /**

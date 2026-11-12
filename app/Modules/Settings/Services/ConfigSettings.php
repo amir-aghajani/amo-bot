@@ -22,14 +22,20 @@ use App\Core\Http\Urls;
 use App\Core\Mail\MailBody;
 use App\Core\Mail\Mailer;
 use App\Core\Mail\MailFailedException;
+use App\Core\Sms\Sms;
+use App\Core\Sms\SmsCredit;
+use App\Core\Sms\SmsFailedException;
 use App\Modules\Auth\Services\AdminAccount;
 use App\Modules\Settings\Exceptions\MailNotReadyException;
+use App\Modules\Settings\Exceptions\SmsCreditUnreadException;
+use App\Modules\Settings\Exceptions\SmsNotReadyException;
 use App\Modules\Settings\Exceptions\UnknownGroupException;
 use App\Modules\Telegram\Api\BotApi;
 use App\Modules\Telegram\Api\BotToken;
 use App\Modules\Telegram\Api\BotTokenException;
 use App\Support\Email;
 use App\Support\Input;
+use App\Support\Persian;
 use App\Support\Timezones;
 use Psr\Http\Message\ServerRequestInterface;
 use Psr\Log\LoggerInterface;
@@ -37,7 +43,7 @@ use Psr\Log\LoggerInterface;
 /**
  * The owner's «تنظیمات پنل» and the installer's view of config.php — never the settings table, since these are needed
  * before a database answers. Groups `app`, `telegram` and `advanced` are declared here; `database` is
- * DatabaseSettings' (written only once a database answers), `mail` MailSettings'. Moving the Bot API's address to
+ * DatabaseSettings' (written only once a database answers), `mail` MailSettings', `sms` SmsSettings'. Moving the Bot API's address to
  * another origin would send every bot's token there — agents' too — so that save asks the owner's current password.
  */
 final class ConfigSettings
@@ -52,8 +58,11 @@ final class ConfigSettings
         private readonly Config $config,
         private readonly DatabaseSettings $database,
         private readonly MailSettings $mail,
+        private readonly SmsSettings $sms,
         private readonly BotApi $bot,
         private readonly Mailer $mailer,
+        /** How codes go out by SMS as config.php had it when the request began: the test SMS goes by it. */
+        private readonly Sms $smsSender,
         private readonly AdminAccount $owner,
         private readonly Urls $urls,
         private readonly LoggerInterface $logger,
@@ -69,6 +78,7 @@ final class ConfigSettings
         }
         $groups['database'] = $this->database->present();
         $groups['mail'] = $this->mail->present();
+        $groups['sms'] = $this->sms->present();
 
         return [
             'file' => [
@@ -105,6 +115,11 @@ final class ConfigSettings
         }
         if ($group === 'mail') {
             $this->write($this->mail->validate($input));
+
+            return $this->present();
+        }
+        if ($group === 'sms') {
+            $this->write($this->sms->validate($input));
 
             return $this->present();
         }
@@ -223,6 +238,46 @@ final class ConfigSettings
         }
     }
 
+    /**
+     * Send a test code to the phone `$to` with the saved SMS settings — through the approved pattern, as a sign-in code
+     * goes —; a failure says why (the provider's own words).
+     *
+     * @return array{code: string} The code sent, for the owner to match against the SMS
+     * @throws ValidationException 422 on `to`: no number a phone has
+     * @throws SmsNotReadyException 422: no driver, or not its settings, saved
+     * @throws SmsFailedException 502: the provider did not take it — its reason said
+     */
+    public function testSms(string $to): array
+    {
+        $phone = self::phone($to);
+        if ($phone === null) {
+            throw ValidationException::on('to', trim($to) === '' ? 'شماره موبایل گیرنده را وارد کنید.' : 'شماره موبایل گیرنده درست نیست؛ آن را مثل 09121234567 یا +989121234567 بنویسید.');
+        }
+        if (!$this->smsSender->available()) {
+            throw new SmsNotReadyException();
+        }
+
+        $code = (string) random_int(100000, 999999);
+        try {
+            $this->smsSender->sendCode($phone, $code);
+        } catch (SmsFailedException $e) {
+            throw $e->explained();
+        }
+
+        return ['code' => $code];
+    }
+
+    /**
+     * The SMS account's credit by the saved settings, asked of its provider; null when the driver tells none.
+     *
+     * @throws SmsNotReadyException 422: no driver, or not its settings, saved
+     * @throws SmsCreditUnreadException 502: the provider could not be asked, or refused the key — its words said
+     */
+    public function smsCredit(): ?SmsCredit
+    {
+        return $this->sms->credit();
+    }
+
     /** The whole cron trigger address, for the screen's copy action; null while there is no token. */
     public function cronUrl(): ?string
     {
@@ -312,6 +367,28 @@ final class ConfigSettings
         $to = $origin(Input::text($input, 'api_url'));
 
         return $to !== null && $to !== $origin($this->apiUrl()->cast($this->file->get('TELEGRAM_API_URL')));
+    }
+
+    /**
+     * A phone number as typed — «09121234567», «۹۱۲ ۱۲۳ ۴۵۶۷», «+98 912…», «0098…» — in E.164; null for none a phone has.
+     */
+    private static function phone(string $typed): ?string
+    {
+        $text = Persian::latinDigits(trim($typed));
+        $plus = str_starts_with($text, '+');
+        $digits = (string) preg_replace('/[\s\-().]+/u', '', ltrim($text, '+'));
+        if ($digits === '' || !ctype_digit($digits)) {
+            return null;
+        }
+        $e164 = match (true) {
+            $plus => '+' . $digits,
+            str_starts_with($digits, '00') => '+' . substr($digits, 2),
+            str_starts_with($digits, '09') && strlen($digits) === 11 => '+98' . substr($digits, 1),
+            str_starts_with($digits, '9') && strlen($digits) === 10 => '+98' . $digits,
+            default => '+' . $digits,
+        };
+
+        return preg_match('/^\+[1-9][0-9]{7,14}$/', $e164) === 1 ? $e164 : null;
     }
 
     private function cronToken(): Secret

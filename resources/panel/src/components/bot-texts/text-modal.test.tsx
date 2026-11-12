@@ -2,9 +2,9 @@ import { fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { TextModal } from '@/components/bot-texts/text-modal'
 import { LeaveQuestion } from '@/components/leave-question'
-import type { BotTextRow } from '@/lib/api-types'
+import type { BotTextRow, CustomEmojisResponse } from '@/lib/api-types'
 import { providers, until } from '@/test/render'
-import { refusal, server } from '@/test/server'
+import { json, refusal, server } from '@/test/server'
 
 /*
  * A bot text's editor (components/bot-texts/text-modal): what the save would refuse is shown as the admin types — in
@@ -137,6 +137,57 @@ describe('a bot text’s editor', () => {
     fireEvent.change(screen.getByRole('textbox'), { target: { value: '<b>سلام </b>' } })
     expect(screen.getByText(/از ۴٬۰۹۶ کاراکتر/).textContent).toBe('۵ از ۴٬۰۹۶ کاراکتر، بدون تگ‌ها')
     expect(screen.queryByText('متن نمی‌تواند خالی باشد.')).toBeNull()
+  })
+})
+
+describe('a button text’s premium emoji', () => {
+  const CANCEL: BotTextRow = { ...WELCOME, key: 'cancel', kind: 'button', html: false, limit: 60, title: 'انصراف', default: '❌ انصراف', value: '❌ انصراف' }
+  const emojis = { emojis: [{ id: '41', emoji: '🚫', format: 'static', repaint: false, updated_at: '2026-10-06T09:00:00Z' }], status: null } satisfies CustomEmojisResponse
+
+  it('is its icon: picked in place of the label’s own emoji, drawn before the words in the preview, and taken off again', async () => {
+    server().on('GET', '/api/admin/bot/custom-emojis', json(emojis))
+    render(<TextModal text={CANCEL} onClose={vi.fn()} onSaved={vi.fn()} />, { wrapper: providers().wrapper })
+    expect(screen.queryByRole('toolbar'), 'no formatting, and no emoji put at the caret').toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'انتخاب' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'ایموجی پرمیوم 🚫' }))
+
+    // The field keeps the label; the icon is «آیکون دکمه»'s, counted as its plain emoji.
+    expect(wording().value).toBe('انصراف')
+    expect(screen.queryByText(/پیش از ذخیره/)).toBeNull()
+    expect(screen.getByText(/از ۶۰ کاراکتر/).textContent).toBe('۹ از ۶۰ کاراکتر، با ایموجی آیکون')
+    const preview = screen.getByRole('figure', { name: 'پیش‌نمایش در تلگرام' })
+    expect(preview.querySelector('img')?.getAttribute('alt')).toBe('🚫')
+    expect(preview.textContent).toBe(' انصراف')
+
+    // Words typed land in the label, the icon kept before it.
+    fireEvent.change(wording(), { target: { value: 'لغو' } })
+    fireEvent.click(screen.getByRole('button', { name: 'برداشتن' }))
+    expect(wording().value).toBe('🚫 لغو')
+  })
+
+  it('saves the icon as the wording’s leading premium emoji', async () => {
+    server().on('GET', '/api/admin/bot/custom-emojis', json(emojis))
+    server().on('PUT', '/api/admin/bot/texts/cancel', json({ text: { ...CANCEL, value: '<tg-emoji emoji-id="41">🚫</tg-emoji> انصراف', customized: true } }))
+    render(<TextModal text={CANCEL} onClose={vi.fn()} onSaved={vi.fn()} />, { wrapper: providers().wrapper })
+
+    fireEvent.click(screen.getByRole('button', { name: 'انتخاب' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'ایموجی پرمیوم 🚫' }))
+    fireEvent.click(screen.getByRole('button', { name: 'ذخیره متن' }))
+
+    await until(() => expect(server().sent('PUT', '/api/admin/bot/texts/cancel')).toHaveLength(1))
+    expect(server().sent('PUT', '/api/admin/bot/texts/cancel')[0]?.body).toEqual({ value: '<tg-emoji emoji-id="41">🚫</tg-emoji> انصراف' })
+  })
+
+  it('in a popup goes at the caret, its notice showing the plain emoji', async () => {
+    server().on('GET', '/api/admin/bot/custom-emojis', json(emojis))
+    render(<TextModal text={{ ...CANCEL, kind: 'popup', limit: 190, value: 'ثبت شد', default: 'ثبت شد' }} onClose={vi.fn()} onSaved={vi.fn()} />, { wrapper: providers().wrapper })
+
+    fireEvent.click(screen.getByRole('button', { name: 'ایموجی پرمیوم' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'افزودن ایموجی پرمیوم 🚫' }))
+
+    expect(wording().value).toBe('ثبت شد<tg-emoji emoji-id="41">🚫</tg-emoji>')
+    expect(screen.getByRole('figure', { name: 'پیش‌نمایش در تلگرام' }).textContent).toContain('ثبت شد🚫')
   })
 })
 

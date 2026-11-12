@@ -162,6 +162,12 @@ final class BotTextsTest extends DatabaseTestCase
         yield 'HTML Telegram would refuse' => [BotText::Welcome, '<b>سلام %name%', 'بسته نشده'];
         yield 'a button on two lines' => [BotText::Cancel, "انصراف\nلغو", 'یک خط'];
         yield 'formatting in a popup' => [BotText::Error, '<b>خطا</b>', 'قالب‌بندی ندارد'];
+        // A premium emoji is the one tag a popup or a button takes, written as the picker writes it.
+        yield 'a premium emoji in a button, written otherwise' => [BotText::Cancel, "<tg-emoji emoji-id='5'>❌</tg-emoji> انصراف", 'همان‌طور بنویسید که «ایموجی پرمیوم» می‌گذارد'];
+        yield 'a premium emoji in a popup, holding words' => [BotText::Error, 'خطا <tg-emoji emoji-id="5">خطا</tg-emoji>', 'فقط یک ایموجی معمولی'];
+        yield "a button's premium emoji after its words" => [BotText::Cancel, 'انصراف <tg-emoji emoji-id="5">❌</tg-emoji>', 'آن هم اول متن'];
+        yield 'a button of two premium emoji' => [BotText::Cancel, '<tg-emoji emoji-id="5">❌</tg-emoji><tg-emoji emoji-id="6">🚫</tg-emoji> انصراف', 'فقط یک ایموجی پرمیوم'];
+        yield 'a button of its premium emoji alone' => [BotText::Cancel, '<tg-emoji emoji-id="5">❌</tg-emoji>', 'متنی هم برای دکمه بنویسید'];
         yield 'a button too long' => [BotText::Cancel, str_repeat('ا', TextKind::Button->limit() + 1), Validation::tooLong('متن', TextKind::Button->limit())];
         // As Telegram counts it: an emoji beyond the basic plane is two units — half as many fit.
         yield 'a button of emoji past its room' => [BotText::Cancel, str_repeat('😀', intdiv(TextKind::Button->limit(), 2) + 1), Validation::tooLong('متن', TextKind::Button->limit())];
@@ -203,5 +209,36 @@ final class BotTextsTest extends DatabaseTestCase
 
         self::assertSame('ربات تا ساعت ۸ &gt; خاموش است &amp; بعد روشن می‌شود', $this->texts->message(BotText::BotOff));
         self::assertSame('ربات تا ساعت ۸ > خاموش است & بعد روشن می‌شود', $this->texts->get(BotText::BotOff), 'a popup shows it as typed');
+    }
+
+    public function testAPopupAndAButtonTakePremiumEmojiTheButtonsOneAtTheStartOfItsLabel(): void
+    {
+        $star = '<tg-emoji emoji-id="5368324170671202286">⭐</tg-emoji>';
+
+        // The button's own emoji in its premium one's place: its icon as it is sent (PlainWording, BotApi).
+        $this->texts->save(BotText::Cancel, "{$star} انصراف");
+        self::assertSame("{$star} انصراف", $this->texts->get(BotText::Cancel));
+
+        // A popup's anywhere, any number: their plain emoji on the notice, the premium ones when it goes as a message.
+        $this->texts->save(BotText::BotOff, "{$star} ربات خاموش است & {$star} بعد روشن می‌شود");
+        self::assertSame("{$star} ربات خاموش است &amp; {$star} بعد روشن می‌شود", $this->texts->message(BotText::BotOff));
+
+        // Counted as the plain emoji the customer sees at the least, not as the tag's long markup.
+        $this->texts->save(BotText::Cancel, $star . str_repeat('ا', TextKind::Button->limit() - 1));
+        self::assertTrue($this->texts->isCustomized(BotText::Cancel));
+    }
+
+    public function testAButtonsLabelNamedInAMessageKeepsItsPremiumEmojiAndIsEscaped(): void
+    {
+        $this->texts->save(BotText::CategoryOther, '<tg-emoji emoji-id="7">🗂</tg-emoji> سایر & بقیه');
+
+        self::assertSame('<tg-emoji emoji-id="7">🗂</tg-emoji> سایر &amp; بقیه', $this->texts->inMessage(BotText::CategoryOther)->html);
+        self::assertStringContainsString(
+            '<tg-emoji emoji-id="7">🗂</tg-emoji> سایر &amp; بقیه',
+            $this->texts->render(BotText::CategoryEmpty, ['category' => $this->texts->inMessage(BotText::CategoryOther)]),
+        );
+
+        $this->expectException(\LogicException::class);
+        $this->texts->inMessage(BotText::Welcome);
     }
 }

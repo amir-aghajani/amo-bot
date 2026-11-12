@@ -26,12 +26,15 @@ wheel ([Gift codes and the lucky wheel](Gift-Codes-And-Lucky-Wheel.md)), and fre
 «عمومی»:
 
 - **«ربات فعال باشد»** (on) — off, every customer gets «ربات خاموش» (`⛔️ ربات فعلا غیرفعال است. …`, a text you may reword)
-  to whatever they send, the menu taken away, **and the shop's website takes no orders** (a purchase, a renewal, a
-  top-up, a receipt — «فروشگاه فعلا سفارش نمی‌گیرد؛ …»). The bot's admins still pass, to try it. The page says the bot is
+  to whatever they send, the menu taken away, **and the shop's website and mini app take no orders** (a purchase, a
+  renewal, a top-up, a receipt — «فروشگاه فعلا سفارش نمی‌گیرد؛ …»). The bot's admins still pass, to try it. The page says the bot is
   off above every section. For a pause, or when the servers are down.
 - **«تایید شماره موبایل»** (off) — on, a customer must send their own Telegram number — one tap of «📱 ارسال شماره موبایل»
   — before anything else: a number typed, or someone else's card, is refused. Asked once; the number shows on their
-  customer page. The bot's admins are not asked.
+  customer page. The bot's admins are not asked. The [mini app](Mini-App.md) asks for it too, on «حساب من»: Telegram
+  sends the customer's own number to the bot, which takes it as it takes one sent in the chat. A card sent while the
+  shop asks for no number, or once the customer's is verified, keeps nothing: the bot answers «شماره لازم نیست» —
+  «تایید شماره» to their own number already verified — and the chat stays where it was.
 - **«راه ارتباط با پشتیبانی»** — a handle or link, 190 characters at most, shown on the bot's «☎️ پشتیبانی» above its
   ticket buttons («نیاز به کمک دارید؟ با ما در تماس باشید: …»); empty, the screen offers the tickets alone. The shop's
   website gets it as a link when it is one: `@handle`, an `https://` address, `t.me/…`, or a phone number.
@@ -174,7 +177,8 @@ payments](Orders-And-Payments.md#receipts)):
     payment sends them there too (one shown a card before you switched this on still asks for its receipt in the bot).
     The website's checkout gives no card either, but the same way to support and the same note.
   - **The payment** waits for you to approve it on «پرداخت‌ها» once you see the money; the bot waits for no receipt. It
-    never expires — not after 48 hours, nor at a discount code's hold: cancel one never paid with «لغو پرداخت».
+    never expires — not after an unpaid order's hours (48 by default), nor at a discount code's hold: cancel one never
+    paid with «لغو پرداخت».
   - **No card of the method is picked** for it: none's daily cap fills, a method is offered whatever its cards'
     switches and caps («روش‌های پرداخت» says so), and «پرداخت‌ها» and the group's «رسیدها» say «کارت در پیوی پشتیبانی
     داده شد» where a card would be. A card-to-card top-up still asks its few Toman more («مبلغ تصادفی افزوده به شارژ
@@ -235,13 +239,15 @@ payments](Orders-And-Payments.md#receipts)):
     within its «کمترین مبلغ» and «بیشترین مبلغ» ([Payment methods](Payment-Methods.md#the-least-and-most-amount)) — and
     while the renewal would end the service by 17 January 2038 («۲۸ دی ۱۴۱۶»), the last day the shop's dates hold: one
     that would end later is not offered it, and its customer is reminded of its end instead.
-  - **A wallet short of the price** is told once, and tried every half hour until it can pay. The panel's word on the
-    end is asked first, so nothing is charged while a panel does not answer.
+  - **A wallet short of the price** is told once, and tried at every run — every half hour by default — until it can
+    pay. The panel's word on the end is asked first, so nothing is charged while a panel does not answer.
   - **Each end date is renewed once**: a renewal since its days began — automatic or the customer's own, refunded since
     or not — that left the end where it was is not followed by another.
-  - **By «ریست زمان + انتقال حجم»** the renewal waits for the last run before the end — the runs come every half hour,
-    so at most 35 minutes ahead —, and the term it starts afresh throws away no more than that. A wallet short of it is
-    still told «چند روز پیش از پایان سرویس»; it then has to hold the price at that last run.
+  - **By «ریست زمان + انتقال حجم»** the renewal waits for the last run before the end — the runs come every half hour by
+    default, so at most 35 minutes ahead: the interval set in
+    [«زمان‌بندی کارها»](Running-In-Production.md#the-task-schedule) and 5 minutes —, and the term it starts afresh throws
+    away no more than that. A wallet short of it is still told «چند روز پیش از پایان سرویس»; it then has to hold the
+    price at that last run.
 
 ## Extra traffic, time and devices
 
@@ -300,7 +306,8 @@ renewal or more traffic:
   days (an hourly plan's) is not reminded at all: it would be the moment its clock started.
 - **«یادآوری تمام شدن حجم»** — «بعد از مصرف چند درصد حجم», 50 to 99, 80 by default. Unlimited services never.
 
-Each comes with «📊 مشاهده سرویس». The services are read from their panels every 15 minutes, and the reminders follow.
+Each comes with «📊 مشاهده سرویس». The services are read from their panels every 15 minutes by default, and the
+reminders follow ([the task schedule](Running-In-Production.md#the-task-schedule)).
 A free test is never reminded.
 
 ## Ended services
@@ -309,7 +316,8 @@ A free test is never reminded.
 
 - **«حذف خودکار سرویس‌های منقضی‌شده»** (off) — on, a service that ended — its time or traffic ran out, or its panel no
   longer has it — is removed from its panel and the shop once it has been over the hours below, quietly: the customer is
-  not told, and the orders that sold it keep their record. Off, an ended service stays until the customer renews it or
+  not told, and the orders that sold it keep their record. The report group's «حذف سرویس‌ها» lists those each run
+  removed, in one report. Off, an ended service stays until the customer renews it or
   you delete it.
 - **«فاصله حذف (ساعت)»** — 0 to 8760 (a year), 24 by default, counted from when the service ended: the deadline it
   passed, else when its panel said its traffic was used up or its client gone. `0` removes it at once. The field's hint
@@ -324,7 +332,8 @@ Never removed:
 - one renewed or extended since the shop last read it: each is read from its panel again just before it goes. One that
   runs again starts its hours anew if it ends again.
 
-The services are checked every 15 minutes, right after they are read from their panels; one whose panel the shop leaves
+The services are checked every 15 minutes by default ([the task schedule](Running-In-Production.md#the-task-schedule)),
+right after they are read from their panels; one whose panel the shop leaves
 alone after a failure waits for a later check, and one its panel no longer has goes without asking it
 ([Services](Services.md#what-runs-by-itself)). While the rule is on, the customer sees when an ended service goes: its
 screen in the bot and its renewal's checkout say «🗑️ اگر این سرویس تا … تمدید نشود، حذف می‌شود.» (a bot text you may

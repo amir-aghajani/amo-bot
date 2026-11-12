@@ -115,9 +115,10 @@ sooner than any other unpaid order — after the hold set on «کدهای تخف
 - «مهلت (دقیقه)» — 0 to 1440, 60 by default. An unpaid order made with a code that nothing happened to for that long,
   and whose money is not with support — its receipt in review, or its card payment sent to support's private chat —, is
   cancelled with the note «مهلت استفاده از کد تخفیف تمام شد», and the code's use is free for someone else. 0 — such an
-  order waits as long as any unpaid one (48 hours).
+  order waits as long as any unpaid one (48 hours by default).
 
-The check runs every ten minutes, so an order may wait up to ten minutes past its hold.
+The check runs every ten minutes by default, so an order may wait up to ten minutes past its hold; both are set in
+[«زمان‌بندی کارها»](Running-In-Production.md#the-task-schedule).
 
 A customer coming back to the same checkout — the same plan, server and price with the same code — gets their own order
 back, not a second one, and is not counted twice against the code. A customer whose last use of a code is held by

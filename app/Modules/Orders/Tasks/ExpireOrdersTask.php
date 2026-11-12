@@ -9,18 +9,19 @@ use App\Modules\Discounts\Services\DiscountSettings;
 use App\Modules\Orders\Models\Order;
 use App\Modules\Orders\Models\RequestKey;
 use App\Modules\Payments\Services\PaymentService;
+use App\Modules\Settings\Services\ScheduleSettings;
 
 /**
- * Drops unpaid orders nobody touched for EXPIRE_HOURS, quietly (PaymentService::expire()); an order made with a discount
+ * Drops unpaid orders nobody touched for the owner's hours (ScheduleSettings::orderHours(), two days by default), quietly (PaymentService::expire()); an order made with a discount
  * code goes sooner, once the code's hold is over (DiscountSettings::holdMinutes()), which frees its use. An order whose
  * money may be with support — a receipt in review, a card transfer taken in support's private chat (Order::expirable()),
  * an online payment held for support — is never dropped: support decides it; nor one whose online gateway's page still
  * takes money (PaymentService::expire()). Also forgets request keys older than RequestKey::KEEP_DAYS. Runs every
- * INTERVAL_MINUTES in every shop.
+ * INTERVAL_MINUTES by default (the owner's «زمان‌بندی کارها») in every shop.
  */
 final class ExpireOrdersTask implements Task
 {
-    public const EXPIRE_HOURS = 48;
+    /** How often it runs, by default. */
     public const INTERVAL_MINUTES = 10;
 
     /** `orders.notes` of an order made with a code, dropped as the code's hold ran out. */
@@ -29,11 +30,12 @@ final class ExpireOrdersTask implements Task
     public function __construct(
         private readonly PaymentService $payments,
         private readonly DiscountSettings $discounts,
+        private readonly ScheduleSettings $schedule,
     ) {}
 
     public function run(): void
     {
-        $idleSince = now()->subHours(self::EXPIRE_HOURS);
+        $idleSince = now()->subHours($this->schedule->orderHours());
 
         foreach (Order::expirable()->where('updated_at', '<=', $idleSince)->get() as $order) {
             $this->payments->expire($order, $idleSince);

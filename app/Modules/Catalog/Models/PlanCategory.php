@@ -17,6 +17,8 @@ use Illuminate\Support\Carbon;
  *
  * @property int $id
  * @property string $name
+ * @property string|null $emoji_id The premium emoji the bot draws for the name's leading emoji (Telegram\Texts\PremiumText);
+ *                                 null for none
  * @property bool $is_active
  * @property int $sort
  * @property Carbon|null $created_at
@@ -29,7 +31,7 @@ class PlanCategory extends Model
 
     protected $table = 'plan_categories';
 
-    protected $fillable = ['name', 'is_active', 'sort'];
+    protected $fillable = ['name', 'emoji_id', 'is_active', 'sort'];
 
     /** @var array<string, string> */
     protected $casts = [

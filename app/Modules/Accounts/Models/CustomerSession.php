@@ -20,6 +20,7 @@ use Illuminate\Support\Carbon;
  * @property string|null $device What the browser said it is, in words: «Chrome در Windows»
  * @property string|null $ip The address it signed in from
  * @property SignInMethod|null $method How it was signed in, or a stronger way proven since; null for a session older than the column (counts as a password alone)
+ * @property string|null $biometric_hash The sha256 of the secret the mini app keeps behind the device's fingerprint or face; null for none
  * @property Carbon|null $last_used_at
  * @property Carbon|null $authenticated_at When a way in was last proven on it: the sign-in, or a reauthentication since
  * @property Carbon $expires_at The end whatever its use: 180 days after the sign-in
@@ -34,9 +35,9 @@ class CustomerSession extends Model
 
     protected $table = 'customer_sessions';
 
-    protected $fillable = ['user_id', 'token_hash', 'device', 'ip', 'method', 'last_used_at', 'authenticated_at', 'expires_at'];
+    protected $fillable = ['user_id', 'token_hash', 'device', 'ip', 'method', 'biometric_hash', 'last_used_at', 'authenticated_at', 'expires_at'];
 
-    protected $hidden = ['token_hash'];
+    protected $hidden = ['token_hash', 'biometric_hash'];
 
     /** @var array<string, string> */
     protected $casts = [

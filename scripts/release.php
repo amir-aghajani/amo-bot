@@ -7,13 +7,13 @@ use App\Support\PhpVersion;
 
 /*
  * Builds a release: the one zip a shop owner uploads to their host — the app, its PHP packages (vendor/, without the
- * development ones), the built panels (public/admin, public/agent and the files they share in public/assets), the key
- * releases are signed with (resources/release-key.pub) and an empty storage/ — and nothing a running shop does not read
- * (no tests, no panel sources, no node_modules, no config.php, no logs). Beside it, build/release.json — the manifest the
- * shops' updater reads: the version, the zip's size and sha256, the PHP and extensions it needs, the app's top-level paths
- * it replaces (Modules\Updates\Manifest) — and, signed with the key in RELEASE_SIGNING_KEY (base64, as
- * scripts/release-key.php writes it; the release workflow's secret), its signature build/release.json.sig. Without the
- * key the release is unsigned, and no shop updates itself to it.
+ * development ones), the built panels (public/admin, public/agent and the files they share in public/assets) and the
+ * mini app (public/app), the key releases are signed with (resources/release-key.pub) and an empty storage/ — and
+ * nothing a running shop does not read (no tests, no panel sources, no node_modules, no config.php, no logs). Beside
+ * it, build/release.json — the manifest the shops' updater reads: the version, the zip's size and sha256, the PHP and
+ * extensions it needs, the app's top-level paths it replaces (Modules\Updates\Manifest) — and, signed with the key in
+ * RELEASE_SIGNING_KEY (base64, as scripts/release-key.php writes it; the release workflow's secret), its signature
+ * build/release.json.sig. Without the key the release is unsigned, and no shop updates itself to it.
  *
  *   php scripts/release.php              # pnpm build first, then build/amobot-<version>.zip
  *   php scripts/release.php --no-build   # use the panels already built in public/
@@ -45,7 +45,7 @@ if (!isset($options['no-build'])) {
     step('Building the panels (pnpm build)');
     run('pnpm build', $root);
 }
-foreach (['admin', 'agent'] as $panel) {
+foreach (['admin', 'agent', 'app'] as $panel) {
     if (!is_file("{$root}/public/{$panel}/index.html")) {
         fail("public/{$panel} is empty: run `pnpm build` (or drop --no-build).");
     }

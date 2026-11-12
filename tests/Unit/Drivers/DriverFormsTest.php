@@ -27,17 +27,18 @@ final class DriverFormsTest extends TestCase
      * What a server's form has beside its connector's: the server's own columns, and its button among a plan's locations
      * in the bot (Providers\Services\ServerService).
      */
-    private const SERVER = ['name', 'capacity', 'notes', 'is_active', 'button_style', 'button_row'];
+    private const SERVER = ['name', 'emoji_id', 'capacity', 'notes', 'is_active', 'button_style', 'button_row'];
 
     /**
      * Each request a family's drivers are saved by — a oneOf of a shape per driver — with its registry's container entry,
      * the field of it that names the driver, the fields every shape has beside the driver's own, and the words a shape may
-     * name that are no driver (mail's and the website captcha's `none`). A server is added and changed by one, and tried
+     * name that are no driver (mail's, SMS's and the website captcha's `none`). A server is added and changed by one, and tried
      * by another — a saved one's under its `id`. A payment method's are held below: a new one and a saved one differ.
      */
     private const FAMILIES = [
         'DatabaseRequest' => ['entry' => 'database.drivers', 'names' => 'driver', 'beside' => [], 'none' => []],
         'ConfigMailRequest' => ['entry' => 'mail.drivers', 'names' => 'transport', 'beside' => ['from_address', 'from_name'], 'none' => ['none']],
+        'ConfigSmsRequest' => ['entry' => 'sms.drivers', 'names' => 'driver', 'beside' => ['agents'], 'none' => ['none']],
         'WebsiteCaptchaRequest' => ['entry' => 'captcha.drivers', 'names' => 'driver', 'beside' => [], 'none' => ['none']],
         'ServerRequest' => ['entry' => 'panel.drivers', 'names' => 'driver', 'beside' => self::SERVER, 'none' => []],
         'ServerTestRequest' => ['entry' => 'panel.drivers', 'names' => 'driver', 'beside' => ['id', ...self::SERVER], 'none' => []],
@@ -77,7 +78,7 @@ final class DriverFormsTest extends TestCase
     public function testNoFieldsLabelSaysItsOwnUnit(): void
     {
         $united = 0;
-        foreach (['database.drivers', 'mail.drivers', 'captcha.drivers', 'panel.drivers', 'payment.drivers'] as $entry) {
+        foreach (['database.drivers', 'mail.drivers', 'sms.drivers', 'captcha.drivers', 'panel.drivers', 'payment.drivers'] as $entry) {
             foreach ($this->drivers($entry) as $driver) {
                 foreach ($driver->describe()->form->describe() as $field) {
                     if ($field['unit'] !== null) {
@@ -95,6 +96,13 @@ final class DriverFormsTest extends TestCase
         $keys = array_map(static fn(Driver $driver): string => $driver->key(), $this->drivers('mail.drivers'));
 
         self::assertSame(['none', ...$keys], HttpTestCase::apiDescription()->components->schemas['MailTransport']->enum ?? null);
+    }
+
+    public function testTheWaysCodesGoOutBySmsAreNoneAndTheSmsDrivers(): void
+    {
+        $keys = array_map(static fn(Driver $driver): string => $driver->key(), $this->drivers('sms.drivers'));
+
+        self::assertSame(['none', ...$keys], HttpTestCase::apiDescription()->components->schemas['SmsDriver']->enum ?? null);
     }
 
     public function testEveryKindOfFieldIsOneTheDescriptionNames(): void

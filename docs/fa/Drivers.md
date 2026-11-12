@@ -5,16 +5,17 @@
 # درایورها
 
 آنچه فروشگاه از راه دیگران انجام می‌دهد یک **درایور** از یک خانواده است: پنل VPN که روی آن می‌فروشد، روشی که با آن
-پول می‌گیرد، دیتابیسی که روی آن اجرا می‌شود، راهی که ایمیل‌هایش فرستاده می‌شوند، کپچایی که فرم‌های یک وب‌سایت
-می‌پرسند. همه خانواده‌ها روی یک هسته کوچک بنا شده‌اند، پس یک درایور تازه یعنی یک کلاس، ثبت آن و شکل درخواستش — پنل‌ها
+پول می‌گیرد، دیتابیسی که روی آن اجرا می‌شود، راهی که ایمیل‌هایش فرستاده می‌شوند، راهی که کدهای ورودش با پیامک فرستاده
+می‌شوند، کپچایی که فرم‌های یک وب‌سایت می‌پرسند. همه خانواده‌ها روی یک هسته کوچک بنا شده‌اند، پس یک درایور تازه یعنی یک کلاس، ثبت آن و شکل درخواستش — پنل‌ها
 فرمش را از روی توصیف آن رسم می‌کنند، بدون هیچ کدی از آن خودشان، جز جایی که یک خانواده در ادامه چیز دیگری بگوید.
 
 | خانواده | interface | رجیستری (`bootstrap/container.php`) | محل | امروز | کد پنل برای درایور تازه |
 |---|---|---|---|---|---|
-| پنل‌های VPN | `Providers\Contracts\PanelDriver` (و کلاینتش، `ProviderInterface`) | `panel.drivers` | <code dir="ltr">app/Modules/Providers/Drivers/&lt;Name&gt;/</code> | `3x-ui`، `pasarguard` | هیچ |
+| پنل‌های VPN | `Providers\Contracts\PanelDriver` (و کلاینتش، `ProviderInterface`) | `panel.drivers` | <code dir="ltr">app/Modules/Providers/Drivers/&lt;Name&gt;/</code> | `3x-ui`، `pasarguard`، `hmpanel` | هیچ |
 | درگاه‌های پرداخت | `Payments\Contracts\GatewayDriver` (و درگاهش، `GatewayInterface`) | `payment.drivers` | <code dir="ltr">app/Modules/Payments/Drivers/&lt;Name&gt;/</code> | `wallet`، `outside` (پرداخت بیرون از فروشگاه)، `manual` (کارت به کارت)، `cubepay`، `zarinpal`، `atlaspay`، `abangateway`، `plisio`، `aqayepardakht`، `variza` | یک آیکون |
 | دیتابیس‌ها | `Core\Database\Drivers\DatabaseDriver` | `database.drivers` | <code dir="ltr">app/Core/Database/Drivers/</code> | `mysql`، `sqlite` | هیچ |
 | ایمیل | `Core\Mail\MailDriver` | `mail.drivers` | <code dir="ltr">app/Core/Mail/Drivers/</code> | `smtp`، `native`، `resend` | هیچ |
+| پیامک | `Core\Sms\SmsDriver` | `sms.drivers` | <code dir="ltr">app/Core/Sms/Drivers/</code> | `ippanel` | هیچ |
 | کپچاها | `Core\Captcha\CaptchaDriver` | `captcha.drivers` | <code dir="ltr">app/Core/Captcha/Drivers/</code> | `turnstile`، `altcha` | هیچ |
 
 ## هسته
@@ -63,8 +64,8 @@
 **در API**، درخواست هر خانواده به‌صورت یک `oneOf` توصیف می‌شود، با یک شکل بسته برای هر درایور، در
 `resources/api/openapi.yaml` — تا درخواست دقیقا با فیلدهای درایور خودش سنجیده شود — و
 `tests/Unit/Drivers/DriverFormsTest` هر شکل را با فرم درایورش تطبیق می‌دهد، در هر دو جهت: همان فیلدها، همان فیلدهای
-الزامی، یک شکل برای هر درایور ثبت‌شده و برای هیچ چیز دیگر. این تست درخواست‌های دیتابیس، ایمیل، کانکتور پنل، روش پرداخت
-و کپچا را پوشش می‌دهد، و فهرست نوع‌های فیلد و کپچاهای توصیف را با فهرست‌های کد تطبیق می‌دهد. پس از ویرایش توصیف،
+الزامی، یک شکل برای هر درایور ثبت‌شده و برای هیچ چیز دیگر. این تست درخواست‌های دیتابیس، ایمیل، پیامک، کانکتور پنل، روش
+پرداخت و کپچا را پوشش می‌دهد، و فهرست نوع‌های فیلد و کپچاهای توصیف را با فهرست‌های کد تطبیق می‌دهد. پس از ویرایش توصیف،
 `pnpm api:types` نوع‌های پنل‌ها را دوباره می‌سازد.
 
 **متن‌ها** — برچسب، توصیف، یادداشت‌ها، راهنماها و ردهای یک درایور — فارسی‌اند، به همان شیوه‌ای که در بقیه کد نوشته
@@ -86,7 +87,7 @@
      صفحه‌های خود پنل را که کانکتور شما نام می‌برد رد می‌کند — <code dir="ltr">/panel</code> در 3X-UI،
      <code dir="ltr">/dashboard</code> در PasarGuard)، بعد
      <code dir="ltr">...Support\PanelCredentials::fields(token, tokenHint, tokenPattern, tokenMismatch, loginHint)</code>
-     (یک توکن API، یا نام کاربری و رمز عبور یک ادمین)، بعد فیلدهای خودش — فیلدی که فقط برای روش رمز عبور است
+     (یک توکن API، یا نام کاربری و رمز عبور یک ادمین — با `loginHint` برابر `null` فقط توکن عرضه می‌شود)، بعد فیلدهای خودش — فیلدی که فقط برای روش رمز عبور است
      `when: PanelCredentials::WITH_PASSWORD` می‌گیرد، و یک رمز <code dir="ltr">boundTo: PanelConnection::bound()</code>
      (آدرس پنل با origin آن، هاست و پورت پراکسی، و بررسی TLS؛ خاموش کردن پراکسی چیزی را عوض نمی‌کند) با `moved`ی که با
      `PanelConnection::MOVED` شروع می‌شود —، بعد <code dir="ltr">...PanelConnection::options(subscriptionHint, subscriptionPlaceholder)</code> (TLS، timeout،
@@ -168,7 +169,7 @@
    <code dir="ltr">php bin/console panel:probe &lt;key&gt; &lt;url&gt; -t &lt;token&gt;</code>
    ([دستورهای کنسول](Console-Commands.md)).
 
-دو کانکتوری که وجود دارند:
+سه کانکتوری که وجود دارند:
 
 - کانکتور **3X-UI** (`Drivers/ThreeXui`) نسخه v3 از API پنل را هدف می‌گیرد: `ThreeXuiClient` (یک توکن API به‌صورت
   Bearer، یا ورود با کوکی — توکن CSRF دوباره فرستاده می‌شود، و وقتی رمزی نگه داشته شده یک کد TOTP هم —، که پس از یک رد
@@ -180,6 +181,16 @@
   محدودیت IP برای هر کاربر ندارد، پس تعداد دستگاه یک پلن آنجا اعمال نمی‌شود. نام کاربری ۳ تا ۱۲۸ حرف، رقم و
   <code dir="ltr">_ - . @</code> است، و هرگز دو تا از این نشانه‌ها کنار هم نمی‌آیند؛ کاربری که در یک ویرایش خاموش نگه داشته
   می‌شود `disabled` است با مدتش (کاربری که هنوز on hold است مدتش را برای روشن شدن دوباره نگه می‌دارد).
+- کانکتور **HMPanel** (`Drivers/HmPanel`، 2.5+)، پنلی بالای چند پنل 3x-ui: `HmPanelClient` (API کلید آن زیر
+  <code dir="ltr">/api/v1</code>، با یک کلید <code dir="ltr">hmp_…</code> به‌صورت Bearer — تنها راه ورود: متد
+  <code dir="ltr">PanelCredentials::fields()</code> بدون `loginHint` فقط توکن را عرضه می‌کند) و `HmPanelProvider`. کلاینت
+  با نامش از راه <code dir="ltr">/v1/clients/lookup</code> پیدا می‌شود و بعد با شناسه خود HMPanel صدا زده می‌شود، که
+  کلاینت نگه می‌دارد؛ اینباندها مال پنل‌های 3x-ui آن هستند، با کلید <code dir="ltr">&lt;panel id&gt;:&lt;inbound id&gt;</code>،
+  و فروشی روی اینباندهای دو پنل پیش از فرستادن رد می‌شود (هر کلاینت روی یک پنل است). مدت و محدودیت دستگاهش همان 3x-ui
+  است که منتقل می‌شود (<code dir="ltr">ThreeXui\Support\ExpiryTime</code>). وضعیت ندارد (API کلیدش آمار هاست ندارد) و
+  تغییر لینک هم ندارد؛ لینکی که ادعا می‌شود را خود پنل جستجو می‌کند و فقط با یکی از رازهای کلاینت — توکن، Sub ID یا
+  UUID آن — حساب می‌شود، هرگز با نامش. کلید به‌طور پیش‌فرض در دقیقه 60 درخواست جواب می‌گیرد: پاسخ 429 خطای
+  نوع `HmPanelApiException` است که پنل را دور از دسترس حساب می‌کند، پس سرور مدتی کنار گذاشته می‌شود.
 
 ## درگاه پرداخت
 
@@ -252,7 +263,8 @@
   (با شماره مرجعش)، <code dir="ltr">waiting()</code> یا <code dir="ltr">closed()</code> — و هرگز حرف یک Callback را
   باور نمی‌کند. <code dir="ltr">waiting(moneyIn: true)</code> می‌گوید درگاه پولی بابت آن گرفته که هنوز تسویه نکرده است
   (رسیدی در حال بررسی، مبلغی که بخشی از آن پرداخت شده): فروشگاه پرداخت را علامت می‌زند (`invoice.money_in`) و بعد از دو
-  ساعت معمول هم درباره‌اش می‌پرسد، تا ۴۸ ساعت پس از بسته شدن صفحه‌اش — بعد آن را برای پشتیبانی نگه می‌دارد. پرداختی
+  ساعت معمول هم درباره‌اش می‌پرسد، تا ۴۸ ساعت پس از بسته شدن صفحه‌اش — بعد آن را برای پشتیبانی نگه می‌دارد (هر دو
+  پیش‌فرض‌اند و مالک فروشگاه آن‌ها را در [«زمان‌بندی کارها»](Running-In-Production.md#زمان‌بندی-کارها) تعیین می‌کند). پرداختی
   که این علامت را دارد و درگاه بعد درباره‌اش <code dir="ltr">closed()</code> پاسخ می‌دهد، همان لحظه برای پشتیبانی نگه
   داشته می‌شود؛
 - متدهای <code dir="ltr">initiate($payment)</code> و <code dir="ltr">settle()</code> برای همه درگاه‌های آنلاین یکسان‌اند،
@@ -277,7 +289,7 @@
 دست دارد تسویه نمی‌کنند —، آدرس Callback، <code dir="ltr">/payments/callback/{payment}/{secret}</code> — با رمزی مال خود
 پرداخت؛ فراخوانی آنجا فقط باعث می‌شود فروشگاه از درگاه بپرسد، حداکثر چند بار در دقیقه برای یک پرداخت، و به فراخوانی
 بیش از آن از روی وضعیت فعلی پرداخت پاسخ داده می‌شود —، زمان‌بند که هر از گاهی درباره هر پرداختی که هنوز پرداخت نشده
-می‌پرسد (`Tasks\OnlinePaymentsTask`) تا دو ساعت پس از بسته شدن صفحه‌اش — درگاه ممکن است دیر پول بگیرد —، «بررسی» ربات
+می‌پرسد (`Tasks\OnlinePaymentsTask`) به‌طور پیش‌فرض تا دو ساعت پس از بسته شدن صفحه‌اش — درگاه ممکن است دیر پول بگیرد —، «بررسی» ربات
 و وب‌سایت برای کاربر و بررسی پنل‌ها برای پشتیبانی؛ پرداخت پرداخت‌شده سفارشش را یک بار تسویه می‌کند و یک بار به کاربر خبر
 می‌دهد، و پولی که درگاه پس از بسته شدن سفارشش گرفته به کیف پول کاربر می‌رود. تست، نسخه‌ای فیک از API درگاه را زیر
 کلاینت خروجی فروشگاه می‌گذارد، همان‌طور که `Tests\Support\FakeCubePay`، `FakeZarinpal`، `FakeAtlasPay`، `FakeAban`،
@@ -375,6 +387,38 @@ Origin فروشگاه را به‌عنوان Referrer می‌فرستد)، و ب
    فرمش تطبیق می‌دهد.
 5. **ساختن دوباره مرجع**: `php scripts/docs.php` تنظیمات آن را به
    [مرجع config.php (انگلیسی)](../Config-Reference.md#mail) اضافه می‌کند.
+
+## درایور پیامک
+
+راهی که کدهای یکبار مصرف فروشگاه با پیامک فرستاده می‌شوند — ورود با شماره موبایل در یک وب‌سایت ([پیامک](Sms.md)).
+
+1. **درایور** — `app/Core/Sms/Drivers/<Name>.php`، که `SmsDriver` را پیاده‌سازی می‌کند:
+   - متد <code dir="ltr">key()</code> — آنچه `SMS_DRIVER` نگه می‌دارد (`none` درایور نیست: یعنی بدون پیامک)؛
+   - متد <code dir="ltr">describe()</code> — برچسب، توصیف و یادداشت‌هایش، و فرمش: تنظیمات <code dir="ltr">SMS_\*</code>
+     خودش، هر کدام زیر تنظیم `config.php` خودش؛ کلید یک `Secret` با `missing` است، وابسته به آدرس API وقتی فرم چنین
+     فیلدی دارد (مثل کلید IPPanel، با <code dir="ltr">Secret::byOrigin()</code>)؛
+   - متد <code dir="ltr">sender(values)</code> — `SmsSender`ی که آن تنظیمات می‌سازند، یا یک `SmsSettingsException` وقتی
+     هیچ فرستنده‌ای نمی‌سازند (لاگ دلیلش را می‌گوید، و هیچ کدی فرستاده نمی‌شود). متد
+     <code dir="ltr">sendCode($to, $code)</code> آن فقط خود کد را می‌فرستد — متن دور آن الگوی تاییدشده سامانه پیامک است،
+     و <code dir="ltr">$to</code> به شکل E.164 — روی تنها کلاینت خروجی فروشگاه، `GuzzleHttp\ClientInterface` (همان‌طور که
+     کلاس `Core\Sms\IpPanelSender` می‌فرستد: بدون دنبال کردن redirect، با مهلتی که بازدیدکننده بتواند صبر کند)، و وقتی سامانه
+     آن را نپذیرد <code dir="ltr">SmsFailedException::because($reason)</code> می‌اندازد: حرف خود سامانه، کوتاه، و هرگز
+     کلید؛ و نه exception کلاینت، که درخواست و همراهش کلید را دارد. فرستنده‌ای که سامانه‌اش اعتبار حساب را می‌گوید،
+     رابط `ReportsCredit` را هم پیاده‌سازی می‌کند (<code dir="ltr">credit()</code>، یک `SmsCredit` به واحد خود سامانه)،
+     که «تنظیمات پنل › پیامک» نشانش می‌دهد.
+2. **ثبت آن** در `bootstrap/container.php`: آن را به `sms.drivers` اضافه کنید.
+   <code dir="ltr">SmsSenders::fromConfig()</code> فرستنده‌ای را که `config.php` نام می‌برد، یک بار در هر پروسه، می‌سازد:
+   همان `sms.sender` کانتینر، که `Core\Sms\Sms` از راه آن می‌فرستد.
+3. **توصیف درخواستش**: کلیدش در enum مربوط به `SmsDriver`، و یک `Sms<Name>Request` در `oneOf` مربوط به
+   درخواست `ConfigSmsRequest` (`driver`، فیلدهایش و `agents`)، بعد `pnpm api:types`. «تنظیمات پنل › پیامک» آن را از
+   روی توصیفش رسم می‌کند.
+4. **تست‌ها**: یک تست واحد مثل `tests/Unit/Core/Sms/IpPanelTest.php` — کارت و فرمش، درخواستی که می‌فرستد (آدرس،
+   هدرها و بدنه‌اش)، پاسخ‌ها و ردهای سامانه، در دسترس نبودنش، و نبودن کلید در هیچ خطایی —، ساخته شدن فرستنده‌اش از روی
+   فایل `config.php` در `tests/Unit/Core/Sms/SmsSendersTest.php`، و یک ذخیره در `tests/Feature/SmsSettingsApiTest.php`. جاهای
+   دیگر، تست‌ها از راه `Tests\Fakes\RecordingSmsSender` می‌فرستند، که در هر تست `sms.sender` کانتینر است
+   (<code dir="ltr">TestCase::sms()</code>). `DriverFormsTest` خودش درخواستش را با فرمش تطبیق می‌دهد.
+5. **ساختن دوباره مرجع**: `php scripts/docs.php` تنظیمات آن را به
+   [مرجع config.php (انگلیسی)](../Config-Reference.md#sms) اضافه می‌کند.
 
 ## درایور کپچا
 

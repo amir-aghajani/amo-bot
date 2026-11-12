@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Core\Scheduling\Scheduler;
+use App\Modules\Bots\Models\Bot;
 use App\Modules\Notifications\Enums\NoticeType;
 use App\Modules\Notifications\Models\Notification;
 use App\Modules\Orders\DTO\OrderKey;
@@ -33,6 +34,8 @@ use App\Modules\Payments\Services\PaymentActions;
 use App\Modules\Payments\Services\PaymentMethods;
 use App\Modules\Payments\Services\PaymentService;
 use App\Modules\Payments\Tasks\OnlinePaymentsTask;
+use App\Modules\Settings\Services\ScheduleSettings;
+use App\Modules\Settings\Services\Settings;
 use App\Modules\Telegram\Models\ReportMessage;
 use App\Modules\Telegram\Reports\Topic;
 use App\Modules\Users\Models\User;
@@ -73,7 +76,7 @@ final class OnlinePaymentsTest extends HttpTestCase
     public function testTheTaskAsksEveryMinuteInEveryShop(): void
     {
         self::assertSame(
-            ['task' => OnlinePaymentsTask::class, 'interval' => 60, 'eachBot' => true],
+            ['task' => OnlinePaymentsTask::class, 'key' => 'online_payments', 'interval' => 60, 'eachBot' => true],
             $this->service(Scheduler::class)->tasks()[OnlinePaymentsTask::class],
         );
     }
@@ -334,7 +337,7 @@ final class OnlinePaymentsTest extends HttpTestCase
         $task->run();
         self::assertCount(1, $this->cubePay->callsTo(CubePayGateway::VERIFY), 'not asked again within its minutes');
 
-        Carbon::setTestNow(now()->addMinutes(OnlinePaymentsTask::CHECK_MINUTES));
+        Carbon::setTestNow(now()->addMinutes(ScheduleSettings::CHECK_MINUTES));
         $this->cubePay->pay((string) $payment->reference);
         $task->run();
         self::assertSame(PaymentStatus::Paid, $payment->refresh()->status);
@@ -346,9 +349,27 @@ final class OnlinePaymentsTest extends HttpTestCase
         Carbon::setTestNow(now()->addMinutes(29));
         $task->run();
         self::assertSame(PaymentStatus::Pending, $quiet->refresh()->status, 'within its page\'s time and the late window');
-        Carbon::setTestNow(now()->addHours(OnlinePaymentsTask::LATE_HOURS)->addMinutes(2));
+        Carbon::setTestNow(now()->addHours(ScheduleSettings::LATE_HOURS)->addMinutes(2));
         $task->run();
         self::assertSame(PaymentStatus::Failed, $quiet->refresh()->status);
+    }
+
+    public function testTheTaskAsksAsOftenAsTheOwnerSays(): void
+    {
+        $this->service(Settings::class)->set('schedule.online_payments_check_minutes', 10, Bot::MAIN);
+        $payment = $this->topUp('50000')->payment();
+        $task = $this->service(OnlinePaymentsTask::class);
+        $verifies = fn(): int => count($this->cubePay->callsTo(CubePayGateway::VERIFY));
+
+        $task->run();
+        self::assertSame(1, $verifies());
+        Carbon::setTestNow(now()->addMinutes(ScheduleSettings::CHECK_MINUTES));
+        $task->run();
+        self::assertSame(1, $verifies(), 'the default\'s minutes are not the owner\'s ten');
+        Carbon::setTestNow(now()->addMinutes(10));
+        $task->run();
+        self::assertSame(2, $verifies());
+        self::assertSame(PaymentStatus::Pending, $payment->refresh()->status);
     }
 
     public function testALatePaymentOnAClosedPageIsStillFoundByTheTask(): void
@@ -363,7 +384,7 @@ final class OnlinePaymentsTest extends HttpTestCase
 
         // The merchant approves a late receipt at CubePay, and its callback is lost: the task finds it, less often now.
         $this->cubePay->pay((string) $payment->reference);
-        Carbon::setTestNow(now()->addMinutes(OnlinePaymentsTask::LATE_CHECK_MINUTES - 1));
+        Carbon::setTestNow(now()->addMinutes(ScheduleSettings::LATE_CHECK_MINUTES - 1));
         $task->run();
         self::assertSame(PaymentStatus::Failed, $payment->refresh()->status, 'not asked again so soon');
         Carbon::setTestNow(now()->addMinutes(2));
@@ -376,7 +397,7 @@ final class OnlinePaymentsTest extends HttpTestCase
         $this->cubePay->close((string) $quiet->reference);
         Carbon::setTestNow(now()->addMinutes(31));
         $task->run();
-        Carbon::setTestNow(now()->addHours(OnlinePaymentsTask::LATE_HOURS));
+        Carbon::setTestNow(now()->addHours(ScheduleSettings::LATE_HOURS));
         $asked = count($this->cubePay->calls);
         $task->run();
         self::assertCount($asked, $this->cubePay->calls);
@@ -431,7 +452,7 @@ final class OnlinePaymentsTest extends HttpTestCase
 
         // Left out of the task: never asked again, never closed, and no word of it in the log run after run.
         foreach ([1, 2, 3] as $run) {
-            Carbon::setTestNow(now()->addHours(OnlinePaymentsTask::LATE_HOURS + 1));
+            Carbon::setTestNow(now()->addHours(ScheduleSettings::LATE_HOURS + 1));
             $this->service(OnlinePaymentsTask::class)->run();
         }
         self::assertSame(PaymentStatus::Pending, $payment->refresh()->status);
@@ -582,10 +603,10 @@ final class OnlinePaymentsTest extends HttpTestCase
         $verifies = fn(): int => count($this->cubePay->callsTo(CubePayGateway::VERIFY));
 
         // Past its late hours: never closed, asked as often as a closed page is.
-        Carbon::setTestNow($closed->copy()->addHours(OnlinePaymentsTask::LATE_HOURS + 1));
+        Carbon::setTestNow($closed->copy()->addHours(ScheduleSettings::LATE_HOURS + 1));
         $task->run();
         $asked = $verifies();
-        Carbon::setTestNow(now()->addMinutes(OnlinePaymentsTask::LATE_CHECK_MINUTES - 1));
+        Carbon::setTestNow(now()->addMinutes(ScheduleSettings::LATE_CHECK_MINUTES - 1));
         $task->run();
         self::assertSame($asked, $verifies(), 'not asked again so soon');
         Carbon::setTestNow(now()->addMinutes(2));
@@ -594,7 +615,7 @@ final class OnlinePaymentsTest extends HttpTestCase
         self::assertSame(PaymentStatus::Pending, $payment->refresh()->status);
 
         // Its order expires as any idle one does; the payment, cancelled with it, is asked on all the same.
-        Carbon::setTestNow($payment->updated_at->copy()->addHours(ExpireOrdersTask::EXPIRE_HOURS)->addMinute());
+        Carbon::setTestNow($payment->updated_at->copy()->addHours(ScheduleSettings::ORDER_HOURS)->addMinute());
         $this->service(ExpireOrdersTask::class)->run();
         self::assertSame([PaymentStatus::Cancelled, OrderStatus::Cancelled], [$payment->refresh()->status, $payment->order->status]);
         $asked = $verifies();
@@ -603,7 +624,7 @@ final class OnlinePaymentsTest extends HttpTestCase
         self::assertFalse(OnlinePayments::isHeld($payment->refresh()));
 
         // REVIEW_HOURS after its page closed: support's, told in «خطاها», and asked no more.
-        Carbon::setTestNow($closed->copy()->addHours(OnlinePaymentsTask::REVIEW_HOURS)->addMinute());
+        Carbon::setTestNow($closed->copy()->addHours(ScheduleSettings::REVIEW_HOURS)->addMinute());
         $task->run();
         $payment->refresh();
         self::assertTrue(OnlinePayments::isHeld($payment));

@@ -1,7 +1,7 @@
 {
   "name": "amo-bot-panel",
   "private": true,
-  "description": "AmoBot's React panels — the owner's and an agent's (built to public/admin, public/agent and public/assets)",
+  "description": "AmoBot's React panels — the owner's and an agent's (built to public/admin, public/agent and public/assets) — and the shops' Telegram mini app (public/app)",
   "license": "MIT",
   "homepage": "https://github.com/amir-aghajani/amo-bot#readme",
   "repository": {
@@ -18,18 +18,20 @@
   },
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit -p tsconfig.json && vite build",
+    "build": "tsc --noEmit -p tsconfig.json && vite build && vite build --mode app",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "lint": "oxlint --deny-warnings resources/panel/src",
     "format": "prettier --write \"resources/panel/src/**/*.{ts,tsx,css}\" \"resources/panel/*/index.html\" vite.config.ts \"scripts/*.mjs\" knip.jsonc .oxlintrc.json",
     "format:check": "prettier --check \"resources/panel/src/**/*.{ts,tsx,css}\" \"resources/panel/*/index.html\" vite.config.ts \"scripts/*.mjs\" knip.jsonc .oxlintrc.json",
     "api:types": "node scripts/api-types.mjs",
+    "settings:index": "node scripts/settings-index.mjs",
     "test": "vitest run",
     "knip": "knip",
-    "check": "node scripts/api-types.mjs --check && pnpm typecheck && pnpm lint && pnpm knip && pnpm format:check && pnpm test"
+    "check": "node scripts/api-types.mjs --check && node scripts/settings-index.mjs --check && pnpm typecheck && pnpm lint && pnpm knip && pnpm format:check && pnpm test"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.104.5",
+    "@twa-dev/sdk": "^8.0.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lottie-web": "^5.13.0",

@@ -32,9 +32,9 @@ The session's sign-in is too old to change how the account signs in, or to hand 
 
 ### Response: StaffRefused
 
-The website's admin API refused the request. The reasons: the customer is not an admin of the shop («این بخش فقط برای پشتیبانی فروشگاه است.»); the website lets no admins in; the session was signed in with a password alone while the website asks for a strong sign-in (`WWW-Authenticate` names the strong ways, and `POST /me/reauthenticate` can prove one); the session's sign-in is older than 12 hours (any operation; SignInAgain's challenge); the website has not granted the operation; a granted operation, or a payment approval, with a sign-in older than 15 minutes (SignInAgain's challenge); a decision about the admin themselves (their own payment approved or refunded, their own wallet, an order made by hand for them, their own service changed: days and traffic, switched off or on, moved, handed on, deleted; their own review moderated; an alert on their own referrals cleared); an admin's account, their own included, or an agent's (banned, put in a customer group, its two-factor sign-in turned off, its sessions ended); «همکار» switched on for a customer group an admin is in; a payment approved without a receipt in review; or a banned customer.
+The website's admin API refused the request. The reasons: the customer is not an admin of the shop («این بخش فقط برای پشتیبانی فروشگاه است.»); the website lets no admins in; the session was signed in by the mini app's launch data (`GET /me`'s `session.method` mini_app: the mini app is the customer side alone, and no way proven since changes that — sign in on the website itself; «کار مدیریت با ورود مینی‌اپ ممکن نیست؛ در خود وب‌سایت وارد شوید.»); the session was signed in with a password alone while the website asks for a strong sign-in (`WWW-Authenticate` names the strong ways, and `POST /me/reauthenticate` can prove one); the session's sign-in is older than 12 hours (any operation; SignInAgain's challenge); the website has not granted the operation; a granted operation, or a payment approval, with a sign-in older than 15 minutes (SignInAgain's challenge); a decision about the admin themselves (their own payment approved or refunded, their own wallet, an order made by hand for them, their own service changed: days and traffic, switched off or on, moved, handed on, deleted; their own review moderated; an alert on their own referrals cleared); an admin's account, their own included, or an agent's (banned, put in a customer group, its two-factor sign-in turned off, its sessions ended); «همکار» switched on for a customer group an admin is in; a payment approved without a receipt in review; or a banned customer.
 
-- Header `WWW-Authenticate`: `Bearer error="insufficient_user_authentication", acr_values="telegram google password_2fa"` (RFC 9470) for a sign-in that is too weak; `Bearer error="insufficient_user_authentication", max_age=900` for one that is too old; absent otherwise.
+- Header `WWW-Authenticate`: `Bearer error="insufficient_user_authentication", acr_values="telegram google password_2fa phone_2fa"` (RFC 9470) for a sign-in that is too weak; `Bearer error="insufficient_user_authentication", max_age=900` for one that is too old; absent otherwise.
 - Body: [ErrorResponse](#errorresponse).
 
 ### Response: NoContent
@@ -42,6 +42,12 @@ The website's admin API refused the request. The reasons: the customer is not an
 Done; no body
 
 - Body: none.
+
+### Response: Backup
+
+A backup file, to save (an attachment): gzip of JSON lines — a header, each table's columns and rows, the rows each held, and an HMAC signature by this installation's key.
+
+- Body: the bytes, as `application/gzip`.
 
 ### Response: Picture
 
@@ -742,9 +748,9 @@ A payment, as a row of the payments screen.
 | `refund_note` | string or null | yes |  |
 | `paid_at` | string (date-time) or null | yes |  |
 | `link_expires_at` | string (date-time) or null | yes | An online payment's page on its gateway: until when it takes money — the gateway's own end, or the time the shop keeps its page when the gateway gives none. Null for any other payment, and for one its gateway would not open. |
-| `checked_at` | string (date-time) or null | yes | An online payment: when the shop last asked its gateway what came of it — its callback, the customer's question, «استعلام از درگاه» (`POST …/check`), or the scheduler every few minutes while it is open. Null until asked. |
+| `checked_at` | string (date-time) or null | yes | An online payment: when the shop last asked its gateway what came of it — its callback, the customer's question, «استعلام از درگاه» (`POST …/check`), or the scheduler every few minutes by default while it is open. Null until asked. |
 | `to_wallet` | boolean | yes | Paid after its order had closed (paid another way, cancelled or expired): the online gateway took the money when the order no longer waited for it, so it went to the customer's wallet («پرداخت آنلاین #12 پس از بسته شدن سفارش #7») and `description` says so. It paid nothing of the order: it is neither retried nor refunded here. |
-| `held` | boolean | yes | An online payment held for support: its gateway took money on it that does not fit — for another order or amount, or less than asked that the customer accepted (AtlasPay) —, kept money on it unsettled for two days after its page closed, or closed it after saying money had come in on it (held at once). `description` says why. It is never asked about again, and only «لغو پرداخت» is offered here, once support has settled it with the customer at the gateway; while it is still waiting (pending, or failed with its page), its order never expires and nothing of it is paid any other way — cancelled, it holds nothing. |
+| `held` | boolean | yes | An online payment held for support: its gateway took money on it that does not fit — for another order or amount, or less than asked that the customer accepted (AtlasPay) —, kept money on it unsettled for two days (by default) after its page closed, or closed it after saying money had come in on it (held at once). `description` says why. It is never asked about again, and only «لغو پرداخت» is offered here, once support has settled it with the customer at the gateway; while it is still waiting (pending, or failed with its page), its order never expires and nothing of it is paid any other way — cancelled, it holds nothing. |
 | `created_at` | string (date-time) or null | yes |  |
 | `actions` | object | yes | Which operations its current state allows (the server decides). |
 | `actions.approve` | boolean | yes |  |
@@ -782,6 +788,12 @@ String: `pending`, `awaiting_review`, `paid`, `failed`, `cancelled`, `refunded`.
 | `meta.paid` | integer | yes | How many of the listed payments (tab, search and dates) are paid. |
 | `meta.paid_amount` | string | yes | Their total, in Toman. |
 
+### PlanBadge
+
+The label a plan's card wears in the mini app and on the website: `bestseller` («پرفروش‌ترین»), `recommended` («پیشنهاد ما») or `vip` («VIP»).
+
+String: `bestseller`, `recommended`, `vip`.
+
 ### PlanCategoriesResponse
 
 | Field | Type | Required | What it is |
@@ -810,6 +822,7 @@ A plan category.
 |---|---|---|---|
 | `id` | integer | yes |  |
 | `name` | string | yes |  |
+| `emoji_id` | string or null | yes | The premium emoji the bot draws for the name's leading emoji (Telegram's custom emoji id): on its buttons as their icon, in its texts in the emoji's place. The name itself stays plain everywhere else. Null for none. |
 | `is_active` | boolean | yes |  |
 | `sort` | integer | yes |  |
 | `counts` | object | yes |  |
@@ -883,6 +896,7 @@ A plan, as the list shows it.
 | `id` | integer | yes |  |
 | `category` | [PlanCategoryRef](#plancategoryref) or null | yes | Null when uncategorised (listed under "سایر پلن‌ها" when the shop has categories). |
 | `name` | string | yes |  |
+| `emoji_id` | string or null | yes | The premium emoji the bot draws for the name's leading emoji (Telegram's custom emoji id): on its buttons as their icon, in its texts in the emoji's place. The name itself stays plain everywhere else. Null for none. |
 | `description` | string or null | yes |  |
 | `price` | string | yes |  |
 | `first_purchase_price` | string or null | yes | The price of a customer's first purchase in the shop («قیمت خرید اول»), below `price`; "0.00" makes the first purchase free. Null for none: everyone pays `price`. Renewals are always at `price`. |
@@ -890,6 +904,7 @@ A plan, as the list shows it.
 | `checkout_note` | string or null | yes | A note shown under the bot's checkout for this plan («یادداشت پیش‌فاکتور»), for purchases and renewals; null for none. |
 | `button_style` | [ButtonStyle](#buttonstyle) or null | yes | The colour of its button in the bot's plan list; null for the client's default. |
 | `button_row` | integer, at least 1 | yes | How many buttons share its row there: 1 for a row of its own, or 2 or 3 (consecutive buttons with the same number share rows). |
+| `badge` | [PlanBadge](#planbadge) or null | yes | The label its card wears in the mini app and on the website; null for none. |
 | `duration_days` | integer | yes | The term in whole days, rounded up; 0 only for no time limit. `duration_hours` is exact. |
 | `duration_hours` | integer | yes | The term in hours from the first connection (a daily plan's is days × 24); 0 for no time limit. |
 | `traffic_gb` | number | yes | Gigabytes, decimals allowed; 0 for unlimited |
@@ -1254,7 +1269,7 @@ A service, as a row of the subscriptions screen: a client on a panel, as last re
 | `last_synced_at` | string (date-time) or null | yes | When the panel was last read for it; the numbers are from then. |
 | `disabled_at` | string (date-time) or null | yes |  |
 | `ended_at` | string (date-time) or null | yes | When it ended: the deadline it passed, or when the shop found its traffic used up or its client gone from the panel. Null while it runs, and past a deadline until the shop next reads its panel. |
-| `removes_at` | string (date-time) or null | yes | When the shop removes it from its panel and the shop by itself, by its rules now: `expired_cleanup_hours` after it ended while `expired_cleanup` is on; a test, while `test_cleanup` is on, `test_cleanup_hours` after it ended — or, never connected, `test_unused_days` after it was made. Null when no rule removes it: it runs (a test never connected aside), it is switched off, or the rule is off. A moment already past: it goes at the next check (every 15 minutes), unless an order of it is still open. |
+| `removes_at` | string (date-time) or null | yes | When the shop removes it from its panel and the shop by itself, by its rules now: `expired_cleanup_hours` after it ended while `expired_cleanup` is on; a test, while `test_cleanup` is on, `test_cleanup_hours` after it ended — or, never connected, `test_unused_days` after it was made. Null when no rule removes it: it runs (a test never connected aside), it is switched off, or the rule is off. A moment already past: it goes at the next check (every 15 minutes by default, «زمان‌بندی کارها»), unless an order of it is still open. |
 | `created_at` | string (date-time) or null | yes |  |
 | `actions` | object | yes | Which operations its current state allows (the server decides). |
 | `actions.sync` | boolean | yes |  |
@@ -1303,7 +1318,7 @@ A message's picture. Its bytes are at the message's attachment address (`…/mes
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `name` | string | yes | Its file name, from the sender's device or generated. |
-| `kept` | boolean | yes | Whether the file is still stored. Uploaded pictures are deleted 30 days after the ticket closes (reopening keeps the pictures still there; deleted ones do not come back). When false, the message still shows it had a picture, and its address is a 404. |
+| `kept` | boolean | yes | Whether the file is still stored. Uploaded pictures are deleted 30 days (by default, «زمان‌بندی کارها») after the ticket closes (reopening keeps the pictures still there; deleted ones do not come back). When false, the message still shows it had a picture, and its address is a 404. |
 
 ### TicketAuthor
 
@@ -1518,6 +1533,12 @@ One line of a customer's wallet ledger.
 ### WalletTransactionType
 
 String: `credit`, `debit`.
+
+### WheelPrizeKind
+
+What a lucky wheel slice gives: `nothing` («پوچ»), Toman in the wallet (`wallet`), GB of `traffic` or `days` on one of the customer's running services, or a free service of a `plan`.
+
+String: `nothing`, `wallet`, `traffic`, `days`, `plan`.
 
 ### WholeNumberInput
 

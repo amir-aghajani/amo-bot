@@ -2,14 +2,16 @@ import { clsx, type ClassValue } from 'clsx'
 import { extendTailwindMerge } from 'tailwind-merge'
 
 /*
- * tailwind-merge has to know the panel's own type scale (index.css @theme): `text-footnote` is a size, not a colour.
- * Unknown `text-*` names count as colours, so without this a size and a colour on one element (`text-body` and
- * `text-primary-foreground` on a button) would cancel each other and the colour would be dropped.
+ * tailwind-merge has to know the panels' and the mini app's own scales (index.css and apps/app/app.css @theme):
+ * `text-footnote` is a size, not a colour, and `rounded-card` a radius. Unknown `text-*` names count as colours, so
+ * without this a size and a colour on one element (`text-body` and `text-primary-foreground` on a button) would cancel
+ * each other and the colour would be dropped; an unknown radius would not give way to a later one.
  */
 const twMerge = extendTailwindMerge({
   extend: {
     theme: {
-      text: ['caption', 'footnote', 'body', 'heading', 'subtitle', 'title', 'stat', 'display'],
+      text: ['micro', 'caption', 'footnote', 'body', 'heading', 'subtitle', 'title', 'stat', 'display'],
+      radius: ['card', 'control'],
     },
   },
 })

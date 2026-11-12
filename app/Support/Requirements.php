@@ -41,6 +41,7 @@ final class Requirements
             self::requirement('ext-openssl', 'افزونه openssl، برای رمزنگاری', extension_loaded('openssl')),
             self::requirement('ext-bcmath', 'افزونه bcmath، برای حساب مبلغ‌ها', extension_loaded('bcmath')),
             self::requirement('ext-fileinfo', 'افزونه fileinfo، برای تشخیص نوع فایل', extension_loaded('fileinfo')),
+            self::requirement('ext-zlib', 'افزونه zlib، برای فایل‌های پشتیبان', extension_loaded('zlib')),
             // A request needs a few tens of MB; drawing a QR card on its picture, some more.
             self::requirement('memory_limit >= 64M', 'حافظه PHP (memory_limit) دست‌کم 64M', self::memoryLimit() === -1 || self::memoryLimit() >= 64 * 1024 * 1024),
             self::requirement('storage/ writable', 'اجازه نوشتن در پوشه storage', is_writable($this->app->storagePath())),

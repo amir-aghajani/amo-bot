@@ -4,7 +4,8 @@ declare(strict_types=1);
 
 /*
  * The front controller for everything PHP answers (the API, webhooks, cron). The document root should be this folder;
- * on shared hosting the root .htaccess forwards here. The panels (admin/, agent/, assets/) are static files.
+ * on shared hosting the root .htaccess forwards here. The panels (admin/, agent/, assets/) and the mini app (app/) are
+ * static files.
  */
 
 use App\Core\Http\ErrorHandler;
@@ -18,20 +19,20 @@ use App\Modules\Updates\Maintenance;
 header_remove('X-Powered-By');
 ini_set('display_errors', '0');
 
-// Under `php -S … public/index.php`, do what public/.htaccess does: real files as they are, any other /admin or /agent
-// address that panel's page.
+// Under `php -S … public/index.php`, do what public/.htaccess does: real files as they are, any other /admin, /agent or
+// /app address that page.
 if (PHP_SAPI === 'cli-server') {
     $path = (string) parse_url((string) ($_SERVER['REQUEST_URI'] ?? ''), PHP_URL_PATH);
     if ($path !== '/' && is_file(__DIR__ . $path)) {
         return false;
     }
     // A build file that is not there is a 404, never a page (see public/.htaccess).
-    if (str_starts_with($path, '/assets/')) {
+    if (str_starts_with($path, '/assets/') || str_starts_with($path, '/app/assets/')) {
         http_response_code(404);
 
         return true;
     }
-    if (preg_match('~^/(admin|agent)(/|$)~', $path, $panel) === 1) {
+    if (preg_match('~^/(admin|agent|app)(/|$)~', $path, $panel) === 1) {
         $page = __DIR__ . '/' . $panel[1] . '/index.html';
         if (!is_file($page)) {
             http_response_code(503);

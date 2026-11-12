@@ -6,6 +6,7 @@ import { DriverFields } from '@/components/driver-form/driver-fields'
 import { DriverPicker } from '@/components/driver-form/driver-picker'
 import type { DriverDescription, DriverValues, FieldDescription } from '@/lib/api-types'
 import { providers } from '@/test/render'
+import { json, server } from '@/test/server'
 
 /*
  * A driver's form drawn from its description alone (components/driver-form): each field by its kind, Latin content left
@@ -205,5 +206,39 @@ describe('the driver picker', () => {
 
     expect(screen.queryByRole('combobox')).toBeNull()
     expect(screen.getByText(/php\.ini/).textContent).toBe('ایمیل خود هاست · php.ini')
+  })
+})
+
+describe('a premium emoji field', () => {
+  const SERVER_FORM: DriverDescription = {
+    ...DRIVER,
+    key: '3x-ui',
+    fields: [field('name', { label: 'نام سرور', required: true }), field('emoji_id', { type: 'premium_emoji', label: 'ایموجی پرمیوم نام', bound_to: ['name'] })],
+  }
+
+  function ServerHarness() {
+    const [draft, setDraft] = useState<DriverDraft>(() => driverDraft(SERVER_FORM, { name: 'آلمان', emoji_id: '' }))
+    return (
+      <>
+        <DriverFields driver={SERVER_FORM} draft={draft} set={(name, value) => setDraft((current) => ({ ...current, [name]: value }))} error={() => undefined} idPrefix="s" />
+        <output data-testid="draft">{JSON.stringify(draft)}</output>
+      </>
+    )
+  }
+
+  it('picks one for the name it is bound to, its plain emoji leading that name, and is taken off again', async () => {
+    server().on('GET', '/api/admin/bot/custom-emojis', json({ emojis: [{ id: '41', emoji: '🇩🇪', format: 'static', repaint: false, updated_at: '2026-10-06T09:00:00Z' }], status: null }))
+    render(<ServerHarness />, { wrapper: providers().wrapper })
+    const draft = () => JSON.parse(screen.getByTestId('draft').textContent ?? '{}') as DriverDraft
+
+    fireEvent.click(screen.getByRole('button', { name: 'انتخاب' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'ایموجی پرمیوم 🇩🇪' }))
+    expect(draft()).toEqual({ name: '🇩🇪 آلمان', emoji_id: '41' })
+
+    type('نام سرور', 'آلمان')
+    expect(screen.getByText(/ایموجی پرمیوم جای ایموجی اول نام می‌نشیند/)).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'برداشتن' }))
+    expect(draft()).toEqual({ name: 'آلمان', emoji_id: '' })
   })
 })

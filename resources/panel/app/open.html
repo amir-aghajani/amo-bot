@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="referrer" content="no-referrer" />
+    <title>باز کردن برنامه</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        font-family: Vazirmatn, Tahoma, system-ui, sans-serif;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        background: Canvas;
+        color: CanvasText;
+      }
+      main {
+        width: min(22rem, calc(100% - 2rem));
+        text-align: center;
+        line-height: 1.7;
+      }
+      a {
+        display: block;
+        margin: 1.25rem 0 0.75rem;
+        padding: 0.9rem 1rem;
+        border-radius: 0.9rem;
+        background: #2481cc;
+        color: #fff;
+        font-weight: 700;
+        text-decoration: none;
+      }
+      p {
+        margin: 0;
+        opacity: 0.7;
+        font-size: 0.875rem;
+      }
+      #from {
+        margin-top: 1rem;
+      }
+      #host {
+        display: block;
+        margin: 0.4rem 0 0.6rem;
+        padding: 0.6rem 0.8rem;
+        border-radius: 0.75rem;
+        background: rgb(127 127 127 / 14%);
+        direction: ltr;
+        unicode-bidi: isolate;
+        font-weight: 700;
+        overflow-wrap: anywhere;
+      }
+      [hidden] {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <!--
+      The mini app's bridge to a VPN app (screens/services/parts/connect): Telegram opens only web addresses from a mini app,
+      so a service's "add to this app" address — v2rayng://, happ://, hiddify://, streisand:// — is handed to this page, in
+      Telegram's browser. The address comes after the # and never reaches the server's logs; any other scheme is refused,
+      and so is one that carries no web (http or https) subscription link. Anyone can link here, and some VPN apps add a
+      subscription without asking: so the page opens nothing by itself — it shows whose server the link is on (the
+      subscription link's host) and the app opens only from a tap on its button.
+    -->
+    <main>
+      <strong id="title">باز کردن برنامه</strong>
+      <div id="from" hidden>
+        <p>لینک اشتراکی که اضافه می‌شود از این آدرس است:</p>
+        <span id="host"></span>
+        <p>اگر این لینک را خودتان از فروشگاه نگرفته‌اید، دکمه را نزنید.</p>
+      </div>
+      <a id="open" href="#" hidden>باز کردن</a>
+      <p id="note">اگر برنامه باز نشد، آن را نصب کنید و دوباره دکمه بالا را بزنید.</p>
+    </main>
+    <script>
+      ;(function () {
+        // The host of the subscription link the app is handed — v2rayNG's in its url parameter, the others' after their
+        // command (happ://add/https://…) —; '' for no http or https address, or one whose host could be read two ways (a
+        // name and password before it, a backslash).
+        function hostOf(address) {
+          try {
+            var link = /^v2rayng:/i.test(address) ? new URL(address).searchParams.get('url') || '' : address.replace(/^[a-z0-9]+:\/\/[^/]*\//i, '')
+            if (/\\/.test(link) || /^[a-z]+:\/\/[^/?#]*@/i.test(link)) return ''
+            var url = new URL(link)
+            return url.protocol === 'https:' || url.protocol === 'http:' ? url.host : ''
+          } catch (error) {
+            return ''
+          }
+        }
+
+        var params = new URLSearchParams(location.hash.slice(1))
+        var to = params.get('to') || ''
+        var name = (params.get('name') || '').slice(0, 32)
+        var host = /^(v2rayng|happ|hiddify|streisand):\/\/\S+$/i.test(to) ? hostOf(to) : ''
+        if (host === '') {
+          document.getElementById('title').textContent = 'این لینک برنامه‌ای را باز نمی‌کند.'
+          document.getElementById('note').hidden = true
+          return
+        }
+        var button = document.getElementById('open')
+        if (name !== '') {
+          document.getElementById('title').textContent = 'افزودن سرویس به ' + name
+          button.textContent = 'باز کردن ' + name
+        }
+        document.getElementById('host').textContent = host
+        document.getElementById('from').hidden = false
+        button.href = to
+        button.hidden = false
+      })()
+    </script>
+  </body>
+</html>

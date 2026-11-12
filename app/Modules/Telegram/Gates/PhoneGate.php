@@ -13,7 +13,9 @@ use App\Modules\Telegram\Texts\BotTexts;
 /**
  * Phone verification: a customer without a verified number is asked for it (Telegram's "request_contact" button)
  * whatever they send. Only their own card counts. Once verified they are never asked again. The card then goes on
- * through the next gates to the `contact` route (the menu) — a gate never opens the menu itself.
+ * through the next gates to the `contact` route (ContactHandler: the menu) — a gate never opens the menu itself. A card
+ * that comes unasked — the gate off, a number on file, a bot admin; the mini app's «share my number» — passes as it
+ * is: nothing the shop did not ask for is stored.
  */
 final class PhoneGate implements Gate
 {

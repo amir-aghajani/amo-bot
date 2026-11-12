@@ -10,13 +10,13 @@ use App\Modules\Subscriptions\Services\AutoRenewal;
 use Psr\Log\LoggerInterface;
 
 /**
- * «تمدید خودکار» on the clock (every INTERVAL_MINUTES, each shop): renews the services that came within the admin's days
+ * «تمدید خودکار» on the clock (every INTERVAL_MINUTES by default — the owner's «زمان‌بندی کارها» —, each shop): renews the services that came within the admin's days
  * of their deadline (AutoRenewal). Each renewal asks its panel, so the run stops at its share of the scheduler's time and
  * the rest wait for the next. One renewal that breaks is logged and stops no other.
  */
 final class AutoRenewTask implements Task
 {
-    /** How often it runs: also how near its deadline a renewal by ResetTime waits to be (AutoRenewal::LAST_RUN_MINUTES). */
+    /** How often it runs, by default: also how near its deadline a renewal by ResetTime waits to be (AutoRenewal::lastRunMinutes()). */
     public const INTERVAL_MINUTES = 30;
 
     public function __construct(

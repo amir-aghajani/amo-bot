@@ -38,6 +38,7 @@ const CONFIG: ConfigSettingsResponse = {
     database: { driver: 'mysql', drivers: [{ key: 'mysql', label: 'MySQL / MariaDB', description: '', notes: [], traits: {}, fields: [] }], values: {} },
     telegram: { token: { set: false, hint: '' }, username: '', api_url: 'https://api.telegram.org', poll_timeout: 25, webhook_secret: { set: false, hint: '' } },
     mail: { transport: 'none', from_address: '', from_name: '', drivers: [], values: {} },
+    sms: { driver: 'none', agents: false, drivers: [], values: {} },
     advanced: { log_level: 'info', session_lifetime: 120, session_secure_cookie: false, http_timeout: 30, cron_token: { set: false, hint: '' } },
   },
   meta: { timezones: [], log_levels: ['info'], cron_url: null, webhook_url: 'https://shop.example.com/webhooks/telegram/…' },
@@ -57,6 +58,40 @@ describe('the panel’s settings, config.php read', () => {
     expect(path.className).toContain('break-all')
     expect(path.parentElement?.className).toContain('whitespace-normal')
     expect(path.parentElement?.className).toContain('max-w-full')
+  })
+})
+
+describe('the SMS account’s credit', () => {
+  const CREDIT = '/api/admin/settings/config/sms/credit'
+  /** SMS set up: the test card asks the provider for the account's credit — a call to IPPanel each time. */
+  const WITH_SMS: ConfigSettingsResponse = { ...CONFIG, groups: { ...CONFIG.groups, sms: { driver: 'ippanel', agents: false, drivers: [], values: {} } } }
+
+  async function showAt(at: string) {
+    server()
+      .on('GET', '/api/admin/settings/config', json(WITH_SMS))
+      .on('GET', '/api/admin/system', refusal(500, 'خطای داخلی'))
+      .on('GET', CREDIT, json({ credit: null }))
+    render(
+      <ThemeProvider>
+        <SettingsPage />
+      </ThemeProvider>,
+      { wrapper: signedIn({ at }).wrapper },
+    )
+    // The SMS section is drawn — hidden, on another section —, its test card with it.
+    await until(() => expect(document.getElementById('sms_test_to')).not.toBeNull())
+  }
+
+  it('is not asked while another section is on screen, though every section is drawn', async () => {
+    await showAt('/settings/login')
+
+    expect(document.getElementById('sms_test_to')?.closest('[hidden]')).not.toBeNull()
+    expect(server().sent('GET', CREDIT)).toHaveLength(0)
+  })
+
+  it('is asked on the SMS section', async () => {
+    await showAt('/settings/sms')
+
+    await until(() => expect(server().sent('GET', CREDIT)).toHaveLength(1))
   })
 })
 

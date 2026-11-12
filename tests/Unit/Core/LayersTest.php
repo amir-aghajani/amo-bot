@@ -25,13 +25,17 @@ final class LayersTest extends TestCase
      * that is more than a plain use of the other module's rows or services says why.
      */
     private const MODULES = [
-        // A merge offer counts the other account's services (Subscriptions).
-        'Accounts' => ['Auth', 'Bots', 'Notifications', 'Subscriptions', 'Telegram', 'Users'],
-        'Admin' => ['Accounts', 'Agency', 'Auth', 'Bots', 'Catalog', 'Discounts', 'Orders', 'Payments', 'Providers', 'Referrals', 'Reviews', 'Rewards', 'Settings', 'Store', 'Subscriptions', 'Support', 'Telegram', 'Users'],
+        // A merge offer counts the other account's services (Subscriptions); its housekeeping keeps the notices as long as the
+        // owner's «زمان‌بندی کارها» says (Settings).
+        'Accounts' => ['Auth', 'Bots', 'Notifications', 'Settings', 'Subscriptions', 'Telegram', 'Users'],
+        'Admin' => ['Accounts', 'Agency', 'Auth', 'Backups', 'Bots', 'Catalog', 'Discounts', 'Orders', 'Payments', 'Providers', 'Referrals', 'Reviews', 'Rewards', 'Settings', 'Store', 'Subscriptions', 'Support', 'Telegram', 'Users'],
         // An agent's shop opens with a wallet of its own (Payments' built-in method); an order's traffic, drawn from the agent's pool (Orders).
         'Agency' => ['Auth', 'Bots', 'Notifications', 'Orders', 'Payments', 'Settings', 'Subscriptions', 'Telegram', 'Users'],
         // An actor may be a customer — one of the shop's admins —, named by who reads the decision (Users).
         'Auth' => ['Bots', 'Users'],
+        // A backup is of a shop (Bots) or of the whole installation, as the panel's principal works in it (Auth); it goes to
+        // the shop's report group (Telegram), when it went kept with the shop's settings (Settings).
+        'Backups' => ['Auth', 'Bots', 'Settings', 'Telegram'],
         // A bot's agent, its traffic — and whether it pays for a sale, in Agency's TrafficShortException's words and the bot's
         // for traffic (Bot::trafficRefusal(), Telegram's Messages) — and what it sold (Bot::stats()); a token's bot id
         // (Telegram's BotToken).
@@ -49,8 +53,9 @@ final class LayersTest extends TestCase
         // back (Rewards' Cashback).
         'Notifications' => ['Bots', 'Discounts', 'Orders', 'Payments', 'Referrals', 'Rewards', 'Subscriptions', 'Support', 'Telegram', 'Users'],
         // What a customer pays is their price less the discounts (Discounts), an order made with a code taking one of its uses;
-        // a delivered order earns its customer their cashback and the loyalty tier it reached, after its commit (Rewards).
-        'Orders' => ['Agency', 'Auth', 'Bots', 'Catalog', 'Discounts', 'Notifications', 'Payments', 'Providers', 'Rewards', 'Subscriptions', 'Telegram', 'Users'],
+        // a delivered order earns its customer their cashback and the loyalty tier it reached, after its commit (Rewards); an
+        // unpaid one is dropped after the owner's hours («زمان‌بندی کارها», Settings).
+        'Orders' => ['Agency', 'Auth', 'Bots', 'Catalog', 'Discounts', 'Notifications', 'Payments', 'Providers', 'Rewards', 'Settings', 'Subscriptions', 'Telegram', 'Users'],
         // A refund takes an agent's traffic back (Agency), and the cashback the order earned out of what it gives (Rewards);
         // money that came in earns a referrer (Referrals). A checkout may meet a code whose last use went to someone else in
         // the same moment (Discounts' refusal, which it lets through to its door).
@@ -78,8 +83,10 @@ final class LayersTest extends TestCase
         // takes back what its order gave a service through Payments' RefundedOrders, which RefundedDeliveries
         // implements (Payments).
         'Subscriptions' => ['Agency', 'Auth', 'Bots', 'Catalog', 'Notifications', 'Orders', 'Payments', 'Providers', 'Settings', 'Telegram', 'Users'],
-        'Support' => ['Auth', 'Bots', 'Notifications', 'Subscriptions', 'Telegram', 'Users'],
-        'Telegram' => ['Agency', 'Auth', 'Bots', 'Catalog', 'Discounts', 'Notifications', 'Orders', 'Payments', 'Providers', 'Referrals', 'Reviews', 'Rewards', 'Settings', 'Subscriptions', 'Support', 'Users'],
+        // A closed ticket's pictures are kept as long as the owner's «زمان‌بندی کارها» says (Settings).
+        'Support' => ['Auth', 'Bots', 'Notifications', 'Settings', 'Subscriptions', 'Telegram', 'Users'],
+        // A customer's card in the report group shows their website sign-in and its devices (Accounts).
+        'Telegram' => ['Accounts', 'Agency', 'Auth', 'Bots', 'Catalog', 'Discounts', 'Notifications', 'Orders', 'Payments', 'Providers', 'Referrals', 'Reviews', 'Rewards', 'Settings', 'Subscriptions', 'Support', 'Users'],
         // The newest release read last is the installation's runtime state: the main bot's settings rows (Bots, Settings).
         'Updates' => ['Bots', 'Settings'],
         // Support signs a customer out or turns their two-factor sign-in off (Accounts); a newcomer's referrer (Referrals);

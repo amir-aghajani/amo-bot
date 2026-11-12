@@ -65,6 +65,11 @@
 مقدارهای پیش‌فرضی دارد برای آنچه تست به‌ندرت برایش مهم است، و <code dir="ltr">$overrides</code>، که آخر از همه ادغام
 می‌شود، برای آنچه مهم است: <code dir="ltr">customer()</code>، <code dir="ltr">webCustomer()</code>، <code dir="ltr">admin()</code>، <code dir="ltr">plan()</code>، <code dir="ltr">sellingServer()</code> (روی پنل فیک، آماده فروش)، <code dir="ltr">fakeServer()</code>، <code dir="ltr">panelServer()</code>، <code dir="ltr">cardMethod()</code>، <code dir="ltr">purchaseOrder()</code>، <code dir="ltr">cardPayment()</code>، <code dir="ltr">receipt()</code>، <code dir="ltr">subscription()</code>، <code dir="ltr">agent()</code>، <code dir="ltr">agentBot()</code>، <code dir="ltr">website()</code>، <code dir="ltr">customerSession()</code>، <code dir="ltr">ticket()</code>، <code dir="ltr">review()</code> و بیشتر.
 بعضی یک سناریوی کامل می‌سازند: <code dir="ltr">buy()</code> (پرداخت از کیف پول)، <code dir="ltr">renew()</code>، <code dir="ltr">paidByCard()</code> (رسیدی فرستاده و تایید شده)، <code dir="ltr">reportGroup()</code> (وصل‌شده، با همه تاپیک‌ها ساخته‌شده)، و کلیدهای روشن/خاموش برنامه‌ها (<code dir="ltr">referralProgram()</code>، <code dir="ltr">agencyProgram()</code>، <code dir="ltr">extrasOnSale()</code>…).
+فیکسچرهای مینی‌اپ: <code dir="ltr">miniApp()</code> (مینی‌اپ فروشگاه، روشن، با کلید فروشگاه خودش — <code dir="ltr">storeApi($door, $path)</code>
+در `HttpTestCase` آن یا یک وب‌سایت را می‌گیرد)، و <code dir="ltr">launchData($telegramId, $madeAt, $startParam, $token)</code>،
+داده راه‌اندازی‌ای که تلگرام به آن می‌دهد، امضاشده با توکن ربات اصلی (`FakeTelegram::TOKEN`) یا ربات یک نماینده
+(`FakeTelegram::AGENT_TOKEN`)؛ `Tests\Support\TelegramLaunch` چنین داده‌ای را فیلد به فیلد می‌سازد و امضا می‌کند، برای تست چیزی
+که معتبر نیست.
 موجودی‌ها دفتر تراکنش‌اند: <code dir="ltr">wallet($user, $balance)</code> و <code dir="ltr">traffic($bot, $gb)</code> همان
 یک خطی را اضافه می‌کنند که موجودی را به آن مقدار می‌رساند. هر فیکسچر ردیف‌هایش را در فروشگاه فعلی می‌سازد؛ برای فروشگاه یک نماینده آن
 را داخل <code dir="ltr">CurrentBot::run($bot, …)</code> بگذارید. متدهای <code dir="ltr">panelActor()</code>
@@ -102,12 +107,16 @@ exception پرتاب می‌کند، یک task که اجراهایش را می�
 - **لایه‌ها**: `tests/Unit/Core/LayersTest` رد می‌شود وقتی Core یا Support نام یک ماژول را بیاورد، یا وقتی ماژول‌هایی که
   یک ماژول نام می‌برد با نگاشت `MODULES` آن فرق داشته باشد ([معماری](Architecture.md#ماژول‌ها)).
 - **مسیرها**: `tests/Feature/RouteGuardsTest` هر مسیر (route) را به ترتیب از همه بررسی‌های امنیتی (guard) می‌گذراند، و
-  با ردیفی از فروشگاه دیگر هم.
+  با ردیفی از فروشگاه دیگر هم؛ `tests/Feature/Store/MiniAppDoorTest` همه مسیرهای Store API را زیر کلید یک وب‌سایت و کلید
+  مینی‌اپ می‌پرسد، و دقیقا همان‌هایی را غایب می‌یابد که توصیف API برای در دیگر `x-door` علامت زده.
 - **توصیف API**: `tests/Unit/Http/ApiDescriptionTest` فایل `resources/api/openapi.yaml` را با مسیرها هماهنگ نگه
   می‌دارد، شیءهای آن را بسته (بدون فیلد اضافه)، و قابل خواندن با ابزارهای خود یک وب‌سایت
   ([قرارداد API](API-Contract.md#چطور-طرف-php-به-آن-پایبند-می‌ماند)).
 - **ارتقاها**: `tests/Unit/Database/UpgradesTest` مطمئن می‌شود هر تغییر اسکیما ارتقای خودش را دارد
   ([دیتابیس](Database.md#ارتقاها)).
+- **پشتیبان‌ها**: `tests/Feature/Backups/BackupTablesTest` هر جدول را به یکی از نوع‌های `BackupTables`، و هر کلید
+  خارجی میان ردیف‌های یک فروشگاه و ردیف‌های مالک را به قاعده‌ای که بازگردانی می‌شناسد پایبند می‌کند
+  ([معماری](Architecture.md#پشتیبان‌گیری)).
 - **درایورها**: `tests/Unit/Drivers/DriverFormsTest` شکل درخواست هر درایور را با فرم آن هماهنگ نگه می‌دارد
   ([درایورها](Drivers.md#هسته)).
 - **کد مرده**: آشکارساز کد مرده PHPStan روی هر چیزی که هیچ چیز صدایش نمی‌زند خطا می‌دهد؛ تست صدازننده حساب نمی‌شود.
@@ -121,6 +130,12 @@ exception پرتاب می‌کند، یک task که اجراهایش را می�
 می‌کند (<code dir="ltr">providers()</code>، <code dir="ltr">signedIn()</code>)، `src/test/rows` ردیف‌های کامل API
 می‌سازد، و زمان فیک است: هیچ چیز واقعا صبر نمی‌کند. صفحه [ساختار داخلی: پنل‌ها](Internals-Panels.md) جزئیات بیشتری
 دارد.
+
+تست‌های مینی‌اپ (`src/apps/app`) در همین مجموعه اجرا می‌شوند، که صفحه‌اش پنل مالک است: هر فایل با
+<code dir="ltr">vi.mock('@/apps/app/config', () => import('@/apps/app/test/config'))</code> شروع می‌شود، که مینی‌اپ را روی
+کلید فروشگاهش می‌گذارد، و صفحه را با <code dir="ltr">screen()</code> از `src/apps/app/test/app` رندر می‌کند — واردشده، با
+<code dir="ltr">GET /</code> و `GET /me` که جواب گرفته‌اند (<code dir="ltr">shop()</code>، <code dir="ltr">account()</code>) —،
+و <code dir="ltr">telegram()</code> برای یک تلگرام فیک روی window ([ساختار داخلی: مینی‌اپ](Internals-Mini-App.md#تست‌ها)).
 
 ## مستندات
 

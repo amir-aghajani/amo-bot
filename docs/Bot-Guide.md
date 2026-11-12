@@ -30,8 +30,9 @@ keeps on.
 | Button | What it opens |
 |---|---|
 | «🔐 خرید اشتراک» | [Buying](#buying) |
+| «📱 اپلیکیشن فروشگاه» | While the shop's mini app is on: the app, where the customer does all of this and more in their own account ([Mini app](Mini-App.md)) — with inline buttons at once; from the keyboard under the text field, a screen with «📱 باز کردن اپلیکیشن», which opens it. The button beside the message box opens it too, while the shop keeps it for the app |
 | «🧪 اکانت تست» | While the shop gives tests: the servers giving one now, each with its traffic and term; a tap makes one ([a free test](#a-free-test)) |
-| «🛍️ سرویس‌های من» | The running services (and those waiting for their first connection), newest first, five a page; each opens [its screen](#a-services-screen). While the shop takes services by their link, «➕ افزودن سرویس» under them ([adding a service by its link](#adding-a-service-by-its-link)) |
+| «🛍️ سرویس‌های من» | The running services (and those waiting for their first connection), newest first, five a page, each under the name the customer gave it beside its client's, «گوشی من (amir_1)», when they gave it one in the mini app or on the website; each opens [its screen](#a-services-screen). While the shop takes services by their link, «➕ افزودن سرویس» under them ([adding a service by its link](#adding-a-service-by-its-link)) |
 | «♻️ تمدید سرویس» | The services that may be renewed — running or ended, on a plan still there, or without a plan (added by their link, or built) to pick what to renew them on —, five a page; each opens its renewal ([renewing](#renewing)) |
 | «💰 کیف پول + شارژ» | The balance («… تومان بدهی» for a debt; an agent's credit), the loyalty tier while the shop has tiers, the latest five lines, «➕ افزایش موجودی» ([the wallet](#the-wallet)) and, while the shop offers it, «💸 انتقال موجودی» on its left ([sending money](#sending-money-to-another-customer)) |
 | «👥 زیرمجموعه‌گیری» | The invite link (a tap copies it), the terms (the start gift and the plan reward while they are on), what it brought, «📤 ارسال لینک برای دوستان» — while the program runs ([Referrals](Referrals.md)) |
@@ -97,9 +98,9 @@ step says what it takes, and waits for another.
      رسید» — and one of a payment shown a card asks for its receipt here, whatever the shop does now.
    - **An online gateway** — see [paying online](#paying-online).
 
-An order left unpaid expires after 48 hours of nothing — except one whose receipt is with support, whose card payment
-went to support's private chat, whose online page still takes money, or whose online payment is held for support and
-still waits.
+An order left unpaid expires after 48 hours of nothing, by default ([the task schedule](Running-In-Production.md#the-task-schedule))
+— except one whose receipt is with support, whose card payment went to support's private chat, whose online page still
+takes money, or whose online payment is held for support and still waits.
 
 ### Paying by card
 
@@ -144,7 +145,7 @@ checkout:
   «📋 کپی مبلغ (ریال)» and «📋 کپی شماره کارت», protected as a card transfer's message is.
 
 **No receipt is sent, and none is taken.** The order is delivered once the gateway says it was paid — when it calls the
-shop back, when the customer taps «🔄 بررسی پرداخت», or when the shop asks it every few minutes; Variza's word comes by
+shop back, when the customer taps «🔄 بررسی پرداخت», or when the shop asks it, every few minutes by default; Variza's word comes by
 the webhook it signs. The customer gets the delivery as any approved payment's notice. Zarinpal, AbanGateway, Plisio,
 AqayePardakht and Variza send the customer's browser back to a page of the shop's saying what came of it, with
 «بازگشت به ربات».
@@ -326,7 +327,7 @@ recipient's message says so («🔐 صاحب قبلی این سرویس هنوز
 previous owner's screen orders nothing once it is handed on: a tap on it says the service is not theirs any more.
 
 A service with an order the customer made still open waits for it («⚠️ این سرویس الان منتقل نمی‌شود: …») — a renewal or
-an extra waiting for its payment or receipt, or being delivered. An unpaid one is dropped by itself after 48 hours,
+an extra waiting for its payment or receipt, or being delivered. An unpaid one is dropped by itself after 48 hours by default,
 unless its card transfer went to support's private chat; one whose delivery failed sends the customer to support, who
 retries it or gives the money back. A customer who looked up 10 ids in 10 minutes, or handed on 5 services in an hour,
 waits a while.
@@ -373,7 +374,7 @@ marked. A shop with one method shows no choice.
 
 A shop may hold a running service back until it nears its end («آستانه مجاز تمدید», [Bot
 settings](Bot-Settings.md#renewal)). The service is still listed in «♻️ تمدید سرویس», but a tap answers «⏳ تمدید این
-سرویس از … ممکن است.» — with the date and hour, «از ۳ روز مانده به پایان آن» for one not yet connected, or «وقتی ٪۲۰ از
+سرویس از … ممکن است.» — with the date and hour, «از ۳ روز مانده به پایان آن» for one not yet connected, or «وقتی ۲۰٪ از
 حجم یا کمتر مانده باشد» — and nothing more happens. An ended service may always be renewed.
 
 ### Extra traffic, time and devices
@@ -508,7 +509,10 @@ request — another admin decides.
 ## Watch out for
 
 - **A relabelled keyboard button** — a customer's old keyboard sends the old label once, answered with the new menu.
-- **A contact card sent at any step** goes to the menu, leaving the step.
-- **The menu's buttons for free tests, referrals, the agency, gift codes and the wheel** show only while their programs
-  run; a menu left with none of its buttons shows the shop's built-in menu instead ([the
+- **A contact card sent at any step** — the mini app's «ثبت شماره تلفن» sends one whenever it is tapped — leaves the
+  step only when the phone check takes it, the customer's number just verified: the greeting and the menu follow. Any
+  other gets a word, nothing kept, the chat left at its step: «✅ شماره شما تایید شد.» for their own number already
+  verified, «📱 ربات به این شماره نیازی ندارد و آن را ذخیره نکرد.» while the shop asks for no number.
+- **The menu's buttons for the mini app, free tests, referrals, the agency, gift codes and the wheel** show only while the
+  app is on and their programs run; a menu left with none of its buttons shows the shop's built-in menu instead ([the
   menu](Bot-Texts-And-Keyboards.md#the-menu)).

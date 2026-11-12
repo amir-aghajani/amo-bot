@@ -53,7 +53,7 @@ function Message({ ticket, customer, message }: { ticket: number; customer: User
           (message.attachment.kept ? (
             <ApiPicture path={`/tickets/${ticket}/messages/${message.id}/attachment`} alt={`تصویر ${isolate(message.attachment.name)}`} name={message.attachment.name} what="تصویر" place="thumbnail" />
           ) : (
-            <PictureNote place="thumbnail">تصویر این پیام دیگر نگه داشته نمی‌شود؛ تصویرهای آپلودشده ۳۰ روز بعد از بسته شدن تیکت پاک می‌شوند.</PictureNote>
+            <PictureNote place="thumbnail">تصویر این پیام دیگر نگه داشته نمی‌شود؛ تصویرهای آپلودشده به‌طور پیش‌فرض ۳۰ روز بعد از بسته شدن تیکت پاک می‌شوند.</PictureNote>
           ))}
       </article>
     </li>

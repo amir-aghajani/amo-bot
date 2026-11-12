@@ -55,12 +55,20 @@ function readChoice(): boolean | null {
 const isApplePlatform = /Mac|iPhone|iPad|iPod/.test(navigator.userAgent)
 
 /** A key pressed in a field — a shortcut there is the field's own. */
-function typedInto(target: EventTarget | null): boolean {
+export function typedInto(target: EventTarget | null): boolean {
   return target instanceof HTMLElement && (target.isContentEditable || target.matches('input, textarea, select'))
 }
 
 /** The modifier key as users see it in hints: "⌘" or "Ctrl". */
 export const MOD_KEY = isApplePlatform ? '⌘' : 'Ctrl'
+
+/** The modifier key as `aria-keyshortcuts` names it. */
+export const MOD_ARIA = isApplePlatform ? 'Meta' : 'Control'
+
+/** Whether a key went with the shortcut modifier: ⌘ on Apple platforms, Ctrl elsewhere. */
+export function withModifier(event: { metaKey: boolean; ctrlKey: boolean }): boolean {
+  return isApplePlatform ? event.metaKey : event.ctrlKey
+}
 
 export function ShellProvider({ panel, children }: { panel: PanelShell; children: ReactNode }) {
   // The admin's choice wins; until they make one, a rail on a narrow window — as it narrows and widens.
@@ -89,8 +97,7 @@ export function ShellProvider({ panel, children }: { panel: PanelShell; children
   // but not in a field (where it is the text editor's bold) nor under a dialog.
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      const mod = isApplePlatform ? event.metaKey : event.ctrlKey
-      if (!mod || event.altKey || event.shiftKey || event.code !== 'KeyB' || typedInto(event.target) || modalOpen()) return
+      if (!withModifier(event) || event.altKey || event.shiftKey || event.code !== 'KeyB' || typedInto(event.target) || modalOpen()) return
       event.preventDefault()
       if (isMobile) setMobileOpen((open) => !open)
       else toggleCollapsed()

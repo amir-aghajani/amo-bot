@@ -27,6 +27,7 @@ final class CustomerGroups
     public const NAME_MAX = 32;
 
     private const TAKEN = 'گروهی با این نام وجود دارد.';
+    private const GONE = 'یکی از گروه‌ها پیدا نشد؛ صفحه را دوباره باز کنید.';
 
     /** @return list<array<string, mixed>> Every group in order, with how many customers are in it. */
     public function all(): array
@@ -97,7 +98,7 @@ final class CustomerGroups
         // Whole numbers only: "2abc" or a list is no group's id.
         $ids = is_array($ids) ? array_values(array_unique(array_map(static fn(mixed $id): int => Input::integerOf($id) ?? 0, $ids))) : null;
         if ($ids === null || in_array(0, $ids, true) || CustomerGroup::query()->whereIn('id', $ids)->count() !== count($ids)) {
-            throw ValidationException::on('group_ids', 'یکی از گروه‌ها پیدا نشد؛ صفحه را دوباره باز کنید.');
+            throw ValidationException::on('group_ids', self::GONE);
         }
         if (!$actor->holds(StaffGrant::Catalog) && CustomerGroup::query()->whereIn('id', $ids)->where('agent_pricing', true)->whereDoesntHave('users', static fn(Builder $member) => $member->whereKey($user->id))->exists()) {
             throw ActorRefusedException::agentGroupNotGranted();
@@ -107,6 +108,55 @@ final class CustomerGroups
         $user->unsetRelation('groups');
 
         return $ids;
+    }
+
+    /**
+     * The customer put in one group, their others as they are — a switch that names the group and the state it asks for
+     * (the report group's), so it stands however often it is pressed: added once (a second insert of the same row is
+     * ignored), whoever switches another group meanwhile. A «همکار» group they are not in yet asks the `catalog` grant
+     * from the website, as assign() does; whose account may be put in one is UserActions::switchGroup()'s to say.
+     *
+     * @return list<int> The groups they are in now
+     * @throws ActorRefusedException 403 from the website without `catalog`, a «همکار» group added
+     * @throws ValidationException on `group_ids` when it is not a group
+     */
+    public function join(User $user, Actor $actor, int $groupId): array
+    {
+        $group = CustomerGroup::query()->find($groupId) ?? throw ValidationException::on('group_ids', self::GONE);
+        if ($group->agent_pricing && !$actor->holds(StaffGrant::Catalog) && $this->addsAgentPricing($user, [$group->id])) {
+            throw ActorRefusedException::agentGroupNotGranted();
+        }
+
+        $user->groups()->newPivotStatement()->insertOrIgnore(['customer_group_id' => $group->id, 'user_id' => $user->id]);
+
+        return self::groupsOf($user);
+    }
+
+    /**
+     * The customer taken out of one group, their others as they are (join()'s other half); a group they are not in is
+     * left so.
+     *
+     * @return list<int> The groups they are in now
+     * @throws ValidationException on `group_ids` when it is not a group
+     */
+    public function leave(User $user, int $groupId): array
+    {
+        $group = CustomerGroup::query()->find($groupId) ?? throw ValidationException::on('group_ids', self::GONE);
+        $user->groups()->detach($group->id);
+
+        return self::groupsOf($user);
+    }
+
+    /**
+     * Whether `$ids` adds the customer to a «همکار» group they are not in yet.
+     *
+     * @param array<array-key, mixed> $ids
+     */
+    public function addsAgentPricing(User $user, array $ids): bool
+    {
+        $ids = array_map(static fn(mixed $id): int => Input::integerOf($id) ?? 0, $ids);
+
+        return CustomerGroup::query()->whereIn('id', $ids)->where('agent_pricing', true)->whereDoesntHave('users', static fn(Builder $member) => $member->whereKey($user->id))->exists();
     }
 
     /** @return array<string, mixed> One row, its customers counted with it (withCount()/loadCount()). */
@@ -160,5 +210,13 @@ final class CustomerGroups
         ValidationException::ifAny($errors);
 
         return ['name' => $name, 'agent_pricing' => $agentPricing];
+    }
+
+    /** @return list<int> The groups the customer is in now, read again. */
+    private static function groupsOf(User $user): array
+    {
+        $user->unsetRelation('groups');
+
+        return array_values(array_map(intval(...), $user->groups()->get()->modelKeys()));
     }
 }

@@ -78,11 +78,11 @@ final class Lottery
 
     /**
      * The entries of a draw whose window is `$since` (inclusive) to `$until` (exclusive), UTC, by customer: their orders
-     * paid in it, or one per buyer.
+     * paid in it, or one per buyer — `$only` that customer's alone.
      *
      * @return array<int, int>
      */
-    public function entries(Carbon $since, Carbon $until): array
+    public function entries(Carbon $since, Carbon $until, ?User $only = null): array
     {
         $paid = Payment::query()->select('order_id')->whereNotNull('paid_at')->where('paid_at', '>=', $since)->where('paid_at', '<', $until);
         $users = User::query()->select('id')
@@ -91,6 +91,7 @@ final class Lottery
             ->when($this->settings->excludesAgents(), static fn(Builder $query) => $query->whereNull('agency_level_id'));
 
         $orders = Order::spending()
+            ->when($only !== null, static fn(Builder $query) => $query->where('user_id', $only?->id))
             ->toBase()
             ->selectRaw('user_id, COUNT(*) AS entries')
             ->whereIn('id', $paid)
@@ -109,23 +110,38 @@ final class Lottery
     }
 
     /**
-     * The window of `$draw`, just made: from where the draw before it ended to SETTLING_SECONDS before this one — but never
-     * further back than WINDOW_MAX_HOURS (all of them when the draw before has no time: written outside AmoBot); a
-     * shop's first, FIRST_WINDOW_HOURS.
+     * Where the window of a draw made at `$at` begins, UTC: where `$before`, the draw before it, ended — but never further
+     * back than WINDOW_MAX_HOURS (all of them when `$before` has no time: written outside AmoBot); a shop's first draw
+     * (`$before` null), FIRST_WINDOW_HOURS. A draw to come is judged by the moment it is due (LotteryBoard).
+     */
+    public static function opens(Carbon $at, ?LotteryDraw $before): Carbon
+    {
+        $until = self::closes($at);
+        if ($before === null) {
+            return $until->copy()->subHours(self::FIRST_WINDOW_HOURS);
+        }
+        $furthest = $until->copy()->subHours(self::WINDOW_MAX_HOURS);
+
+        return $before->created_at?->copy()->subSeconds(self::SETTLING_SECONDS)->utc()->max($furthest) ?? $furthest;
+    }
+
+    /**
+     * The window of `$draw`, just made: from where the draw before it ended (opens()) to SETTLING_SECONDS before this one.
      *
      * @return array{Carbon, Carbon} From (inclusive), until (exclusive), UTC
      */
     private static function window(LotteryDraw $draw): array
     {
-        $until = ($draw->created_at ?? now())->copy()->startOfSecond()->subSeconds(self::SETTLING_SECONDS)->utc();
+        $at = $draw->created_at ?? now();
         $before = LotteryDraw::query()->where('id', '<', $draw->id)->latest('id')->first();
-        if ($before === null) {
-            return [$until->copy()->subHours(self::FIRST_WINDOW_HOURS), $until];
-        }
-        $furthest = $until->copy()->subHours(self::WINDOW_MAX_HOURS);
-        $since = $before->created_at?->copy()->subSeconds(self::SETTLING_SECONDS)->utc()->max($furthest);
 
-        return [$since ?? $furthest, $until];
+        return [self::opens($at, $before), self::closes($at)];
+    }
+
+    /** Where the window of a draw made at `$at` ends (exclusive): SETTLING_SECONDS before it, UTC. */
+    private static function closes(Carbon $at): Carbon
+    {
+        return $at->copy()->startOfSecond()->subSeconds(self::SETTLING_SECONDS)->utc();
     }
 
     /** The draw of `$day`, made now; null when another run drew it first. */

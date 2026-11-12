@@ -10,10 +10,10 @@ use App\Modules\Telegram\Keyboard\MainMenu;
 use App\Modules\Telegram\Texts\BotTexts;
 
 /**
- * /start, /menu and a contact card the gates let through: the greeting and the main menu (MainMenu::show()), then the
- * screen a /start link opens — `?start=usertest` the free test. A link a gate held back waits in the chat for an hour
- * (ChatSession::takeStartLink()) and opens with the update that gets through: the contact card, /start or /menu here,
- * or «عضو شدم» (JoinHandler).
+ * /start, /menu and the contact card the phone gate just took (ContactHandler): the greeting and the main menu
+ * (MainMenu::show()), then the screen a /start link opens — `?start=usertest` the free test. A link a gate held back
+ * waits in the chat for an hour (ChatSession::takeStartLink()) and opens with the update that gets through: the contact
+ * card, /start or /menu here, or «عضو شدم» (JoinHandler).
  */
 final class StartHandler implements Handler
 {

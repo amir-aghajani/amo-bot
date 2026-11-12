@@ -3,8 +3,9 @@
 # Panel settings
 
 «تنظیمات» at the foot of the sidebar › «تنظیمات پنل», the owner's: the installation's own settings — what `config.php`
-keeps ([Configuration](Configuration.md)) —, your login and AmoBot's own update. Each section is a page of its own, and
-each card on it is saved on its own. An agent's «تنظیمات پنل» has «ظاهر» alone.
+keeps ([Configuration](Configuration.md)) —, your login, the backups, the scheduled tasks' times and AmoBot's own
+update. Each section is a page of its own, and each card on it is saved on its own («زمان‌بندی کارها» saves its page
+whole). An agent's «تنظیمات پنل» has two sections alone: «ظاهر», and «پشتیبان‌گیری» for their own shop's backups.
 
 **A secret** — a token, a password, a key — is never shown back: its field shows a hint of it (a token's last four
 characters — the bot's token with its bot's id —, or dots alone for a password or a secret shorter than 12) and says «خالی بماند، همان مقدار ذخیره‌شده می‌ماند.». Left blank, it stays. «پاک کردن
@@ -57,7 +58,8 @@ them first and changes nothing if the database does not answer**, saying why —
 no such database, the server out of reach, a server older than MySQL 5.7.8 / MariaDB 10.3. The password must be typed
 again when the host, port or socket changes.
 
-Moving to another database copies nothing: the new one must hold the shop's data already ([Backups](Backups.md)).
+Moving to another database copies nothing: the new one must hold the shop's data already
+([Backups](Backups.md#without-the-panel)).
 
 ## The app
 
@@ -90,6 +92,23 @@ Resend — and «نام فرستنده» (empty: each shop's name — the app's 
 **«ارسال ایمیل تست»** sends a short email with the saved settings to an address you type: check the inbox, and the
 spam folder.
 
+## SMS
+
+«پیامک» — how the shop sends one-time codes by SMS: the codes of a website's sign-in by phone number («ورود با شماره
+موبایل», [Website](Website.md)) — the main shop's website, and the agents' while you allow it. Card «ارسال پیامک»,
+**«روش ارسال»**:
+
+| Choice | What it needs |
+|---|---|
+| «خاموش» (default) | Nothing — no sign-in by phone number on any website |
+| «IPPanel (ای‌پی پنل)» | An IPPanel account: «کلید دسترسی» (made in its panel's «توسعه‌دهندگان ← کلیدهای دسترسی»), «شماره فرستنده» (one of the account's lines: `3000505` or `+983000505`), «کد الگو» (a pattern approved there) and «نام متغیر کد» (`code` for a pattern's `%code%`); under «تنظیمات پیشرفته» «آدرس API» (`https://edge.ippanel.com/v1`) — the key typed again when it moves |
+
+Then the switch **«سایت نماینده‌ها هم بتوانند کد ورود پیامکی بفرستند»** (off): agents' websites may send sign-in codes
+too — every SMS, whichever shop's website asked for it, is paid from your one account. Card **«ارسال پیامک آزمایشی»**
+sends a test code with the saved settings, through the same pattern, to a mobile number you type, and shows the code
+sent; while a way is saved it shows «اعتبار حساب» (IPPanel's, in Rial), asked of IPPanel with the saved key — a key it
+refuses says so there. Setting IPPanel up: [SMS](Sms.md).
+
 ## The panel's login
 
 «ورود به پنل» — your username (2 to 64 characters: Latin letters, digits, `. _ @ -`) and password (8 characters at least,
@@ -105,10 +124,39 @@ it too.
 ## Update
 
 «به‌روزرسانی» — the version the shop runs and the newest release of AmoBot, with its notes, read from GitHub once a day
-(the dashboard's «وضعیت سیستم» card says when one is out) and at once on «بررسی دوباره». «به‌روزرسانی به نسخه …» installs it
+by default ([«زمان‌بندی کارها»](#the-task-schedule); the dashboard's «وضعیت سیستم» card says when one is out) and at once
+on «بررسی دوباره». «به‌روزرسانی به نسخه …» installs it
 in a few steps, the shop answering «در حال به‌روزرسانی» for a moment; only a release signed with the key built into the
-shop is installed, and the previous version is kept to put back. Back the database up first. What each step does, what
-the host needs for it, and the update by hand: [Upgrading](Upgrading.md).
+shop is installed, and the previous version is kept to put back. Back the shop up first
+([«پشتیبان‌گیری»](#backups)). What each step does, what the host needs for it, and the update by hand:
+[Upgrading](Upgrading.md).
+
+## Backups
+
+«پشتیبان‌گیری» — the shop's database saved to a file and put back from one. In the main shop it is the whole
+installation's — every shop, the servers, the agents —; with an agent's shop open, and in the agent's own panel, that
+shop's alone. Four cards:
+
+- **«دریافت پشتیبان»** — «دریافت فایل پشتیبان» makes a backup now and saves it.
+- **«ارسال خودکار به گروه گزارش‌ها»** — the switch «ارسال خودکار», the report group's «پشتیبان‌گیری» topic: a backup there
+  once a day by default (how often is «ارسال پشتیبان به گروه» in [«زمان‌بندی کارها»](#the-task-schedule)), when the last
+  one went or why it did not, and «اتصال گروه گزارش‌ها» while no group is connected.
+- **«بازگردانی»** — «انتخاب فایل پشتیبان», under it the largest file the host takes; the file checked and described
+  («زمان پشتیبان», «نسخه AmoBot», «محتوا», «ردیف‌ها», the fold «ردیف‌های هر جدول») with what a restore loses; then
+  «می‌دانم هرچه بعد از این پشتیبان تغییر کرده، از دست می‌رود.» ticked, and the red «بازگردانی» — or «انصراف».
+- **«پیش از بازگردانی‌ها»** — the state kept just before each restore, the last three, each with «دریافت».
+
+A restore signs customers out of the websites and the mini app — every shop's, or the one shop's —, never anyone out of
+the panels. What is in a backup, what is not, and moving to another host: [Backups](Backups.md).
+
+## The task schedule
+
+«زمان‌بندی کارها» — how often each scheduled task runs, and the times a few of them decide by: when an unpaid order is
+dropped, how the online gateways are asked about a payment, and how long the website's notices, the tickets' pictures
+and the report group's messages are kept. One for the whole installation, every shop's work with it. Each task shows
+what it does, whether it runs in each shop, and when it last ran and is next due. The page is saved as one form: every
+value checked, and all kept or none; one left at its default follows the default of a later version. Every task, its
+default and its bounds: [the task schedule](Running-In-Production.md#the-task-schedule).
 
 ## Advanced
 
@@ -140,5 +188,7 @@ What the screen does not show — `APP_KEY`, `TRUSTED_PROXIES`, the log file, th
 - **After changing `APP_URL` or «توکن Cron», copy the cron line again** into cPanel's *Cron Jobs*: the line is built on
   both, and an old token no longer runs the scheduler.
 - **Email off** leaves customers without Telegram unreachable, and every website without email sign-up.
-- **A database password, an SMTP password or a bot token left blank after its address changed** is refused: type it
-  again. Moving the Bot API's address asks your panel password too.
+- **SMS off** leaves every website without sign-in by phone number; **every SMS is paid from your account**, the agents'
+  websites' too once their switch is on.
+- **A database password, an SMTP password, an IPPanel key or a bot token left blank after its address changed** is
+  refused: type it again. Moving the Bot API's address asks your panel password too.

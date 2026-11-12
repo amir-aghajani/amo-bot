@@ -45,7 +45,7 @@ final class PasarGuardConnectorTest extends HttpTestCase
         self::assertSame('PasarGuard', $data['server']['driver_label']);
         self::assertSame(
             ['auth_mode' => 'token', 'api_token' => true, 'username' => '', 'password' => false, 'verify_tls' => true, 'timeout' => 30, 'subscription_url' => '', 'proxy_enabled' => false, 'proxy_host' => '', 'proxy_port' => 1080, 'proxy_username' => '', 'proxy_password' => false],
-            array_map(static fn(mixed $value): mixed => is_array($value) ? $value['set'] : $value, array_diff_key($data['server']['form'], array_flip(['name', 'base_url', 'capacity', 'notes', 'is_active', 'button_style', 'button_row']))),
+            array_map(static fn(mixed $value): mixed => is_array($value) ? $value['set'] : $value, array_diff_key($data['server']['form'], array_flip(['name', 'emoji_id', 'base_url', 'capacity', 'notes', 'is_active', 'button_style', 'button_row']))),
             'its connection as kept: its key, never shown, and no two-factor secret of its own',
         );
         self::assertTrue($data['probe']['ok']);

@@ -18,8 +18,8 @@ words of `/broadcast`, `/emoji` and the report group are fixed: only the bot's a
 | «پیام» | A message | Telegram's HTML | 3500 characters |
 | «کپشن عکس» | The QR card's caption — a longer one goes as a message without the picture | Telegram's HTML | 850 |
 | «بخشی از پیام» | A piece another text takes in (a status, a note, a hint); its leading empty lines are its distance from what is above it, and emptied, it is left out | Telegram's HTML | 500 |
-| «اعلان» | The short notice on a tapped button | None — shown as written | 190 |
-| «دکمه» | A button's label | None, one line | 60 |
+| «اعلان» | The short notice on a tapped button | None — shown as written; a premium emoji shows as its plain one | 190 |
+| «دکمه» | A button's label | None, one line; a premium emoji at its start is its icon | 60 |
 
 ### Editing a text
 
@@ -28,6 +28,9 @@ A text's title opens its editor:
 - **The toolbar** wraps the selection in Telegram's tags: «پررنگ», «کج», «زیرخط», «خط‌خورده», «کد» (a tap copies it),
   «مخفی» (a tap shows it), «نقل‌قول» and «لینک» — type the address into its `href=""`. To write a `<` itself, write
   `&lt;`.
+- **«آیکون دکمه»**, in a button's editor: a premium emoji the bot shows before the label — the button's icon, as on the
+  [keyboards](#the-menu) —, in place of the label's own emoji; «برداشتن» puts that plain emoji back. A popup's editor
+  has «ایموجی پرمیوم» instead, at the caret ([below](#premium-emoji)).
 - **«متغیرها»**: a tap puts `%name%`, `%plan%`, `%subscription%`… at the caret; the bot fills them as it sends. One
   marked «لازم» cannot be left out — a delivery without its link would be no delivery.
 - **The counter** counts as Telegram does — what the customer sees: tags cost nothing, `&lt;` is one character, and an
@@ -65,7 +68,9 @@ order, and the first that fails is the one said:
 2. **Too long** — past its kind's limit (the table above), counted as the counter counts.
 3. **A button on two lines.**
 4. **A variable the text does not have**, or a required one left out.
-5. **A tag in a notice or a button**, which show the text as it is. In a text with formatting:
+5. **A tag in a notice or a button**, which show the text as it is — but a premium emoji, written as the picker writes
+   it: `<tg-emoji emoji-id="…">👍</tg-emoji>`, around one plain emoji. A button takes one, at the start of its label and
+   with words beside it. In a text with formatting:
    - **a tag Telegram does not know** — only `b`, `i`, `u`, `s`, `code`, `pre`, `a`, `blockquote`, `tg-spoiler`,
      `tg-emoji`, `tg-time` and their other names (`strong`, `em`, `ins`, `strike`, `del`, `<span class="tg-spoiler">`)
      are read; `<br>` is none: press Enter for a new line;
@@ -98,8 +103,16 @@ Premium**. To use them:
 3. In a text's editor, «ایموجی پرمیوم» lists the latest 200; a tap puts one at the caret, and an emoji's ✕ takes it off
    the list.
 
+**In a button's label** («دکمه» texts), a premium emoji at its start goes as the button's icon — Telegram draws icons
+before the label and reads no tag in it, so a button takes one, there. A plan's, a category's or a server's name with a
+premium emoji ([Plans](Plans.md#a-plan), [Servers](Servers.md)) brings its own: at the label's start — or right after
+the label's own leading emoji and a space, «🌍 %server%», whose place it then takes — it is the icon; anywhere else in
+the label, its plain emoji. **In a notice** («اعلان»), Telegram draws no
+premium emoji: each shows its plain emoji, and the premium one where the same words go as a message (a refusal to
+something typed, the bot switched off).
+
 Nothing is lost when Telegram turns them away: the message goes again with their plain emoji (and buttons without their
-icons), and for ten minutes every message goes plain from the start before they are tried again. The picker warns while
+icons, a label's plain emoji back in its place), and for ten minutes every message goes plain from the start before they are tried again. The picker warns while
 the bot last found them refused — by `/emoji`, or by a message Telegram turned away.
 
 ## The menu
@@ -111,9 +124,9 @@ the bot last found them refused — by `/emoji`, or by a message Telegram turned
 - **Rows** — 12 at most, 8 buttons a row; the first row is the top one, a row's first button its rightmost. Drag a button
   anywhere — under the last row to make a new one —, or use its dialog. ▲▼ moves a row; its bin removes it.
 - **A button** — «افزودن دکمه», or a tap on one:
-  - «دکمه» — what it does: «خرید اشتراک», «اکانت تست», «سرویس‌های من», «تمدید سرویس», «کیف پول + شارژ»,
-    «زیرمجموعه‌گیری», «نمایندگی», «آموزش» (the text «آموزش», a short guide you may reword), «پشتیبانی», «کد هدیه» or
-    «گردونه شانس». Each once.
+  - «دکمه» — what it does: «خرید اشتراک», «اپلیکیشن» (the shop's mini app, [below](#the-mini-apps-button)), «اکانت
+    تست», «سرویس‌های من», «تمدید سرویس», «کیف پول + شارژ», «زیرمجموعه‌گیری», «نمایندگی», «آموزش» (the text «آموزش», a
+    short guide you may reword), «پشتیبانی», «کد هدیه» or «گردونه شانس». Each once.
   - «متن دکمه» — its label, 64 characters, an emoji welcome; no two alike (a keyboard's tap arrives as its label).
   - «آیکون دکمه» — a premium emoji before the label (seen only as [above](#premium-emoji)). A premium emoji's tag pasted
     into the label is offered «انتقال به آیکون دکمه».
@@ -124,14 +137,23 @@ the bot last found them refused — by `/emoji`, or by a message Telegram turned
 The preview shows the menu under your greeting. «ذخیره» checks the keyboard as a whole and says what is wrong under its
 row; «بازگشت به پیش‌فرض» brings the shop's own layout back — saved at once, asked first, no way back.
 
-The shop's layout: «خرید اشتراک»; «اکانت تست»; «سرویس‌های من» | «تمدید سرویس»; «آموزش» | «کیف پول + شارژ»; «پشتیبانی» |
-«زیرمجموعه‌گیری»; «نمایندگی»; «کد هدیه» | «گردونه شانس». An agent's bot has no «نمایندگی».
+The shop's layout: «خرید اشتراک»; «اپلیکیشن»; «اکانت تست»; «سرویس‌های من» | «تمدید سرویس»; «آموزش» | «کیف پول + شارژ»;
+«پشتیبانی» | «زیرمجموعه‌گیری»; «نمایندگی»; «کد هدیه» | «گردونه شانس». An agent's bot has no «نمایندگی».
 
-**«اکانت تست», «زیرمجموعه‌گیری», «نمایندگی», «کد هدیه» and «گردونه شانس» show only while their programs run**, so they
-can stay on the layout; in the main bot an agent keeps «نمایندگی», their account. A layout without one of them is
+**«اکانت تست», «زیرمجموعه‌گیری», «نمایندگی», «کد هدیه» and «گردونه شانس» show only while their programs run — and
+«اپلیکیشن» while the shop's mini app is on and on https —**, so they can stay on the layout; in the main bot an agent
+keeps «نمایندگی», their account. A layout without one of the programs' buttons is
 pointed out on its program's page while the program runs. A layout made of nothing but these buttons, with every one
 of their programs off, would leave no menu at all: the bot shows the shop's built-in menu instead, in your layout's
 type, until one of them comes back.
+
+### The mini app's button
+
+«اپلیکیشن» — «📱 اپلیکیشن فروشگاه» — opens the shop's [mini app](Mini-App.md). With «دکمه‌های شیشه‌ای» its button opens
+the app itself. On «کیبورد پایین صفحه» its tap opens a screen, the text «اپلیکیشن فروشگاه», with «📱 باز کردن اپلیکیشن»
+(«دکمه باز کردن اپلیکیشن») under it, which opens the app: Telegram signs no one in to an app opened from a keyboard's own
+button. A tap after the app was switched off gets «اپلیکیشن در دسترس نیست». The shop's layout has the button; **a
+layout you saved yourself has it not** until you add it.
 
 ## Watch out for
 

@@ -61,7 +61,11 @@ final class CustomerSessionsTest extends HttpTestCase
             'phone' => '+989121234567',
             'balance' => '50000.00',
             'created_at' => '2026-10-07T12:00:00+00:00',
-        ], 'unread_notifications' => 0, 'staff' => null, 'loyalty' => ['tier' => null, 'spent' => '0.00', 'next' => null]], $this->decode($this->get($this->storeApi($this->website, '/me'))));
+        ], 'unread_notifications' => 0, 'staff' => null, 'loyalty' => ['tier' => null, 'spent' => '0.00', 'next' => null], 'session' => [
+            'method' => 'password',
+            'biometric' => false,
+            'recent_until' => '2026-10-07T12:15:00+00:00',
+        ]], $this->decode($this->get($this->storeApi($this->website, '/me'))));
     }
 
     public function testNoTokenAWrongOneOrAnotherShopsSignsNobodyIn(): void

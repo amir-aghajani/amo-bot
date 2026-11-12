@@ -4,6 +4,7 @@ import { Link, useLocation } from 'react-router'
 import { BrandMark } from '@/components/brand-mark'
 import { IconButton } from '@/components/icon-button'
 import { Kbd } from '@/components/kbd'
+import { SettingsColumnSearch } from '@/components/settings-search/launcher'
 import { AccountRow } from '@/components/shell/account-row'
 import { areaFor, inSettings, isGroup, isNavItemActive, isSectionCurrent, type NavArea, type NavGroup, type NavItem } from '@/components/shell/nav'
 import { pressingQueue, QueueBadge, useQueueCounts, type Queue } from '@/components/shell/queue-badge'
@@ -103,7 +104,10 @@ export function SidebarBody({ onClose }: { onClose?: () => void }) {
           motion.from === 'start' && 'slide-in-from-start-3',
         )}
       >
-        <div className={cn('pb-2', collapsed ? 'px-2' : 'px-3')}>{area ? <MenuButton onClick={backToMenu} /> : Picker && <Picker />}</div>
+        <div className={cn('pb-2', collapsed ? 'grid gap-px px-2' : 'px-3')}>
+          {area ? <MenuButton onClick={backToMenu} /> : Picker && <Picker />}
+          {area?.id === 'settings' && <ColumnSearch />}
+        </div>
 
         <nav
           aria-label={area ? `بخش‌های ${area.label}` : 'منوی اصلی'}
@@ -352,6 +356,13 @@ function MenuButton({ onClick }: { onClick: () => void }) {
       </button>
     </RailTooltip>
   )
+}
+
+/** The settings search, at the top of the settings' column: a field to press — on the rail its icon, with a tooltip. */
+function ColumnSearch() {
+  const collapsed = useRail()
+
+  return <SettingsColumnSearch className={collapsed ? cn(ITEM, ITEM_IDLE, RAIL_ITEM) : 'mt-2'} />
 }
 
 /** A page's sections: a heading per group (the page, or each page of the settings) and its sections under it. */

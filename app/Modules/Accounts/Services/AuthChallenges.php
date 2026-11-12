@@ -24,9 +24,9 @@ use Psr\Log\LoggerInterface;
  * back opens nothing of a customer who did not ask for it.
  *
  * Challenges tried with codes count their tries on the row (attempt(), CODE_ATTEMPTS, each counted before it is judged):
- * emailed codes (issueCode()/checkCode()), a two-factor sign-in's step (find()), an app secret waiting for its first code
- * (hold()/held()). What anyone may ask for without an account (a nonce, a redirect state) is capped at LIVE_MAX per shop
- * in its lifetime, so a stranger asking from address after address cannot fill the table: past it, a 503.
+ * emailed and texted codes (issueCode()/checkCode()), a two-factor sign-in's step (find()), an app secret waiting for its
+ * first code (hold()/held()). What anyone may ask for without an account (a nonce, a redirect state) is capped at LIVE_MAX
+ * per shop in its lifetime, so a stranger asking from address after address cannot fill the table: past it, a 503.
  */
 final class AuthChallenges
 {
@@ -104,15 +104,49 @@ final class AuthChallenges
      * CODE_ATTEMPTS tries. It replaces the same holder's last code for that address — never another customer's. Six digits
      * are no secret to a bare hash, so it is kept as a hash keyed with APP_KEY: the database alone does not give it away.
      *
+     * With `$deliver` (an SMS provider asked to send it), the new code is kept beside the last one while it goes, and
+     * replaces it only once `$deliver` returns: one that throws takes the new code away and leaves the last one — the code
+     * the customer already has — standing.
+     *
      * @param array<string, mixed> $payload What checkCode() gives back
+     * @param (\Closure(string): void)|null $deliver
      */
-    public function issueCode(ChallengePurpose $purpose, string $subject, ?User $user, array $payload, int $seconds): string
+    public function issueCode(ChallengePurpose $purpose, string $subject, ?User $user, array $payload, int $seconds, ?\Closure $deliver = null): string
     {
         $code = str_pad((string) random_int(0, 999_999), 6, '0', STR_PAD_LEFT);
-        self::heldBy(AuthChallenge::query()->where('purpose', $purpose->value)->where('subject', $subject), $user)->delete();
-        $this->keep($purpose, $subject, $user, $this->codeHash($purpose, $subject, $code), $payload, $seconds);
+        $earlier = static fn(): Builder => self::heldBy(AuthChallenge::query()->where('purpose', $purpose->value)->where('subject', $subject), $user);
+        if ($deliver === null) {
+            $earlier()->delete();
+        }
+        $kept = $this->keep($purpose, $subject, $user, $this->codeHash($purpose, $subject, $code), $payload, $seconds);
+        if ($deliver === null) {
+            return $code;
+        }
+
+        try {
+            $deliver($code);
+        } catch (\Throwable $e) {
+            AuthChallenge::query()->whereKey($kept->id)->delete();
+
+            throw $e;
+        }
+        $earlier()->where('id', '<', $kept->id)->delete();
 
         return $code;
+    }
+
+    /**
+     * The latest code issued for `$purpose` and `$subject` (with `$holder`, to that customer) while a try may still be made
+     * on it: unexpired, its tries not used up. Null while none is.
+     */
+    public function liveCode(ChallengePurpose $purpose, string $subject, ?User $holder = null): ?AuthChallenge
+    {
+        $codes = AuthChallenge::query()->where('purpose', $purpose->value)->where('subject', $subject);
+        if ($holder !== null) {
+            $codes->where('user_id', $holder->id);
+        }
+
+        return self::live($codes->latest('id')->first());
     }
 
     /**
@@ -207,9 +241,9 @@ final class AuthChallenges
     }
 
     /** @param array<string, mixed> $payload */
-    private function keep(ChallengePurpose $purpose, ?string $subject, ?User $user, string $hash, array $payload, int $seconds): void
+    private function keep(ChallengePurpose $purpose, ?string $subject, ?User $user, string $hash, array $payload, int $seconds): AuthChallenge
     {
-        AuthChallenge::query()->create([
+        return AuthChallenge::query()->create([
             'purpose' => $purpose,
             'subject' => $subject,
             'user_id' => $user?->id,

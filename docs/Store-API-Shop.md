@@ -2,7 +2,8 @@
 
 # Store API: the shop
 
-What anyone may read with the store key alone: the shop itself, what it sells now, and how its servers stand. Paths are
+What anyone may read with the store key alone: the shop itself, what it sells now, the sales running, how its servers
+stand, and its tutorial. Paths are
 under the [base address](Store-API.md#the-base-address). Render these on your server and cache them briefly
 ([calling from your server](Store-API.md#calling-from-your-server)) — but the catalogue read with a customer's token,
 which is theirs ([read signed in](#read-signed-in)).
@@ -10,8 +11,8 @@ which is theirs ([read signed in](#read-signed-in)).
 ## What the site asks first
 
 `GET /` — the shop's name and bot, whether it takes orders and services by their link, whether customers may hand a
-service on or build one, how they may name a new one, how to reach support, the ways in, the captcha and the referral
-program's terms.
+service on or build one, how they may name a new one, which of its programs run, how to reach support, the ways in, the
+captcha and the referral program's terms — and, through the mini app's key, how the mini app looks.
 
 `GET /` → `200`
 ```json
@@ -20,19 +21,24 @@ program's terms.
     "name": "Amo Shop",
     "bot": { "username": "amo_shop_bot", "url": "https://t.me/amo_shop_bot" },
     "taking_orders": true,
+    "phone_required": false,
     "service_claims": false,
     "service_transfers": false,
     "custom_services": true,
-    "name_modes": ["sequential", "random", "custom"]
+    "name_modes": ["sequential", "random", "custom"],
+    "programs": { "test_accounts": true, "wheel": true, "lottery": false, "gift_codes": true, "loyalty": true, "cashback": false, "wallet_transfers": true, "reviews": false }
   },
   "support": { "url": "https://t.me/amo_support" },
   "sign_in": {
     "telegram": { "client_id": "7012345678", "redirect": true },
     "google": { "client_id": "1234567890-abc123def456.apps.googleusercontent.com" },
-    "email": true
+    "email": true,
+    "phone": true,
+    "mini_app": false
   },
   "captcha": { "driver": "turnstile", "site_key": "0x4AAAAAAAAbcdEfGhIjKlMn", "challenge_url": null },
-  "referral": { "enabled": true, "rate": 10, "first_only": false }
+  "referral": { "enabled": true, "rate": 10, "first_only": false },
+  "app": null
 }
 ```
 
@@ -42,6 +48,9 @@ program's terms.
   not suspended by the main shop. While it is `false`, every ordering request is refused with a `503`
   ([the flow](Store-API-Buying.md#the-flow) says which words, and what is still taken). What it sells is still read (a
   suspended agent's shop offers no plan), and customers still sign in. Say so where the site sells.
+- `shop.phone_required` — whether the shop's bot asks every customer to share their own phone number before anything
+  else («تایید شماره»). The bot alone takes the number, as a contact card: the mini app asks a Telegram customer without
+  one (`GET /me`'s `phone` `null`) to share it with Telegram's `requestContact`, which sends their card to the bot.
 - `shop.service_claims` — whether a customer may add a service to their account by its link now (it stays so while
   `taking_orders` is false: adding a service is no order)
   ([adding a service by its link](Store-API-After-Buying.md#adding-a-service-by-its-link)): the main shop's alone, while
@@ -56,12 +65,41 @@ program's terms.
 - `shop.name_modes` — the ways a buyer may name their new service on its panel: `sequential` (the shop's pattern) always
   first, then `random` and `custom` while the shop's admin offers them. With `sequential` alone, ask nothing; else let
   the customer choose at the checkout ([a purchase](Store-API-Buying.md#a-purchase)).
+- `shop.programs` — which of the shop's programs run now, as its bot shows their buttons: `test_accounts`
+  ([test accounts](Store-API-After-Buying.md#test-accounts)), `wheel` ([the lucky wheel](Store-API-After-Buying.md#the-lucky-wheel)),
+  `lottery` ([the nightly draw](Store-API-After-Buying.md#the-nightly-draw)), `gift_codes`
+  ([gift codes](Store-API-After-Buying.md#gift-codes)), `loyalty` (the shop has a loyalty tier: `GET /me`'s `loyalty`),
+  `cashback`, `wallet_transfers` ([sending money](Store-API-After-Buying.md#sending-money-to-another-customer)) — and
+  `reviews`, this door's own: whether the website, or the mini app, shows reviews and takes them
+  ([reviews](Store-API-Reviews.md)). Show a program's way in while it is `true`.
 - `support.url` — the bot's «پشتیبانی» contact as a link: a `https://t.me/…` address, a web address or a `tel:` number;
   `null` when none is set or it is plain words.
-- `sign_in` — [which ways in](Store-API-Sign-In.md#which-ways-in). `captcha` — `null`, or the captcha the website's
-  forms ask and how to draw it ([the captcha](Store-API-Sign-In.md#the-captcha)).
+- `sign_in` — [which ways in](Store-API-Sign-In.md#which-ways-in); `mini_app` is `true` through the mini app's key
+  alone. `captcha` — `null`, or the captcha the website's forms ask and how to draw it
+  ([the captcha](Store-API-Sign-In.md#the-captcha)).
 - `referral` — `rate` percent of what a referred customer pays, or of their first payment alone with `first_only`
   ([the referral program](Store-API-After-Buying.md#the-referral-program)).
+- `app` — `null` through a website's key. Through the mini app's ([two doors](Store-API.md#two-doors)), how the shop set
+  it to look:
+
+  ```json
+  {
+    "title": "Amo Shop",
+    "accent_color": "#2481cc",
+    "logo_url": "https://panel.example.com/api/store/v1/5d0c9a7e3b1f4a6c8e2d7b90/app/logo?v=1793000000",
+    "announcement": { "text": "سرور آلمان امشب ساعت ۲ تا ۳ به‌روزرسانی می‌شود.", "url": "https://t.me/amo_shop" },
+    "fullscreen": true,
+    "time_zone": "Asia/Tehran"
+  }
+  ```
+
+  `title` is the name it shows (the shop's own while it sets none); `accent_color` its colour, `#rrggbb`, `null` for the
+  Telegram client's button colour; `logo_url` its logo, `null` for none — `GET /app/logo`, a picture's bytes (a PNG,
+  JPEG or WebP) that any cache may keep five minutes, its `v` changed with every change of the
+  mini app's settings so a replaced logo is never a phone's old copy (`404` `این مینی‌اپ لوگویی ندارد.` once it is
+  gone); `announcement` a word to every customer on its home screen (plain text, line breaks kept, 500 characters at
+  most) and where it leads, `null` for none; `fullscreen` whether it opens full screen on a phone; and `time_zone` the
+  shop's zone (`APP_TIMEZONE`), which it shows every date in.
 
 ## What it sells
 
@@ -93,7 +131,8 @@ token, it is what the bot offers that customer ([read signed in](#read-signed-in
           "duration_hours": 720,
           "devices": 2,
           "category_id": 1,
-          "locations": [{ "id": 1, "name": "آلمان" }, { "id": 2, "name": "هلند" }]
+          "locations": [{ "id": 1, "name": "آلمان" }, { "id": 2, "name": "هلند" }],
+          "badge": "bestseller"
         }
       ]
     },
@@ -115,7 +154,8 @@ token, it is what the bot offers that customer ([read signed in](#read-signed-in
           "duration_hours": 2160,
           "devices": 0,
           "category_id": null,
-          "locations": [{ "id": 2, "name": "هلند" }]
+          "locations": [{ "id": 2, "name": "هلند" }],
+          "badge": null
         },
         {
           "id": 9,
@@ -132,7 +172,8 @@ token, it is what the bot offers that customer ([read signed in](#read-signed-in
           "duration_hours": 1,
           "devices": 1,
           "category_id": null,
-          "locations": [{ "id": 1, "name": "آلمان" }]
+          "locations": [{ "id": 1, "name": "آلمان" }],
+          "badge": null
         }
       ]
     }
@@ -154,6 +195,7 @@ token, it is what the bot offers that customer ([read signed in](#read-signed-in
 | `devices` | devices at once; `0` no limit |
 | `category_id` | the category it is listed under; `null` for the last group |
 | `locations` | the servers it can be bought on today («لوکیشن» in the bot), in the plan's order — at least one; the customer picks one, which becomes `server_id` at checkout |
+| `badge` | the label its card wears, as the shop set it on the plan: `bestseller` («پرفروش‌ترین»), `recommended` («پیشنهاد ما») or `vip` («VIP»); `null` for none. The shop chooses it — nothing is counted to make it |
 
 `GET /plans/{id}` answers `{ "plan": … }`, one plan in the same shape, or `404` for one the shop does not sell now
 (switched off, on no server able to deliver it, or — in an agent's shop — more than the agent's traffic covers, or kept
@@ -216,6 +258,33 @@ What a customer pays is priced in three steps, by the shop's one rule (the bot's
 
 A wallet top-up is never discounted. A renewal and extra traffic, time or devices get the same automatic discount (a sale
 by the service's plan) and take a code too.
+
+## Timed sales
+
+`GET /sales` — the timed sales («فروش ویژه») running now, for a banner: the soonest to end first, those without an end
+last.
+
+`GET /sales` → `200`
+```json
+{
+  "sales": [
+    { "id": 4, "name": "فروش ویژه نوروز", "percent": 20, "ends_at": "2026-03-21T20:30:00+00:00", "plan_ids": [3, 7], "order_types": ["purchase", "renewal"] }
+  ]
+}
+```
+
+`percent` is what it takes off; `ends_at` when it ends (`null`: until support stops it — a countdown needs it);
+`plan_ids` the plans it holds for (`null`: every plan); `order_types` the kinds of order it holds for — `purchase`,
+`renewal`, `extra_traffic`, `extra_time`, `extra_devices` — (`null`: every kind). It is for telling: what a sale takes
+off a plan for its reader is already in the plan's `offer_price` and `discount` ([discounts](#discounts)), the largest
+automatic discount alone.
+
+## The tutorial
+
+`GET /tutorial` → `200` `{ "text": "…" }` — the shop's «آموزش»: the very text the bot shows under its «آموزش» button,
+in the shop's wording, in Telegram's HTML. Render only Telegram's tags — `<b>`, `<i>`, `<u>`, `<s>`, `<a href>`,
+`<code>`, `<pre>`, `<blockquote>`, `<tg-spoiler>`, `<tg-emoji>` (its plain emoji) — and show everything else as text:
+never put the text into a page as HTML as it is.
 
 ## How its servers stand
 

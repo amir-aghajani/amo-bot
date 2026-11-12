@@ -18,11 +18,15 @@ const KEY = '/api/admin/website/key'
 const SAVED = websiteRow()
 const SAVED_DONE = 'تنظیمات وب‌سایت ذخیره شد'
 const MAIL_SETTINGS = '/settings/mail'
+const SMS_SETTINGS = '/settings/sms'
 
-/** The page at `at`, the website read as `website`, in the panel `mailSettings` says (the owner's links its email settings); resolved once its cards are on screen. */
-async function show(at: string, website: Website = SAVED, mailSettings?: string) {
+/**
+ * The page at `at`, the website read as `website`, in the panel `mailSettings` and `smsSettings` say (the owner's links
+ * its email and SMS settings); resolved once its cards are on screen.
+ */
+async function show(at: string, website: Website = SAVED, mailSettings?: string, smsSettings?: string) {
   server().on('GET', URL, json({ website } satisfies WebsiteResponse))
-  render(<WebsiteSettingsPage mailSettings={mailSettings} />, { wrapper: signedIn({ at }).wrapper })
+  render(<WebsiteSettingsPage mailSettings={mailSettings} smsSettings={smsSettings} />, { wrapper: signedIn({ at }).wrapper })
   await screen.findAllByRole('button', { name: 'ذخیره' })
 }
 
@@ -59,6 +63,8 @@ const SIGNUP = 'ثبت‌نام با ایمیل'
 const CAPTCHA = 'تایید امنیتی'
 const CAPTCHA_DRIVER = 'نوع تایید امنیتی'
 const SIGNUP_SWITCH = { name: 'ثبت‌نام با ایمیل و رمز عبور' }
+const PHONE = 'ورود مشتری با شماره موبایل'
+const PHONE_SWITCH = { name: 'ورود با شماره موبایل (پیامک)' }
 
 /** Cloudflare Turnstile asked, its keys kept. */
 const TURNSTILE = websiteCaptcha('turnstile', { site_key: '0x4AAAAAAA-site', secret_key: { set: true, hint: '••••••cret' } })
@@ -320,6 +326,74 @@ describe('the email sign-up card', () => {
 
     expect(await card(SIGNUP).findByText(words)).toBeTruthy()
     expect(screen.getByRole('switch', SIGNUP_SWITCH).getAttribute('aria-invalid')).toBe('true')
+  })
+})
+
+describe('the sign-in by SMS card', () => {
+  it('switches it on alone', async () => {
+    saves(websiteRow({ phone: { enabled: true, sms: 'ready' } }))
+    await show('/website-settings/phone')
+
+    fireEvent.click(screen.getByRole('switch', PHONE_SWITCH))
+    fireEvent.click(card(PHONE).getByRole('button', { name: 'ذخیره' }))
+
+    await until(() => expect(toast.success).toHaveBeenCalledWith(SAVED_DONE))
+    expect(sent()).toEqual([{ phone_login: true }])
+    expect(screen.getByRole('switch', PHONE_SWITCH).getAttribute('aria-checked')).toBe('true')
+    expect(card(PHONE).queryByText(/راه‌اندازی نشده|باز نکرده/)).toBeNull()
+  })
+
+  it('is held while no SMS is set up — the owner sent to the panel’s SMS settings', async () => {
+    await show('/website-settings/phone', websiteRow({ phone: { enabled: false, sms: 'not_set_up' } }), MAIL_SETTINGS, SMS_SETTINGS)
+    const phone = screen.getByRole('switch', PHONE_SWITCH)
+
+    fireEvent.click(phone)
+
+    expect(phone.getAttribute('aria-disabled')).toBe('true')
+    expect(phone.getAttribute('aria-checked')).toBe('false')
+    expect(card(PHONE).getByText(/راه‌اندازی نشده است؛ تا راه نیفتد، این گزینه روشن نمی‌شود\./)).toBeTruthy()
+    expect(card(PHONE).getByRole('link', { name: 'تنظیمات پنل › پیامک' }).getAttribute('href')).toBe(SMS_SETTINGS)
+  })
+
+  it('is held on an agent’s site the owner does not text for, saying so', async () => {
+    await show('/website-settings/phone', websiteRow({ phone: { enabled: false, sms: 'not_for_agents' } }))
+
+    expect(screen.getByRole('switch', PHONE_SWITCH).getAttribute('aria-disabled')).toBe('true')
+    expect(card(PHONE).getByText(/مالک فروشگاه پیامک را برای سایت نماینده‌ها باز نکرده است/)).toBeTruthy()
+    expect(card(PHONE).queryByRole('link')).toBeNull()
+  })
+
+  it('tells the owner on an agent’s site that it is theirs to open, sending them to the panel’s SMS settings', async () => {
+    await show('/website-settings/phone', websiteRow({ phone: { enabled: false, sms: 'not_for_agents' } }), MAIL_SETTINGS, SMS_SETTINGS)
+
+    expect(screen.getByRole('switch', PHONE_SWITCH).getAttribute('aria-disabled')).toBe('true')
+    expect(card(PHONE).getByText(/پیامک را برای سایت نماینده‌ها باز نکرده‌اید؛ تا آن را در/).textContent).toContain('باز نکنید، این گزینه روشن نمی‌شود.')
+    expect(card(PHONE).getByRole('link', { name: 'تنظیمات پنل › پیامک' }).getAttribute('href')).toBe(SMS_SETTINGS)
+    expect(card(PHONE).queryByText(/مالک فروشگاه/)).toBeNull()
+  })
+
+  it('kept on while no SMS goes out, says nobody signs in by it and may still be switched off', async () => {
+    saves(websiteRow({ phone: { enabled: false, sms: 'not_for_agents' } }))
+    await show('/website-settings/phone', websiteRow({ phone: { enabled: true, sms: 'not_for_agents' } }))
+    expect(card(PHONE).getByText(/کسی نمی‌تواند با شماره موبایل وارد شود/)).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('switch', PHONE_SWITCH))
+    fireEvent.click(card(PHONE).getByRole('button', { name: 'ذخیره' }))
+
+    await until(() => expect(toast.success).toHaveBeenCalledWith(SAVED_DONE))
+    expect(sent()).toEqual([{ phone_login: false }])
+  })
+
+  it('says the server’s refusal under the switch', async () => {
+    const words = 'ارسال پیامک در این نصب راه نیفتاده است؛ مالک فروشگاه باید آن را در تنظیمات پنل › پیامک راه بیندازد.'
+    server().on('PATCH', URL, refusal(422, words, { phone_login: [words] }))
+    await show('/website-settings/phone')
+
+    fireEvent.click(screen.getByRole('switch', PHONE_SWITCH))
+    fireEvent.click(card(PHONE).getByRole('button', { name: 'ذخیره' }))
+
+    expect(await card(PHONE).findByText(words)).toBeTruthy()
+    expect(screen.getByRole('switch', PHONE_SWITCH).getAttribute('aria-invalid')).toBe('true')
   })
 })
 

@@ -8,6 +8,7 @@ use App\Modules\Bots\CurrentBot;
 use App\Modules\Catalog\Models\Plan;
 use App\Modules\Catalog\Models\PlanCategory;
 use App\Modules\Catalog\Services\PlanCategoryService;
+use App\Modules\Telegram\Texts\PremiumText;
 use App\Support\Validation;
 use Tests\HttpTestCase;
 
@@ -55,6 +56,20 @@ final class AdminPlanCategoriesApiTest extends HttpTestCase
 
         $response = $this->patchJson("/api/admin/plans/categories/{$monthly['id']}", ['is_active' => false]);
         self::assertFalse($this->decode($response)['category']['is_active']);
+    }
+
+    public function testItsNamesLeadingEmojiMayBePremiumInTheBot(): void
+    {
+        $category = $this->decode($this->postJson('/api/admin/plans/categories', ['name' => '💎 ویژه', 'emoji_id' => '42']))['category'];
+        self::assertSame(['💎 ویژه', '42'], [$category['name'], $category['emoji_id']]);
+        self::assertSame('42', $this->decode($this->putJson("/api/admin/plans/categories/{$category['id']}", ['name' => '💎 ویژه‌تر']))['category']['emoji_id'], 'renamed without it: its own stays');
+
+        $refused = $this->putJson("/api/admin/plans/categories/{$category['id']}", ['name' => 'ویژه', 'emoji_id' => '42']);
+        self::assertSame(['name' => [PremiumText::NO_EMOJI]], $this->decode($refused)['errors'] ?? null);
+        $refused = $this->putJson("/api/admin/plans/categories/{$category['id']}", ['name' => '', 'emoji_id' => 'x']);
+        self::assertSame(['name', 'emoji_id'], array_keys($this->decode($refused)['errors'] ?? []), 'every refusal at once');
+
+        self::assertNull($this->decode($this->putJson("/api/admin/plans/categories/{$category['id']}", ['name' => '💎 ویژه', 'emoji_id' => null]))['category']['emoji_id']);
     }
 
     public function testTheSwitchTakesOnOrOffAndNothingElse(): void

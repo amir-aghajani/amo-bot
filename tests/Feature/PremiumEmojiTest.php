@@ -50,6 +50,22 @@ final class PremiumEmojiTest extends DatabaseTestCase
         self::assertSame(self::PREMIUM, $this->telegram()->params(0)['text'], 'the hold is over: tried again');
     }
 
+    public function testWhileTheNoHoldsALabelsPremiumEmojiGoesPlainInItAndNoIcon(): void
+    {
+        $this->service(PremiumEmojiStatus::class)->record(false);
+        $markup = ['inline_keyboard' => [[['text' => '<tg-emoji emoji-id="111">🔥</tg-emoji> خرید', 'callback_data' => 'buy']]]];
+
+        $this->api()->sendMessage(42, 'منو', ['reply_markup' => $markup]);
+
+        self::assertSame(['sendMessage'], $this->telegram()->calls(), 'plain from the start');
+        self::assertSame([[['text' => '🔥 خرید', 'callback_data' => 'buy']]], $this->telegram()->markup(0)['inline_keyboard']);
+
+        $this->service(PremiumEmojiStatus::class)->forget();
+        $this->telegram()->reset();
+        $this->api()->sendMessage(42, 'منو', ['reply_markup' => $markup]);
+        self::assertSame([[['text' => 'خرید', 'callback_data' => 'buy', 'icon_custom_emoji_id' => '111']]], $this->telegram()->markup(0)['inline_keyboard'], 'tried again: its icon');
+    }
+
     public function testEachBotIsToldNoForItselfAndHeedsOnlyItsOwnNo(): void
     {
         $bot = $this->agentBot();

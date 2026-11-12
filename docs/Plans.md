@@ -2,8 +2,8 @@
 
 # Plans
 
-«فروشگاه › پلن‌ها» and «فروشگاه › دسته‌بندی‌ها», in both panels: what the shop sells. The bot's «خرید اشتراک» and the
-shop's website offer exactly what these lists say, in their order.
+«فروشگاه › پلن‌ها» and «فروشگاه › دسته‌بندی‌ها», in both panels: what the shop sells. The bot's «خرید اشتراک», the
+shop's [mini app](Mini-App.md) and its website offer exactly what these lists say, in their order.
 
 ## A plan
 
@@ -14,6 +14,11 @@ colleagues) — and the servers it can be bought on. «افزودن پلن» ope
 **«مشخصات»**
 
 - «نام پلن» — as the customer sees it in the bot, 128 characters at most. Names need not be unique.
+- «ایموجی پرمیوم نام» — optional: a premium emoji from the bot's list
+  ([Bot texts and keyboards](Bot-Texts-And-Keyboards.md#premium-emoji)). Picked, its plain emoji becomes the name's first —
+  in place of the one it started with — and the bot draws that one premium: on the plan's button as its icon, in its
+  texts (`%plan%`) in its place. The mini app, the website, the panels and the reports show the plain one. While it is
+  chosen the name must start with an emoji; «برداشتن» leaves the plain one in the name.
 - «دسته» — optional; plans without one are listed under «سایر پلن‌ها» ([categories](#categories)).
 - «توضیحات» — optional, shown under the plan's name.
 - «یادداشت پیش‌فاکتور» — optional, 500 characters at most: a few lines the bot says under the plan's checkout, a
@@ -22,6 +27,9 @@ colleagues) — and the servers it can be bought on. «افزودن پلن» ope
 - «دکمه در ربات» — the plan's button in «خرید اشتراک»: its colour — blue, green or red, or «پیش‌فرض» for Telegram's
   own — and its width: a row of its own, or two or three to a row. Plans of the same width that follow each other in the
   list share rows; one of another width starts a new row.
+- «برچسب» — optional: a label on the plan's card in the [mini app](Mini-App.md) and the shop's website — «پرفروش‌ترین»,
+  «پیشنهاد ما» or «VIP» —, or «بدون برچسب». Only you set it: nothing gives a plan one by itself, whatever it sells. The
+  list shows it beside the plan's name; the bot does not.
 - «قابل خرید» — the switch: off, the plan is not offered; the services already sold go on.
 
 **«قیمت و سهمیه»**
@@ -233,7 +241,8 @@ under «نیازمند رسیدگی» ([Orders and payments](Orders-And-Payments
 
 ## Categories
 
-«دسته‌بندی‌ها»: a name (64 characters at most, unique in the shop), a switch and an order. While any category is switched
+«دسته‌بندی‌ها»: a name (64 characters at most, unique in the shop) — with a premium emoji for its first emoji if you
+like, as a plan's ([above](#a-plan)): its button's icon in the bot, premium in `%category%` —, a switch and an order. While any category is switched
 on, the bot's «خرید اشتراک» shows the categories first — every one switched on, in this order, an empty one too, which
 says it has nothing for sale now —, then «سایر پلن‌ها» for the plans of no category or of one switched off, when there
 are any. Without a category switched on, the bot lists the plans at once. The shop's website groups its catalogue the

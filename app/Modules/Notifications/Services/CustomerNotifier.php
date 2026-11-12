@@ -37,6 +37,7 @@ use App\Modules\Telegram\Notifications\ServiceCard;
 use App\Modules\Telegram\Texts\BotText;
 use App\Modules\Telegram\Texts\BotTexts;
 use App\Modules\Telegram\Texts\Html;
+use App\Modules\Telegram\Texts\PremiumText;
 use App\Modules\Telegram\Texts\TelegramHtml;
 use App\Modules\Users\Models\User;
 use App\Modules\Users\Models\WalletTransfer;
@@ -247,15 +248,17 @@ final class CustomerNotifier
     }
 
     /**
-     * Support handed the service to another customer (ServiceTransfers): its previous owner hears it, and which of their
-     * unpaid orders of it went with it (`$cancelled`, their ids). It is theirs no more, so the notice is about their
-     * account, with nothing for their website to open.
+     * Support handed the service to another customer (ServiceTransfers): its previous owner hears it — the service named as
+     * they knew it (`$shown`, taken before the handover cleared their own name for it) —, and which of their unpaid orders
+     * of it went with it (`$cancelled`, their ids). It is theirs no more, so the notice is about their account, with
+     * nothing for their website to open.
      *
      * @param list<int> $cancelled
      */
-    public function serviceTransferred(Subscription $subscription, User $from, array $cancelled): void
+    public function serviceTransferred(Subscription $subscription, User $from, array $cancelled, string $shown): void
     {
         $this->tell($from, NoticeType::ServiceTransferred, fn(): array => $this->serviceChanged($subscription, BotText::ServiceTransferredBySupport, [
+            'client' => $shown,
             'cancelled' => $cancelled === [] ? '' : $this->texts->part(BotText::ServiceTransferredOrders, [
                 // A left-to-right mark before each: after the Persian words, «#142» would read «142#».
                 'orders' => implode('، ', array_map(static fn(int $id): string => "\u{200E}#{$id}", $cancelled)),
@@ -319,7 +322,7 @@ final class CustomerNotifier
     public function autoRenewShort(Subscription $subscription, string $price): void
     {
         $this->tell($subscription, NoticeType::AutoRenewShort, fn(): array => $this->message($this->texts->render(BotText::AutoRenewShort, [
-            'client' => $subscription->remote_name,
+            'client' => $subscription->shownAs(),
             'amount' => Money::format($price),
             'balance' => Messages::balance($subscription->user->balance()),
             'expires' => Messages::expiry($subscription->expires_at, $subscription->duration_hours),
@@ -355,7 +358,7 @@ final class CustomerNotifier
      * «جایزه دعوت»: `$buyers` of the referrer's referrals bought, so a service of the plan was given to them free (the
      * service itself comes as any delivered order).
      */
-    public function referralRewarded(User $referrer, string $plan, int $buyers): void
+    public function referralRewarded(User $referrer, PremiumText $plan, int $buyers): void
     {
         $this->tell($referrer, NoticeType::ReferralReward, fn(): array => $this->message($this->texts->render(BotText::ReferralRewarded, [
             'buyers' => Persian::number($buyers),
@@ -654,14 +657,15 @@ final class CustomerNotifier
     }
 
     /**
-     * A plain message about support's change of a service: its client's name on the panel and the text's own values.
+     * A plain message about support's change of a service: its name as its customer reads it (Subscription::shownAs()) —
+     * unless `$values` names it otherwise — and the text's own values.
      *
-     * @param array<string, scalar|Html> $values the text's own, besides the client's name
+     * @param array<string, scalar|Html> $values the text's own; a `client` of its own in place of the service's name
      * @return array{string, \Closure(int): array<string, mixed>}
      */
     private function serviceChanged(Subscription $subscription, BotText $text, array $values = []): array
     {
-        return $this->message($this->texts->render($text, ['client' => $subscription->remote_name] + $values));
+        return $this->message($this->texts->render($text, $values + ['client' => $subscription->shownAs()]));
     }
 
     /**

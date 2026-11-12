@@ -7,6 +7,8 @@ namespace App\Modules\Store\Api;
 use App\Core\Exceptions\TooManyAttemptsException;
 use App\Core\Exceptions\ValidationException;
 use App\Core\Http\ApiController;
+use App\Core\Sms\SmsFailedException;
+use App\Modules\Accounts\Enums\SignInMethod;
 use App\Modules\Accounts\Exceptions\AccountRefusedException;
 use App\Modules\Accounts\Http\Customer;
 use App\Modules\Accounts\Models\CustomerSession;
@@ -14,6 +16,7 @@ use App\Modules\Accounts\Services\AccountNames;
 use App\Modules\Accounts\Services\AccountPresenter;
 use App\Modules\Accounts\Services\CustomerSessions;
 use App\Modules\Accounts\Services\EmailSignIn;
+use App\Modules\Accounts\Services\PhoneSignIn;
 use App\Modules\Accounts\Services\Reauthentication;
 use App\Modules\Auth\Exceptions\SignInRefusedException;
 use App\Modules\Discounts\Services\Loyalty;
@@ -36,11 +39,12 @@ final class MeController extends ApiController
         private readonly AccountNames $names,
         private readonly EmailSignIn $email,
         private readonly Reauthentication $reauthentication,
+        private readonly PhoneSignIn $phone,
         private readonly CustomerNotifications $notifications,
         private readonly Loyalty $loyalty,
     ) {}
 
-    /** GET /me — the account, its unread notices, what the admin API lets them do (`staff`) and their loyalty tier. */
+    /** GET /me — the account, its unread notices, what the admin API lets them do (`staff`), their loyalty tier and this session. */
     public function show(Request $request, Response $response): Response
     {
         return $this->account($request, $response);
@@ -69,9 +73,40 @@ final class MeController extends ApiController
      */
     public function reauthenticate(Request $request, Response $response): Response
     {
-        $this->reauthentication->prove(StoreMiddleware::website($request), $request, Customer::of($request), $this->input($request));
+        $this->reauthentication->prove(StoreMiddleware::door($request), $request, Customer::of($request), $this->input($request));
 
         return $this->json($response, ['expires_in' => CustomerSessions::RECENT_SECONDS]);
+    }
+
+    /**
+     * POST /me/reauthenticate/phone — a code texted to the account's own mobile, which POST /me/reauthenticate (`phone`)
+     * takes back on this session alone (202).
+     *
+     * @throws SignInRefusedException 422 sign-in by SMS off, 503 the SMS budget spent
+     * @throws ValidationException 422 on `method`: no mobile an SMS reaches
+     * @throws TooManyAttemptsException 429
+     * @throws SmsFailedException 502
+     */
+    public function reauthenticationCode(Request $request, Response $response): Response
+    {
+        return $this->json($response, PhoneSignIn::sent($this->phone->sendReauthCode(StoreMiddleware::website($request), $request, Customer::of($request))), 202);
+    }
+
+    /**
+     * PUT /me/biometric — a new secret for the mini app to keep behind the device's fingerprint or face; proving it again
+     * (POST /me/reauthenticate, `biometric`) makes this session recent. Shown this once; one set before is replaced.
+     */
+    public function biometric(Request $request, Response $response): Response
+    {
+        return $this->json($response, ['token' => $this->sessions->setBiometric(Customer::of($request)->session)]);
+    }
+
+    /** DELETE /me/biometric — the session's fingerprint secret forgotten. */
+    public function forgetBiometric(Request $request, Response $response): Response
+    {
+        $this->sessions->clearBiometric(Customer::of($request)->session);
+
+        return $this->noContent($response);
     }
 
     /**
@@ -122,16 +157,26 @@ final class MeController extends ApiController
         return $this->noContent($response);
     }
 
-    /** What GET /me and PATCH /me answer. */
+    /**
+     * What GET /me and PATCH /me answer: the account, its unread notices, what the admin API lets them do (`staff`), their
+     * loyalty tier, and this session — how it signed in, whether it keeps a fingerprint secret, and until when it counts
+     * as recently signed in (null: prove a way in again before what asks it).
+     */
     private function account(Request $request, Response $response): Response
     {
         $customer = Customer::of($request);
+        $session = $customer->session;
 
         return $this->json($response, [
             'customer' => AccountPresenter::present($customer->user),
             'unread_notifications' => $this->notifications->unread($customer->user),
-            'staff' => StaffPresenter::present(StoreMiddleware::website($request), $customer),
+            'staff' => StaffPresenter::present(StoreMiddleware::door($request), $customer),
             'loyalty' => $this->loyalty->standing($customer->user),
+            'session' => [
+                'method' => ($session->method ?? SignInMethod::Password)->value,
+                'biometric' => $session->biometric_hash !== null,
+                'recent_until' => CustomerSessions::provenUntil($session, CustomerSessions::RECENT_SECONDS)?->toIso8601String(),
+            ],
         ]);
     }
 }

@@ -4,8 +4,9 @@
 
 AmoBot is an open-source shop for selling VPN subscriptions. Customers buy, pay for and manage their services in a
 Telegram bot; the owner runs the shop from a web panel (`/admin/`), and each agent — a reseller with a bot and a shop of
-their own — from theirs (`/agent/`); and a shop's own website can sell through the Store API. AmoBot makes each service on the
-VPN panels it connects to (3X-UI, PasarGuard), and takes the payment methods the owner sets up.
+their own — from theirs (`/agent/`); the shop's mini app brings the customer's side into Telegram itself, and a shop's
+own website can sell through the Store API. AmoBot makes each service on the VPN panels it connects to (3X-UI,
+PasarGuard, HMPanel), and takes the payment methods the owner sets up.
 
 It runs on shared hosting — cPanel, DirectAdmin and the like —, the one supported way: PHP answers a JSON API, the
 panels are static files, a web installer sets it all up from the browser, the host's cron runs its scheduler and
@@ -28,6 +29,7 @@ Then, as the shop runs:
 |---|---|
 | Work in the panels, a screen at a time | The [Owner's guide](Owners-Guide.md#the-pages) and its pages |
 | See what customers and the bot's admins see in the bot | [Bot guide](Bot-Guide.md) |
+| Open the shop inside Telegram | [Mini app](Mini-App.md) |
 | Connect the shop's own website | [Website](Website.md) |
 | Change the installation's settings | [Configuration](Configuration.md) and the [config.php reference](Config-Reference.md) |
 | Install a new version | [Upgrading](Upgrading.md) |

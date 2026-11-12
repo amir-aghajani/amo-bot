@@ -85,6 +85,7 @@ function configWith(database: DatabaseSettings): ConfigSettingsResponse {
       database,
       telegram: { token: { set: false, hint: '' }, username: '', api_url: 'https://api.telegram.org', poll_timeout: 25, webhook_secret: { set: false, hint: '' } },
       mail: { transport: 'none', from_address: '', from_name: '', drivers: [], values: {} },
+      sms: { driver: 'none', agents: false, drivers: [], values: {} },
       advanced: { log_level: 'info', session_lifetime: 120, session_secure_cookie: false, http_timeout: 30, cron_token: { set: false, hint: '' } },
     },
     meta: { timezones: [], log_levels: ['info'], cron_url: null, webhook_url: 'https://shop.example/webhooks/telegram/…' },

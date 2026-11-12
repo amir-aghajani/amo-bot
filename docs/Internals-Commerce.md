@@ -173,7 +173,8 @@ support:
   the order to the process that has it, and an agent's traffic it drew stays drawn — it is that delivery's
   (`OrderService::withTraffic()`; `TrafficPool::draw()` never draws twice for one order).
 
-Unpaid orders expire after `ExpireOrdersTask::EXPIRE_HOURS` (`Order::expirable()`), never while their money may be with
+Unpaid orders expire after the owner's hours (`ScheduleSettings::orderHours()`, «زمان‌بندی کارها»; the default of
+`ScheduleSettings::ORDER_HOURS`) (`Order::expirable()`), never while their money may be with
 support (`Payment::isWithSupport()`): a receipt in review, or a card transfer taken in support's private chat — shown no
 card, it stays support's to approve or cancel, whatever the setting says since.
 
@@ -323,7 +324,8 @@ stands, and is never approved over. An online payment is never approved nor reje
 (`OnlinePayments::check()`, the gateway's word alone moves it), and one paid after its order closed
 (`Payment::wentToWallet()`: its money in the wallet) is neither retried nor
 refunded — it paid nothing of the order. One is held for support (`OnlinePayments::isHeld()`) when its gateway answers
-what does not fit it, keeps money on it unsettled 48 hours after its page closed, or closes it after saying money had
+what does not fit it, keeps money on it unsettled past `ScheduleSettings::reviewHours()` after its page closed (the
+default of `ScheduleSettings::REVIEW_HOURS`, 48), or closes it after saying money had
 come in on it — the last at once —, each with its note (`PaymentService::HELD_NOTES`). A held one is asked about no
 more — only `cancel()` is allowed —, and while it still waits (pending, or failed with its page) its order neither
 expires (`PaymentService::expire()` keeps it) nor is paid another way (`Checkout::pay()` throws
@@ -507,7 +509,7 @@ main group's report (then `remedy()`, the owner's way back) and, copied word for
 The program's minimum and an agent's own are one field (`AgencySettings::minimumOf()`): whole Toman, 0 for none —
 `monthly_minimum` null.
 `Bot::sells()` is the one question every door asks — true for the main bot; an end passed counts at once, before
-the hourly `Agency\Tasks\AgencyStandingTask` writes it down. It is never `Bot::status()`, which would stop the bot, its
+`Agency\Tasks\AgencyStandingTask` (hourly by default) writes it down. It is never `Bot::status()`, which would stop the bot, its
 webhook, panel, website and tasks. Where the answer must be the database's as it is now — a bot's polling process keeps
 its shop's row for seconds, and a suspension holds from the moment it is written — the door asks `Bot::sellsNow()`,
 which reads an agent's row again (without a lock: a free test locks the shop's row before its customer's):

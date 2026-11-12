@@ -9,7 +9,7 @@ they show them, and a path such as «فروش › پرداخت‌ها» is a gro
 
 Everything here works the same in an agent's panel for the agent's own shop, except where a page says it is the owner's
 alone: the servers, the agents, the mass gift («هدیه همگانی»), custom services, services added by their link, and the
-installation's settings («تنظیمات پنل»).
+installation's settings («تنظیمات پنل» — an agent's has «ظاهر» and their own shop's «پشتیبان‌گیری»).
 
 ## Setting a shop up
 
@@ -32,13 +32,14 @@ A new shop sells once it has a bot, a server, a plan and a way to pay. In order:
    the welcome, the texts and the menu in «ربات › متن‌های ربات» and «ربات › کیبوردها»
    ([Bot texts and keyboards](Bot-Texts-And-Keyboards.md)).
 6. **The report group** — a Telegram group of you and your team, where sales, receipts, failed deliveries and tickets
-   arrive with buttons to act on them ([Report group](Telegram-Group.md)). Only the bot's admins can use the buttons, so
+   arrive with buttons to act on them, and the shop's backup once a day ([Report group](Telegram-Group.md)). Only the bot's admins can use the buttons, so
    make yourself one: start the bot from your own Telegram account, then «فروش › کاربران» › your row's menu › «مدیر ربات
    کردن».
 7. **Then, as the shop grows**: [free test accounts](Test-Accounts.md), [discounts](Discounts.md),
    [loyalty tiers and cashback](Loyalty-Cashback-And-Draws.md),
    [gift codes and the lucky wheel](Gift-Codes-And-Lucky-Wheel.md), the [referral program](Referrals.md),
-   [agents](Agency.md) with bots of their own, and a [website](Website.md) of the shop's own.
+   [agents](Agency.md) with bots of their own, the shop's [mini app](Mini-App.md) inside Telegram, and a
+   [website](Website.md) of the shop's own.
 
 Try it as a customer before telling anyone: `/start` the bot, buy the cheapest plan with a card, send a receipt, and
 approve it in the panel.
@@ -57,6 +58,7 @@ approve it in the panel.
 | One service | «فروش › اشتراک‌ها»: its link, usage, days and traffic added, switched off, moved, deleted ([Services](Services.md)) |
 | A server down | Its page says why; its services' days can be made good afterwards, or its services rescued to another server ([Servers](Servers.md#moving-its-services)) |
 | News for everyone | `/broadcast` in the bot; «ربات › ارسال همگانی» follows and controls the runs ([Broadcasts](Broadcasts.md)) |
+| A backup | Every day in the report group's «پشتیبان‌گیری» topic; at any time, and a restore, in «تنظیمات پنل › پشتیبان‌گیری» — keep `config.php` and `storage/uploads/` with them ([Backups](Backups.md)) |
 
 The menu counts what waits beside its entries — «پشتیبانی», «نظرات», «سفارش‌ها», «پرداخت‌ها» —, and every list follows the shop
 live: there is no need to reload.
@@ -76,7 +78,7 @@ live: there is no need to reload.
 | [Services added by their link](Service-Claims.md) | A client made by hand on a panel, added to a customer's account when they send its link |
 | [Custom services](Custom-Services.md) | A service the customer builds of the traffic and days they choose, priced by tiers |
 | [Support tickets](Support-Tickets.md) | Answering customers, from the panel and from the report group |
-| [Reviews](Reviews.md) | Customers' reviews from the website: approved, rejected, deleted |
+| [Reviews](Reviews.md) | Customers' reviews from the website and the mini app: approved, rejected, deleted |
 | [Discounts](Discounts.md) | Discount codes, timed sales and a customer's own discount, and how they add up |
 | [Loyalty, cashback and draws](Loyalty-Cashback-And-Draws.md) | Loyalty tiers, cashback rules and the nightly draw |
 | [Gift codes and the lucky wheel](Gift-Codes-And-Lucky-Wheel.md) | Codes worth Toman or a free service, and the bot's wheel |
@@ -87,6 +89,7 @@ live: there is no need to reload.
 | [Bot settings](Bot-Settings.md) | The bot's switches and rules |
 | [Bot texts and keyboards](Bot-Texts-And-Keyboards.md) | Every word the bot says, and its menu ([reference](Bot-Texts-Reference.md)) |
 | [Website](Website.md) | A shop's own website: its address, sign-ins, captcha, reviews, and the bot's admins working the shop from it |
-| [Panel settings](Panel-Settings.md) | The installation's own settings, the owner's login, the look, AmoBot's update |
+| [Mini app](Mini-App.md) | The shop inside Telegram: what customers do in it, switching it on, its look, the bot's buttons that open it |
+| [Panel settings](Panel-Settings.md) | The installation's own settings, the owner's login, the look, the backups ([Backups](Backups.md)), the task schedule, AmoBot's update |
 
 The customer's side of every screen — what the bot shows and says — is the [Bot guide](Bot-Guide.md).

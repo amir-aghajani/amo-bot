@@ -175,7 +175,7 @@ final class SubscriptionHandler implements Handler
         }
 
         $ctx->session->enter(self::ROTATING . $subscription->id);
-        $ctx->edit($this->texts->render(BotText::ServiceRotateConfirm, ['client' => $subscription->remote_name]), [
+        $ctx->edit($this->texts->render(BotText::ServiceRotateConfirm, ['client' => $subscription->shownAs()]), [
             'reply_markup' => $this->buttons->confirmChange($subscription->id, BotText::ServiceRotateYes, self::serviceCallback($subscription->id, 'rotate', 'yes')),
         ]);
     }
