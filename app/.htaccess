@@ -1,7 +1,21 @@
-<IfModule mod_authz_core.c>
-    Require all denied
+# The PHP sources: never served. But app/ is also the address of the shop's Telegram mini app (app/{its store key}/,
+# the build's public/app/), and on a host whose document root is the project folder itself (cPanel's public_html) a
+# request for it arrives here — and a plain refusal answered the mini app with 403 Forbidden. So with rewriting each
+# request goes on to public/app/, as the root's .htaccess sends the rest into public/, and nothing of this folder is
+# ever served: what the forward cannot place is refused, and so is everything where rewriting is unavailable.
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    # %1 is the address up to this folder (the project's own folder, wherever it is installed), %2 the rest after app/.
+    RewriteCond %{REQUEST_URI}::$0 ^(.*)app/(.*)::\2$
+    RewriteRule ^.*$ %1public/app/%2 [L]
+    RewriteRule ^ - [F]
 </IfModule>
-<IfModule !mod_authz_core.c>
-    Order allow,deny
-    Deny from all
+<IfModule !mod_rewrite.c>
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order allow,deny
+        Deny from all
+    </IfModule>
 </IfModule>

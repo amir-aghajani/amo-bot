@@ -82,8 +82,9 @@ run(composer($options) . ' install --no-dev --optimize-autoloader --classmap-aut
 
 // Nothing of the project but public/ is served (the folders the copy brought carry their own rule; these two are made
 // here): the PHP packages and the shipped assets refuse the web too, for a host where the project sits in the web root.
+// bin/'s rule is a plain refusal (app/'s also forwards the mini app's address into public/app/).
 foreach (['vendor', 'resources'] as $dir) {
-    copy($root . '/app/.htaccess', $stage . '/' . $dir . '/.htaccess');
+    copy($root . '/bin/.htaccess', $stage . '/' . $dir . '/.htaccess');
 }
 
 step('Writing ' . basename($zip));

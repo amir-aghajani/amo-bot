@@ -22,10 +22,14 @@ interface CalloutProps {
   children: ReactNode
 }
 
-/** A tinted strip that reports an outcome or a note in place: a test that passed, a refusal, a hint before a form. */
+/**
+ * A tinted strip that reports an outcome or a note in place: a test that passed, a refusal, a hint before a form. What
+ * it says may carry an address or a key with no place to break: it breaks anywhere, or it would push the strip — and
+ * the card and the page around it — wider than the screen.
+ */
 export function Callout({ tone, icon: Icon, role, className, children }: CalloutProps) {
   return (
-    <div role={role ?? (tone === 'danger' ? 'alert' : undefined)} className={cn('flex items-start gap-2.5 rounded-lg border px-3 py-2.5 text-body', TONES[tone].box, className)}>
+    <div role={role ?? (tone === 'danger' ? 'alert' : undefined)} className={cn('flex items-start gap-2.5 rounded-lg border px-3 py-2.5 text-body wrap-anywhere', TONES[tone].box, className)}>
       {Icon && <Icon className={cn('mt-[3px] size-4 shrink-0', TONES[tone].icon)} aria-hidden />}
       <div className="min-w-0 flex-1">{children}</div>
     </div>

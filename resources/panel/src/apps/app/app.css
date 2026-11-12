@@ -128,10 +128,13 @@
     overscroll-behavior-y: none;
   }
 
-  /* Latin runs (links, codes, card numbers) read left to right inside Persian text. */
+  /* Latin runs (links, codes, card numbers) read left to right inside Persian text. One has no place to break — an
+     email, a link —: it breaks anywhere, or a long one would push the screen wider than the phone. A run kept on one
+     line (nowrap, truncate) stays on it. */
   .ltr {
     direction: ltr;
     unicode-bidi: isolate;
+    overflow-wrap: anywhere;
   }
 
   button {

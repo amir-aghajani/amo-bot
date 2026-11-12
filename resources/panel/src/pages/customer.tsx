@@ -200,7 +200,8 @@ function Identity({ user }: { user: UserRow }) {
           </>
         )}
         {user.email && (
-          <span>
+          // An email has no place to break: a long one breaks anywhere, or it would push the page wider than a phone.
+          <span className="min-w-0 wrap-anywhere">
             ایمیل{' '}
             <bdi dir="ltr" className="text-foreground">
               {user.email}

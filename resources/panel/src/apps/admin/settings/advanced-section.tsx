@@ -25,11 +25,14 @@ function cronLine(url: string): string {
   return `curl -fsS ${url} > /dev/null`
 }
 
-/** A line to copy as it is (an address, a command for a form), written left to right, with its copy button. */
+/**
+ * A line to copy as it is (an address, a command for a form), written left to right, with its copy button. It wraps
+ * anywhere: cut to one line, a long address would still push the card wider than a phone's screen.
+ */
 function CopyLine({ text, label, busy, onCopy }: { text: string; label: string; busy: boolean; onCopy: () => void }) {
   return (
     <div className="flex items-center gap-2 rounded-lg border border-border bg-fill px-3 py-2">
-      <code dir="ltr" className="min-w-0 flex-1 truncate text-start text-footnote">
+      <code dir="ltr" className="min-w-0 flex-1 text-start text-footnote break-all">
         {text}
       </code>
       <IconButton icon={Copy} busy={busy} onClick={onCopy} aria-label={label} className="-me-1 size-7" />

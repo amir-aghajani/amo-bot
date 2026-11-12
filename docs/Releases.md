@@ -13,6 +13,26 @@ While a version is being made its changes collect under **Unreleased**; releasin
 
 Nothing yet.
 
+## Version 0.8.1
+
+### Fixed
+
+- **The mini app on a host whose document root is the project folder** (the release's contents in cPanel's
+  `public_html`, as on most shared hosts) answered *403 Forbidden* — in Telegram and in the panels' «پیش‌نمایش» alike.
+  Its address, `/app/<key>/`, is also the name of the PHP code's folder, `app/`, whose `.htaccess` refused every
+  request; it now sends them on to the mini app, and still serves nothing of the code
+  ([Installation](Installation.md#the-mini-app-answers-403-forbidden)). The mini app's own folder carries the rule for
+  its pages as well, so it holds whichever folder's rules the server reads.
+- **A long address or email on a phone** pushed the panel's page wider than the screen: the mini app's address in the
+  `@BotFather` steps of «مینی‌اپ تلگرام», the cron address in «تنظیمات پنل › پیشرفته», the group's connect message, a
+  customer's email on their page. They wrap now, and so does anything long in the panels' note boxes. In the mini app,
+  a long email or link wraps too.
+
+### Upgrading
+
+- **Update from «تنظیمات پنل › به‌روزرسانی»**: nothing else to do, and the database does not change. After an upload
+  by hand, take the release's `app/` and `public/` whole.
+
 ## Version 0.8.0
 
 ### Security

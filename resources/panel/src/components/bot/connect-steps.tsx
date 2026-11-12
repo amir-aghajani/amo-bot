@@ -63,7 +63,7 @@ export function ConnectSteps({ group, creating, onCreate }: { group: ReportGroup
             <p className="text-body text-muted-foreground">ربات را خودتان مدیر گروه کنید و دسترسی «مدیریت تاپیک‌ها» را به آن بدهید، بعد این پیام را در گروه بفرستید:</p>
             <div className="flex items-center gap-2">
               <div className="min-w-0 flex-1 rounded-lg border border-border bg-fill px-3 py-2">
-                <code dir="ltr" className="block truncate text-start text-footnote">
+                <code dir="ltr" className="block text-start text-footnote break-all">
                   {link.command}
                 </code>
               </div>

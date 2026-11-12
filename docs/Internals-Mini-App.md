@@ -52,7 +52,12 @@ code.
   `vite.config.ts`) — `'self'` for the panels' «پیش‌نمایش», which shows the app in a frame on the same site.
 
 `public/.htaccess` serves the app's files as they are, answers a missing one under `app/assets/` with a 404, and sends
-any other address under `app/` to `app/index.html` — `public/index.php` does the same under `php -S`. The release zip
+any other address under `app/` to `app/index.html` — `public/index.php` does the same under `php -S`. The build's
+`public/app/.htaccess` says it again for its own folder, so it holds on a server that does not carry a folder's
+rewrite rules into a folder with an `.htaccess` of its own. Where the document root is the project folder (cPanel's
+`public_html`), `/app/…` first reaches the PHP code's folder, `app/`: its `.htaccess` sends every request on to
+`public/app/` under the project's own folder (wherever it is installed), refuses what it cannot place, and refuses
+everything where rewriting is unavailable — so nothing of the code is served (`tests/Unit/Http/WebRootTest.php`). The release zip
 ships `public/app` (`scripts/release.php` refuses to build without it), Git ignores it, and knip is given
 `src/apps/app/main.tsx` as an entry of its own (`knip.jsonc`), since it reads `vite.config.ts` as the panels' build.
 

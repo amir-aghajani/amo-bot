@@ -48,6 +48,32 @@ const SHARED_SOURCE = (id: string) => PANEL_SOURCES.test(id) && !OWN_APPS.test(i
 export const MINI_APP_FRAME_ANCESTORS = "frame-ancestors 'self' https://web.telegram.org"
 
 /**
+ * The mini app's folder's own rules (public/app/.htaccess, written by the build): who may frame it, and its pages — a
+ * build file as it is, a missing one a 404, any other address the app's page —, said in the folder itself.
+ */
+export const MINI_APP_HTACCESS = [
+  '# Written by the build (vite.config.ts). The mini app opens inside Telegram: its web client (web.telegram.org) shows',
+  '# it in a frame, which public/.htaccess refuses every other page — and so does the preview in the panels, on this',
+  '# site. Its folder lets those two frame it, and no other.',
+  '<IfModule mod_headers.c>',
+  '    Header unset X-Frame-Options',
+  `    Header set Content-Security-Policy "${MINI_APP_FRAME_ANCESTORS}"`,
+  '</IfModule>',
+  '',
+  '# Its files as they are; a build file that is not there is a 404; any other address (app/{a store key}/…) is its',
+  "# page. Said here as public/.htaccess says it, so it holds on a server that does not carry a folder's rules into a",
+  '# folder with an .htaccess of its own.',
+  '<IfModule mod_rewrite.c>',
+  '    RewriteEngine On',
+  '    RewriteCond %{REQUEST_FILENAME} !-f',
+  '    RewriteRule ^assets/ - [R=404,L]',
+  '    RewriteCond %{REQUEST_FILENAME} !-f',
+  '    RewriteRule ^ index.html [L]',
+  '</IfModule>',
+  '',
+].join('\n')
+
+/**
  * A built page's Content-Security-Policy: the build's own files and the site's origin, the page's inline scripts by
  * their hashes. The mini app also shows the customer's Telegram picture, from t.me (its account card); the panels load
  * no picture from anywhere else. The panels frame the site's own pages alone (the mini app's preview); the mini app
@@ -80,7 +106,7 @@ export function pagePolicy(miniApp: boolean, html: string): string {
  *   allowed by its hash, taken from the built page, so it never goes stale;
  * - for the mini app, app/.htaccess: Telegram's web client shows it in a frame, and so does the panels' preview of it
  *   (the panels' pages may be framed by nobody), so its folder lets web.telegram.org and the site itself frame it, and
- *   nobody else (MINI_APP_FRAME_ANCESTORS);
+ *   nobody else (MINI_APP_FRAME_ANCESTORS) — and says its pages itself (MINI_APP_HTACCESS);
  * - beside each script and stylesheet a brotli copy (x.js.br, best level, made once), and assets/.htaccess: the hashed
  *   files are cached for good, and a browser that reads brotli gets the .br as it is — nothing compressed per request;
  * - a clean slate: public/ also holds the PHP front controller, so the build removes only its own outputs.
@@ -105,20 +131,7 @@ function production(miniApp: boolean): Plugin {
     },
     generateBundle() {
       if (miniApp) {
-        this.emitFile({
-          type: 'asset',
-          fileName: `${MINI_APP}/.htaccess`,
-          source: [
-            '# Written by the build (vite.config.ts). The mini app opens inside Telegram: its web client (web.telegram.org) shows',
-            '# it in a frame, which public/.htaccess refuses every other page — and so does the preview in the panels, on this',
-            '# site. Its folder lets those two frame it, and no other.',
-            '<IfModule mod_headers.c>',
-            '    Header unset X-Frame-Options',
-            `    Header set Content-Security-Policy "${MINI_APP_FRAME_ANCESTORS}"`,
-            '</IfModule>',
-            '',
-          ].join('\n'),
-        })
+        this.emitFile({ type: 'asset', fileName: `${MINI_APP}/.htaccess`, source: MINI_APP_HTACCESS })
       }
       this.emitFile({
         type: 'asset',

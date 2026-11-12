@@ -59,7 +59,8 @@ On cPanel (DirectAdmin and the others have the same parts under other names):
      release's `public/` folder (cPanel › *Domains*).
    - If you cannot change the document root, move the release's contents **into** `public_html`. The root `.htaccess`
      then forwards every request into `public/` and refuses the rest. Every other folder has a deny-all `.htaccess` of
-     its own, and `config.php` (with any copy an editor left beside it) is refused even without mod_rewrite.
+     its own — `app/`, the PHP code, sends the mini app's address (`/app/…`) on to `public/app/` and serves nothing of
+     its own —, and `config.php` (with any copy an editor left beside it) is refused even without mod_rewrite.
 4. **Run the installer.** Open `https://your-domain/` and follow it ([the web installer](#the-web-installer)).
 5. **Point Telegram at the shop.** In the panel, open «تنظیمات پنل › ربات تلگرام» and press «ثبت Webhook» on the
    «دریافت پیام‌ها» card. It registers the main bot and every agent's bot. Telegram needs the site's address on
@@ -140,6 +141,14 @@ type of "application/octet-stream"*.
   and a plain reload would use the broken copies.
 - **After an upload or an upgrade by hand**: everything under `public/assets/` must be the release's own, whole — upload
   that folder again.
+
+## The mini app answers 403 Forbidden
+
+**0.8.0 with the release's contents in `public_html`** (the document root is the project folder): the mini app's
+address, `/app/{store key}/`, is also the name of the PHP code's folder, `app/`, and that release's `app/.htaccess`
+refused every request into it — the app, its preview in the panels and its files alike. Update to 0.8.1 or later from
+«تنظیمات پنل › به‌روزرسانی»: its `app/.htaccess` sends those requests on to `public/app/`. A shop whose document root
+is `public/` never had this.
 
 ## Next
 

@@ -45,7 +45,13 @@ resources/panel/
 
 فایل <code dir="ltr">public/.htaccess</code> فایل‌های مینی‌اپ را همان‌طور که هستند سرو می‌کند، فایلی را که زیر
 پوشه <code dir="ltr">app/assets/</code> نیست با 404 جواب می‌دهد، و هر آدرس دیگری زیر <code dir="ltr">app/</code> را به
-`app/index.html` می‌فرستد — و فایل `public/index.php` هم زیر `php -S` همین کار را می‌کند. zip نسخه `public/app` را همراه
+`app/index.html` می‌فرستد — و فایل `public/index.php` هم زیر `php -S` همین کار را می‌کند. فایل
+<code dir="ltr">public/app/.htaccess</code> بیلد همین را برای پوشه خودش دوباره می‌گوید، تا روی سروری که قانون‌های rewrite یک
+پوشه را به پوشه‌ای با <code dir="ltr">.htaccess</code> خودش نمی‌برد هم کار کند. جایی که پوشه ریشه دامنه همان پوشه پروژه است
+(`public_html` در cPanel)، آدرس <code dir="ltr">/app/…</code> اول به پوشه کد PHP، <code dir="ltr">app/</code>، می‌رسد:
+فایل <code dir="ltr">.htaccess</code> آن هر درخواست را به <code dir="ltr">public/app/</code> زیر پوشه خود پروژه (هر جا که نصب
+شده) می‌فرستد، آنچه را نمی‌تواند جا بدهد رد می‌کند، و جایی که rewrite در دسترس نیست همه چیز را رد می‌کند؛ پس هیچ چیز از کد
+سرو نمی‌شود (`tests/Unit/Http/WebRootTest.php`). zip نسخه `public/app` را همراه
 دارد (`scripts/release.php` بدون آن بیلد نمی‌کند)، Git آن را نادیده می‌گیرد، و knip ورودی جداگانه `src/apps/app/main.tsx` را
 می‌گیرد (`knip.jsonc`)، چون فایل `vite.config.ts` را بیلد پنل‌ها می‌خواند.
 
