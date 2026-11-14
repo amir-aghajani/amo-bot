@@ -1,0 +1,755 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "MarzbanAPI",
+    "description": "Unified GUI Censorship Resistant Solution Powered by Xray",
+    "version": "0.8.4",
+    "x-source": "Marzban v0.8.4 (https://github.com/Gozargah/Marzban/tree/v0.8.4, commit 7f396db3e703d71a28060bc9ce4a532ec64cb1f4): app/routers/{admin,user,system,core,subscription}.py and app/models/{admin,user,proxy,system,core}.py, as its FastAPI 0.115.2 and pydantic 2.10.4 serve it at /openapi.json. Marzban publishes no description file; a panel serves one only with DOCS=True. Its operations here: the admin's sign-in and own record, every User operation, the system's stats and inbounds, the core's stats, and the subscription routes under the default XRAY_SUBSCRIPTION_PATH (sub)."
+  },
+  "paths": {
+    "/api/admin/token": {
+      "post": {
+        "tags": ["Admin"],
+        "summary": "Admin Token",
+        "description": "Authenticate an admin and issue a token.",
+        "operationId": "admin_token",
+        "requestBody": {
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": { "$ref": "#/components/schemas/Body_admin_token_api_admin_token_post" }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": { "description": "Successful Response", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Token" } } } },
+          "401": { "description": "Unauthorized", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Unauthorized" } } } },
+          "422": { "description": "Validation Error", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/HTTPValidationError" } } } }
+        }
+      }
+    },
+    "/api/admin": {
+      "get": {
+        "tags": ["Admin"],
+        "summary": "Get Current Admin",
+        "description": "Retrieve the current authenticated admin.",
+        "operationId": "get_current_admin",
+        "responses": {
+          "200": { "description": "Successful Response", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Admin" } } } },
+          "401": { "description": "Unauthorized", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Unauthorized" } } } }
+        },
+        "security": [{ "OAuth2PasswordBearer": [] }]
+      }
+    },
+    "/api/core": {
+      "get": {
+        "tags": ["Core"],
+        "summary": "Get Core Stats",
+        "description": "Retrieve core statistics such as version and uptime.",
+        "operationId": "get_core_stats",
+        "responses": {
+          "200": { "description": "Successful Response", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CoreStats" } } } },
+          "401": { "description": "Unauthorized", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Unauthorized" } } } }
+        },
+        "security": [{ "OAuth2PasswordBearer": [] }]
+      }
+    },
+    "/sub/{token}/": {
+      "get": {
+        "tags": ["Subscription"],
+        "summary": "User Subscription",
+        "description": "Provides a subscription link based on the user agent (Clash, V2Ray, etc.).",
+        "operationId": "user_subscription",
+        "parameters": [
+          { "name": "token", "in": "path", "required": true, "schema": { "type": "string", "title": "Token" } },
+          { "name": "user-agent", "in": "header", "required": false, "schema": { "type": "string", "default": "", "title": "User-Agent" } }
+        ],
+        "responses": {
+          "200": { "description": "Successful Response", "content": { "application/json": { "schema": {} } } },
+          "422": { "description": "Validation Error", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/HTTPValidationError" } } } }
+        }
+      }
+    },
+    "/sub/{token}/info": {
+      "get": {
+        "tags": ["Subscription"],
+        "summary": "User Subscription Info",
+        "description": "Retrieves detailed information about the user's subscription.",
+        "operationId": "user_subscription_info",
+        "parameters": [
+          { "name": "token", "in": "path", "required": true, "schema": { "type": "string", "title": "Token" } }
+        ],
+        "responses": {
+          "200": { "description": "Successful Response", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SubscriptionUserResponse" } } } },
+          "422": { "description": "Validation Error", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/HTTPValidationError" } } } }
+        }
+      }
+    },
+    "/sub/{token}/usage": {
+      "get": {
+        "tags": ["Subscription"],
+        "summary": "User Get Usage",
+        "description": "Fetches the usage statistics for the user within a specified date range.",
+        "operationId": "user_get_usage",
+        "parameters": [
+          { "name": "token", "in": "path", "required": true, "schema": { "type": "string", "title": "Token" } },
+          { "name": "start", "in": "query", "required": false, "schema": { "type": "string", "default": "", "title": "Start" } },
+          { "name": "end", "in": "query", "required": false, "schema": { "type": "string", "default": "", "title": "End" } }
+        ],
+        "responses": {
+          "200": { "description": "Successful Response", "content": { "application/json": { "schema": {} } } },
+          "422": { "description": "Validation Error", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/HTTPValidationError" } } } }
+        }
+      }
+    },
+    "/sub/{token}/{client_type}": {
+      "get": {
+        "tags": ["Subscription"],
+        "summary": "User Subscription With Client Type",
+        "description": "Provides a subscription link based on the specified client type (e.g., Clash, V2Ray).",
+        "operationId": "user_subscription_with_client_type",
+        "parameters": [
+          { "name": "token", "in": "path", "required": true, "schema": { "type": "string", "title": "Token" } },
+          { "name": "client_type", "in": "path", "required": true, "schema": { "type": "string", "pattern": "sing-box|clash-meta|clash|outline|v2ray|v2ray-json", "title": "Client Type" } },
+          { "name": "user-agent", "in": "header", "required": false, "schema": { "type": "string", "default": "", "title": "User-Agent" } }
+        ],
+        "responses": {
+          "200": { "description": "Successful Response", "content": { "application/json": { "schema": {} } } },
+          "422": { "description": "Validation Error", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/HTTPValidationError" } } } }
+        }
+      }
+    },
+    "/api/system": {
+      "get": {
+        "tags": ["System"],
+        "summary": "Get System Stats",
+        "description": "Fetch system stats including memory, CPU, and user metrics.",
+        "operationId": "get_system_stats",
+        "responses": {
+          "200": { "description": "Successful Response", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SystemStats" } } } },
+          "401": { "description": "Unauthorized", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Unauthorized" } } } }
+        },
+        "security": [{ "OAuth2PasswordBearer": [] }]
+      }
+    },
+    "/api/inbounds": {
+      "get": {
+        "tags": ["System"],
+        "summary": "Get Inbounds",
+        "description": "Retrieve inbound configurations grouped by protocol.",
+        "operationId": "get_inbounds",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "propertyNames": { "$ref": "#/components/schemas/ProxyTypes" },
+                  "additionalProperties": { "type": "array", "items": { "$ref": "#/components/schemas/ProxyInbound" } },
+                  "title": "Response Get Inbounds Api Inbounds Get"
+                }
+              }
+            }
+          },
+          "401": { "description": "Unauthorized", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Unauthorized" } } } }
+        },
+        "security": [{ "OAuth2PasswordBearer": [] }]
+      }
+    },
+    "/api/user": {
+      "post": {
+        "tags": ["User"],
+        "summary": "Add User",
+        "description": "Add a new user\n\n- **username**: 3 to 32 characters, can include a-z, 0-9, and underscores.\n- **status**: User's status, defaults to `active`. Special rules if `on_hold`.\n- **expire**: UTC timestamp for account expiration. Use `0` for unlimited.\n- **data_limit**: Max data usage in bytes (e.g., `1073741824` for 1GB). `0` means unlimited.\n- **data_limit_reset_strategy**: Defines how/if data limit resets. `no_reset` means it never resets.\n- **proxies**: Dictionary of protocol settings (e.g., `vmess`, `vless`).\n- **inbounds**: Dictionary of protocol tags to specify inbound connections.\n- **note**: Optional text field for additional user information or notes.\n- **on_hold_timeout**: UTC timestamp when `on_hold` status should start or end.\n- **on_hold_expire_duration**: Duration (in seconds) for how long the user should stay in `on_hold` status.\n- **next_plan**: Next user plan (resets after use).",
+        "operationId": "add_user",
+        "requestBody": {
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UserCreate" } } },
+          "required": true
+        },
+        "responses": {
+          "200": { "description": "Successful Response", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UserResponse" } } } },
+          "401": { "description": "Unauthorized", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Unauthorized" } } } },
+          "400": { "description": "Bad request", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/HTTPException" } } } },
+          "409": { "description": "Conflict", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Conflict" } } } },
+          "422": { "description": "Validation Error", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/HTTPValidationError" } } } }
+        },
+        "security": [{ "OAuth2PasswordBearer": [] }]
+      }
+    },
+    "/api/user/{username}": {
+      "get": {
+        "tags": ["User"],
+        "summary": "Get User",
+        "description": "Get user information",
+        "operationId": "get_user",
+        "security": [{ "OAuth2PasswordBearer": [] }],
+        "parameters": [
+          { "name": "username", "in": "path", "required": true, "schema": { "type": "string", "title": "Username" } }
+        ],
+        "responses": {
+          "200": { "description": "Successful Response", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UserResponse" } } } },
+          "401": { "description": "Unauthorized", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Unauthorized" } } } },
+          "403": { "description": "Forbidden", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Forbidden" } } } },
+          "404": { "description": "Not found", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/NotFound" } } } },
+          "422": { "description": "Validation Error", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/HTTPValidationError" } } } }
+        }
+      },
+      "put": {
+        "tags": ["User"],
+        "summary": "Modify User",
+        "description": "Modify an existing user\n\n- **username**: Cannot be changed. Used to identify the user.\n- **status**: User's new status. Can be 'active', 'disabled', 'on_hold', 'limited', or 'expired'.\n- **expire**: UTC timestamp for new account expiration. Set to `0` for unlimited, `null` for no change.\n- **data_limit**: New max data usage in bytes (e.g., `1073741824` for 1GB). Set to `0` for unlimited, `null` for no change.\n- **data_limit_reset_strategy**: New strategy for data limit reset. Options include 'daily', 'weekly', 'monthly', or 'no_reset'.\n- **proxies**: Dictionary of new protocol settings (e.g., `vmess`, `vless`). Empty dictionary means no change.\n- **inbounds**: Dictionary of new protocol tags to specify inbound connections. Empty dictionary means no change.\n- **note**: New optional text for additional user information or notes. `null` means no change.\n- **on_hold_timeout**: New UTC timestamp for when `on_hold` status should start or end. Only applicable if status is changed to 'on_hold'.\n- **on_hold_expire_duration**: New duration (in seconds) for how long the user should stay in `on_hold` status. Only applicable if status is changed to 'on_hold'.\n- **next_plan**: Next user plan (resets after use).\n\nNote: Fields set to `null` or omitted will not be modified.",
+        "operationId": "modify_user",
+        "security": [{ "OAuth2PasswordBearer": [] }],
+        "parameters": [
+          { "name": "username", "in": "path", "required": true, "schema": { "type": "string", "title": "Username" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UserModify" } } }
+        },
+        "responses": {
+          "200": { "description": "Successful Response", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UserResponse" } } } },
+          "401": { "description": "Unauthorized", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Unauthorized" } } } },
+          "400": { "description": "Bad request", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/HTTPException" } } } },
+          "403": { "description": "Forbidden", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Forbidden" } } } },
+          "404": { "description": "Not found", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/NotFound" } } } },
+          "422": { "description": "Validation Error", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/HTTPValidationError" } } } }
+        }
+      },
+      "delete": {
+        "tags": ["User"],
+        "summary": "Remove User",
+        "description": "Remove a user",
+        "operationId": "remove_user",
+        "security": [{ "OAuth2PasswordBearer": [] }],
+        "parameters": [
+          { "name": "username", "in": "path", "required": true, "schema": { "type": "string", "title": "Username" } }
+        ],
+        "responses": {
+          "200": { "description": "Successful Response", "content": { "application/json": { "schema": {} } } },
+          "401": { "description": "Unauthorized", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Unauthorized" } } } },
+          "403": { "description": "Forbidden", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Forbidden" } } } },
+          "404": { "description": "Not found", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/NotFound" } } } },
+          "422": { "description": "Validation Error", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/HTTPValidationError" } } } }
+        }
+      }
+    },
+    "/api/user/{username}/reset": {
+      "post": {
+        "tags": ["User"],
+        "summary": "Reset User Data Usage",
+        "description": "Reset user data usage",
+        "operationId": "reset_user_data_usage",
+        "security": [{ "OAuth2PasswordBearer": [] }],
+        "parameters": [
+          { "name": "username", "in": "path", "required": true, "schema": { "type": "string", "title": "Username" } }
+        ],
+        "responses": {
+          "200": { "description": "Successful Response", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UserResponse" } } } },
+          "401": { "description": "Unauthorized", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Unauthorized" } } } },
+          "403": { "description": "Forbidden", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Forbidden" } } } },
+          "404": { "description": "Not found", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/NotFound" } } } },
+          "422": { "description": "Validation Error", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/HTTPValidationError" } } } }
+        }
+      }
+    },
+    "/api/user/{username}/revoke_sub": {
+      "post": {
+        "tags": ["User"],
+        "summary": "Revoke User Subscription",
+        "description": "Revoke users subscription (Subscription link and proxies)",
+        "operationId": "revoke_user_subscription",
+        "security": [{ "OAuth2PasswordBearer": [] }],
+        "parameters": [
+          { "name": "username", "in": "path", "required": true, "schema": { "type": "string", "title": "Username" } }
+        ],
+        "responses": {
+          "200": { "description": "Successful Response", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UserResponse" } } } },
+          "401": { "description": "Unauthorized", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Unauthorized" } } } },
+          "403": { "description": "Forbidden", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Forbidden" } } } },
+          "404": { "description": "Not found", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/NotFound" } } } },
+          "422": { "description": "Validation Error", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/HTTPValidationError" } } } }
+        }
+      }
+    },
+    "/api/users": {
+      "get": {
+        "tags": ["User"],
+        "summary": "Get Users",
+        "description": "Get all users",
+        "operationId": "get_users",
+        "security": [{ "OAuth2PasswordBearer": [] }],
+        "parameters": [
+          { "name": "offset", "in": "query", "required": false, "schema": { "type": "integer", "title": "Offset" } },
+          { "name": "limit", "in": "query", "required": false, "schema": { "type": "integer", "title": "Limit" } },
+          { "name": "username", "in": "query", "required": false, "schema": { "type": "array", "items": { "type": "string" }, "title": "Username" } },
+          { "name": "search", "in": "query", "required": false, "schema": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Search" } },
+          { "name": "admin", "in": "query", "required": false, "schema": { "anyOf": [{ "type": "array", "items": { "type": "string" } }, { "type": "null" }], "title": "Admin" } },
+          { "name": "status", "in": "query", "required": false, "schema": { "$ref": "#/components/schemas/UserStatus" } },
+          { "name": "sort", "in": "query", "required": false, "schema": { "type": "string", "title": "Sort" } }
+        ],
+        "responses": {
+          "200": { "description": "Successful Response", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UsersResponse" } } } },
+          "401": { "description": "Unauthorized", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Unauthorized" } } } },
+          "400": { "description": "Bad request", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/HTTPException" } } } },
+          "403": { "description": "Forbidden", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Forbidden" } } } },
+          "404": { "description": "Not found", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/NotFound" } } } },
+          "422": { "description": "Validation Error", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/HTTPValidationError" } } } }
+        }
+      }
+    },
+    "/api/users/reset": {
+      "post": {
+        "tags": ["User"],
+        "summary": "Reset Users Data Usage",
+        "description": "Reset all users data usage",
+        "operationId": "reset_users_data_usage",
+        "responses": {
+          "200": { "description": "Successful Response", "content": { "application/json": { "schema": {} } } },
+          "401": { "description": "Unauthorized", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Unauthorized" } } } },
+          "403": { "description": "Forbidden", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Forbidden" } } } },
+          "404": { "description": "Not found", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/NotFound" } } } }
+        },
+        "security": [{ "OAuth2PasswordBearer": [] }]
+      }
+    },
+    "/api/user/{username}/usage": {
+      "get": {
+        "tags": ["User"],
+        "summary": "Get User Usage",
+        "description": "Get users usage",
+        "operationId": "get_user_usage",
+        "security": [{ "OAuth2PasswordBearer": [] }],
+        "parameters": [
+          { "name": "username", "in": "path", "required": true, "schema": { "type": "string", "title": "Username" } },
+          { "name": "start", "in": "query", "required": false, "schema": { "type": "string", "default": "", "title": "Start" } },
+          { "name": "end", "in": "query", "required": false, "schema": { "type": "string", "default": "", "title": "End" } }
+        ],
+        "responses": {
+          "200": { "description": "Successful Response", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UserUsagesResponse" } } } },
+          "401": { "description": "Unauthorized", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Unauthorized" } } } },
+          "403": { "description": "Forbidden", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Forbidden" } } } },
+          "404": { "description": "Not found", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/NotFound" } } } },
+          "422": { "description": "Validation Error", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/HTTPValidationError" } } } }
+        }
+      }
+    },
+    "/api/user/{username}/active-next": {
+      "post": {
+        "tags": ["User"],
+        "summary": "Active Next Plan",
+        "description": "Reset user by next plan",
+        "operationId": "active_next_plan",
+        "security": [{ "OAuth2PasswordBearer": [] }],
+        "parameters": [
+          { "name": "username", "in": "path", "required": true, "schema": { "type": "string", "title": "Username" } }
+        ],
+        "responses": {
+          "200": { "description": "Successful Response", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UserResponse" } } } },
+          "401": { "description": "Unauthorized", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Unauthorized" } } } },
+          "403": { "description": "Forbidden", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Forbidden" } } } },
+          "404": { "description": "Not found", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/NotFound" } } } },
+          "422": { "description": "Validation Error", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/HTTPValidationError" } } } }
+        }
+      }
+    },
+    "/api/users/usage": {
+      "get": {
+        "tags": ["User"],
+        "summary": "Get Users Usage",
+        "description": "Get all users usage",
+        "operationId": "get_users_usage",
+        "security": [{ "OAuth2PasswordBearer": [] }],
+        "parameters": [
+          { "name": "start", "in": "query", "required": false, "schema": { "type": "string", "default": "", "title": "Start" } },
+          { "name": "end", "in": "query", "required": false, "schema": { "type": "string", "default": "", "title": "End" } },
+          { "name": "admin", "in": "query", "required": false, "schema": { "anyOf": [{ "type": "array", "items": { "type": "string" } }, { "type": "null" }], "title": "Admin" } }
+        ],
+        "responses": {
+          "200": { "description": "Successful Response", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UsersUsagesResponse" } } } },
+          "401": { "description": "Unauthorized", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Unauthorized" } } } },
+          "422": { "description": "Validation Error", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/HTTPValidationError" } } } }
+        }
+      }
+    },
+    "/api/user/{username}/set-owner": {
+      "put": {
+        "tags": ["User"],
+        "summary": "Set Owner",
+        "description": "Set a new owner (admin) for a user.",
+        "operationId": "set_owner",
+        "security": [{ "OAuth2PasswordBearer": [] }],
+        "parameters": [
+          { "name": "username", "in": "path", "required": true, "schema": { "type": "string", "title": "Username" } },
+          { "name": "admin_username", "in": "query", "required": true, "schema": { "type": "string", "title": "Admin Username" } }
+        ],
+        "responses": {
+          "200": { "description": "Successful Response", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UserResponse" } } } },
+          "401": { "description": "Unauthorized", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Unauthorized" } } } },
+          "422": { "description": "Validation Error", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/HTTPValidationError" } } } }
+        }
+      }
+    },
+    "/api/users/expired": {
+      "get": {
+        "tags": ["User"],
+        "summary": "Get Expired Users",
+        "description": "Get users who have expired within the specified date range.\n\n- **expired_after** UTC datetime (optional)\n- **expired_before** UTC datetime (optional)\n- At least one of expired_after or expired_before must be provided for filtering\n- If both are omitted, returns all expired users",
+        "operationId": "get_expired_users",
+        "security": [{ "OAuth2PasswordBearer": [] }],
+        "parameters": [
+          { "name": "expired_after", "in": "query", "required": false, "schema": { "anyOf": [{ "type": "string", "format": "date-time" }, { "type": "null" }], "title": "Expired After" }, "example": "2024-01-01T00:00:00" },
+          { "name": "expired_before", "in": "query", "required": false, "schema": { "anyOf": [{ "type": "string", "format": "date-time" }, { "type": "null" }], "title": "Expired Before" }, "example": "2024-01-31T23:59:59" }
+        ],
+        "responses": {
+          "200": { "description": "Successful Response", "content": { "application/json": { "schema": { "type": "array", "items": { "type": "string" }, "title": "Response Get Expired Users Api Users Expired Get" } } } },
+          "401": { "description": "Unauthorized", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Unauthorized" } } } },
+          "422": { "description": "Validation Error", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/HTTPValidationError" } } } }
+        }
+      },
+      "delete": {
+        "tags": ["User"],
+        "summary": "Delete Expired Users",
+        "description": "Delete users who have expired within the specified date range.\n\n- **expired_after** UTC datetime (optional)\n- **expired_before** UTC datetime (optional)\n- At least one of expired_after or expired_before must be provided",
+        "operationId": "delete_expired_users",
+        "security": [{ "OAuth2PasswordBearer": [] }],
+        "parameters": [
+          { "name": "expired_after", "in": "query", "required": false, "schema": { "anyOf": [{ "type": "string", "format": "date-time" }, { "type": "null" }], "title": "Expired After" }, "example": "2024-01-01T00:00:00" },
+          { "name": "expired_before", "in": "query", "required": false, "schema": { "anyOf": [{ "type": "string", "format": "date-time" }, { "type": "null" }], "title": "Expired Before" }, "example": "2024-01-31T23:59:59" }
+        ],
+        "responses": {
+          "200": { "description": "Successful Response", "content": { "application/json": { "schema": { "type": "array", "items": { "type": "string" }, "title": "Response Delete Expired Users Api Users Expired Delete" } } } },
+          "401": { "description": "Unauthorized", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Unauthorized" } } } },
+          "422": { "description": "Validation Error", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/HTTPValidationError" } } } }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Admin": {
+        "properties": {
+          "username": { "type": "string", "title": "Username" },
+          "is_sudo": { "type": "boolean", "title": "Is Sudo" },
+          "telegram_id": { "anyOf": [{ "type": "integer" }, { "type": "null" }], "title": "Telegram Id" },
+          "discord_webhook": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Discord Webhook" },
+          "users_usage": { "anyOf": [{ "type": "integer" }, { "type": "null" }], "title": "Users Usage" }
+        },
+        "type": "object",
+        "required": ["username", "is_sudo"],
+        "title": "Admin"
+      },
+      "Body_admin_token_api_admin_token_post": {
+        "properties": {
+          "grant_type": { "anyOf": [{ "type": "string", "pattern": "password" }, { "type": "null" }], "title": "Grant Type" },
+          "username": { "type": "string", "title": "Username" },
+          "password": { "type": "string", "title": "Password" },
+          "scope": { "type": "string", "title": "Scope", "default": "" },
+          "client_id": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Client Id" },
+          "client_secret": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Client Secret" }
+        },
+        "type": "object",
+        "required": ["username", "password"],
+        "title": "Body_admin_token_api_admin_token_post"
+      },
+      "Conflict": {
+        "properties": { "detail": { "type": "string", "title": "Detail", "default": "Entity already exists" } },
+        "type": "object",
+        "title": "Conflict"
+      },
+      "CoreStats": {
+        "properties": {
+          "version": { "type": "string", "title": "Version" },
+          "started": { "type": "boolean", "title": "Started" },
+          "logs_websocket": { "type": "string", "title": "Logs Websocket" }
+        },
+        "type": "object",
+        "required": ["version", "started", "logs_websocket"],
+        "title": "CoreStats"
+      },
+      "Forbidden": {
+        "properties": { "detail": { "type": "string", "title": "Detail", "default": "You are not allowed to ..." } },
+        "type": "object",
+        "title": "Forbidden"
+      },
+      "HTTPException": {
+        "properties": { "detail": { "type": "string", "title": "Detail" } },
+        "type": "object",
+        "required": ["detail"],
+        "title": "HTTPException"
+      },
+      "HTTPValidationError": {
+        "properties": { "detail": { "items": { "$ref": "#/components/schemas/ValidationError" }, "type": "array", "title": "Detail" } },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "NextPlanModel": {
+        "properties": {
+          "data_limit": { "anyOf": [{ "type": "integer" }, { "type": "null" }], "title": "Data Limit" },
+          "expire": { "anyOf": [{ "type": "integer" }, { "type": "null" }], "title": "Expire" },
+          "add_remaining_traffic": { "type": "boolean", "title": "Add Remaining Traffic", "default": false },
+          "fire_on_either": { "type": "boolean", "title": "Fire On Either", "default": true }
+        },
+        "type": "object",
+        "title": "NextPlanModel"
+      },
+      "NotFound": {
+        "properties": { "detail": { "type": "string", "title": "Detail", "default": "Entity {} not found" } },
+        "type": "object",
+        "title": "NotFound"
+      },
+      "ProxyInbound": {
+        "properties": {
+          "tag": { "type": "string", "title": "Tag" },
+          "protocol": { "$ref": "#/components/schemas/ProxyTypes" },
+          "network": { "type": "string", "title": "Network" },
+          "tls": { "type": "string", "title": "Tls" },
+          "port": { "anyOf": [{ "type": "integer" }, { "type": "string" }], "title": "Port" }
+        },
+        "type": "object",
+        "required": ["tag", "protocol", "network", "tls", "port"],
+        "title": "ProxyInbound"
+      },
+      "ProxySettings": {
+        "properties": {},
+        "type": "object",
+        "title": "ProxySettings"
+      },
+      "ProxyTypes": {
+        "type": "string",
+        "enum": ["vmess", "vless", "trojan", "shadowsocks"],
+        "title": "ProxyTypes"
+      },
+      "SubscriptionUserResponse": {
+        "properties": {
+          "proxies": { "type": "object", "title": "Proxies" },
+          "expire": { "anyOf": [{ "type": "integer" }, { "type": "null" }], "title": "Expire", "nullable": true },
+          "data_limit": { "anyOf": [{ "type": "integer", "minimum": 0 }, { "type": "null" }], "title": "Data Limit", "description": "data_limit can be 0 or greater" },
+          "data_limit_reset_strategy": { "$ref": "#/components/schemas/UserDataLimitResetStrategy", "default": "no_reset" },
+          "sub_updated_at": { "anyOf": [{ "type": "string", "format": "date-time" }, { "type": "null" }], "title": "Sub Updated At", "nullable": true },
+          "sub_last_user_agent": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Sub Last User Agent", "nullable": true },
+          "online_at": { "anyOf": [{ "type": "string", "format": "date-time" }, { "type": "null" }], "title": "Online At", "nullable": true },
+          "on_hold_expire_duration": { "anyOf": [{ "type": "integer" }, { "type": "null" }], "title": "On Hold Expire Duration", "nullable": true },
+          "on_hold_timeout": { "anyOf": [{ "type": "string", "format": "date-time" }, { "type": "null" }], "title": "On Hold Timeout", "nullable": true },
+          "next_plan": { "anyOf": [{ "$ref": "#/components/schemas/NextPlanModel" }, { "type": "null" }], "nullable": true },
+          "username": { "type": "string", "title": "Username" },
+          "status": { "$ref": "#/components/schemas/UserStatus" },
+          "used_traffic": { "type": "integer", "title": "Used Traffic" },
+          "lifetime_used_traffic": { "type": "integer", "title": "Lifetime Used Traffic", "default": 0 },
+          "created_at": { "type": "string", "format": "date-time", "title": "Created At" },
+          "links": { "items": { "type": "string" }, "type": "array", "title": "Links", "default": [] },
+          "subscription_url": { "type": "string", "title": "Subscription Url", "default": "" }
+        },
+        "type": "object",
+        "required": ["proxies", "username", "status", "used_traffic", "created_at"],
+        "title": "SubscriptionUserResponse"
+      },
+      "SystemStats": {
+        "properties": {
+          "version": { "type": "string", "title": "Version" },
+          "mem_total": { "type": "integer", "title": "Mem Total" },
+          "mem_used": { "type": "integer", "title": "Mem Used" },
+          "cpu_cores": { "type": "integer", "title": "Cpu Cores" },
+          "cpu_usage": { "type": "number", "title": "Cpu Usage" },
+          "total_user": { "type": "integer", "title": "Total User" },
+          "online_users": { "type": "integer", "title": "Online Users" },
+          "users_active": { "type": "integer", "title": "Users Active" },
+          "users_on_hold": { "type": "integer", "title": "Users On Hold" },
+          "users_disabled": { "type": "integer", "title": "Users Disabled" },
+          "users_expired": { "type": "integer", "title": "Users Expired" },
+          "users_limited": { "type": "integer", "title": "Users Limited" },
+          "incoming_bandwidth": { "type": "integer", "title": "Incoming Bandwidth" },
+          "outgoing_bandwidth": { "type": "integer", "title": "Outgoing Bandwidth" },
+          "incoming_bandwidth_speed": { "type": "integer", "title": "Incoming Bandwidth Speed" },
+          "outgoing_bandwidth_speed": { "type": "integer", "title": "Outgoing Bandwidth Speed" }
+        },
+        "type": "object",
+        "required": ["version", "mem_total", "mem_used", "cpu_cores", "cpu_usage", "total_user", "online_users", "users_active", "users_on_hold", "users_disabled", "users_expired", "users_limited", "incoming_bandwidth", "outgoing_bandwidth", "incoming_bandwidth_speed", "outgoing_bandwidth_speed"],
+        "title": "SystemStats"
+      },
+      "Token": {
+        "properties": {
+          "access_token": { "type": "string", "title": "Access Token" },
+          "token_type": { "type": "string", "title": "Token Type", "default": "bearer" }
+        },
+        "type": "object",
+        "required": ["access_token"],
+        "title": "Token"
+      },
+      "Unauthorized": {
+        "properties": { "detail": { "type": "string", "title": "Detail", "default": "Not authenticated" } },
+        "type": "object",
+        "title": "Unauthorized"
+      },
+      "UserCreate": {
+        "properties": {
+          "proxies": { "additionalProperties": { "$ref": "#/components/schemas/ProxySettings" }, "propertyNames": { "$ref": "#/components/schemas/ProxyTypes" }, "type": "object", "title": "Proxies", "default": {} },
+          "expire": { "anyOf": [{ "type": "integer" }, { "type": "null" }], "title": "Expire", "nullable": true },
+          "data_limit": { "anyOf": [{ "type": "integer", "minimum": 0 }, { "type": "null" }], "title": "Data Limit", "description": "data_limit can be 0 or greater" },
+          "data_limit_reset_strategy": { "$ref": "#/components/schemas/UserDataLimitResetStrategy", "default": "no_reset" },
+          "inbounds": { "additionalProperties": { "items": { "type": "string" }, "type": "array" }, "propertyNames": { "$ref": "#/components/schemas/ProxyTypes" }, "type": "object", "title": "Inbounds", "default": {} },
+          "note": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Note", "nullable": true },
+          "sub_updated_at": { "anyOf": [{ "type": "string", "format": "date-time" }, { "type": "null" }], "title": "Sub Updated At", "nullable": true },
+          "sub_last_user_agent": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Sub Last User Agent", "nullable": true },
+          "online_at": { "anyOf": [{ "type": "string", "format": "date-time" }, { "type": "null" }], "title": "Online At", "nullable": true },
+          "on_hold_expire_duration": { "anyOf": [{ "type": "integer" }, { "type": "null" }], "title": "On Hold Expire Duration", "nullable": true },
+          "on_hold_timeout": { "anyOf": [{ "type": "string", "format": "date-time" }, { "type": "null" }], "title": "On Hold Timeout", "nullable": true },
+          "auto_delete_in_days": { "anyOf": [{ "type": "integer" }, { "type": "null" }], "title": "Auto Delete In Days", "nullable": true },
+          "next_plan": { "anyOf": [{ "$ref": "#/components/schemas/NextPlanModel" }, { "type": "null" }], "nullable": true },
+          "username": { "type": "string", "title": "Username" },
+          "status": { "$ref": "#/components/schemas/UserStatusCreate", "default": null }
+        },
+        "type": "object",
+        "required": ["username"],
+        "title": "UserCreate",
+        "example": {
+          "data_limit": 0,
+          "data_limit_reset_strategy": "no_reset",
+          "expire": 0,
+          "inbounds": { "vless": ["VLESS TCP REALITY", "VLESS GRPC REALITY"], "vmess": ["VMess TCP", "VMess Websocket"] },
+          "next_plan": { "add_remaining_traffic": false, "data_limit": 0, "expire": 0, "fire_on_either": true },
+          "note": "",
+          "on_hold_expire_duration": 0,
+          "on_hold_timeout": "2023-11-03T20:30:00",
+          "proxies": { "vless": {}, "vmess": { "id": "35e4e39c-7d5c-4f4b-8b71-558e4f37ff53" } },
+          "status": "active",
+          "username": "user1234"
+        }
+      },
+      "UserDataLimitResetStrategy": {
+        "type": "string",
+        "enum": ["no_reset", "day", "week", "month", "year"],
+        "title": "UserDataLimitResetStrategy"
+      },
+      "UserModify": {
+        "properties": {
+          "proxies": { "additionalProperties": { "$ref": "#/components/schemas/ProxySettings" }, "propertyNames": { "$ref": "#/components/schemas/ProxyTypes" }, "type": "object", "title": "Proxies", "default": {} },
+          "expire": { "anyOf": [{ "type": "integer" }, { "type": "null" }], "title": "Expire", "nullable": true },
+          "data_limit": { "anyOf": [{ "type": "integer", "minimum": 0 }, { "type": "null" }], "title": "Data Limit", "description": "data_limit can be 0 or greater" },
+          "data_limit_reset_strategy": { "$ref": "#/components/schemas/UserDataLimitResetStrategy", "default": null },
+          "inbounds": { "additionalProperties": { "items": { "type": "string" }, "type": "array" }, "propertyNames": { "$ref": "#/components/schemas/ProxyTypes" }, "type": "object", "title": "Inbounds", "default": {} },
+          "note": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Note", "nullable": true },
+          "sub_updated_at": { "anyOf": [{ "type": "string", "format": "date-time" }, { "type": "null" }], "title": "Sub Updated At", "nullable": true },
+          "sub_last_user_agent": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Sub Last User Agent", "nullable": true },
+          "online_at": { "anyOf": [{ "type": "string", "format": "date-time" }, { "type": "null" }], "title": "Online At", "nullable": true },
+          "on_hold_expire_duration": { "anyOf": [{ "type": "integer" }, { "type": "null" }], "title": "On Hold Expire Duration", "nullable": true },
+          "on_hold_timeout": { "anyOf": [{ "type": "string", "format": "date-time" }, { "type": "null" }], "title": "On Hold Timeout", "nullable": true },
+          "auto_delete_in_days": { "anyOf": [{ "type": "integer" }, { "type": "null" }], "title": "Auto Delete In Days", "nullable": true },
+          "next_plan": { "anyOf": [{ "$ref": "#/components/schemas/NextPlanModel" }, { "type": "null" }], "nullable": true },
+          "status": { "$ref": "#/components/schemas/UserStatusModify", "default": null }
+        },
+        "type": "object",
+        "title": "UserModify",
+        "example": {
+          "data_limit": 0,
+          "data_limit_reset_strategy": "no_reset",
+          "expire": 0,
+          "inbounds": { "vless": ["VLESS TCP REALITY", "VLESS GRPC REALITY"], "vmess": ["VMess TCP", "VMess Websocket"] },
+          "next_plan": { "add_remaining_traffic": false, "data_limit": 0, "expire": 0, "fire_on_either": true },
+          "note": "",
+          "on_hold_expire_duration": 0,
+          "on_hold_timeout": "2023-11-03T20:30:00",
+          "proxies": { "vless": {}, "vmess": { "id": "35e4e39c-7d5c-4f4b-8b71-558e4f37ff53" } },
+          "status": "active"
+        }
+      },
+      "UserResponse": {
+        "properties": {
+          "proxies": { "type": "object", "title": "Proxies" },
+          "expire": { "anyOf": [{ "type": "integer" }, { "type": "null" }], "title": "Expire", "nullable": true },
+          "data_limit": { "anyOf": [{ "type": "integer", "minimum": 0 }, { "type": "null" }], "title": "Data Limit", "description": "data_limit can be 0 or greater" },
+          "data_limit_reset_strategy": { "$ref": "#/components/schemas/UserDataLimitResetStrategy", "default": "no_reset" },
+          "inbounds": { "additionalProperties": { "items": { "type": "string" }, "type": "array" }, "propertyNames": { "$ref": "#/components/schemas/ProxyTypes" }, "type": "object", "title": "Inbounds", "default": {} },
+          "note": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Note", "nullable": true },
+          "sub_updated_at": { "anyOf": [{ "type": "string", "format": "date-time" }, { "type": "null" }], "title": "Sub Updated At", "nullable": true },
+          "sub_last_user_agent": { "anyOf": [{ "type": "string" }, { "type": "null" }], "title": "Sub Last User Agent", "nullable": true },
+          "online_at": { "anyOf": [{ "type": "string", "format": "date-time" }, { "type": "null" }], "title": "Online At", "nullable": true },
+          "on_hold_expire_duration": { "anyOf": [{ "type": "integer" }, { "type": "null" }], "title": "On Hold Expire Duration", "nullable": true },
+          "on_hold_timeout": { "anyOf": [{ "type": "string", "format": "date-time" }, { "type": "null" }], "title": "On Hold Timeout", "nullable": true },
+          "auto_delete_in_days": { "anyOf": [{ "type": "integer" }, { "type": "null" }], "title": "Auto Delete In Days", "nullable": true },
+          "next_plan": { "anyOf": [{ "$ref": "#/components/schemas/NextPlanModel" }, { "type": "null" }], "nullable": true },
+          "username": { "type": "string", "title": "Username" },
+          "status": { "$ref": "#/components/schemas/UserStatus" },
+          "used_traffic": { "type": "integer", "title": "Used Traffic" },
+          "lifetime_used_traffic": { "type": "integer", "title": "Lifetime Used Traffic", "default": 0 },
+          "created_at": { "type": "string", "format": "date-time", "title": "Created At" },
+          "links": { "items": { "type": "string" }, "type": "array", "title": "Links", "default": [] },
+          "subscription_url": { "type": "string", "title": "Subscription Url", "default": "" },
+          "excluded_inbounds": { "additionalProperties": { "items": { "type": "string" }, "type": "array" }, "propertyNames": { "$ref": "#/components/schemas/ProxyTypes" }, "type": "object", "title": "Excluded Inbounds", "default": {} },
+          "admin": { "anyOf": [{ "$ref": "#/components/schemas/Admin" }, { "type": "null" }] }
+        },
+        "type": "object",
+        "required": ["proxies", "username", "status", "used_traffic", "created_at"],
+        "title": "UserResponse"
+      },
+      "UserStatus": {
+        "type": "string",
+        "enum": ["active", "disabled", "limited", "expired", "on_hold"],
+        "title": "UserStatus"
+      },
+      "UserStatusCreate": {
+        "type": "string",
+        "enum": ["active", "on_hold"],
+        "title": "UserStatusCreate"
+      },
+      "UserStatusModify": {
+        "type": "string",
+        "enum": ["active", "disabled", "on_hold"],
+        "title": "UserStatusModify"
+      },
+      "UserUsageResponse": {
+        "properties": {
+          "node_id": { "anyOf": [{ "type": "integer" }, { "type": "null" }], "title": "Node Id" },
+          "node_name": { "type": "string", "title": "Node Name" },
+          "used_traffic": { "type": "integer", "title": "Used Traffic" }
+        },
+        "type": "object",
+        "required": ["node_name", "used_traffic"],
+        "title": "UserUsageResponse"
+      },
+      "UserUsagesResponse": {
+        "properties": {
+          "username": { "type": "string", "title": "Username" },
+          "usages": { "items": { "$ref": "#/components/schemas/UserUsageResponse" }, "type": "array", "title": "Usages" }
+        },
+        "type": "object",
+        "required": ["username", "usages"],
+        "title": "UserUsagesResponse"
+      },
+      "UsersResponse": {
+        "properties": {
+          "users": { "items": { "$ref": "#/components/schemas/UserResponse" }, "type": "array", "title": "Users" },
+          "total": { "type": "integer", "title": "Total" }
+        },
+        "type": "object",
+        "required": ["users", "total"],
+        "title": "UsersResponse"
+      },
+      "UsersUsagesResponse": {
+        "properties": {
+          "usages": { "items": { "$ref": "#/components/schemas/UserUsageResponse" }, "type": "array", "title": "Usages" }
+        },
+        "type": "object",
+        "required": ["usages"],
+        "title": "UsersUsagesResponse"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": { "items": { "anyOf": [{ "type": "string" }, { "type": "integer" }] }, "type": "array", "title": "Location" },
+          "msg": { "type": "string", "title": "Message" },
+          "type": { "type": "string", "title": "Error Type" }
+        },
+        "type": "object",
+        "required": ["loc", "msg", "type"],
+        "title": "ValidationError"
+      }
+    },
+    "securitySchemes": {
+      "OAuth2PasswordBearer": {
+        "type": "oauth2",
+        "flows": { "password": { "scopes": {}, "tokenUrl": "/api/admin/token" } }
+      }
+    }
+  }
+}

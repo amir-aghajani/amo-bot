@@ -26,7 +26,7 @@ import { formatMoney } from '@/lib/format'
  * stands in meanwhile), its note, the location to buy it on (the catalogue's, when it was filtered by one), the
  * service's name while the shop lets the buyer choose, a discount code, the way to pay, and the bill. Pay sends
  * `POST /orders` at the price shown (`expected_amount`) with the attempt's Idempotency-Key, then opens the payment; a
- * free plan — or a code that takes it all — is taken with one button, by the first way to pay.
+ * free plan — or a code that takes it all — is taken with one button, by the first way to pay that is no card transfer.
  */
 
 /** The fields of `POST /orders` the screen shows a refusal under, beside their inputs. */
@@ -88,9 +88,10 @@ function Checkout({ plan, fresh, reread }: CheckoutProps) {
   const code = useDiscountCheck(server === null ? null : { for: 'purchase', plan_id: plan.id, server_id: server.id })
   const amount = code.applied?.quote.amount ?? plan.offer_price
   const free = Number(amount) === 0
-  // A free order names the first way to pay, whatever its bounds: the shop settles it with nothing taken.
+  // A free order names a way to pay, whatever its bounds (no card transfer while another is): the shop settles it with
+  // nothing taken.
   const payment = usePaymentChoice('purchase', free ? null : amount)
-  const method = free ? (payment.list[0] ?? null) : payment.method
+  const method = free ? payment.free : payment.method
 
   const ordering = useOrdering(
     (body: StoreOrderRequest, key) => store.post('/orders', body, { idempotencyKey: key }),

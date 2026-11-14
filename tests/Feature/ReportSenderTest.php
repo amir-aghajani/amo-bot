@@ -18,6 +18,7 @@ use App\Modules\Telegram\Reports\ReportGroupState;
 use App\Modules\Telegram\Reports\ReportSender;
 use App\Modules\Telegram\Reports\ShopReports;
 use App\Modules\Telegram\Reports\Topic;
+use App\Modules\Telegram\Reports\UserManagement;
 use App\Modules\Telegram\Tasks\SendReportsTask;
 use GuzzleHttp\Psr7\Response;
 use Illuminate\Support\Carbon;
@@ -388,7 +389,8 @@ final class ReportSenderTest extends DatabaseTestCase
         self::assertStringContainsString('<a href="tg://user?id=5151">Ali</a> · ' . "\u{200E}@ali · <code>5151</code>", $copy['caption']);
         self::assertStringContainsString('📝 توضیح مشتری: از کارت پدرم', $copy['caption']);
         self::assertStringContainsString('۳۰ دقیقه', $copy['caption'], 'the window before it is accepted by itself');
-        self::assertSame(ReceiptReview::buttons($payment->id), FakeTelegram::markupOf($copy)['inline_keyboard'] ?? null, 'the bot admins\' buttons under it');
+        $manage = UserManagement::buttons($customer->id);
+        self::assertSame([...ReceiptReview::buttons($payment->id), ...$manage], FakeTelegram::markupOf($copy)['inline_keyboard'] ?? null, 'the bot admins\' buttons under it, and «⚙️ مدیریت کاربر»');
 
         $this->telegram()->reset();
         $this->service(PaymentService::class)->approve($payment, 'admin');
@@ -400,7 +402,9 @@ final class ReportSenderTest extends DatabaseTestCase
         self::assertSame((string) $this->threads['receipts'], $verdict['message_thread_id']);
         self::assertSame(['message_id' => 101, 'allow_sending_without_reply' => true], json_decode($verdict['reply_parameters'], true), 'a reply to the copy');
         self::assertArrayNotHasKey('reply_markup', $verdict);
-        self::assertSame(['chat_id' => (string) self::REPORT_GROUP, 'message_id' => '101', 'reply_markup' => '{"inline_keyboard":[]}'], $this->telegram()->params(1), 'decided here, on the screen or by the timer: nothing left to press');
+        $buttons = $this->telegram()->params(1);
+        self::assertSame([(string) self::REPORT_GROUP, '101'], [$buttons['chat_id'], $buttons['message_id']]);
+        self::assertSame($manage, FakeTelegram::markupOf($buttons)['inline_keyboard'] ?? null, 'decided here, on the screen or by the timer: nothing left to press but «⚙️ مدیریت کاربر»');
         self::assertSame((string) $this->threads['wallet'], $this->telegram()->params(2)['message_thread_id']);
     }
 

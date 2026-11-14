@@ -19,8 +19,9 @@ Paths are under the [base address](Store-API.md#the-base-address); every one her
 5. Act on the outcome: delivered, a card to pay, an online gateway's page to pay on, or a delivery under way
    ([what a checkout answers](#what-a-checkout-answers)).
 6. For a card transfer, upload the receipt ([card transfer and the receipt](#card-transfer-and-the-receipt)) and wait
-   for the review ([the review](#the-review)); for an online gateway, send the customer to its page and wait for its
-   word ([paying online](#paying-online)).
+   for the review ([the review](#the-review)) — or, while `transfer.auto_confirmed`, wait for the bank's SMS of the
+   exact sum ([confirmed by the bank's SMS](#confirmed-by-the-banks-sms)); for an online gateway, send the customer to
+   its page and wait for its word ([paying online](#paying-online)).
 
 Nothing is ordered until the way to pay is picked: browsing plans and opening a checkout cost nothing.
 
@@ -609,7 +610,8 @@ switched on, inside its window (an "hourly" code ends at an hour), for that kind
 and an extra's: their service's), for a customer who has bought nothing when it says so (a purchase refunded since counts
 as none, as for [first-purchase prices](Store-API-Shop.md#first-purchase-prices)), for an order of at least its least,
 and while it has uses left — in all, and for this customer. Each refusal is a `422` on `discount_code`, worded for
-the customer: show it under the code's field.
+the customer: show it under the code's field. A customer the customers' perks do not reach (`GET /me`'s `perks` false)
+takes no code at all (`کد تخفیف برای حساب همکارها فعال نیست.`): offer them no code field.
 
 Quote it before the customer pays: `POST /discount-codes/check` — the same quote their order would be made at, nothing
 ordered:
@@ -836,7 +838,8 @@ Only a `delivery` failure is delivered later, once support retries it; a `first_
       "holder": "محمد کریمی",
       "bank": "ملت",
       "instructions": "شماره پیگیری را نگه دارید.",
-      "contact": null
+      "contact": null,
+      "auto_confirmed": false
     },
     "link": null,
     "subscription": null
@@ -890,7 +893,8 @@ Rial, ten to the Toman, as Iran's banks count: `1200000`, the digits alone, as a
 `instructions` (the shop's note, `null` without one). The card is the payment's own: a shop with
 several cards shows each payment one of them, picked at random, and the same one every time after — a request made
 again with its key answers the same card, even if the shop switched it off since. Once the customer has paid, upload the
-receipt for `transfer.payment_id`:
+receipt for `transfer.payment_id` — while `transfer.auto_confirmed`, none is needed
+([confirmed by the bank's SMS](#confirmed-by-the-banks-sms)):
 
 ```ts
 const form = new FormData()
@@ -975,6 +979,20 @@ The refusals, in the order they are asked:
    together, one budget ([the tickets' limits](Store-API-Support-Tickets.md#limits)), a receipt counted once it passed
    its checks.
 
+### Confirmed by the bank's SMS
+
+While the shop confirms card transfers by itself («تایید خودکار واریز»: a phone app forwards the bank's deposit SMS —
+`GET /`'s `shop.card_auto_confirmed`), `transfer.auto_confirmed` is `true` — but where the method's highest amount
+leaves no room above the price: then it is `false`, and the receipt is asked for as usual — and `amount` is the order's
+plus 1 to 999 Toman, a sum no other open card payment of the shop asks: its last digits are this payment's own, part of what the
+customer pays (a top-up credits all of it, a refund gives it back). Show `amount` as the sum to transfer exactly, to the
+last digit — `amount_rial` to copy —, and say no receipt is needed. A transfer of that very sum approves the payment,
+usually within a minute, as support's approval would ([the review](#the-review)): read `GET /orders/{id}` every few
+seconds while its page is open, until it is `fulfilled` or `failed`. The receipt's upload stays open for a transfer not
+confirmed within a few minutes — another sum, an SMS that did not come —, and support reviews that one as any other. A
+payment in support's private chat ([below](#card-payments-in-supports-private-chat)) is `auto_confirmed` too: the card
+support gives, the same exact sum.
+
 ### Card payments in support's private chat
 
 A payment made while the shop takes card payments in support's private chat (the bot setting «هدایت پرداخت کارت به
@@ -994,14 +1012,18 @@ shown. A request made again answers the same payment — given a card, should th
   "holder": null,
   "bank": null,
   "instructions": "شماره پیگیری را نگه دارید.",
-  "contact": { "text": "@amo_support", "url": "https://t.me/amo_support" }
+  "contact": { "text": "@amo_support", "url": "https://t.me/amo_support" },
+  "auto_confirmed": false
 }
 ```
 
 ## The review
 
-Support reviews the receipt — in the panel or in the shop's Telegram group — always: the review window a card may have,
-which accepts on its own a receipt sent in the bot that nobody looked at, never takes one uploaded from a website. Then:
+Support reviews the receipt — in the panel or in the shop's Telegram group —, unless the review window a card may have
+passes first: it accepts on its own a receipt nobody looked at when it was sent in the bot or by a customer whose
+account is a Telegram account (any mini app customer, a website customer who signed in with Telegram), never one only
+an email or a mobile number vouches for. A transfer the bank's SMS confirmed needs no review
+([confirmed by the bank's SMS](#confirmed-by-the-banks-sms)). Then:
 
 - **Approved** — the payment is `paid` and the order delivered: `fulfilled` (a purchase's, a renewal's or extras'
   service in `subscription`, a top-up's amount on the balance) — or `failed`, its `failure` saying why

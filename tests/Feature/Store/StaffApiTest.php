@@ -299,6 +299,7 @@ final class StaffApiTest extends HttpTestCase
 
         foreach ([$reza, $this->sara] as $admin) {
             $this->assertRefused(ActorRefusedException::ADMIN_ACCOUNT, $this->patchJson($this->staffApi("/users/{$admin->id}"), ['status' => 'banned']));
+            $this->assertRefused(ActorRefusedException::ADMIN_ACCOUNT, $this->putJson($this->staffApi("/users/{$admin->id}/phone-exempt"), ['phone_exempt' => true]));
             $this->assertRefused(ActorRefusedException::ADMIN_ACCOUNT, $this->postJson($this->staffApi("/users/{$admin->id}/two-factor/disable")));
             $this->assertRefused(ActorRefusedException::ADMIN_ACCOUNT, $this->postJson($this->staffApi("/users/{$admin->id}/sessions/end")));
         }
@@ -306,6 +307,8 @@ final class StaffApiTest extends HttpTestCase
         self::assertSame(1, CustomerSession::query()->where('user_id', $this->sara->id)->count(), 'her session stands');
 
         self::assertSame('banned', $this->decode($this->patchJson($this->staffApi("/users/{$this->ali->id}"), ['status' => 'banned']))['user']['status']);
+        self::assertTrue($this->decode($this->putJson($this->staffApi("/users/{$this->ali->id}/phone-exempt"), ['phone_exempt' => true]))['user']['phone_exempt'], 'a customer excused from the phone rule from the website too');
+        self::assertSame(['delivery' => 'told'], $this->decode($this->postJson($this->staffApi("/users/{$this->ali->id}/message"), ['text' => 'سلام'])), 'and written to');
         $this->customerSession($this->ali);
         self::assertSame(204, $this->postJson($this->staffApi("/users/{$this->ali->id}/sessions/end"))->getStatusCode());
         self::assertSame(0, CustomerSession::query()->where('user_id', $this->ali->id)->count());
@@ -323,6 +326,7 @@ final class StaffApiTest extends HttpTestCase
         $this->customerSession($agent);
 
         $this->assertRefused(ActorRefusedException::AGENT_ACCOUNT, $this->patchJson($this->staffApi("/users/{$agent->id}"), ['status' => 'banned']));
+        $this->assertRefused(ActorRefusedException::AGENT_ACCOUNT, $this->putJson($this->staffApi("/users/{$agent->id}/phone-exempt"), ['phone_exempt' => true]));
         $this->assertRefused(ActorRefusedException::AGENT_ACCOUNT, $this->postJson($this->staffApi("/users/{$agent->id}/two-factor/disable")));
         $this->assertRefused(ActorRefusedException::AGENT_ACCOUNT, $this->postJson($this->staffApi("/users/{$agent->id}/sessions/end")));
         self::assertFalse($agent->refresh()->isBanned(), "the owner's partner: their account is the panels' to change");

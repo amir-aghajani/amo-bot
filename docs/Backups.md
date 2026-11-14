@@ -12,7 +12,8 @@ not in a backup: keep them as well ([what a backup leaves out](#what-a-backup-le
 
 **The owner, in the main shop**, backs up the whole installation: every shop — the main one and each agent's —, the
 servers and their inbounds, the agents' bots, levels, requests, terms and traffic, the servers and plans kept from their
-shops, «افزودن زمان و حجم», «هدیه همگانی» and the moves of servers' services, and every shop's settings, «زمان‌بندی
+shops, «افزودن زمان و حجم», «هدیه همگانی» and the moves of servers' services, the imports from another bot — their
+reports, and what they brought ([Importing from another bot](Importing.md)) —, and every shop's settings, «زمان‌بندی
 کارها» among them.
 
 **Any other panel** — an agent's, or the owner's with an agent's shop open
@@ -27,8 +28,10 @@ in full — the panel's address with it — is left out, and where the owner dec
 order made by hand, a ticket's answer) the file names «پشتیبانی», as the agent reads it everywhere.
 
 **Never in a backup**, since it is true only now: the sign-ins to a website or the mini app and their codes, a chat with
-the bot half-way, the reports waiting to go to a group, a checkout's request keys, the updates Telegram sent, and the
-panels' live feed.
+the bot half-way, the reports waiting to go to a group, a checkout's request keys, the updates Telegram sent, the
+panels' live feed, and an import's copy of another bot's data. An import still open comes in the whole installation's
+backup as it is stored: its panels' connections — the other bot's passwords — and the database it reads, encrypted with
+`APP_KEY` ([Importing](Importing.md#the-imports-own-data)).
 
 ## Downloading one
 
@@ -98,7 +101,8 @@ update the shop first ([Upgrading](Upgrading.md)).
 
 **A whole installation's backup** restores only in the owner's panel, in the main shop, and replaces everything a backup
 holds, in every shop. What is never in a backup goes with it: everyone signed in to a website or the mini app signs in
-again, a chat with a bot half-way starts over, and the reports waiting for a group are dropped.
+again, a chat with a bot half-way starts over, and the reports waiting for a group are dropped. An import from another
+bot under way stops at its next step — its copy of the other bot's data is gone —: start it again.
 
 **No restore signs anyone out of the panels** — yours or an agent's: the panels' sign-ins are not in the database.
 

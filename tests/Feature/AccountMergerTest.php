@@ -239,6 +239,17 @@ final class AccountMergerTest extends DatabaseTestCase
         self::assertSame('root', AccountMerge::query()->latest('id')->firstOrFail()->actor, "a panel's principal");
     }
 
+    public function testAnExcuseFromThePhoneRuleOfEitherAccountStays(): void
+    {
+        Carbon::setTestNow('2026-09-01 10:00:00');
+        $older = $this->customer(['telegram_id' => 7101]);
+        Carbon::setTestNow('2026-09-02 10:00:00');
+        $newer = $this->webCustomer();
+        $newer->forceFill(['phone_exempt' => true])->save();
+
+        self::assertTrue($this->merger->merge($older, $newer, AccountMerger::BY_CUSTOMER)->refresh()->phone_exempt, 'support excused the account that went: the one that stays is');
+    }
+
     public function testAnAccountWithoutItsTimeGivesWayToTheOneNumberedFirst(): void
     {
         Carbon::setTestNow('2026-09-01 10:00:00');

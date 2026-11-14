@@ -11,8 +11,9 @@ which is theirs ([read signed in](#read-signed-in)).
 ## What the site asks first
 
 `GET /` — the shop's name and bot, whether it takes orders and services by their link, whether customers may hand a
-service on or build one, how they may name a new one, which of its programs run, how to reach support, the ways in, the
-captcha and the referral program's terms — and, through the mini app's key, how the mini app looks.
+service on or build one, how they may name a new one, which of its programs run, when its bot asks a customer's number,
+whether the bank's SMS confirms a card transfer, how to reach support, the ways in, the captcha and the referral
+program's terms — and, through the mini app's key, how the mini app looks.
 
 `GET /` → `200`
 ```json
@@ -22,6 +23,9 @@ captcha and the referral program's terms — and, through the mini app's key, ho
     "bot": { "username": "amo_shop_bot", "url": "https://t.me/amo_shop_bot" },
     "taking_orders": true,
     "phone_required": false,
+    "phone_moments": ["purchase", "test"],
+    "phone_iran_only": true,
+    "card_auto_confirmed": true,
     "service_claims": false,
     "service_transfers": false,
     "custom_services": true,
@@ -49,8 +53,23 @@ captcha and the referral program's terms — and, through the mini app's key, ho
   ([the flow](Store-API-Buying.md#the-flow) says which words, and what is still taken). What it sells is still read (a
   suspended agent's shop offers no plan), and customers still sign in. Say so where the site sells.
 - `shop.phone_required` — whether the shop's bot asks every customer to share their own phone number before anything
-  else («تایید شماره»). The bot alone takes the number, as a contact card: the mini app asks a Telegram customer without
-  one (`GET /me`'s `phone` `null`) to share it with Telegram's `requestContact`, which sends their card to the bot.
+  else («تایید شماره», asked in «کل ربات»); `false` where it asks only at some moments (`phone_moments`). The bot alone
+  takes the number, as a contact card: the mini app asks a Telegram customer without one (`GET /me`'s `phone` `null`) to
+  share it with Telegram's `requestContact`, which sends their card to the bot. A customer support excused from it
+  (`GET /me`'s `phone_exempt`) is never asked.
+- `shop.phone_moments` — where the bot asks the number only at the moments the shop chose («فقط موقع این کارها»), those
+  moments, in this order: `purchase` (a service bought or built), `renewal` (a renewal, or extra traffic, time or
+  devices), `test` (a free test), `card` (a card-to-card payment, whatever it pays for — a wallet top-up too). Empty
+  while the number is asked before everything (`phone_required`) or not at all. Through the mini app an order that is
+  one of them is refused from a customer without their number (`422` on `status`), and through either key a free test
+  is, at `test` ([test accounts](Store-API-After-Buying.md#test-accounts)); nothing else waits for it.
+- `shop.phone_iran_only` — while the shop asks numbers (`phone_required`, or `phone_moments`): only Iranian numbers
+  (`+98`) count. Another country's is refused when shared, and a customer whose number on file is one (`GET /me`'s
+  `phone`) is asked again, as one with none.
+- `shop.card_auto_confirmed` — whether a card-to-card payment is confirmed by itself from the bank's SMS («تایید خودکار
+  واریز»): the customer transfers the exact sum it asks — its last digits its own — and sends no receipt
+  ([confirmed by the bank's SMS](Store-API-Buying.md#confirmed-by-the-banks-sms)). A checkout's `transfer.auto_confirmed`
+  says the same of one payment.
 - `shop.service_claims` — whether a customer may add a service to their account by its link now (it stays so while
   `taking_orders` is false: adding a service is no order)
   ([adding a service by its link](Store-API-After-Buying.md#adding-a-service-by-its-link)): the main shop's alone, while
@@ -262,7 +281,8 @@ by the service's plan) and take a code too.
 ## Timed sales
 
 `GET /sales` — the timed sales («فروش ویژه») running now, for a banner: the soonest to end first, those without an end
-last.
+last. Sent with a customer's bearer token, it lists none for one the customers' perks do not reach (`GET /me`'s
+`perks` false), whom no sale holds for.
 
 `GET /sales` → `200`
 ```json

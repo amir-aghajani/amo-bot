@@ -197,7 +197,8 @@ final class ReportSender
 
     /**
      * Post the report in its topic (made or reopened as needed), mark it sent while still held, and take the buttons off
-     * the report it settles. Returns the message's id, or null while another process is making the topic.
+     * the report it settles — but its «⚙️ مدیریت کاربر». Returns the message's id, or null while another process is making
+     * the topic.
      *
      * @throws TelegramApiException
      */
@@ -208,7 +209,8 @@ final class ReportSender
             return null;
         }
 
-        $target = $this->replyTarget($message, $chatId);
+        $replied = $this->replyTarget($message, $chatId);
+        $target = $replied?->message_id;
         try {
             $sentId = $this->post($message, $chatId, $thread, $target);
         } catch (TelegramApiException $e) {
@@ -233,8 +235,9 @@ final class ReportSender
 
             return $sentId;
         }
-        if ($message->clears_buttons && $target !== null) {
-            $this->groupButtons->set($chatId, $target, null);
+        if ($message->clears_buttons && $replied !== null && $target !== null) {
+            // Its «⚙️ مدیریت کاربر» stays: the customer is still there to manage.
+            $this->groupButtons->set($chatId, $target, UserManagement::kept($replied->keyboard ?? []));
         }
 
         return $sentId;
@@ -326,13 +329,13 @@ final class ReportSender
         return (int) ($sent['message_id'] ?? 0);
     }
 
-    /** The message a follow-up report (a receipt's verdict) replies to, when that one went to this group. */
-    private function replyTarget(ReportMessage $message, int $chatId): ?int
+    /** The report a follow-up report (a receipt's verdict) replies to, when that one went to this group. */
+    private function replyTarget(ReportMessage $message, int $chatId): ?ReportMessage
     {
         if ($message->reply_ref === null) {
             return null;
         }
 
-        return ReportMessage::query()->where('ref', $message->reply_ref)->where('chat_id', $chatId)->whereNotNull('message_id')->latest('id')->first()?->message_id;
+        return ReportMessage::query()->where('ref', $message->reply_ref)->where('chat_id', $chatId)->whereNotNull('message_id')->latest('id')->first();
     }
 }

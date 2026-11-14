@@ -10,6 +10,7 @@ use App\Core\Mail\Mailer;
 use App\Modules\Bots\Services\Bots;
 use App\Modules\Catalog\Services\CustomServices;
 use App\Modules\Discounts\Services\Loyalty;
+use App\Modules\Payments\Deposits\Services\DepositSettings;
 use App\Modules\Referrals\Services\ReferralSettings;
 use App\Modules\Rewards\Services\CashbackSettings;
 use App\Modules\Rewards\Services\GiftCodeSettings;
@@ -23,6 +24,7 @@ use App\Modules\Subscriptions\Services\ServiceClaims;
 use App\Modules\Subscriptions\Services\ServiceTransfers;
 use App\Modules\Subscriptions\Services\TestAccountSettings;
 use App\Modules\Telegram\BotSettings;
+use App\Modules\Telegram\Gates\PhoneRequirement;
 use App\Modules\Users\Services\WalletTransferSettings;
 use App\Support\LocalTime;
 
@@ -61,10 +63,12 @@ final class Storefront
         private readonly CashbackSettings $cashback,
         private readonly WalletTransferSettings $walletTransfers,
         private readonly Loyalty $loyalty,
+        private readonly PhoneRequirement $phone,
+        private readonly DepositSettings $deposits,
     ) {}
 
     /**
-     * @return array{shop: array{name: string, bot: array{username: string, url: string}|null, taking_orders: bool, phone_required: bool, service_claims: bool, service_transfers: bool, custom_services: bool, name_modes: list<string>, programs: array{test_accounts: bool, wheel: bool, lottery: bool, gift_codes: bool, loyalty: bool, cashback: bool, wallet_transfers: bool, reviews: bool}}, support: array{url: string}|null, sign_in: array{telegram: array{client_id: string, redirect: bool}|null, google: array{client_id: string}|null, email: bool, phone: bool, mini_app: bool}, captcha: array{driver: string, site_key: string|null, challenge_url: string|null}|null, referral: array{enabled: bool, rate: int, first_only: bool}, app: array{title: string, accent_color: string|null, logo_url: string|null, announcement: array{text: string, url: string|null}|null, fullscreen: bool, time_zone: string}|null}
+     * @return array{shop: array{name: string, bot: array{username: string, url: string}|null, taking_orders: bool, phone_required: bool, phone_moments: list<string>, phone_iran_only: bool, card_auto_confirmed: bool, service_claims: bool, service_transfers: bool, custom_services: bool, name_modes: list<string>, programs: array{test_accounts: bool, wheel: bool, lottery: bool, gift_codes: bool, loyalty: bool, cashback: bool, wallet_transfers: bool, reviews: bool}}, support: array{url: string}|null, sign_in: array{telegram: array{client_id: string, redirect: bool}|null, google: array{client_id: string}|null, email: bool, phone: bool, mini_app: bool}, captcha: array{driver: string, site_key: string|null, challenge_url: string|null}|null, referral: array{enabled: bool, rate: int, first_only: bool}, app: array{title: string, accent_color: string|null, logo_url: string|null, announcement: array{text: string, url: string|null}|null, fullscreen: bool, time_zone: string}|null}
      */
     public function present(Door $door): array
     {
@@ -82,7 +86,13 @@ final class Storefront
                 // Off while the bot is off — and while an agent's selling is suspended (Bot::sells()).
                 'taking_orders' => $this->botSettings->enabled() && $bot->sells(),
                 // The bot asks every customer to share their own number first («تایید شماره»): the mini app asks it too.
-                'phone_required' => $this->botSettings->phoneRequired(),
+                'phone_required' => $this->botSettings->phoneRequired() && $this->botSettings->phoneEverywhere(),
+                // Or only before these (a purchase, a renewal, a free test, a card-to-card payment): none otherwise.
+                'phone_moments' => $this->phone->moments(),
+                // Only Iranian numbers (+98) count while the shop asks numbers: another country's one is asked again.
+                'phone_iran_only' => $this->botSettings->phoneRequired() && $this->botSettings->phoneIranOnly(),
+                // A card-to-card payment is confirmed by the bank's SMS, no receipt needed («تایید خودکار واریز»).
+                'card_auto_confirmed' => $this->deposits->enabled(),
                 'service_claims' => $this->claims->offered(),
                 'service_transfers' => $this->transfers->offered(),
                 'custom_services' => $this->custom->offered(),

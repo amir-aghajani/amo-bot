@@ -4,18 +4,23 @@
 
 What the shop does through someone else is a **driver** of a family: a VPN panel it sells on, a way it takes money, the
 database it runs on, the way its email goes out, the way its sign-in codes go out by SMS, the captcha a website's
-forms ask. Every family stands on one small
+forms ask, the other bot an import brings a shop over from. Every family stands on one small
 kernel, so a new driver is a class, its registration and its request shape — the panels draw its form from its
 description, with no code of their own but where a family says so below.
 
 | Family | The interface | Registry (`bootstrap/container.php`) | Lives in | Today | Panel code for a new one |
 |---|---|---|---|---|---|
-| VPN panels | `Providers\Contracts\PanelDriver` (and its client, `ProviderInterface`) | `panel.drivers` | `app/Modules/Providers/Drivers/<Name>/` | `3x-ui`, `pasarguard`, `hmpanel` | none |
+| VPN panels | `Providers\Contracts\PanelDriver` (and its client, `ProviderInterface`) | `panel.drivers` | `app/Modules/Providers/Drivers/<Name>/` | `3x-ui`, `pasarguard`, `hmpanel`, `marzban` | none |
 | Payment gateways | `Payments\Contracts\GatewayDriver` (and its gateway, `GatewayInterface`) | `payment.drivers` | `app/Modules/Payments/Drivers/<Name>/` | `wallet`, `outside` (paid outside the shop), `manual` (card to card), `cubepay`, `zarinpal`, `atlaspay`, `abangateway`, `plisio`, `aqayepardakht`, `variza` | an icon |
 | Databases | `Core\Database\Drivers\DatabaseDriver` | `database.drivers` | `app/Core/Database/Drivers/` | `mysql`, `sqlite` | none |
 | Mail | `Core\Mail\MailDriver` | `mail.drivers` | `app/Core/Mail/Drivers/` | `smtp`, `native`, `resend` | none |
 | SMS | `Core\Sms\SmsDriver` | `sms.drivers` | `app/Core/Sms/Drivers/` | `ippanel` | none |
 | Captchas | `Core\Captcha\CaptchaDriver` | `captcha.drivers` | `app/Core/Captcha/Drivers/` | `turnstile`, `altcha` | none |
+| Migrators | `Imports\Contracts\Migrator` | `import.migrators` | `app/Modules/Imports/Migrators/<Name>/` | `faoxima` | none |
+
+Beside the kernel, with no form or registry: the phone apps that forward a bank's deposit SMS to the shop
+(«تایید خودکار واریز»), each a `Payments\Deposits\Contracts\DepositSource` that reads its app's body
+(`app/Modules/Payments/Deposits/Sources/`, `forapp` today) and is listed in `Payments\Deposits\DepositSources`.
 
 ## The kernel
 
@@ -23,7 +28,7 @@ description, with no code of their own but where a family says so below.
 `describe()`, a `Descriptor`: its key, a Persian `label` and `description`, short `notes` (the versions it needs, its
 caveats), the `form` it asks the admin to fill in, and `traits` — what its family says of it beyond that (a database's
 `installable`, a mail driver's `sender`, a gateway's `kind` and `builtin`, a panel connector's `mark`, `vendor`,
-`docs_url` and capabilities). A family's drivers are one `Registry`, by key, in the order they are registered: two
+`docs_url` and capabilities, a migrator's `mark` and `vendor`). A family's drivers are one `Registry`, by key, in the order they are registered: two
 drivers of one key are a `LogicException` as the container builds it, and a key no driver has is an
 `UnknownDriverException` — the code's mistake, or a hand-edited `config.php`'s, never a request's.
 
@@ -150,7 +155,7 @@ folder but its registration and its request shape.
 8. **Try it** on a real panel from a shell: `php bin/console panel:probe <key> <url> -t <token>`
    ([Console commands](Console-Commands.md)).
 
-The three that exist:
+The four that exist:
 
 - **3X-UI** (`Drivers/ThreeXui`) targets the v3 panel API: `ThreeXuiClient` (an API token as a bearer, or a cookie
   login — the CSRF token replayed, a TOTP code when a secret is kept — signed in again once on a refusal), `ThreeXuiApi`
@@ -161,7 +166,9 @@ The three that exist:
   inbounds only through groups), a term from the first connection is its *on hold*, and it has no per-user IP limit, so
   a plan's device count is not enforced there. A username is 3 to 128 letters, digits and `_ - . @`, never two of
   those side by side; a user kept switched off by an update is `disabled` with its term (one still on hold keeps its
-  duration for the switch back on).
+  duration for the switch back on). Its API cannot clear that duration either, and PasarGuard 5 puts any switched-off
+  user carrying one on hold when it is switched on: a service the shop knows is not waiting — a fixed end, or none — is
+  put back active, so it never starts its old term over its end at its next connection.
 - **HMPanel** (`Drivers/HmPanel`, 2.5+), a panel over several 3x-ui panels: `HmPanelClient` (its key API under
   `/api/v1`, an `hmp_…` key as the bearer — the one way in: `PanelCredentials::fields()` with no `loginHint` offers the
   token alone) and `HmPanelProvider`. A client is found by name through `/v1/clients/lookup` and then called by
@@ -171,6 +178,37 @@ The three that exist:
   link claimed is looked up by the panel and counts only by one of the client's secrets — its token, subscription id
   or UUID —, never its name. The key answers 60 calls a minute by default: a 429 is an `HmPanelApiException` that
   counts as the panel out of reach, so the server backs off.
+- **Marzban** (`Drivers/Marzban`, 0.8+): `MarzbanClient` (an admin's username and password, the one way in — Marzban's
+  API has no keys, so its form is `PanelCredentials::fields()`' password fields under a choice that offers that way
+  alone —, traded at `POST /api/admin/token` for a bearer token) and `MarzbanProvider`. The token outlives a request:
+  `MarzbanTokens` keeps it in `storage/cache/panel-tokens` (the container's `panel.tokens`), encrypted with `APP_KEY`, in
+  a file named by a keyed hash (`Encrypter::mac()`) of everything it was issued for — the saved server, the panel's
+  address, the proxy and the TLS check, the username and password —, until a margin before the `exp` its JWT names: 10
+  minutes, or a tenth of its life when that is shorter (a day's life when it names none); a 401 drops it and signs in
+  once again. Marzban reports every sign-in to its Telegram admins, so the shop signs in seldom; a server being tried
+  before it is saved keeps its token for the client's life alone. Inbounds are the Xray config's, keyed by their tag
+  (`GET /api/inbounds` lists them by protocol): a user is made with a proxy of each protocol its inbounds speak, its
+  settings left for the panel to mint, and the tags by protocol — a tag the panel lacks is a `MarzbanApiException`
+  before anything is sent, and the panel's own refusal of an inbound gone or a protocol disabled carries the «Core
+  Settings» hint (`MarzbanApiException::refused()`). A term from the first connection is its *on hold*
+  (`on_hold_expire_duration`), a deadline its `expire` (0 for none); a user is made active or on hold only, so one
+  wanted off is made, then disabled — deleted again when that is refused. Every update and switch reads the user first
+  and sends its `next_plan` back (Marzban's update drops one it is not sent). A traffic reset puts a user's status back
+  as it was — Marzban's own reset would make a switched-off user active, and one on hold active with no end. Marzban's
+  API cannot clear an on-hold duration (it reads 0 as "no change"), so a duration may stay beside a term that replaced
+  it: on an active user, or beside a deadline, it is no term; on a switched-off user without a deadline it is read as
+  waiting, as the panel reads it — so a waiting service later given unlimited time and then switched off comes back on
+  hold when switched on. No per-user IP limit; a username of 3 to 32 `A-Za-z0-9_` (Marzban takes `- . @` after three of
+  those, which the shop's names do without); rotation is `revoke_sub`. The link is `subscription_url`, made absolute on
+  the panel's address; a link claimed is shown to the panel's own `…/{token}/info` — the subscription path found off a
+  user's link, the last three folders before its token tried when there are more —, three parts of the link at most,
+  each of 15 characters or more; a config's credentials are matched against the users' proxies. Status from
+  `/api/system` and `/api/core`, without disk or uptime. A sudo admin's panel is listed 500 users a page, 100 pages at
+  most (beyond, `UnsupportedOperationException`: the sync asks client by client); another admin's never is — it sees
+  only the users it made —, so its sync and an import ask service by service, and another admin's user is a 403 with a
+  hint to sign in as a sudo admin. Its contract test holds every request to `tests/Fixtures/marzban-openapi.json`.
+  Rebecca, Marzban's fork, is no fit: its 1.x puts every user in a service and takes no choice of inbounds as Marzban
+  does — it needs a connector of its own.
 
 ## A payment gateway
 
@@ -405,3 +443,68 @@ form of the site's own whose token its backend has the shop judge ([the captcha]
    `FakeTurnstile`); the website's forms with it in `tests/Feature/Store/CaptchaTest.php`; and `DriverFormsTest`, which
    holds its request shape to its form and the description's list of captchas to the registered ones.
 5. **Tell the websites' developers**: how a page draws it, in [the captcha](Store-API-Sign-In.md#the-captcha).
+
+## A migrator
+
+Another bot a shop is brought over from («انتقال از ربات دیگر», [Importing from another bot](Importing.md)): a migrator
+knows one bot's database and translates it into the import's own records. It writes nothing, calls nothing and runs
+nothing of the other bot's: the core reads the data — the bot's backup file or its database (`Imports\Sources`) —,
+stages it, keeps the owner's choices and writes everything with the shop's own services, once however many times an
+import is run ([Architecture](Architecture.md#imports)). A new migrator is its folder, its registration and its tests.
+
+1. **The driver** — `app/Modules/Imports/Migrators/<Name>/<Name>Migrator.php`, implementing `Imports\Contracts\Migrator`
+   (a `Driver`):
+   - `key()` — what `imports.migrator` holds (`faoxima`), and what the links of what imports brought (`import_links`)
+     are kept under: once released it never changes, or a later import no longer knows what an earlier one brought;
+   - `describe()` — the card «ربات قبلی» shows: the bot's name as its label, a Persian description of what comes over,
+     `notes` (the versions it reads, what stays behind), the traits `Migrator::MARK` (the two letters the card is drawn
+     with) and `Migrator::VENDOR` (the bot's project page), and an empty `Form` — where the data comes from is the
+     core's;
+   - `tables()` — the tables it reads, by name, each a `Staging\Table`: the columns staged of it (`null` for all) and
+     those that are secrets — a panel's password, a bot's token —, staged encrypted with `APP_KEY` and read back plain.
+     Nothing else is staged: name only what you use, a table counted for «آنچه منتقل نمی‌شود» by its id alone. A
+     source's name is matched as you write it, then without case (MySQL on Windows keeps names in lower case);
+   - `recognize(Schema)` — whether a database is that bot's, from its tables and columns alone: `Recognition::yes()`
+     (with the version, when the schema tells it), or `no($missing)` — the tables or `table.column` it looked for, which
+     the owner reads in the failure. Tell the bot from its relatives: Faoxima's from MirzaBot's, its ancestor's, by a
+     table and columns of Faoxima's own;
+   - `survey(Staged)` — the review's `Survey\Survey`, every word in the owner's: the counts of `Survey::KINDS` as the
+     generators will yield them, the balances' total, the panels — `Records\ImportedPanel`: its key, name, kind,
+     address, the connector that speaks to it (`PanelDriver::key()`, or `null` with why) and `connection`, the values
+     that connector's server form takes, secrets and all (the core keeps it encrypted apart from the survey, and no
+     screen gets it) —, the customer groups (`SurveyGroup`), the admins (`SurveyAdmin`), what stays behind (`LeftBehind`)
+     and the warnings;
+   - the generators — `customers()`, `plans()`, `services()`, `discountCodes()`, `giftCodes()`, `channels()` and
+     `cards()`, each `(Staged $staged, int $after = 0)` — yield the records of `Imports\Records` under keys strictly
+     increasing, from after `$after`: the core stops when its step's time is up and goes on later from the last key it
+     wrote. A key is the staged row the record comes from (`Staged::rows()`' seq), or — for a small table read whole
+     (`Staged::all()`) and put in an order of its own, as Faoxima's plans are — its place in that order, from 1: the
+     staged copy never changes, so either resumes alike. A row it cannot read is passed over, or yielded with what it
+     has — never a reason to stop.
+
+   Each record carries the other bot's own key for the thing (`$key`), which the core remembers with what it became: a
+   later import of the same bot recognises it and brings it no more (nor brings it back once the owner deleted it) — so a
+   key is what the thing is known by and keeps: the bot's id for a customer or a service, a code's own code, a card's
+   number, a channel's chat; never a place that moves. A record says what the bot had — a customer who bought there
+   (`ImportedCustomer::$boughtBefore`: no newcomer here), a panel closed to new sales and its capacity
+   (`ImportedPanel::$active`, `$capacity`) — and the core decides what of it comes (the owner's switches, the shop's forms
+   and rules: a card always comes switched off), counting and reporting the rest (`Enums\ProblemReason`). A row it cannot
+   read is passed over; an exception out of `survey()` or a generator fails the whole import (`Imports::BROKEN`, logged),
+   since every step would stop at the same row.
+2. **Register it** in `bootstrap/container.php`: add `$c->get(<Name>Migrator::class)` to `import.migrators`.
+3. **The panels** need nothing: its card comes from your description. Where the bot's own backup is found may be said
+   under the upload, by its key, in `BACKUP_FROM` (`resources/panel/src/components/imports/start-card.tsx`).
+4. **Tests**:
+   - `tests/Unit/Imports/<Name>/` — on `Tests\Fakes\ArrayStaged`, an in-memory `Staged` of the rows you give it: the
+     recognition (the bot's database yes, its relatives' no), the survey (its counts, panels with their connectors and
+     connections — each connection held to its connector's server form —, groups, admins, what stays behind, warnings),
+     every generator's mapping and its edge cases, and resuming after a key;
+   - fixture dumps of the bot's real schema with invented rows, in `tests/Fixtures/imports/<name>/` — its own backup's
+     format and a `mysqldump` one, as Faoxima's `backup-php.sql` and `backup-mysqldump.sql` — read end to end through
+     the sources and written (`tests/Feature/Imports/FaoximaEndToEndTest.php`);
+   - the core's and the API's tests use `Tests\Fakes\FakeMigrator`, a migrator yielding the records it is given.
+
+Today's is **Faoxima** (`Migrators/Faoxima`, its 1.x, which keeps no version in its database): `FaoximaMigrator`,
+`Panels` (its `marzban_panel` rows: each kind's connector, and the server form's values from its address and its token
+or login), `Catalog` (its products as plans, an agents' product paired with its customers' twin as that plan's agent
+price) and `Cell` (its loosely written values read).

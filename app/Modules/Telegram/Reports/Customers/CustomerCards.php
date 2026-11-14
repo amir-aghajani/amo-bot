@@ -71,6 +71,7 @@ final class CustomerCards
         'us' => CustomerServices::class,
         'uw' => CustomerWallet::class,
         'ud' => CustomerDiscount::class,
+        'ux' => CustomerMessage::class,
         'uo' => CustomerOrder::class,
     ];
 
@@ -84,7 +85,7 @@ final class CustomerCards
     /**
      * The press on a button of `$prefix` (`<prefix><action>:<customer id>[:<arg>…]`), checked; null after answering it —
      * silently for one malformed or outside the report group, with who may for anyone but a bot admin, and taking the
-     * card's buttons off for a customer gone.
+     * card's buttons off for a customer gone (a report's «⚙️ مدیریت کاربر» only).
      */
     public function press(Update $update, string $prefix): ?CardPress
     {
@@ -103,7 +104,12 @@ final class CustomerCards
         }
         $user = User::query()->find((int) $id);
         if ($user === null) {
-            $this->groupButtons->dismiss($update, self::GONE);
+            // A report keeps its other buttons (a receipt's «تایید» / «رد»); a card loses them all.
+            if ($prefix === UserManagement::PREFIX && $action === UserManagement::NEW) {
+                $this->groupButtons->forget($update, self::GONE);
+            } else {
+                $this->groupButtons->dismiss($update, self::GONE);
+            }
 
             return null;
         }

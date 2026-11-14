@@ -141,6 +141,11 @@ return [
             $table->decimal('credit_limit', 14, 2)->default(0);
             // A percent off whatever the customer buys, theirs for good (Discounts: «تخفیف اختصاصی»); 0 none.
             $table->unsignedTinyInteger('discount_percent')->default(0);
+            // When an import learned they had bought in the bot the shop came from («انتقال از ربات دیگر»): no newcomer
+            // here — no first-purchase price or code, no newcomers' test, no referral start gift; null: none known.
+            $table->timestamp('bought_elsewhere_at')->nullable();
+            // Excused from the shop's phone rule (Telegram\Gates\PhoneRequirement): never asked for their number.
+            $table->boolean('phone_exempt')->default(false);
             $table->string('referral_code', 16)->nullable()->unique();
             $table->foreignId('referred_by')->nullable()->constrained('users')->nullOnDelete();
             $table->timestamp('last_seen_at')->nullable();
@@ -1133,6 +1138,30 @@ return [
             $table->index(['card_id', 'created_at', 'status', 'amount']);
         },
 
+        // The bank's deposit SMS a phone app (Payments\Deposits: ForApp) forwards to the shop, each once (by the app's own
+        // id for it): what it said, and what came of it — the card payment it approved, or why none.
+        'deposits' => static function (Blueprint $table): void {
+            $table->bigIncrements('id');
+            $table->foreignId('bot_id')->default(1)->constrained('bots')->restrictOnDelete();
+            $table->string('source', 16);
+            $table->string('external_id', 100);
+            $table->string('status', 16);
+            $table->unsignedBigInteger('amount_rial')->nullable();
+            $table->string('bank', 60)->nullable();
+            $table->string('sender', 60)->nullable();
+            $table->text('body')->nullable();
+            $table->string('note', 500)->nullable();
+            $table->foreignId('payment_id')->nullable()->constrained('payments')->nullOnDelete();
+            $table->timestamp('received_at')->nullable();
+            $table->timestamps();
+
+            // Each SMS once per shop and source; a shop's deposits newest first (the screen, its tabs), and its old ones
+            // pruned by their day.
+            $table->unique(['bot_id', 'source', 'external_id']);
+            $table->index(['bot_id', 'status', 'created_at']);
+            $table->index(['bot_id', 'created_at']);
+        },
+
         'referral_commissions' => static function (Blueprint $table): void {
             $table->bigIncrements('id');
             $table->foreignId('bot_id')->default(1)->constrained('bots')->restrictOnDelete();
@@ -1483,6 +1512,86 @@ return [
             $table->timestamps();
 
             $table->unique(['bot_id', 'emoji_id']);
+        },
+
+        /*
+         * «انتقال از ربات دیگر» (Imports): another bot's data brought into a shop. `imports` — one import: the bot it is
+         * from (`migrator`, the driver's key), how its data arrives (`source`: a backup file or its database) and its
+         * `phase` (Imports\Enums\ImportPhase). Reading keeps the source's cursor (`reading`), a database's connection
+         * encrypted (`connection`, gone once read), and the tables it found (`schema`); then what the data holds
+         * (`survey`), the panels' connections encrypted (`panels`), the owner's `choices`, and, importing, the `stage`
+         * and the last staged row it wrote (`cursor`), what each kind came to (`counts`), and why it failed (`error`).
+         *
+         * `import_rows` — the staged copy, its rows' `id` their seq: only the tables and columns the migrator reads, each
+         * row a JSON object of strings and nulls, its secrets encrypted; deleted once the import ends.
+         *
+         * `import_links` — what an import brought, each thing of the other bot by its own key (`source_key`) and what it
+         * became here (`target_id`): what a later import of the same bot recognises and does not bring twice.
+         *
+         * `import_problems` — what an import could not bring, and why (Imports\Enums\ProblemReason), for its report.
+         */
+        'imports' => static function (Blueprint $table): void {
+            $table->bigIncrements('id');
+            $table->foreignId('bot_id')->default(1)->constrained('bots')->restrictOnDelete();
+            $table->string('migrator', 32);
+            $table->string('source', 16);
+            $table->string('phase', 16);
+            $table->string('file_name', 191)->nullable();
+            $table->json('reading')->nullable();
+            $table->text('connection')->nullable();
+            $table->json('schema')->nullable();
+            $table->string('version', 32)->nullable();
+            $table->json('survey')->nullable();
+            $table->text('panels')->nullable();
+            $table->json('choices')->nullable();
+            $table->string('stage', 24)->nullable();
+            $table->unsignedBigInteger('cursor')->default(0);
+            $table->json('counts')->nullable();
+            $table->text('error')->nullable();
+            $table->string('reviewer', 64)->nullable();
+            $table->timestamp('started_at')->nullable();
+            $table->timestamp('finished_at')->nullable();
+            $table->timestamps();
+
+            $table->index('phase');
+        },
+
+        'import_rows' => static function (Blueprint $table): void {
+            $table->bigIncrements('id');
+            $table->foreignId('import_id')->constrained('imports')->cascadeOnDelete();
+            $table->string('table_name', 64);
+            $table->longText('data');
+
+            // A table's rows in order, after a seq.
+            $table->index(['import_id', 'table_name', 'id']);
+        },
+
+        'import_links' => static function (Blueprint $table): void {
+            $table->bigIncrements('id');
+            $table->foreignId('bot_id')->default(1)->constrained('bots')->restrictOnDelete();
+            $table->string('migrator', 32);
+            $table->string('kind', 24);
+            $table->string('source_key', 191);
+            $table->unsignedBigInteger('target_id')->nullable();
+            $table->foreignId('import_id')->nullable()->constrained('imports')->nullOnDelete();
+            $table->timestamp('created_at')->nullable();
+
+            // Named: the default name would pass MySQL's 64 characters after the longest prefix.
+            $table->unique(['bot_id', 'migrator', 'kind', 'source_key'], 'import_links_source_unique');
+        },
+
+        'import_problems' => static function (Blueprint $table): void {
+            $table->bigIncrements('id');
+            $table->foreignId('import_id')->constrained('imports')->cascadeOnDelete();
+            $table->string('kind', 24);
+            $table->string('source_key', 191);
+            $table->string('reason', 32);
+            $table->string('detail', 500)->nullable();
+            $table->timestamp('created_at')->nullable();
+
+            // A report's problems by reason, and by kind.
+            $table->index(['import_id', 'reason']);
+            $table->index(['import_id', 'kind']);
         },
     ],
 

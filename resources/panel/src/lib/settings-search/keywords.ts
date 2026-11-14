@@ -145,6 +145,7 @@ export const KEYWORDS: Partial<Record<string, string[]>> = {
   'section:/wheel/spins': ['spin', 'spins', 'چرخش', 'برنده‌ها'],
   'section:/wheel/settings': ['wheel', 'spin', 'lucky', 'گردونه', 'گردونه شانس', 'قوانین گردونه'],
   'section:/discounts/settings': ['discount', 'coupon', 'تخفیف', 'کد تخفیف', 'مهلت کد'],
+  'section:/payments/deposits': ['deposit', 'deposits', 'sms', 'bank sms', 'forapp', 'واریز', 'پیامک', 'پیامک بانک', 'پیامک واریز', 'اس ام اس', 'فوراپ'],
   'section:/tests/servers': ['test server', 'سرور تست', 'حجم تست', 'مدت تست'],
   'section:/tests/settings': ['test', 'trial', 'free', 'تست', 'اکانت تست', 'رایگان', 'سهمیه', 'quota'],
 
@@ -222,6 +223,24 @@ export const KEYWORDS: Partial<Record<string, string[]>> = {
     ...SCHEDULE_TASKS,
   ],
   'section:/settings/backups': ['backup', 'backups', 'restore', 'dump', 'بک آپ', 'بکاپ', 'بک اپ', 'پشتیبان', 'نسخه پشتیبان', 'فایل پشتیبان', 'بازیابی', 'ریستور', 'بازگردانی'],
+  'section:/settings/import': [
+    'import',
+    'migrate',
+    'migration',
+    'faoxima',
+    'mirza',
+    'mirzabot',
+    'ایمپورت',
+    'وارد کردن',
+    'مهاجرت',
+    'انتقال ربات',
+    'انتقال از ربات',
+    'ربات قبلی',
+    'ربات دیگر',
+    'ربات میرزا',
+    'میرزا',
+    'فاکسیما',
+  ],
   'section:/settings/advanced': ['advanced', 'log', 'session', 'timeout', 'cookie', 'https', 'لاگ', 'سشن', 'تایم اوت', 'کوکی'],
 
   // Single settings the panel words differently from how they are looked for.
@@ -241,5 +260,7 @@ export const KEYWORDS: Partial<Record<string, string[]>> = {
   'setting:/settings/backups#بازگردانی': ['restore', 'ریستور', 'بازیابی'],
   'setting:/bot-settings/general#bot_support_contact': ['support', 'support id', 'آیدی پشتیبانی', 'پشتیبانی', 'ادمین'],
   'setting:/bot-settings/general#تایید-شماره-موبایل': ['phone', 'contact', 'شماره', 'شماره تلفن'],
+  'setting:/payment-methods#تایید-خودکار-واریز': ['forapp', 'sms', 'bank sms', 'auto verify', 'فوراپ', 'فور اپ', 'پیامک', 'پیامک بانک', 'اس ام اس', 'تایید خودکار', 'تایید واریز'],
+  'setting:/payment-methods#اتصال-فوراپ': ['forapp', 'webhook', 'api key', 'فوراپ', 'وبهوک', 'وب هوک', 'کلید'],
   'setting:/bot-settings/wallet#wallet_topup_min': ['minimum top up', 'حداقل شارژ', 'کمترین شارژ', 'کف شارژ'],
 }

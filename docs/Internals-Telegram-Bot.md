@@ -381,15 +381,20 @@ updates), its topics `ReportTopics` (each made under a lease, so two processes n
 
 ### A customer's card
 
-The panel's customer page, in the group: `Reports\UserManagement` is the card's front — «⚙️ مدیریت کاربر» under a
-newcomer's report posts one under it, and `/manage <who>` (`COMMAND`) anywhere in the group answers with one, `<who>` a
+The panel's customer page, in the group: `Reports\UserManagement` is the card's front — «⚙️ مدیریت کاربر» under every
+report about a customer (`ShopReports::managing()`, only for a customer of the group's shop) posts one under it, and
+stays when the report's other buttons go (`GroupButtons::buttons()` and the sender's `clears_buttons` keep the rows
+`UserManagement::kept()` finds; a customer gone takes only their own button off, in Telegram and in the report's
+row, `GroupButtons::forget()`) — and
+`/manage <who>` (`COMMAND`) anywhere in the group answers with one, `<who>` a
 Telegram id, an @username or the customer's number in the shop (`#12`). The front says who they are and opens the
 sections, each a handler of its own callback prefix under `Reports\Customers` that rewrites the card in place, with
 «⬅️ بازگشت» back to the front: `CustomerServices` (a service's sync, time and traffic, switch off and on, deletion),
 `CustomerWallet` (an increase or a decrease with a note), `CustomerOrder` (a service made by hand, as the panel's
 «افزودن سفارش»: `ManualOrders`, the confirm button carrying a nonce as the order's key), `CustomerDiscount`,
-`CustomerHistory` (orders, payments, tickets, referrals — reading only) and `CustomerAccount` (the website's sign-in:
-two-factor off, every device signed out); the groups, the role and the ban are the front's own.
+`CustomerHistory` (orders, payments, tickets, referrals — reading only), `CustomerAccount` (the website's sign-in:
+two-factor off, every device signed out) and `CustomerMessage` (a message from support, as the panel's «ارسال پیام»,
+on every card but the admin's own); the groups, the phone excuse, the role and the ban are the front's own.
 
 - **What every section shares** is `Customers\CustomerCards`: `press()` checks a press once for all — in the shop's
   connected report group, by one of its bot admins (`GroupButtons::admin()`, never the button's data), about a customer
@@ -402,9 +407,9 @@ two-factor off, every device signed out); the groups, the role and the ban are t
   bot's admins — as a `CardReply` to that section (`AnswersPrompts::answer()`), which ends it with `done()` (the card
   rewritten, the question deleted) or `retry()` (a word under the reply, the question kept).
 - **Every change** goes through the service the panel uses, under the admin's name (`Actor::groupAdmin()`), by its
-  rules — `UserActions` (a wallet, the role, the ban, the groups, the sign-in), `SubscriptionActions`,
-  `PersonalDiscounts::set()`, `ManualOrders` — and a refusal is a popup. Never an admin banned, put in a «همکار»
-  group, or their discount or website sign-in changed.
+  rules — `UserActions` (a wallet, the role, the ban, the phone excuse, the groups, the sign-in, a message),
+  `SubscriptionActions`, `PersonalDiscounts::set()`, `ManualOrders` — and a refusal is a popup. Never an admin banned,
+  put in a «همکار» group, or their discount or website sign-in changed.
 
 ## Broadcasts
 

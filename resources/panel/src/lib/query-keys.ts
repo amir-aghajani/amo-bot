@@ -25,6 +25,10 @@ export const queryKeys = {
   schedule: ['schedule'] as const,
   /** «پشتیبان‌گیری» (both panels'): what the panel's backups hold, their sending to the report group, the states kept from before a restore. */
   backups: ['backups'] as const,
+  /** «انتقال از ربات دیگر» (the owner's, the main shop's): the bots it brings data from, the import under way, the earlier ones. */
+  imports: ['imports'] as const,
+  /** What an import did not bring, a page of it (its report), by the import and the view. */
+  importProblems: (id: number, view: { reason: string; page: number }) => ['import-problems', id, view] as const,
   plans: ['plans'] as const,
   planCategories: ['plan-categories'] as const,
   planOptions: ['plan-options'] as const,
@@ -55,6 +59,10 @@ export const queryKeys = {
   payments: ['payments'] as const,
   payment: (id: number) => ['payment', id] as const,
   everyPayment: ['payment'] as const,
+  /** «تایید خودکار واریز»: its switch, where the phone app posts and with which key, whether SMS have been coming. */
+  depositSettings: ['deposit-settings'] as const,
+  /** The bank SMS the phone app forwarded, each with what came of it («واریزهای پیامکی»). */
+  deposits: ['deposits'] as const,
   subscriptions: ['subscriptions'] as const,
   subscription: (id: number) => ['subscription', id] as const,
   everySubscription: ['subscription'] as const,

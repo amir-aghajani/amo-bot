@@ -23,6 +23,7 @@ use App\Modules\Telegram\Api\BotApi;
 use App\Modules\Telegram\Models\ReportMessage;
 use App\Modules\Telegram\Reports\TicketClose;
 use App\Modules\Telegram\Reports\Topic;
+use App\Modules\Telegram\Reports\UserManagement;
 use App\Modules\Users\Enums\PictureFolder;
 use App\Modules\Users\Models\User;
 use App\Modules\Users\Services\CustomerPictures;
@@ -75,7 +76,7 @@ final class StoreTicketsTest extends HttpTestCase
         self::assertSame(TicketChannel::Web, TicketMessage::query()->sole()->channel);
 
         $report = ReportMessage::query()->sole();
-        self::assertSame([Topic::Tickets, "ticket:{$ticket['id']}", TicketClose::buttons($ticket['id'])], [$report->topic, $report->ref, $report->keyboard]);
+        self::assertSame([Topic::Tickets, "ticket:{$ticket['id']}", [...TicketClose::buttons($ticket['id']), ...UserManagement::buttons($this->customer->id)]], [$report->topic, $report->ref, $report->keyboard]);
         self::assertStringContainsString("🎫 <b>تیکت جدید</b> · \u{200E}#{$ticket['id']}", $report->text);
         self::assertStringContainsString('🔖 سرویس: <code>ali_1</code>', $report->text);
         self::assertStringContainsString('📨 از وب‌سایت', $report->text);

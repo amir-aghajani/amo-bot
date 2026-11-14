@@ -44,6 +44,11 @@ parameters:
         -
             identifier: shipmonk.deadMethod
             message: '#^Unused App\\Support\\PhpVersion::setTestHost #'
+        # An import's step budget counted in rows or without end, and the schema a reading recorded read back whole: the
+        # tests' seams onto an import's steps and what its reading found — the app steps by seconds alone.
+        -
+            identifier: shipmonk.deadMethod
+            message: '#^Unused App\\Modules\\Imports\\(Budget::(checks|unlimited)|Staging\\Schema::(columns|tables)) #'
 
 services:
     # Keeps model types through Eloquent's forwarded query-builder methods (see phpstan/src).

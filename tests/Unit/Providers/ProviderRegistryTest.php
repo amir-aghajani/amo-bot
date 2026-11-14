@@ -96,9 +96,9 @@ final class ProviderRegistryTest extends TestCase
         $registry = $this->registry();
 
         self::assertTrue($registry->has('3x-ui'));
-        self::assertFalse($registry->has('marzban'));
-        self::assertFalse($registry->capabilities('marzban')->inbounds);
-        self::assertFalse($registry->capabilities('marzban')->linkRotation);
+        self::assertFalse($registry->has('nopanel'));
+        self::assertFalse($registry->capabilities('nopanel')->inbounds);
+        self::assertFalse($registry->capabilities('nopanel')->linkRotation);
         self::assertTrue($registry->capabilities('3x-ui')->linkRotation);
 
         $registry->unregister('3x-ui');

@@ -67,9 +67,11 @@ const SECTIONS = {
   '/settings/update': ['apps/admin/settings/update-section.tsx#UpdateSection'],
   '/settings/schedule': ['apps/admin/settings/schedule-section.tsx#ScheduleSection'],
   '/settings/backups': ['components/backups/backups-section.tsx#BackupsSection'],
+  // An import's screen, not settings: its cards come and go with the import's phase, so the header's words alone are its.
+  '/settings/import': [],
   '/settings/advanced': ['apps/admin/settings/advanced-section.tsx#AdvancedSection'],
   // The feature pages' settings sections, and the pages whose settings are a card on the page itself.
-  '/discounts/settings': ['components/discounts/discount-settings-card.tsx#DiscountSettingsCard'],
+  '/discounts/settings': ['components/discounts/discount-settings-card.tsx#DiscountSettingsCard', 'components/discounts/agent-perks-card.tsx#AgentPerksCard'],
   '/tests/settings': ['components/tests/test-settings-card.tsx#TestSettingsCard'],
   '/wheel/settings': ['components/wheel/wheel-settings-card.tsx#WheelSettingsCard'],
   '/agents/settings': ['apps/admin/agency/settings-card.tsx#AgencySettingsCard'],
@@ -77,6 +79,7 @@ const SECTIONS = {
   '/gift-codes': ['components/gift-codes/gift-codes-settings-card.tsx#GiftCodesSettingsCard'],
   '/lottery': ['components/lottery/lottery-settings-card.tsx#LotterySettingsCard'],
   '/custom-services': ['components/custom-services/custom-services-card.tsx#CustomServicesCard'],
+  '/payment-methods': ['components/payments/deposits/deposit-settings-card.tsx#DepositSettings'],
 }
 
 /**
@@ -88,6 +91,10 @@ const ABOUT = {
   '/settings/appearance': 'components/appearance-card.tsx#APPEARANCE_DESCRIPTION',
   '/settings/update': 'apps/admin/settings/update-section.tsx#UPDATE_DESCRIPTION',
   '/settings/schedule': 'apps/admin/settings/schedule-section.tsx#SCHEDULE_DESCRIPTION',
+  '/settings/import': 'components/imports/imports-section.tsx#IMPORTS_DESCRIPTION',
+  '/payment-methods': 'pages/payment-methods.tsx#DESCRIPTION',
+  '/payments': 'pages/payments.tsx#HEADERS.payments',
+  '/payments/deposits': 'pages/payments.tsx#HEADERS.deposits',
   '/users': 'pages/users.tsx#HEADERS.users',
   '/users/groups': 'pages/users.tsx#HEADERS.groups',
   '/referrals': 'pages/referrals.tsx#HEADERS.referrers',
@@ -186,8 +193,12 @@ function isExported(node) {
   return node.modifiers?.some((modifier) => modifier.kind === K.ExportKeyword) ?? false
 }
 
-/** The identifier a binding name (an identifier or a destructuring pattern) declares as `name`, or null. */
+/**
+ * The identifier a binding name (an identifier or a destructuring pattern) declares as `name`, or null. An array
+ * pattern's hole (`const [, b] = …`) has no name.
+ */
 function bindingNamed(nameNode, name) {
+  if (!nameNode) return null
   if (nameNode.kind === K.Identifier) return nameNode.text === name ? nameNode : null
   if (nameNode.kind === K.ObjectBindingPattern || nameNode.kind === K.ArrayBindingPattern) {
     for (const element of nameNode.elements) {
@@ -330,7 +341,7 @@ function destructured(nameNode, binding, value, frame) {
   if (nameNode === binding) return value
   if (nameNode.kind !== K.ObjectBindingPattern && nameNode.kind !== K.ArrayBindingPattern) return UNKNOWN
   for (const [index, element] of nameNode.elements.entries()) {
-    if (element.kind !== K.BindingElement || !contains(element.name, binding)) continue
+    if (element.kind !== K.BindingElement || !element.name || !contains(element.name, binding)) continue
     if (element.dotDotDotToken) return UNKNOWN
     let inner
     if (nameNode.kind === K.ArrayBindingPattern) inner = Array.isArray(value) ? value[index] : UNKNOWN

@@ -22,6 +22,12 @@ final class Reviewers
     /** What anyone but the owner reads for the owner. */
     public const SUPPORT = 'پشتیبانی';
 
+    /** A card payment a bank SMS approved (Payments\Deposits\Services\Deposits). */
+    public const BANK_SMS = 'پیامک بانک';
+
+    /** The names a machine's decision keeps (Actor::machine()), shown as they are to anyone: no person behind them. */
+    private const MACHINES = [self::BANK_SMS];
+
     /** How agents and admins are kept; anything else is a login of the owner's, now or in the past. */
     private const OWN = '/^(@\S+|tg:\d+|user#\d+|agent#\d+)$/';
 
@@ -50,6 +56,11 @@ final class Reviewers
     {
         if ($reviewer === null) {
             return null;
+        }
+
+        // A machine's decision says so to anyone (a card payment a bank SMS approved): it hides nobody.
+        if (in_array($reviewer, self::MACHINES, true)) {
+            return $reviewer;
         }
 
         // The login now is the owner's even when it looks like one of the shop's own (it may start with "@").

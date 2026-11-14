@@ -9,6 +9,7 @@ import {
   MARKETING_GROUP,
   MINI_APP_SETTINGS,
   panelSettings,
+  PAYMENT_SECTIONS,
   REFERRAL_SECTIONS,
   REVIEWS,
   SALES_GROUP,
@@ -28,6 +29,6 @@ import {
  */
 export const AGENT_NAV: PanelNav = {
   menu: [DASHBOARD, SUPPORT, REVIEWS, { id: 'account', title: 'حساب نمایندگی', to: '/account', icon: BadgeCheck }, SHOP_GROUP, SALES_GROUP, MARKETING_GROUP, BOT_GROUP],
-  sections: { users: USER_SECTIONS, referrals: REFERRAL_SECTIONS, wheel: WHEEL_SECTIONS, discounts: DISCOUNT_SECTIONS, tests: TEST_SECTIONS },
+  sections: { users: USER_SECTIONS, payments: PAYMENT_SECTIONS, referrals: REFERRAL_SECTIONS, wheel: WHEEL_SECTIONS, discounts: DISCOUNT_SECTIONS, tests: TEST_SECTIONS },
   settings: { item: SETTINGS, groups: [BOT_SETTINGS, WEBSITE_SETTINGS, MINI_APP_SETTINGS, panelSettings([BACKUPS_SECTION, APPEARANCE_SECTION])] },
 }

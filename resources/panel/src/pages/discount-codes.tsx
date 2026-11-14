@@ -1,4 +1,5 @@
 import { WithBotSettings } from '@/components/bot/settings/with-bot-settings'
+import { AgentPerksCard } from '@/components/discounts/agent-perks-card'
 import { CodesList } from '@/components/discounts/codes-list'
 import { DiscountSettingsCard } from '@/components/discounts/discount-settings-card'
 import { SectionedPage } from '@/components/sectioned-page'
@@ -12,8 +13,8 @@ const HEADERS: Record<Section, { title: string; description: string }> = {
     description: 'کدهایی که مشتری هنگام پرداخت در ربات یا وب‌سایت وارد می‌کند: درصدی، مبلغ ثابت یا رایگان، برای سفارش‌ها، پلن‌ها و سرورهایی که تعیین می‌کنید.',
   },
   settings: {
-    title: 'تنظیمات کدهای تخفیف',
-    description: 'سفارش پرداخت‌نشده با کد تخفیف تا کی سهم کد را نگه دارد.',
+    title: 'تنظیمات تخفیف‌ها',
+    description: 'سفارش پرداخت‌نشده با کد تخفیف تا کی سهم کد را نگه دارد، و همکارها تخفیف‌ها و جایزه‌های مشتری‌ها را بگیرند یا نه.',
   },
 }
 
@@ -21,13 +22,25 @@ const HEADERS: Record<Section, { title: string; description: string }> = {
 const PROGRAM =
   'قیمت هر خرید، تمدید، حجم، زمان یا کاربر اضافه اول با بیشترین تخفیف خودکار مشتری کم می‌شود — فروش ویژه، تخفیف اختصاصی او یا تخفیف سطح وفاداری‌اش؛ هیچ‌وقت دو تا با هم جمع نمی‌شوند — و بعد کد تخفیفی که مشتری وارد کرده روی همان مبلغ اعمال می‌شود. هر سفارش پرداخت‌نشده‌ای که با کد ثبت شود یکی از دفعات استفاده کد را نگه می‌دارد؛ اگر لغو شود یا مهلتش تمام شود، آن سهم آزاد می‌شود. شارژ کیف پول و خرید حجم نمایندگی تخفیف نمی‌گیرند.'
 
-/** «کدهای تخفیف» (both panels), in two sections: the codes, and how long an unpaid order holds a code's use (a bot-settings group). */
+/**
+ * «کدهای تخفیف» (both panels), in two sections: the codes, and the settings — how long an unpaid order holds a code's use,
+ * and whether those who pay agent prices go without the customers' perks (two bot-settings groups).
+ */
 export function DiscountCodesPage() {
   return (
     <SectionedPage sections={DISCOUNT_SECTIONS} header={(current) => ({ ...HEADERS[current.value], info: PROGRAM })}>
       {{
         codes: <CodesList />,
-        settings: <WithBotSettings what="تنظیمات کدهای تخفیف">{(settings) => <DiscountSettingsCard settings={settings} />}</WithBotSettings>,
+        settings: (
+          <WithBotSettings what="تنظیمات تخفیف‌ها">
+            {(settings) => (
+              <div className="grid gap-6">
+                <DiscountSettingsCard settings={settings} />
+                <AgentPerksCard settings={settings} />
+              </div>
+            )}
+          </WithBotSettings>
+        ),
       }}
     </SectionedPage>
   )

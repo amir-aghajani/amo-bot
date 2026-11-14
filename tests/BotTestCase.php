@@ -11,6 +11,7 @@ use App\Modules\Payments\Models\PaymentMethod;
 use App\Modules\Providers\Models\Server;
 use App\Modules\Subscriptions\Models\Subscription;
 use App\Modules\Telegram\Handlers\PurchaseHandler;
+use App\Modules\Telegram\Models\ReportMessage;
 use App\Modules\Telegram\Texts\BotText;
 use App\Modules\Telegram\Texts\BotTexts;
 use App\Modules\Telegram\Update\CallbackData;
@@ -38,6 +39,9 @@ abstract class BotTestCase extends DatabaseTestCase
     /** The last update id handed out: each update a test makes is new to the bot, as each Telegram sends is. */
     private static int $updateId = 0;
 
+    /** @var array<int, list<list<array<string, mixed>>>> The buttons the bot last set under each of its messages, before the last send(). */
+    private array $buttonsSet = [];
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -55,6 +59,11 @@ abstract class BotTestCase extends DatabaseTestCase
     /** The customer does something: one update in, whatever the bot answers recorded fresh. */
     protected function send(Update $update): void
     {
+        foreach ($this->telegram()->history as $call) {
+            if ($call['method'] === 'editMessageReplyMarkup') {
+                $this->buttonsSet[(int) ($call['params']['message_id'] ?? 0)] = FakeTelegram::markupOf($call['params'])['inline_keyboard'] ?? [];
+            }
+        }
         $this->telegram()->reset();
         $this->bot()->dispatch($update);
     }
@@ -142,9 +151,10 @@ abstract class BotTestCase extends DatabaseTestCase
 
     /**
      * What the bot says of a card transfer of `$amount` Toman, in place of the checkout: the card's instructions — the
-     * card of the fixtures' cardMethod() unless told otherwise —, then the line asking for the receipt.
+     * card of the fixtures' cardMethod() unless told otherwise —, then the line asking for the receipt (`$suffix`; while
+     * the shop listens to its bank SMS, the one asking the exact sum: PayInstructionsAuto).
      */
-    protected function cardInstructions(string $amount, string $card = '6037997700001119', string $holder = 'AmoBot', string $instructions = ''): string
+    protected function cardInstructions(string $amount, string $card = '6037997700001119', string $holder = 'AmoBot', string $instructions = '', BotText $suffix = BotText::PayInstructionsSuffix): string
     {
         return BotTexts::paragraphs(trim(self::text(BotText::CardInstructions, [
             'amount' => Money::format($amount),
@@ -154,7 +164,7 @@ abstract class BotTestCase extends DatabaseTestCase
             'holder' => $holder,
             'bank' => '',
             'instructions' => $instructions,
-        ])), self::text(BotText::PayInstructionsSuffix));
+        ])), self::text($suffix));
     }
 
     /** What the bot's answer to the tap said — a popup or a toast — since the last send(); null when it said nothing. */
@@ -256,9 +266,22 @@ abstract class BotTestCase extends DatabaseTestCase
                     'message_thread_id' => $thread,
                     'is_topic_message' => true,
                     'date' => time(),
-                ],
+                ] + $this->markupUnder($post),
             ],
         ]);
+    }
+
+    /**
+     * The buttons under one of the bot's group messages, as Telegram sends them with a press on it: as last set — since
+     * the last send(), else in an earlier step —, else as its report went out; none known, none sent.
+     *
+     * @return array<string, mixed>
+     */
+    private function markupUnder(int $post): array
+    {
+        $rows = $this->buttonsUnder($post) ?? $this->buttonsSet[$post] ?? ReportMessage::query()->withoutGlobalScopes()->where('message_id', $post)->latest('id')->first()?->keyboard;
+
+        return $rows === null || $rows === [] ? [] : ['reply_markup' => ['inline_keyboard' => $rows]];
     }
 
     /**

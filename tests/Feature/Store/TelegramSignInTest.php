@@ -65,6 +65,7 @@ final class TelegramSignInTest extends HttpTestCase
             'has_password' => false,
             'two_factor' => false,
             'phone' => null,
+            'phone_exempt' => false,
             'balance' => '50000.00',
             'created_at' => '2026-10-07T12:00:00+00:00',
         ], $answer['customer'], "the bot's customer, their profile as Telegram has it now");

@@ -147,9 +147,33 @@ class Payment extends Model
         return $payments->whereIn('status', [PaymentStatus::Pending->value, PaymentStatus::Failed->value])->whereNotNull('invoice->held');
     }
 
+    /**
+     * Receipts their method's review window may accept on its own (selfApproving()), as a condition on `$payments`.
+     *
+     * @param Builder<self> $payments
+     * @return Builder<self>
+     */
+    public static function whereSelfApproving(Builder $payments): Builder
+    {
+        return $payments->where(static fn(Builder $query) => $query
+            ->whereNotNull('receipt_file_id')
+            ->orWhereHas('order.user', static fn(Builder $user) => $user->whereNotNull('telegram_id')));
+    }
+
     public function isPaid(): bool
     {
         return $this->status === PaymentStatus::Paid;
+    }
+
+    /**
+     * Whether its method's review window may accept its receipt on its own (AutoApproveReceiptsTask): one sent in the bot,
+     * or uploaded by a customer whose account is a Telegram account — the mini app's always is, the website's when they
+     * signed in with Telegram. Never one only an email or a phone number vouches for: that account may be a minute old.
+     * Reads its order's customer.
+     */
+    public function selfApproving(): bool
+    {
+        return $this->receipt_file_id !== null || $this->order->user->telegram_id !== null;
     }
 
     /**

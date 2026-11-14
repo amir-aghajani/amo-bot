@@ -32,8 +32,11 @@ final class BackupTables
         'settings', 'users', 'wallet_transactions', 'wallet_transfers', 'customer_groups', 'websites', 'mini_apps',
         'account_merges', 'notifications', 'plan_categories', 'plans', 'subscriptions', 'test_accounts', 'payment_methods',
         'payment_cards', 'discount_codes', 'sales', 'loyalty_tiers', 'cashback_rules', 'wheel_prizes', 'orders', 'gift_codes',
-        'wheel_spins', 'cashbacks', 'lottery_draws', 'payments', 'referral_commissions', 'referral_bonuses', 'referral_rewards',
+        'wheel_spins', 'cashbacks', 'lottery_draws', 'payments', 'deposits', 'referral_commissions', 'referral_bonuses', 'referral_rewards',
         'referral_alerts', 'tickets', 'reviews', 'bot_channels', 'broadcasts', 'report_chats', 'report_topics', 'custom_emojis',
+        // What the shop's imports of another bot brought (Imports\Links): a later import knows it again, so it goes with the
+        // rows it names.
+        'import_links',
     ];
 
     /**
@@ -51,10 +54,16 @@ final class BackupTables
         'broadcast_pins' => ['broadcast_id', 'broadcasts'],
     ];
 
-    /** The owner's: the whole installation's backup holds them; a shop's backup and restore never do. */
+    /**
+     * The owner's: the whole installation's backup holds them; a shop's backup and restore never do. Among them the owner's
+     * imports of another bot (Imports) and their reports — an import's encrypted columns (`connection`, `panels`, set only
+     * while it is open) as they are stored, like a server's password: only this installation's key reads them, and only it
+     * signs a file its restore takes.
+     */
     public const OWNER = [
         'bots', 'sequences', 'agency_levels', 'agency_requests', 'servers', 'server_inbounds', 'bot_hidden_servers', 'grants',
-        'grant_parts', 'server_migrations', 'migration_failures', 'migration_leftovers', 'traffic_transactions',
+        'grant_parts', 'server_migrations', 'migration_failures', 'migration_leftovers', 'traffic_transactions', 'imports',
+        'import_problems',
     ];
 
     /**
@@ -63,11 +72,17 @@ final class BackupTables
      */
     public const TRANSIENT = [
         'change_versions', 'customer_sessions', 'auth_challenges', 'request_keys', 'telegram_updates', 'telegram_sessions',
-        'report_messages',
+        'report_messages', 'import_rows',
     ];
 
     /** Of the transient ones, what a restore keeps as it is: the panels' feed counts on, Telegram's updates stay answered once. */
     public const KEPT_ON_RESTORE = ['change_versions', 'telegram_updates'];
+
+    /**
+     * Of the transient ones, those of no shop, which only the whole installation's restore empties: an import's staged
+     * copy of another bot's data (its panels' passwords among it), whose import is the owner's.
+     */
+    public const OWNERS_TRANSIENT = ['import_rows'];
 
     /**
      * Columns of a shop's rows that are the owner's to set, kept as they are now by a shop's restore (a plan the owner
@@ -125,6 +140,7 @@ final class BackupTables
         ['subscriptions', 'server_id', 'servers', 'refuse'],
         ['test_accounts', 'server_id', 'servers', 'null'],
         ['orders', 'server_id', 'servers', 'null'],
+        ['import_links', 'import_id', 'imports', 'null'],
     ];
 
     /**

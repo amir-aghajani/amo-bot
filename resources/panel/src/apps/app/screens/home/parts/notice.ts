@@ -11,6 +11,7 @@ import {
   Coins,
   Crown,
   Gift,
+  Headset,
   MessageCircle,
   PartyPopper,
   RefreshCw,
@@ -77,6 +78,7 @@ const LOOKS: Record<string, NoticeLook> = {
   email_codes_failed: { icon: ShieldAlert, tint: BAD },
   ticket_answered: { icon: MessageCircle, tint: CALM },
   ticket_closed: { icon: MessageCircle, tint: 'var(--app-hint)' },
+  support_message: { icon: Headset, tint: CALM },
   loyalty_tier_up: { icon: Crown, tint: '#e6a100' },
   lottery_won: { icon: PartyPopper, tint: '#ff2d55' },
 }

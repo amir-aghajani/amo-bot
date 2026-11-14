@@ -8,7 +8,7 @@ import { idLabel } from '@/lib/direction'
 import { queryKeys } from '@/lib/query-keys'
 import { CustomerPage, type CustomerPageProps } from '@/pages/customer'
 import { OWNER, testQueryClient, until } from '@/test/render'
-import { customerAccount, loyaltyStanding, onlinePaymentRow, orderRow, paymentRow, planRow, subscriptionRow, ticketRow, userRow } from '@/test/rows'
+import { botSettingsResponse, customerAccount, loyaltyStanding, onlinePaymentRow, orderRow, paymentRow, planRow, subscriptionRow, ticketRow, userRow } from '@/test/rows'
 import { json, refusal, server, type Answer } from '@/test/server'
 
 /*
@@ -293,6 +293,22 @@ describe('a customer’s page', () => {
     expect(server().sent('PATCH', '/api/admin/users/10')).toEqual([])
   })
 
+  it('excuses the customer from the phone rule at once, through its own endpoint, and keeps the answered row', async () => {
+    answers()
+    server().on('PUT', '/api/admin/users/10/phone-exempt', json({ user: { ...CUSTOMER, phone_exempt: true } }))
+    open()
+
+    await screen.findByRole('heading', { level: 2, name: 'شماره موبایل' })
+    const exempt = within(card('شماره موبایل')).getByRole('switch', { name: 'معاف از ارسال شماره موبایل' })
+    expect(exempt.getAttribute('aria-checked')).toBe('false')
+    fireEvent.click(exempt)
+
+    await until(() => expect(server().sent('PUT', '/api/admin/users/10/phone-exempt').length).toBe(1))
+    await until(() => expect(exempt.getAttribute('aria-disabled')).toBeNull())
+    expect(exempt.getAttribute('aria-checked')).toBe('true')
+    expect(server().sent('PUT', '/api/admin/users/10/phone-exempt')[0]?.body).toEqual({ phone_exempt: true })
+  })
+
   it('makes the customer an order from its menu, and reads their services and orders again', async () => {
     answers()
     server()
@@ -316,6 +332,22 @@ describe('a customer’s page', () => {
 
     await until(() => expect([reads('subscriptions') > 1, reads('orders') > 1]).toEqual([true, true]))
     expect(server().sent('POST', '/api/admin/users/10/orders')[0]?.body).toMatchObject({ plan_id: 3, server_id: 1, payment: 'free' })
+  })
+
+  it('sends the customer a message through the shop’s bot from its header, and closes once it went', async () => {
+    answers()
+    server()
+      .on('GET', '/api/admin/bot/settings', json(botSettingsResponse()))
+      .on('POST', '/api/admin/users/10/message', json({ delivery: 'told' }))
+    open()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'ارسال پیام' }))
+    const dialog = await screen.findByRole('dialog', { name: 'ارسال پیام' })
+    fireEvent.change(within(dialog).getByLabelText('متن پیام'), { target: { value: 'سلام' } })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'ارسال پیام' }))
+
+    await until(() => expect(screen.queryByRole('dialog', { name: 'ارسال پیام' })).toBeNull())
+    expect(server().sent('POST', '/api/admin/users/10/message')[0]?.body).toEqual({ text: 'سلام' })
   })
 
   it('shows an agent’s agency, and where the panel manages them', async () => {

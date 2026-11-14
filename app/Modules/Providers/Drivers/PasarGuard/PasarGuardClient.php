@@ -40,7 +40,7 @@ final class PasarGuardClient
     private const HINT_KEY_SCOPE = 'کلید را با دسترسی کامل به کاربران و دسترسی خواندن گروه‌ها و سیستم بسازید (یا دسترسی‌های ادمین صاحب کلید را به آن بدهید).';
     private const HINT_DISABLED = 'حساب این ادمین در PasarGuard غیرفعال است؛ آن را در بخش Admins پنل فعال کنید.';
     private const HINT_ENV_ADMIN = 'ادمینی که در فایل env پنل تعریف شده (SUDO_USERNAME) بیرون از حالت Debug وارد نمی‌شود؛ در داشبورد یک ادمین بسازید و با آن وصل شوید.';
-    private const HINT_ADDRESS = 'آدرس پنل همان آدرس داشبورد بدون /dashboard است (مثل https://panel.example.com:8000) و نسخه پنل باید 3.1 یا بالاتر باشد.';
+    private const HINT_ADDRESS = "آدرس پنل همان آدرس داشبورد بدون \u{2068}/dashboard\u{2069} است (مثل https://panel.example.com:8000) و نسخه پنل باید 3.1 یا بالاتر باشد.";
     private const HINT_REDIRECT = 'معمولا https به‌جای http، یا آدرس دیگری برای پنل.';
     private const HINT_NOT_API = 'احتمالا آدرس پنل اشتباه است، مثلا آدرس داشبورد یا سایتی دیگر.';
 

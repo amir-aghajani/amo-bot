@@ -151,14 +151,37 @@ final class PasarGuardProvider implements ProviderInterface
         }
     }
 
-    /** One PUT: the panel keeps the user's groups, credentials and link, and its own reset strategy. */
+    /**
+     * One PUT: the panel keeps the user's groups, credentials and link, and its own reset strategy. A term not waiting
+     * for the first connection that the panel put on hold all the same is put active (activated()).
+     */
     public function updateClient(ClientSpec $spec): ClientInfo
     {
-        $user = $this->client->put(self::USERS . rawurlencode($spec->name), [
+        $path = self::USERS . rawurlencode($spec->name);
+        $user = $this->client->put($path, [
             'data_limit' => $spec->totalBytes,
         ] + self::term($spec->expiry, $spec->enabled) + self::note($spec));
+        if ($spec->enabled && $spec->expiry->pendingSeconds() === null) {
+            $user = $this->activated($path, $user);
+        }
 
         return $this->clientOf($user, online: null);
+    }
+
+    /**
+     * The user a PUT of `active` answered, active. PasarGuard (5.x) reads a switched-off user switched back on as on hold
+     * whenever it keeps a duration — and its API cannot clear one (its validator reads 0 as "no change"), so a duration
+     * stays on a user whose waiting term was replaced by a deadline or by none. Put on hold so, the user would start that
+     * old term at its next connection, over its deadline or its unlimited time: one the shop knows is not waiting is put
+     * active from there, which the panel takes as asked.
+     *
+     * @param array<string, mixed> $user
+     * @return array<string, mixed>
+     * @throws ProviderException
+     */
+    private function activated(string $path, array $user): array
+    {
+        return Raw::string($user, 'status') === 'on_hold' ? $this->client->put($path, ['status' => 'active']) : $user;
     }
 
     /** revoke_sub: fresh proxy credentials and a new link; every link signed before stops working. */
@@ -169,7 +192,8 @@ final class PasarGuardProvider implements ProviderInterface
 
     /**
      * Switching off is one PUT. Switching on reads the user first: one whose term never started goes back on hold with
-     * it, sent explicitly — a panel before 5.0 would otherwise make it active with no end at all.
+     * it, sent explicitly — a panel before 5.0 would otherwise make it active with no end at all —; any other goes back
+     * active, even beside a leftover duration (activated()).
      */
     public function setClientEnabled(string $name, bool $enabled): void
     {
@@ -186,7 +210,13 @@ final class PasarGuardProvider implements ProviderInterface
         }
 
         $pending = self::waitingTerm($user);
-        $this->client->put($path, $pending !== null ? ['status' => 'on_hold', 'on_hold_expire_duration' => $pending] : ['status' => 'active']);
+        if ($pending !== null) {
+            $this->client->put($path, ['status' => 'on_hold', 'on_hold_expire_duration' => $pending]);
+
+            return;
+        }
+
+        $this->activated($path, $this->client->put($path, ['status' => 'active']));
     }
 
     public function deleteClient(string $name): void
@@ -378,8 +408,11 @@ final class PasarGuardProvider implements ProviderInterface
 
     /**
      * The term still waiting for the user's first connection, in seconds: on hold, or switched off before its clock
-     * started (switched on, it goes back on hold); null otherwise. A duration on an active user is a leftover the panel
-     * cannot clear, not a term.
+     * started (switched on, it goes back on hold); null otherwise. A duration on an active user, or beside a deadline, is
+     * a leftover the panel cannot clear, not a term. On a switched-off user without a deadline it is read as waiting, as
+     * PasarGuard reads it: the panel cannot tell it from a leftover — not by `online_at` either, since a term starts only
+     * at traffic since the user's last edit, and a user that connected before is put back on hold when an ended service
+     * is renewed.
      *
      * @param array<string, mixed> $user
      */

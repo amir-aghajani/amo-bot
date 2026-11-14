@@ -462,7 +462,20 @@ session, and once one ends a cover over the phone says so. A panel's page may fr
 mini app's folder lets the site frame it (`vite.config.ts`, held by `frame-policy.test.ts`).
 
 The panel settings (`apps/admin/settings`) edit config.php's groups through `useConfigGroup`; the update section drives
-an update one step per request until the page reloads on the new build. The web installer (`apps/admin/install`) talks
+an update one step per request until the page reloads on the new build. «انتقال از ربات دیگر» (`components/imports`)
+is offered in the main shop alone (`mainShop` on its entry, `sectionsOfShop()`), and draws the import `GET /imports`
+answers as it stands: `StartCard` (the bots as cards from their descriptions, then the backup's upload — a file larger
+than `upload_max_bytes` refused before it is sent — or the database's form), `ProgressCard` while it reads or writes,
+`Review` (the survey, each panel's choice among the servers of its connector, the switches, what stays behind; the
+choices saved as the screen shows them — a switch held off by the one it goes with sent off — with `PUT …/choices`
+before `POST …/start`) and `Outcome` (the tally, and the problems a page at a time). `useImportRunner` asks for the next
+step, `POST /imports/{id}/continue`, a second apart while the section is on screen and the import reads or writes; an
+answer of `stepped: false` (another tab's or the console's step holds the import) is asked again after a few seconds.
+A step that got no answer, or the server's own failure, is tried again after a wait that doubles; after four in a row,
+or at once for a step refused, the runner stops asking and the card says «انتقال متوقف ماند» until «تلاش دوباره» — a 404
+or 401 ends the run. Leaving the screen leaves the run, and the open import being the answer's `current`, coming back
+resumes it. An import that ends having written invalidates every read: it changed
+much of the shop. The web installer (`apps/admin/install`) talks
 to `/api/install` with the install key the owner read off the host (`X-Install-Key`, kept for the tab), and opens on the
 first step still needed (`steps.ts`).
 

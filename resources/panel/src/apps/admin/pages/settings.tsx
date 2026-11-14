@@ -16,40 +16,45 @@ import { APPEARANCE_DESCRIPTION, AppearanceCard } from '@/components/appearance-
 import { BackupsDescription, BackupsSection } from '@/components/backups/backups-section'
 import { Callout } from '@/components/callout'
 import { ErrorState } from '@/components/error-state'
+import { IMPORTS_DESCRIPTION, ImportsSection } from '@/components/imports/imports-section'
 import { useReadFailure } from '@/components/page'
 import { SectionedPage } from '@/components/sectioned-page'
+import { sectionsOfShop } from '@/components/shell/nav'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { api } from '@/lib/api'
 import type { ConfigSettingsResponse } from '@/lib/api-types'
+import { useMainShop } from '@/lib/auth'
 import { queryKeys } from '@/lib/query-keys'
 
 /**
- * The sections that are none of config.php's — the panel's look (this browser's), AmoBot's update, the schedule and the
- * backups (the database's) —, by what the header says of each: the file's path, its read and whether it can be written
- * are not theirs.
+ * The sections that are none of config.php's — the panel's look (this browser's), AmoBot's update, the schedule, the
+ * backups and the imports from another bot (the database's) —, by what the header says of each: the file's path, its
+ * read and whether it can be written are not theirs.
  */
 const OUTSIDE_THE_FILE: Partial<Record<(typeof PANEL_SETTINGS_SECTIONS)[number]['value'], ReactNode>> = {
   appearance: APPEARANCE_DESCRIPTION,
   update: UPDATE_DESCRIPTION,
   schedule: SCHEDULE_DESCRIPTION,
   backups: <BackupsDescription />,
+  import: IMPORTS_DESCRIPTION,
 }
 
 /**
  * «تنظیمات پنل» (the owner's): config.php's groups — kept in a file so they stay editable even when the database is
- * broken —, the owner's login, the panel's look in this browser, AmoBot's update, the scheduled tasks' timings and the
- * backups.
+ * broken —, the owner's login, the panel's look in this browser, AmoBot's update, the scheduled tasks' timings, the
+ * backups and, in the main shop alone, the imports from another bot (sectionsOfShop()).
  */
 export function SettingsPage() {
   const read = useQuery({ queryKey: queryKeys.configSettings, queryFn: () => api.get<ConfigSettingsResponse>('/settings/config'), staleTime: 60_000 })
   const { data, refetch } = read
   const failure = useReadFailure(read)
   const readOnly = data ? !data.file.writable : false
+  const sections = sectionsOfShop(PANEL_SETTINGS_SECTIONS, useMainShop())
 
   return (
     <SectionedPage
-      sections={PANEL_SETTINGS_SECTIONS}
+      sections={sections}
       width="narrow"
       header={(current) =>
         OUTSIDE_THE_FILE[current.value] !== undefined
@@ -119,6 +124,7 @@ export function SettingsPage() {
         update: <UpdateSection />,
         schedule: <ScheduleSection />,
         backups: <BackupsSection scheduleSettings="/settings/schedule" />,
+        import: <ImportsSection />,
         advanced: data && <AdvancedSection settings={data.groups.advanced} meta={data.meta} disabled={readOnly} />,
       }}
     </SectionedPage>

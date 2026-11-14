@@ -15,6 +15,7 @@ use App\Modules\Subscriptions\Exceptions\TestAccountRefusedException;
 use App\Modules\Subscriptions\Models\Subscription;
 use App\Modules\Subscriptions\Services\TestAccounts;
 use App\Modules\Subscriptions\Services\TestAccountSettings;
+use App\Modules\Telegram\Gates\PhoneMoment;
 use App\Modules\Users\Models\User;
 use App\Support\Input;
 use App\Support\Persian;
@@ -25,8 +26,9 @@ use Psr\Log\LoggerInterface;
  * The free test accounts («اکانت تست») on the website and in the mini app, as the bot's «🧪 اکانت تست» gives them
  * (Subscriptions\Services\TestAccounts): the servers giving one now with their terms, or why the customer can take none;
  * and one taken. The quota is the bot's, counted together, and so is what the bot asks first (CustomerGates: a Telegram
- * account, their number, the shop's channels). The screen shows the test it made, so nothing is sent in
- * Telegram; a panel that fails is logged and said in a word, nothing of the quota spent.
+ * account, their number — while the shop asks it before everything, or before a free test —, the shop's channels). The
+ * screen shows the test it made, so nothing is sent in Telegram; a panel that fails is logged and said in a word,
+ * nothing of the quota spent.
  */
 final class CustomerTestAccounts
 {
@@ -57,7 +59,7 @@ final class CustomerTestAccounts
     public function offers(User $customer): array
     {
         $this->open();
-        $held = $this->gates->refusal($customer);
+        $held = $this->gates->refusal($customer, PhoneMoment::Test);
         if ($held !== null) {
             return ['offers' => [], 'refusal' => $held];
         }
@@ -87,7 +89,7 @@ final class CustomerTestAccounts
     public function take(User $customer, array $input): Subscription
     {
         $this->open();
-        $held = $this->gates->refusal($customer);
+        $held = $this->gates->refusal($customer, PhoneMoment::Test);
         if ($held !== null) {
             throw ValidationException::on('status', $held);
         }

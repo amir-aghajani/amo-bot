@@ -15,6 +15,7 @@ use App\Modules\Telegram\Models\ReportMessage;
 use App\Modules\Telegram\Notifications\ServiceCard;
 use App\Modules\Telegram\Reports\DeliveryRetry;
 use App\Modules\Telegram\Reports\ReportSender;
+use App\Modules\Telegram\Reports\UserManagement;
 use App\Modules\Telegram\Texts\BotText;
 use App\Modules\Telegram\Update\Update;
 use Tests\BotTestCase;
@@ -107,8 +108,9 @@ final class DeliveryRetryTest extends BotTestCase
         $again = $this->telegram()->params(0);
         self::assertSame((string) $this->threads['errors'], $again['message_thread_id']);
         self::assertSame($firstFailure, $this->telegram()->replyTarget(0), 'under the first failure');
-        self::assertSame(DeliveryRetry::buttons($this->order->id), FakeTelegram::markupOf($again)['inline_keyboard'] ?? null, 'with the button');
-        self::assertSame([], $this->buttonsUnder($firstFailure), 'which the first one loses');
+        $manage = UserManagement::buttons($this->order->user_id);
+        self::assertSame([...DeliveryRetry::buttons($this->order->id), ...$manage], FakeTelegram::markupOf($again)['inline_keyboard'] ?? null, 'with the button, and «⚙️ مدیریت کاربر»');
+        self::assertSame($manage, $this->buttonsUnder($firstFailure), 'which the first one loses — but its «⚙️ مدیریت کاربر»');
     }
 
     public function testAStaleRetryIsRefusedAndLosesItsButton(): void

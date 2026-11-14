@@ -1,13 +1,15 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { EllipsisVertical, PackagePlus } from 'lucide-react'
+import { EllipsisVertical, MessageSquareText, PackagePlus } from 'lucide-react'
 import { useParams } from 'react-router'
 import { BackLink } from '@/components/back-link'
 import { DiscountCard } from '@/components/customer/discount-card'
 import { LoyaltyCard } from '@/components/customer/loyalty-card'
 import { ManualOrderDialog } from '@/components/customer/manual-order-dialog'
+import { MessageDialog } from '@/components/customer/message-dialog'
 import { OrdersCard } from '@/components/customer/orders-card'
 import { PaymentsCard } from '@/components/customer/payments-card'
+import { PhoneCard } from '@/components/customer/phone-card'
 import { AgencyCard, GroupsCard, ReferralCard, WalletCard } from '@/components/customer/profile-cards'
 import { ServicesCard } from '@/components/customer/services-card'
 import { TicketsCard } from '@/components/customer/tickets-card'
@@ -43,10 +45,11 @@ export interface CustomerPageProps {
 }
 
 /**
- * One customer (`/users/:id`, both panels), where support answers them from: identity, account actions and an order made
- * for them by hand (ManualOrderDialog), their latest
- * services, payments, orders and tickets, wallet, referral facts, groups, website account and agency. The page is keyed
- * on the customer, so nothing of one (a draft, an open dialog) is left on another.
+ * One customer (`/users/:id`, both panels), where support answers them from: identity, account actions, a message sent
+ * them through the shop's bot (MessageDialog) and an order made for them by hand (ManualOrderDialog), their latest
+ * services, payments, orders and tickets, wallet, referral facts, personal discount, phone rule (excused or not), groups,
+ * website account and agency. The page is keyed on the customer, so nothing of one (a draft, an open dialog) is left on
+ * another.
  */
 export function CustomerPage(props: CustomerPageProps) {
   const id = Number(useParams().id)
@@ -69,6 +72,8 @@ function CustomerView({ id, servers = shopServerChoices, serverPage, traffic, ag
   const account = useAccountChange(changed, elsewhere)
   // «افزودن سفارش»: support's order for the customer, in its dialog.
   const [ordering, setOrdering] = useState(false)
+  // «ارسال پیام»: support's message to the customer through the shop's bot, in its dialog.
+  const [messaging, setMessaging] = useState(false)
 
   if (detail.isPending && failed.error === null) {
     return (
@@ -121,6 +126,9 @@ function CustomerView({ id, servers = shopServerChoices, serverPage, traffic, ag
               <Button asChild variant="secondary">
                 <TelegramChatLink user={user} />
               </Button>
+              <Button variant="secondary" icon={MessageSquareText} onClick={() => setMessaging(true)}>
+                ارسال پیام
+              </Button>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="secondary" size="icon" icon={EllipsisVertical} aria-label="حساب مشتری" />
@@ -156,6 +164,7 @@ function CustomerView({ id, servers = shopServerChoices, serverPage, traffic, ag
           {/* While the shop has loyalty tiers: one the customer is on, or the next to reach. */}
           {(loyalty.tier || loyalty.next) && <LoyaltyCard loyalty={loyalty} />}
           <DiscountCard customer={user} invalidates={elsewhere} onSaved={changed} />
+          <PhoneCard customer={user} invalidates={elsewhere} onSaved={changed} />
           {/* The groups' counts move too. */}
           <GroupsCard customer={user} invalidates={[...elsewhere, queryKeys.customerGroups]} onSaved={changed} />
           <WebsiteAccountCard customer={user} account={website} />
@@ -165,6 +174,7 @@ function CustomerView({ id, servers = shopServerChoices, serverPage, traffic, ag
 
       <AccountChangeConfirm account={account} />
       <ManualOrderDialog customer={ordering ? user : null} traffic={traffic} onClose={() => setOrdering(false)} />
+      <MessageDialog customer={messaging ? user : null} onClose={() => setMessaging(false)} />
     </Page>
   )
 }

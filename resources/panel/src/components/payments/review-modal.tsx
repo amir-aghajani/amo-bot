@@ -9,7 +9,7 @@ import { OperationsSection, useOperations, type OperationSpec } from '@/componen
 import { DiscountFact } from '@/components/orders/order-discounts'
 import { orderBrings } from '@/components/orders/order-subject'
 import { MethodSummary } from '@/components/payments/method-summary'
-import { Reviewer } from '@/components/reviewer'
+import { DecidedBy } from '@/components/payments/payment-status-cell'
 import { StatusBadge } from '@/components/status-badge'
 import { searchLink, TextLink } from '@/components/text-link'
 import { Button } from '@/components/ui/button'
@@ -262,7 +262,7 @@ function Facts({ payment }: { payment: PaymentRow }) {
         {payment.held && <span className="ms-1 text-footnote text-warning">{HELD}</span>}{' '}
         {payment.reviewer && !payment.auto_approved && (
           <span className="ms-1 text-footnote text-muted-foreground">
-            توسط <Reviewer name={payment.reviewer} person={payment.reviewer_name} />
+            <DecidedBy reviewer={payment.reviewer} person={payment.reviewer_name} />
           </span>
         )}
       </Fact>

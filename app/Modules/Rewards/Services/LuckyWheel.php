@@ -6,6 +6,7 @@ namespace App\Modules\Rewards\Services;
 
 use App\Core\Database\Ledger;
 use App\Core\Exceptions\DomainRuleException;
+use App\Modules\Discounts\Services\Perks;
 use App\Modules\Orders\Models\Order;
 use App\Modules\Providers\Exceptions\ProviderException;
 use App\Modules\Providers\Services\ProviderErrorPresenter;
@@ -29,7 +30,8 @@ use Psr\Log\LoggerInterface;
  * two taps never spin twice: the cooldown since their last given spin, the slices that can reach them now
  * (Eligibility), the cost from the wallet (an agent's credit does not count). The prize is given after the commit; if
  * that fails, the cost is refunded and the spin keeps why, counting for no cooldown. A buyers-only wheel needs a
- * purchase with a price, kept (Order::keptPurchases()); bot admins spin either way.
+ * purchase with a price, kept (Order::keptPurchases()); bot admins spin either way. For one who goes without the
+ * customers' perks (Perks) the wheel is off.
  */
 final class LuckyWheel
 {
@@ -48,6 +50,7 @@ final class LuckyWheel
 
     public function __construct(
         private readonly WheelSettings $settings,
+        private readonly Perks $perks,
         private readonly Rewards $rewards,
         private readonly Eligibility $eligibility,
         private readonly WalletService $wallet,
@@ -161,10 +164,13 @@ final class LuckyWheel
         return $next !== null && $next->isFuture() ? $next : null;
     }
 
-    /** @throws WheelRefusedException switched off, or for buyers only and the customer — no bot admin — has bought nothing */
+    /**
+     * @throws WheelRefusedException switched off — for one without the customers' perks too (Perks) —, or for buyers only
+     *                               and the customer — no bot admin — has bought nothing
+     */
     private function admit(User $customer): void
     {
-        if (!$this->settings->enabled()) {
+        if (!$this->settings->enabled() || $this->perks->withheld($customer)) {
             throw WheelRefusedException::because(WheelRefusal::Off);
         }
         if ($this->settings->buyersOnly() && !$customer->isAdmin() && !Order::keptPurchases()->where('user_id', $customer->id)->exists()) {

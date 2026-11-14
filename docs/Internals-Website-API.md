@@ -221,8 +221,9 @@ services only add the API's shape and limits.
   (`CustomerGates::holdBack()`, from their controllers: the door is the request's). A program switched off is a 404
   (`ProgramOffException`) — the wheel's refusals, the bot's words, a 422 on `status`. Nothing of these is sent in
   Telegram: the page shows it.
-- **Receipts** (`CustomerReceipts`) are taken as the bot takes them, but an uploaded receipt never auto-approves: the
-  account behind it may be an email made a minute ago.
+- **Receipts** (`CustomerReceipts`) are taken as the bot takes them, and auto-approve as the bot's do only when the
+  account behind them is a Telegram account — the mini app's always, the website's when signed in with Telegram
+  (`Payment::selfApproving()`): one only an email or a mobile number vouches for may be a minute old.
 - **Online payments** (`CustomerOnlinePayments`): a checkout by an online gateway answers its page (`link`, read off
   the payment by the gateway's `initiate()`, which calls nothing — so does an order's pending payment while its page
   takes money, `OrderPresenter::link()`); `POST /payments/{id}/check` asks the gateway through

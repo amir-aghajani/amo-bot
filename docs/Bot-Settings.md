@@ -31,13 +31,34 @@ wheel ([Gift codes and the lucky wheel](Gift-Codes-And-Lucky-Wheel.md)), and fre
   off above every section. For a pause, or when the servers are down.
 - **«تایید شماره موبایل»** (off) — on, a customer must send their own Telegram number — one tap of «📱 ارسال شماره موبایل»
   — before anything else: a number typed, or someone else's card, is refused. Asked once; the number shows on their
-  customer page. The bot's admins are not asked. The [mini app](Mini-App.md) asks for it too, on «حساب من»: Telegram
-  sends the customer's own number to the bot, which takes it as it takes one sent in the chat. A card sent while the
-  shop asks for no number, or once the customer's is verified, keeps nothing: the bot answers «شماره لازم نیست» —
-  «تایید شماره» to their own number already verified — and the chat stays where it was.
+  customer page. The bot's admins are not asked, nor a customer you excused from it («معاف از ارسال شماره موبایل» on
+  their page or the report group's card — [Customers](Customers.md#excused-from-the-phone-number)). The
+  [mini app](Mini-App.md) asks for it too, on «حساب من»: Telegram sends the customer's own number to the bot, which
+  takes it as it takes one sent in the chat. A card sent while the shop asks for no number, or once the customer's is
+  verified, keeps nothing: the bot answers «شماره لازم نیست» — «تایید شماره» to their own number already verified — and
+  the chat stays where it was.
+  - **Where it is asked** — **«کل ربات»** (the default): as above, nothing works until the number is in. **«فقط موقع این
+    کارها»**: the bot works as usual and asks for the number only when the customer is about to do one of the moments
+    ticked — **«خرید سرویس»** (a plan or a service they build), **«تمدید»** (a renewal, and extra traffic, time or
+    devices), **«گرفتن اکانت تست»**, **«پرداخت کارت به کارت»** (the shop's own card-to-card method, by receipt or
+    «تایید خودکار واریز», whatever it pays for, a top-up too; the online gateways ask for no number). At that moment the
+    checkout gives way to the ask with its one button; once the number is in, the customer taps again. All four are
+    ticked when you first choose it; with none ticked, nothing is asked. A number the customer sends of their own
+    accord meanwhile is kept, so «ثبت شماره تلفن» in the mini app still works.
+  - **«فقط شماره‌های ایران (‎+98)»** (off) — on, only an Iranian number counts: another country's card is refused
+    («فقط شماره ایران» — `📵 این ربات فقط شماره‌های ایران (‎+98) را می‌پذیرد…`, a text you may reword) and kept nowhere,
+    the button offered again. A customer verified earlier with another country's number is asked again, wherever the
+    number is asked; the mini app's «حساب من» asks them for an Iranian one. For a customer with no Iranian number, excuse
+    them from the number on their page. Numbers verified by SMS on the website are Iranian already.
+  - The shop's website asks for no number before an order, in either way: only before a free test (and a spin of the
+    wheel with «کل ربات»), as it always has. Through the mini app the moments are asked as in the bot.
 - **«راه ارتباط با پشتیبانی»** — a handle or link, 190 characters at most, shown on the bot's «☎️ پشتیبانی» above its
   ticket buttons («نیاز به کمک دارید؟ با ما در تماس باشید: …»); empty, the screen offers the tickets alone. The shop's
   website gets it as a link when it is one: `@handle`, an `https://` address, `t.me/…`, or a phone number.
+- **«عنوان پیام پشتیبانی»** (on) — a message you write to a customer with «ارسال پیام» (their page, or their card in the
+  report group — [Writing to a customer](Customers.md#writing-to-a-customer)) reaches them under «📩 پیام از طرف
+  پشتیبانی:», so they know who is writing; the heading is the bot text «پیام پشتیبانی به مشتری», yours to reword. Off,
+  they get your words alone.
 
 ## Service usernames
 
@@ -50,7 +71,7 @@ bot's service screen («👤 نام کاربری سرویس»; «نام سروی
   at each tap.
 - **«نام دلخواه»** (off) — on, it offers «✏️ دلخواه»: the customer types the name — 3 to 32 English letters, digits,
   `_` and `-` (Persian digits are read as Latin) —, one no service on that server has and its panel takes (PasarGuard
-  refuses two of `_` and `-` side by side, so the bot asks for another).
+  refuses two of `_` and `-` side by side, and Marzban any `-`, so the bot asks for another).
 
 A pattern is 48 characters at most: English letters, digits, `_ - . @` and the variables below. It must hold `{n}` or
 `{random}`, or `{seq}` beside `{username}`, `{tg_id}` or `{user_id}` — `{seq}` alone counts each customer's services
@@ -78,7 +99,8 @@ How names are given:
   the move) fails for you to retry.
 - **A name fits its panel.** A username too long for the 64 characters a name may have is shortened, never the part
   that tells the names apart. On PasarGuard, two of `_ - . @` side by side become the first alone, and a name under 3
-  characters gets leading zeros (`{n}` gives `001`).
+  characters gets leading zeros (`{n}` gives `001`). On Marzban a name is 3 to 32 letters, digits and `_`: `-`, `.` and
+  `@` are dropped, a long username gives way within 32 characters, and a name under 3 gets leading zeros.
 - **`{n}` is each shop's own count**, so two shops selling on the same servers with one pattern of `{n}` would name
   alike, the one behind skipping the other's names: give each its own letters (`a{n}`, `b{n}`).
 - **A name is never changed.** A new pattern names new services; those made before keep their names. So does a service
@@ -290,7 +312,7 @@ What counts as a change is what the save would keep: an empty row, the rows' ord
 Traffic is offered for a service with a quota, days for one with a term — neither for one switched off by support, nor
 for one ended on both counts, which a renewal is for, nor for a free test ([Test accounts](Test-Accounts.md)). Devices
 are offered for a service with a device limit (an unlimited one takes none) whose time and traffic have not run out (a
-renewal of one ended would replace their period at once), on a server whose panel enforces the limit — 3X-UI does; PasarGuard has no IP limit, so its services are offered none. In an
+renewal of one ended would replace their period at once), on a server whose panel enforces the limit — 3X-UI does; PasarGuard and Marzban have no IP limit, so their services are offered none. In an
 agent's shop the extra traffic its customers buy comes out of the agent's traffic, and no more is offered than is left
 ([Agency](Agency.md)); extra days and devices cost it nothing.
 

@@ -1,13 +1,13 @@
 import { Reviewer } from '@/components/reviewer'
 import { StatusBadge } from '@/components/status-badge'
 import type { PaymentRow } from '@/lib/api-types'
-import { HELD, PAYMENT_STATUS, TO_WALLET } from '@/lib/statuses'
+import { BANK_SMS_APPROVED, BANK_SMS_REVIEWER, HELD, PAYMENT_STATUS, TO_WALLET } from '@/lib/statuses'
 
 type PaymentState = Pick<PaymentRow, 'status' | 'to_wallet' | 'held' | 'auto_approved' | 'reviewer' | 'reviewer_name'>
 
 /**
  * A payment's status in a list's cell: its badge and, under it, whether it went to the wallet or is held for support —
- * and, with `decided` (the payments screen), who decided it: the shop by itself, or the one who reviewed it.
+ * and, with `decided` (the payments screen), who decided it: the shop by itself, a bank SMS, or the one who reviewed it.
  */
 export function PaymentStatusCell({ payment, decided = false }: { payment: PaymentState; decided?: boolean }) {
   return (
@@ -17,9 +17,23 @@ export function PaymentStatusCell({ payment, decided = false }: { payment: Payme
       {payment.to_wallet && <span className="text-caption text-warning">{TO_WALLET}</span>} {payment.held && <span className="text-caption text-warning">{HELD}</span>}{' '}
       {decided && payment.reviewer && !payment.auto_approved && (
         <span className="text-caption text-faint">
-          توسط <Reviewer name={payment.reviewer} person={payment.reviewer_name} />
+          <DecidedBy reviewer={payment.reviewer} person={payment.reviewer_name} />
         </span>
       )}
     </div>
+  )
+}
+
+/**
+ * Who decided a payment, under its status: «توسط» the one who reviewed it — or, a card payment a bank SMS named
+ * («تایید خودکار واریز»), that it was approved so.
+ */
+export function DecidedBy({ reviewer, person }: { reviewer: string; person: string | null }) {
+  if (reviewer === BANK_SMS_REVIEWER) return BANK_SMS_APPROVED
+
+  return (
+    <>
+      توسط <Reviewer name={reviewer} person={person} />
+    </>
   )
 }

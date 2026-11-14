@@ -6,6 +6,7 @@
   - [config.php reference](Config-Reference.md)
   - [Upgrading](Upgrading.md)
   - [Backups](Backups.md)
+  - [Importing from another bot](Importing.md)
   - [Console commands](Console-Commands.md)
 - Owner's guide
   - [Overview](Owners-Guide.md)

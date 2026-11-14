@@ -6,6 +6,7 @@ use App\Core\Scheduling\Scheduler;
 use App\Modules\Accounts\Tasks\PruneAccountsTask;
 use App\Modules\Agency\Tasks\AgencyStandingTask;
 use App\Modules\Backups\Tasks\SendBackupsTask;
+use App\Modules\Imports\Tasks\PruneImportsTask;
 use App\Modules\Orders\Tasks\ExpireOrdersTask;
 use App\Modules\Orders\Tasks\ResumeDeliveriesTask;
 use App\Modules\Payments\Tasks\AutoApproveReceiptsTask;
@@ -74,6 +75,9 @@ return static function (Scheduler $schedule): void {
     // Each shop's backup to its report group's «پشتیبان‌گیری» topic: the main shop's group the whole installation's, an
     // agent's group its own shop's alone.
     $schedule->everyMinutes(24 * 60, SendBackupsTask::class, eachBot: true);
+    // «انتقال از ربات دیگر»: an import left open a week cancelled, and what an ended one still keeps of the other bot's
+    // data (its staged rows and uploaded file hold its panels' passwords) deleted.
+    $schedule->everyMinutes(24 * 60, PruneImportsTask::class);
     // AmoBot's newest release read from GitHub once a day, so the owner's dashboard says when one is out.
     $schedule->everyMinutes(24 * 60, CheckReleasesTask::class);
     // The report groups: what the panel and the tasks above queued, at Telegram's pace. Last, so a tick's own reports go in them.

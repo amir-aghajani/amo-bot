@@ -4,23 +4,36 @@ declare(strict_types=1);
 
 namespace App\Modules\Telegram;
 
+use App\Core\Forms\Fields\Choice;
 use App\Core\Forms\Fields\Text;
 use App\Core\Forms\Fields\Toggle;
 use App\Core\Forms\Form;
 use App\Modules\Settings\DeclaresSettings;
 use App\Modules\Settings\Services\Settings;
+use App\Modules\Telegram\Gates\PhoneMoment;
 use App\Support\Persian;
 
 /**
  * The bot's own runtime settings (each bot its own), as groups of the bot settings screen: `general` (the master switch
- * and the phone rule — each enforced by a Gate — and the support contact), `channels` (the required-channels rule) and
- * `qr` (whether a delivered service comes as a QR card).
+ * — a Gate —, the phone rule — Gates\PhoneRequirement: whether customers must share their number, and when: before
+ * anything at all, or only at the moments chosen, and whether only Iranian numbers (+98) count —, the support contact,
+ * and whether a message support writes to a customer comes under «پیام از طرف پشتیبانی»), `channels` (the
+ * required-channels rule) and `qr` (whether a delivered service comes as a QR card).
  */
 final class BotSettings implements DeclaresSettings
 {
+    /** The phone rule's reach: before anything at all, or only at the moments switched on. */
+    public const PHONE_EVERYWHERE = 'everywhere';
+    public const PHONE_MOMENTS = 'moments';
+
     private readonly Toggle $enabled;
     private readonly Toggle $phoneRequired;
+    private readonly Choice $phoneScope;
+    /** @var array<string, Toggle> By PhoneMoment value */
+    private readonly array $phoneMoments;
+    private readonly Toggle $phoneIranOnly;
     private readonly Text $supportContact;
+    private readonly Toggle $supportHeader;
     private readonly Toggle $joinRequired;
     private readonly Toggle $qrEnabled;
 
@@ -28,7 +41,16 @@ final class BotSettings implements DeclaresSettings
     {
         $this->enabled = new Toggle('enabled', 'bot.enabled', default: true);
         $this->phoneRequired = new Toggle('phone_required', 'bot.phone_required', default: false);
+        $this->phoneScope = new Choice('phone_scope', 'bot.phone_scope', self::PHONE_EVERYWHERE, [self::PHONE_EVERYWHERE, self::PHONE_MOMENTS], 'محدوده شماره موبایل باید «کل ربات» یا «فقط موقع این کارها» باشد.');
+        $moments = [];
+        foreach (PhoneMoment::cases() as $moment) {
+            // All four on: «فقط موقع این کارها» chosen asks at every one of them until some are switched off.
+            $moments[$moment->value] = new Toggle('phone_on_' . $moment->value, 'bot.phone_on_' . $moment->value, default: true);
+        }
+        $this->phoneMoments = $moments;
+        $this->phoneIranOnly = new Toggle('phone_iran_only', 'bot.phone_iran_only', default: false);
         $this->supportContact = new Text('support_contact', 'bot.support_contact', default: '', label: 'راه ارتباط با پشتیبانی', max: 190);
+        $this->supportHeader = new Toggle('support_header', 'bot.support_header', default: true);
         $this->joinRequired = new Toggle('join_required', 'bot.join_required', default: false);
         $this->qrEnabled = new Toggle('qr_enabled', 'bot.qr_enabled', default: true);
     }
@@ -36,7 +58,7 @@ final class BotSettings implements DeclaresSettings
     public function groups(): array
     {
         return [
-            new Form('general', [$this->enabled, $this->phoneRequired, $this->supportContact]),
+            new Form('general', [$this->enabled, $this->phoneRequired, $this->phoneScope, ...array_values($this->phoneMoments), $this->phoneIranOnly, $this->supportContact, $this->supportHeader]),
             new Form('channels', [$this->joinRequired]),
             new Form('qr', [$this->qrEnabled]),
         ];
@@ -48,10 +70,26 @@ final class BotSettings implements DeclaresSettings
         return $this->settings->read($this->enabled);
     }
 
-    /** Whether a customer must share their Telegram phone number before the bot serves them. */
+    /** Whether the shop asks customers for their Telegram phone number at all (when: phoneEverywhere(), phoneMoments()). */
     public function phoneRequired(): bool
     {
         return $this->settings->read($this->phoneRequired);
+    }
+
+    /** Whether the number, while asked, is asked before the bot serves anything at all (else at phoneMoments() only). */
+    public function phoneEverywhere(): bool
+    {
+        return $this->settings->read($this->phoneScope) !== self::PHONE_MOMENTS;
+    }
+
+    /**
+     * The moments the number is asked at while it is not asked before everything (phoneEverywhere()).
+     *
+     * @return list<PhoneMoment>
+     */
+    public function phoneMoments(): array
+    {
+        return array_values(array_filter(PhoneMoment::cases(), fn(PhoneMoment $moment): bool => $this->settings->read($this->phoneMoments[$moment->value])));
     }
 
     /** Whether a customer must be a member of every channel in Channels\RequiredChannels before the bot serves them. */
@@ -64,6 +102,21 @@ final class BotSettings implements DeclaresSettings
     public function supportContact(): string
     {
         return $this->settings->read($this->supportContact);
+    }
+
+    /** Whether the phone rule takes Iranian numbers alone (+98): another country's is refused, and one on file counts as none. */
+    public function phoneIranOnly(): bool
+    {
+        return $this->settings->read($this->phoneIranOnly);
+    }
+
+    /**
+     * Whether a message support writes to a customer by hand («ارسال پیام») comes under the bot text «پیام پشتیبانی به
+     * مشتری» (BotText::SupportMessage: «📩 پیام از طرف پشتیبانی:»); off, the customer gets the words alone.
+     */
+    public function supportHeader(): bool
+    {
+        return $this->settings->read($this->supportHeader);
     }
 
     /**

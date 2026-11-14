@@ -5,7 +5,7 @@ import { keys, queryClient } from '@/apps/app/lib/query'
 import { orderRow, paymentRow } from '@/apps/app/screens/wallet/test-rows'
 import TopUpScreen from '@/apps/app/screens/wallet/top-up'
 import * as app from '@/apps/app/test/app'
-import { API, CARD, GATEWAY, walletRow } from '@/apps/app/test/rows'
+import { API, CARD, GATEWAY, storeTransfer, walletRow } from '@/apps/app/test/rows'
 import type { StoreCheckoutResponse, StorePaymentMethodsResponse } from '@/lib/api-types'
 import { until } from '@/test/render'
 import { json, offline, refusal, server, type Answer } from '@/test/server'
@@ -37,7 +37,7 @@ const CHECKOUT: StoreCheckoutResponse = {
       subscription: null,
       payments: [paymentRow({ id: 90, status: 'pending', amount: '100037.00', paid_at: null, receipt: null })],
     }),
-    transfer: { payment_id: 90, amount: '100037.00', amount_rial: '1000370', card: '6037997700001119', holder: 'محمد کریمی', bank: 'ملت', instructions: null, contact: null },
+    transfer: storeTransfer({ payment_id: 90, amount: '100037.00', amount_rial: '1000370' }),
     link: null,
     subscription: null,
   },

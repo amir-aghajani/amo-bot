@@ -17,9 +17,9 @@ use Illuminate\Database\Query\Builder;
  * then each table as a line naming it and its columns followed by its rows as arrays, then the rows each table held,
  * then the signature: an HMAC over every line before it, keyed from APP_KEY (Encrypter::macKey()). Only this
  * installation's key signs a file its restore takes, so a file nobody changed is the one thing restored — an agent
- * cannot write themselves rows of another shop, or of the owner's, into one. Rows are read a batch at a time and
- * written as they come: a large shop never sits in memory whole. A shop's file holds nothing only the owner reads
- * (BackupTables::OWNER_ONLY_COLUMNS, REVIEWER_COLUMNS): its agent downloads it.
+ * cannot write themselves rows of another shop, or of the owner's, into one. Rows are read a batch at a time, in one
+ * read transaction (atOnce()), and written as they come: a large shop never sits in memory whole. A shop's file holds
+ * nothing only the owner reads (BackupTables::OWNER_ONLY_COLUMNS, REVIEWER_COLUMNS): its agent downloads it.
  */
 final class BackupWriter
 {
@@ -74,18 +74,22 @@ final class BackupWriter
 
         try {
             $line($this->header($scope));
-            $rows = [];
-            foreach (BackupTables::of($scope, $this->schema->tables()) as $table) {
-                $columns = $this->db->getSchemaBuilder()->getColumnListing($table);
-                $line(['table' => $table, 'columns' => $columns]);
-                $rows[$table] = 0;
-                $shown = $this->shown($table, $scope);
-                foreach ($this->rows($table, $scope, $columns) as $row) {
-                    $values = $shown((array) $row);
-                    $line(array_map(static fn(string $column): mixed => $values[$column] ?? null, $columns));
-                    $rows[$table]++;
+            $rows = $this->atOnce(function () use ($scope, $line): array {
+                $rows = [];
+                foreach (BackupTables::of($scope, $this->schema->tables()) as $table) {
+                    $columns = $this->db->getSchemaBuilder()->getColumnListing($table);
+                    $line(['table' => $table, 'columns' => $columns]);
+                    $rows[$table] = 0;
+                    $shown = $this->shown($table, $scope);
+                    foreach ($this->rows($table, $scope, $columns) as $row) {
+                        $values = $shown((array) $row);
+                        $line(array_map(static fn(string $column): mixed => $values[$column] ?? null, $columns));
+                        $rows[$table]++;
+                    }
                 }
-            }
+
+                return $rows;
+            });
             $line(['end' => ['rows' => $rows]]);
             $put(json_encode(['signature' => hash_final($signature)], self::JSON) . "\n");
         } catch (\Throwable $e) {
@@ -107,6 +111,24 @@ final class BackupWriter
         }
 
         return $rows;
+    }
+
+    /**
+     * `$read` in one read transaction: every table of the file as the database stood at one moment (on MySQL and MariaDB
+     * a repeatable read's snapshot), never half of a write made while it reads — a wallet line without its link, say.
+     *
+     * @template T
+     * @param \Closure(): T $read
+     * @return T
+     */
+    private function atOnce(\Closure $read): mixed
+    {
+        if ($this->db->transactionLevel() === 0 && in_array($this->db->getDriverName(), ['mysql', 'mariadb'], true)) {
+            // The next transaction's alone, whatever the server's default.
+            $this->db->unprepared('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ');
+        }
+
+        return $this->db->transaction($read);
     }
 
     /**

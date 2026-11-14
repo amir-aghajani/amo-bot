@@ -38,6 +38,7 @@ use App\Modules\Telegram\Reports\AgencyReview;
 use App\Modules\Telegram\Reports\Customers\CustomerAccount;
 use App\Modules\Telegram\Reports\Customers\CustomerDiscount;
 use App\Modules\Telegram\Reports\Customers\CustomerHistory;
+use App\Modules\Telegram\Reports\Customers\CustomerMessage;
 use App\Modules\Telegram\Reports\Customers\CustomerOrder;
 use App\Modules\Telegram\Reports\Customers\CustomerServices;
 use App\Modules\Telegram\Reports\Customers\CustomerWallet;
@@ -147,5 +148,6 @@ return static function (Dispatcher $bot): void {
     $bot->groupCallback(CustomerHistory::PREFIX, CustomerHistory::class);
     $bot->groupCallback(CustomerAccount::PREFIX, CustomerAccount::class);
     $bot->groupCallback(CustomerOrder::PREFIX, CustomerOrder::class);
+    $bot->groupCallback(CustomerMessage::PREFIX, CustomerMessage::class);
     $bot->group(ReportGroupUpdates::class);
 };

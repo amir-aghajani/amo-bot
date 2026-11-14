@@ -65,6 +65,7 @@ walks every route to prove it.
 | `…/admin` under the store | › the website's door › a customer's token › one of the shop's admins, let in, on a session that is not the mini app's, signed in recently enough |
 | `/webhooks/…`, `/cron/{token}`, `/payments/callback/{payment}/{secret}` (an online gateway's callback) | installed (a secret in the address authenticates) |
 | `/payments/webhooks/{driver}` (the webhook a gateway signs: Variza's) | installed (the signature authenticates) |
+| `/webhooks/deposits/{source}/{bot}` (the bank SMS a phone app forwards: ForApp's) | installed (the shop's key in `X-API-Key` authenticates) |
 | `/`, `/health`, `/api/app` | nothing: they answer before installation too |
 
 A controller is *load → service → present*. It lets the shop's refusals through: a `Core\Exceptions\DomainRuleException`
@@ -89,7 +90,8 @@ Around that:
   into an address (a proxy's) and a key in an address's query. PHP's own warnings and fatal errors, which PHP itself
   writes to `storage/logs/php-errors.log`, are not cleaned;
 - an online gateway's callback is never believed — it only makes the shop ask the gateway itself
-  (`Payments\Services\OnlinePayments`) —, and a gateway's webhook is believed only when a method's secret signs it;
+  (`Payments\Services\OnlinePayments`) —, a gateway's webhook is believed only when a method's secret signs it, and a
+  forwarded bank SMS only with the shop's key;
 - every sign-in is throttled, and the throttle fails closed;
 - a fresh upload's installer needs a key from the host's files;
 - uploaded pictures are judged by their bytes and written again;
@@ -107,7 +109,7 @@ module implements: `Core\Scheduling\Shops` is the Bots module's `BotShops`.
 
 | Module | What it is |
 |---|---|
-| Providers | The VPN panels: connectors (3X-UI, PasarGuard, HMPanel), servers and their health |
+| Providers | The VPN panels: connectors (3X-UI, PasarGuard, HMPanel, Marzban), servers and their health |
 | Catalog | Plans, categories, and which servers can sell a plan today |
 | Subscriptions | A customer's service on a panel: provisioning, sync, renewal, moves, grants, extras, reminders |
 | Orders, Payments | The order's lifecycle; payment methods, the checkout the bot and the website share, the settlement |
@@ -121,6 +123,7 @@ module implements: `Core\Scheduling\Shops` is the Bots module's `BotShops`.
 | Admin | The panels' controllers, the dashboard and the queues |
 | Settings, Installer, Updates | The settings screens; the web installer; the one-press update |
 | Backups | A whole installation's or one shop's backup: written, checked and restored, and sent to the report group ([below](#backups)) |
+| Imports | Another bot's shop brought into the main shop: its data read once, reviewed by the owner and written ([below](#imports)) |
 
 Which modules each module may name is one map, `MODULES` in `tests/Unit/Core/LayersTest.php`, held to the code
 exactly: a new dependency between modules fails the test until the map says so, with a comment saying why where it is
@@ -253,6 +256,81 @@ and holds a shop's own to a `bot_id` and a child to a parent that reaches one.
   said (`Backups::LAST_SENT`). The panels reach it through `Admin\Api\BackupsController`, in
   both panels' `$configuration` group.
 
+## Imports
+
+The Imports module brings another bot's shop into the main shop («انتقال از ربات دیگر»; the owner's side:
+[Importing from another bot](Importing.md)). An import (`Models\Import`, a row of `imports`) goes through
+`Enums\ImportPhase` — **reading**, **review**, **importing**, then **done**, **failed** or **cancelled** —, one open at a
+time in the installation (decided under `storage/imports/begin.lock`), always into the main shop (`bot_id` 1; its
+routes are the owner's, in the `shop.main` group). The panel drives it a request at a time — `POST /imports/{id}/continue`,
+a step of `Imports::STEP_SECONDS` (15) by its `Budget` —, and `import:run` from a shell the same way. A step holds the
+import's lock file (`storage/imports/<id>.lock`): `Imports::advance()` answers false when another holds it and nothing
+was done — `continue` says so as `stepped: false`, and the panel, or the command, waits before asking again.
+
+- **Reading** (`Sources\Stager`) — the data comes one of two ways, the core's and never the migrator's
+  (`Enums\ImportSource`): a backup file — `Sources\BackupFile` tells a zip, a gzip or plain SQL by its bytes and
+  unpacks it to `storage/imports/<id>/dump.sql` a step at a time, 1 GiB at most and leaving 256 MiB of the disk free
+  (`BackupFile::MOST`, `KEEP_FREE`); `DumpReader` streams its statements: `CREATE TABLE`'s columns, and the rows of
+  `INSERT` and `REPLACE`, one or many, with or without a column list, a row of 16 MiB at most (less where PHP has little
+  memory); anything else passed over, and a `DELIMITER` block too —, or a read-only connection to the other bot's MySQL
+  database (`DatabaseSource` through a `Dialect`, `MySqlDialect`: a 5-second connect, a read-only session, 20 seconds a
+  statement, `information_schema`, pages by a one-column primary key). Either is read once into the staged copy,
+  `import_rows`: only the tables and columns the migrator names (`Migrator::tables()`, a name matched as written, then
+  without case — `Names`), every value a string or null, its secrets encrypted with `APP_KEY`, 300 rows a batch written
+  with where the reading got to in one transaction (`RowWriter`), so a step stopped anywhere stages no row twice.
+  Everything after reads the staged copy (`Staging\DatabaseStaged`): the other bot may be gone, and a migrator never
+  knows its source. Read whole, the schema is `Migrator::recognize()`d — not the bot's, the import fails in words naming
+  the tables missing (a dump of data without its tables' structure, in words of its own) —, `survey()` makes the review,
+  and the panels' connections are kept encrypted apart from it (`imports.panels`), so the survey the panels read holds
+  no secret. Then `Stager::readingDone()` deletes the uploaded file, its dump and the database's connection: the old
+  database whole, the bot's token and keys in it, is not needed again.
+- **The review** — `Imports::present()` (the `ImportState` the API answers) gives each panel the server it likely is
+  (`Choices::suggestedServer()`: one of the panel's connector at the same scheme, host and port) and proposes choices
+  while none are saved; `Choices::check()` holds the owner's to the survey and the shop's servers, every refusal at
+  once under `choices.…`.
+- **Writing** (`Importer`) — the stages of `Enums\ImportStage` in order, each from the import's `cursor`, a thing at a
+  time by its writer (`Writers\*`, sharing a step's `Run`: the choices, the server each panel maps to, the tally), until
+  the budget is spent. After every thing, the stage, the cursor, the tally (`imports.counts`) and the problems found are
+  saved in one transaction, only while the import is still importing — a cancel stops it at the next thing. The
+  migrator only translates; **the core writes, with the shop's own services**: `ServerService` (a panel added is created
+  — switched off when the other bot had closed it, with its capacity — and checked, and deleted again when the check
+  fails), `CustomerGroups`, the customers written directly — never through `Users\Services\Customers`, which registers a
+  newcomer —, `WalletService` (a balance one line, a debt with the credit that covers it), `PlanService` and
+  `PlanCategoryService`, `ProvisioningService::adopt()` for a service (one `listClients()` per server a step,
+  `findClient()` by name where a connector cannot list — a non-sudo Marzban admin's —; nothing on the panel changes),
+  `DiscountCodes`, the gift codes' rows, `RequiredChannels::add()`, `PaymentMethods` and `PaymentCards` (every card
+  switched off). Nothing reports to a group, rewards a referral or tells a customer.
+- **No newcomer** — a customer who bought in the other bot gets `users.bought_elsewhere_at` (`User::boughtElsewhere()`),
+  which the shop reads wherever a newcomer is told apart: a plan's first-purchase price (`Pricing`), a code for a first
+  purchase (`DiscountCodes`), a test for newcomers (`TestAccounts`), a referral's start gift
+  (`OrderService::boughtBefore()`) and a referrer's milestones (`ReferralGifts`). An imported referral's start gift is
+  written decided (a `ReferralBonus` of zeros), so neither side gets one; an account merge carries the mark.
+- **Once, however often** — `Links` keeps in `import_links` each thing of the other bot, by its kind and the bot's own
+  key for it — a code, a card's number, a channel's chat, a server's panel address (`Run::serverKey()`) — and the row
+  it became (unique by shop, migrator, kind and key). A writer asks it first (`Run::broughtBefore()`, `Links::brought()`),
+  so a step cut short, an import run again or a later import of a newer backup brings nothing twice — and **brought
+  once, never again**: what the owner edited or deleted since is theirs, a deleted thing counted `removed` and never
+  brought back (a deleted customer's balance with them; a balance is credited once, ever). Only a server the owner
+  chooses to add again, and a category a plan brought now needs, are made again (`Links::alive()`). A customer merged
+  since into another account is that account (`Links::customer()`, following `account_merges`), and a group membership
+  is brought once (a `membership` link). A link outlives its import.
+- **What did not come** is that thing's problem, never the import's: a reason of `Enums\ProblemReason` — only counted
+  (the owner's choice, or nothing to act on), or a row of `import_problems` naming it and what finds it. A failure the
+  shop did not expect is logged and counted `failed`. A panel that does not answer stops the step before its service
+  (`Writers\TryAgain`) for up to three steps (`ServiceWriter::TRIES`), then its services are counted
+  `panel_unreachable`. Only the staged copy gone (`Imports::STAGED_GONE` — a restore of the whole installation empties
+  it), the migrator failing on its own data (`Imports::BROKEN`, the cause logged) or the bot's migrator gone fails an
+  import.
+- **Ended** — done, failed or cancelled —, an import's staged rows, files and panels' connections are deleted
+  (`Imports::discard()`): they hold the other bot's passwords. Its record, tally and problems stay for its report until
+  the owner deletes it. `Tasks\PruneImportsTask` (`prune_imports`, daily) cancels an open import untouched for
+  `Imports::IDLE_DAYS` (7), and deletes what an ended one still keeps.
+
+Imports names Backups (the upload limit), Bots, Catalog, Discounts, Orders, Payments, Providers, Referrals, Rewards,
+Subscriptions, Telegram and Users; Admin's `ImportsController` and the `import:run` command name it. The other bots are
+migrators, a driver family of their own ([Drivers](Drivers.md#a-migrator)). In a backup (`BackupTables`), `imports` and
+`import_problems` are the owner's, `import_links` goes with the main shop's rows, and `import_rows` is never in one.
+
 ## Files the app writes
 
 Shared hosting has no cache server or lock service, so the app keeps its state in files under `storage/`, each a
@@ -272,12 +350,16 @@ container entry so the test suite points it at a folder of its own:
 | Sessions, logs | `storage/sessions/`, `storage/logs/` |
 | The updater's work and the maintenance flag | `storage/updates/`, `storage/updating.flag` |
 | Backups made for a download, uploaded to restore, kept from before a restore | `storage/backups/{made,uploads,kept}` |
+| An import's uploaded file and the dump unpacked of it; its step's lock, and the one a new import begins under | `storage/imports/<id>/`, `storage/imports/<id>.lock`, `storage/imports/begin.lock` (`imports.path`) |
+| The tokens Marzban panels signed the shop in with, kept across requests | `storage/cache/panel-tokens/` (`panel.tokens`) |
 
 Writes are atomic (a temporary file renamed over the real one) or done under a file lock (`Core\Support\Files`,
 `FileLock`), so a reader never sees half a file. `storage/` is refused to the web by its `.htaccess`.
 
 ## Drivers
 
-What the shop does through someone else — a VPN panel, a payment gateway, the database, email, a captcha — is a driver
-of a family on one small kernel (`Core\Drivers`, `Core\Forms`). A driver describes its own form, and the panels draw
-it from that description alone. See [Drivers](Drivers.md).
+What the shop does through someone else — a VPN panel, a payment gateway, the database, email, a captcha, the other bot
+an import reads — is a driver of a family on one small kernel (`Core\Drivers`, `Core\Forms`). A driver describes its own form, and the panels draw
+it from that description alone. See [Drivers](Drivers.md). The phone apps that forward a bank's deposit SMS
+(«تایید خودکار واریز») stand beside the kernel, with no form: each is a `Payments\Deposits\Contracts\DepositSource` that
+reads its app's body — ForApp the first —, listed in `Payments\Deposits\DepositSources`.

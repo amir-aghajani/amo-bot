@@ -198,7 +198,8 @@ final class ReferralGifts
     {
         return $this->db->transaction(static function () use ($referrer, $every): ?ReferralReward {
             User::query()->whereKey($referrer->id)->lockForUpdate()->value('id');
-            $buyers = Order::keptPurchases()->whereIn('user_id', $referrer->referrals()->select('id'))->distinct()->count('user_id');
+            // A referral who bought in the bot the shop came from bought there first: no milestone of theirs here.
+            $buyers = Order::keptPurchases()->whereIn('user_id', $referrer->referrals()->whereNull('bought_elsewhere_at')->select('id'))->distinct()->count('user_id');
             $claimed = (int) ReferralReward::query()->where('referrer_id', $referrer->id)->max('milestone');
             $milestone = (intdiv($claimed, $every) + 1) * $every;
 

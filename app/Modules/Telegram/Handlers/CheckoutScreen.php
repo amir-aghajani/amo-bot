@@ -9,11 +9,13 @@ use App\Modules\Catalog\Models\Plan;
 use App\Modules\Discounts\DTO\DiscountLine;
 use App\Modules\Discounts\Exceptions\DiscountCodeRefusedException;
 use App\Modules\Discounts\Services\DiscountCodes;
+use App\Modules\Discounts\Services\Perks;
 use App\Modules\Orders\DTO\OrderKey;
 use App\Modules\Orders\DTO\Quote;
 use App\Modules\Orders\Enums\OrderStatus;
 use App\Modules\Orders\Enums\OrderType;
 use App\Modules\Orders\Models\Order;
+use App\Modules\Payments\Deposits\Services\DepositSettings;
 use App\Modules\Payments\DTO\CardTransfer;
 use App\Modules\Payments\DTO\PayLink;
 use App\Modules\Payments\DTO\Shortfall;
@@ -31,6 +33,8 @@ use App\Modules\Subscriptions\Exceptions\TermTooLongException;
 use App\Modules\Subscriptions\Services\ClientNameSettings;
 use App\Modules\Telegram\BotSettings;
 use App\Modules\Telegram\Context;
+use App\Modules\Telegram\Gates\PhoneAsk;
+use App\Modules\Telegram\Gates\PhoneMoment;
 use App\Modules\Telegram\Keyboard\Buttons;
 use App\Modules\Telegram\Keyboard\InlineKeyboard;
 use App\Modules\Telegram\Keyboard\MainMenu;
@@ -91,6 +95,9 @@ final class CheckoutScreen
         private readonly BotSettings $bot,
         private readonly DiscountCodes $codes,
         private readonly ClientNameSettings $names,
+        private readonly PhoneAsk $phone,
+        private readonly DepositSettings $deposits,
+        private readonly Perks $perks,
     ) {}
 
     /**
@@ -198,10 +205,11 @@ final class CheckoutScreen
      * customer's own open payment of it waits on, and when none is left the customer is told so), the row `$instead`
      * (other things to buy) and «بازگشت» to `$back`. Something `$free` gets one «🎁 دریافت رایگان» button instead,
      * through the first way to pay: the checkout settles a free order whichever is picked. With a `$quote`,
-     * «🏷 کد تخفیف دارم» — or «❌ حذف کد تخفیف» while a code is applied — is offered while the shop has codes and
-     * something is left to pay. A purchase's checkout says its service's name under the text, with a button per way the
-     * shop lets buyers name it (nameRow()). The row `$choices` (a renewal's methods, each redrawing the checkout) comes
-     * above `$instead`. Both rows read in order, the first on the right. Showing it leaves whatever flow the chat was in.
+     * «🏷 کد تخفیف دارم» — or «❌ حذف کد تخفیف» while a code is applied — is offered while the shop has codes, something
+     * is left to pay and the customer may use one (not Perks::withheld()). A purchase's checkout says its service's name
+     * under the text, with a button per way the shop lets buyers name it (nameRow()). The row `$choices` (a renewal's
+     * methods, each redrawing the checkout) comes above `$instead`. Both rows read in order, the first on the right.
+     * Showing it leaves whatever flow the chat was in.
      *
      * @param \Closure(PaymentMethod): string $pay
      * @param list<array<string, mixed>> $instead
@@ -220,7 +228,7 @@ final class CheckoutScreen
                 $keyboard->row(InlineKeyboard::callback($method->label, $pay($method)));
             }
         }
-        if ($quote !== null && $methods !== [] && ($quote->code !== null || (Money::isPositive($quote->afterAutomatic()) && $this->codes->offered()))) {
+        if ($quote !== null && $methods !== [] && ($quote->code !== null || (Money::isPositive($quote->afterAutomatic()) && $this->codes->offered() && !$this->perks->withheld($ctx->user)))) {
             $keyboard->row($quote->code !== null
                 ? InlineKeyboard::callback($this->texts->get(BotText::DiscountCodeRemove), DiscountCodeHandler::removeCallback($checkout))
                 : InlineKeyboard::callback($this->texts->get(BotText::DiscountCodeButton), DiscountCodeHandler::askCallback($checkout)));
@@ -274,7 +282,9 @@ final class CheckoutScreen
      * of the checkout. `$checkout` is the checkout's callback data (as show() drew it), where «بازگشت» leads from here.
      * A way that does not take the price now (its bounds, or its cards' room for today: Checkout::pay()) orders nothing:
      * the checkout is drawn again by `$redraw`, with the ways that are left. A purchase whose term would end its service
-     * past the last day the shop keeps orders nothing either (TermTooLongException): the refusal in its place.
+     * past the last day the shop keeps orders nothing either (TermTooLongException): the refusal in its place. Nor does a
+     * customer the shop asks their number before it — a purchase, a renewal or an extra, a card-to-card payment
+     * (PhoneMoment::ofOrder(); nothing to pay is no card payment) —: the ask in place of the checkout (PhoneAsk::before()).
      *
      * The wallet (and a free order) claims the checkout state first, so a second tap — or a tap on a checkout the chat
      * left — charges nothing; and it pays only the checkout on screen, at the amount it showed: one priced otherwise since
@@ -292,6 +302,9 @@ final class CheckoutScreen
      */
     public function buy(Context $ctx, PaymentMethod $method, OrderType $type, string $price, \Closure $open, string $checkout, \Closure $redraw): void
     {
+        if ($this->phone->before($ctx, ...PhoneMoment::ofOrder($type, Money::isPositive($price) ? $method : null))) {
+            return;
+        }
         $instant = $method->isWallet() || !Money::isPositive($price);
         if (($instant || $this->shownFree($ctx, $checkout)) && $this->repriced($ctx, $checkout, $price)) {
             $redraw();
@@ -505,8 +518,10 @@ final class CheckoutScreen
     /**
      * The card to transfer to — its number, holder and bank (when the owner named it) —, with buttons that copy its number
      * and the amount (in Rial, the digits a banking app takes: Money::rials()); the chat now waits for the receipt
-     * (ReceiptHandler). It is protected while the shop protects cards (showCard()). A payment shown no card, taken in
-     * support's private chat (PaymentCards::toSupport()), gets the way there instead (toSupport()).
+     * (ReceiptHandler). While its own bank SMS approves it (DepositSettings::approvesItself()) the line under it says to
+     * pay exactly that sum, which approves itself, the receipt only should it not (PayInstructionsAuto). It is protected
+     * while the shop protects cards (showCard()). A payment shown no card, taken in support's private chat
+     * (PaymentCards::toSupport()), gets the way there instead (toSupport()).
      */
     private function transfer(Context $ctx, Payment $payment, CardTransfer $transfer, string $checkout): void
     {
@@ -530,7 +545,9 @@ final class CheckoutScreen
         ]));
         $keyboard = InlineKeyboard::make()->row(...$this->copyRow($rials, $number))->row($this->buttons->back($checkout));
 
-        $this->showCard($ctx, BotTexts::paragraphs($instructions, $this->texts->part(BotText::PayInstructionsSuffix)), $keyboard);
+        $suffix = $this->deposits->approvesItself($payment) ? BotText::PayInstructionsAuto : BotText::PayInstructionsSuffix;
+
+        $this->showCard($ctx, BotTexts::paragraphs($instructions, $this->texts->part($suffix)), $keyboard);
     }
 
     /**
@@ -614,20 +631,22 @@ final class CheckoutScreen
      * A card payment taken in support's private chat (PaymentCards::toSupport()): no card, but the order's number and the
      * amount, the way to support, what comes once they approve it and the method's note (as the website's answer gives
      * it), with a button to their chat (Buttons::supportChat()). No receipt is awaited here: the payment stays pending
-     * for support to approve in the panels.
+     * for support to approve in the panels — or, while its own bank SMS approves it (DepositSettings::approvesItself()),
+     * for the exact sum's SMS to approve (CardToSupportAuto: in Rial too, the receipt to support only should it not).
      */
     private function toSupport(Context $ctx, Payment $payment, string $instructions, string $checkout): void
     {
         $ctx->session->clear();
         $order = $payment->order;
+        $listening = $this->deposits->approvesItself($payment);
 
-        $ctx->edit(trim($this->texts->render(BotText::CardToSupport, [
+        $ctx->edit(trim($this->texts->render($listening ? BotText::CardToSupportAuto : BotText::CardToSupport, [
             'order' => $order->id,
             'amount' => Money::format($payment->amount),
             'contact' => $this->bot->supportContact(),
             'outcome' => $this->texts->part(ReceiptHandler::outcome($order->type)),
             'instructions' => $instructions,
-        ])), ['reply_markup' => InlineKeyboard::make()->row(...$this->buttons->supportChat())->row($this->buttons->back($checkout))->build()]);
+        ] + ($listening ? ['amount_rial' => Money::rials($payment->amount)] : []))), ['reply_markup' => InlineKeyboard::make()->row(...$this->buttons->supportChat())->row($this->buttons->back($checkout))->build()]);
     }
 
     /** What the paid order delivered, as a fresh message, with the way on that fits what it was. */

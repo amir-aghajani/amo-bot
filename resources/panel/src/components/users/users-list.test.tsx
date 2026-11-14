@@ -4,14 +4,15 @@ import { UsersList } from '@/components/users/users-list'
 import type { CustomerGroupsResponse, UsersResponse } from '@/lib/api-types'
 import { UsersPage } from '@/pages/users'
 import { providers, until } from '@/test/render'
-import { userRow } from '@/test/rows'
+import { botSettingsResponse, botSettingsRow, userRow } from '@/test/rows'
 import { json, server } from '@/test/server'
 
 /*
  * The customers' list (components/users/users-list): each customer's number beside them — what «#12» in the search box
- * finds alone, as every list takes it —, the bot's admins alone by the role's pill (where the website's settings send the
- * owner to see who its admins are), a search or a filter that found nobody says what to change: the search, the filters,
- * or both; and a row's dialog goes with the list when its section goes out of sight.
+ * finds alone, as every list takes it —, «ارسال پیام» in a row's menu, one excused from the phone rule marked where
+ * their number would be, the bot's admins alone by the role's pill (where the website's settings send the owner to see
+ * who its admins are), a search or a filter that found nobody says what to change: the search, the filters, or both;
+ * and a row's dialog goes with the list when its section goes out of sight.
  */
 
 const META = { page: 1, per_page: 25, sort: 'joined', dir: 'desc' } as const
@@ -38,6 +39,28 @@ describe('the customers’ list', () => {
     fireEvent.pointerDown(screen.getByRole('button', { name: /^عملیات / }), { button: 0, ctrlKey: false, pointerType: 'mouse' })
     expect(await screen.findByRole('menuitem', { name: 'کیف پول' })).toBeTruthy()
     expect(screen.queryByRole('menuitem', { name: 'گفتگو در تلگرام' })).toBeNull()
+  })
+
+  it('writes to a customer from the row’s menu — one without Telegram too, the message kept on their website', async () => {
+    open('/users', [userRow({ id: 11, telegram_id: null, email: 'sara@example.com' })])
+    server()
+      .on('GET', '/api/admin/bot/settings', json(botSettingsResponse(botSettingsRow())))
+      .on('POST', '/api/admin/users/11/message', json({ delivery: 'emailed' }))
+
+    fireEvent.pointerDown(await screen.findByRole('button', { name: /^عملیات / }), { button: 0, ctrlKey: false, pointerType: 'mouse' })
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'ارسال پیام' }))
+    const dialog = await screen.findByRole('dialog', { name: 'ارسال پیام' })
+    fireEvent.change(within(dialog).getByLabelText('متن پیام'), { target: { value: 'سلام' } })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'ارسال پیام' }))
+
+    await until(() => expect(server().sent('POST', '/api/admin/users/11/message')[0]?.body).toEqual({ text: 'سلام' }))
+  })
+
+  it('marks in the phone’s column a customer excused from the phone rule who sent none — never a bot admin, asked anyway never', async () => {
+    open('/users', [userRow({ id: 11, phone: null, phone_exempt: true }), userRow({ id: 12, phone: null, phone_exempt: true, role: 'admin' }), userRow({ id: 13, phone_exempt: true })])
+
+    expect(await screen.findByText('#11')).toBeTruthy()
+    expect(screen.getAllByText('معاف').map((mark) => mark.closest('tr')?.textContent)).toEqual([expect.stringContaining('#11')])
   })
 })
 

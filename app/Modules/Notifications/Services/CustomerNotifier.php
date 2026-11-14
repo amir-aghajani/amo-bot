@@ -577,6 +577,26 @@ final class CustomerNotifier
     }
 
     /**
+     * A message support wrote to the customer by hand («ارسال پیام», Users\Services\UserActions::message()): under
+     * «📩 پیام از طرف پشتیبانی:» (BotText::SupportMessage) while the shop's bot says so (BotSettings::supportHeader()),
+     * else the words alone — as plain text either way, cut to what a message holds under a long heading. Returns what
+     * came of it, which the screen reports.
+     */
+    public function supportMessage(User $customer, string $message): Delivery
+    {
+        return $this->tell($customer, NoticeType::SupportMessage, function () use ($message): array {
+            $words = fn(string $body): string => $this->bot->supportHeader() ? $this->texts->render(BotText::SupportMessage, ['message' => $body]) : htmlspecialchars($body);
+            $text = $words($message);
+            $over = TelegramHtml::visibleLength($text) - (Limits::MESSAGE - self::MESSAGE_ROOM);
+            if ($over > 0) {
+                $text = $words(Limits::fit($message, Limits::length($message) - $over));
+            }
+
+            return [$text, fn(int $chat): array => $this->api->sendMessage($chat, $text)];
+        });
+    }
+
+    /**
      * Support closed the customer's ticket (a message to it opens it again). Buttons: «⭐ امتیاز» while unrated, and
      * «🗂️ مشاهده تیکت».
      */

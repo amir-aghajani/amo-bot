@@ -15,7 +15,7 @@ use Psr\Http\Message\ServerRequestInterface as Request;
 /**
  * What the shop sells, to anyone (Store\Services\StoreCatalog): the plans as its bot offers them now, one plan, how their
  * servers stand, and the timed sales running (StoreSales). A bearer token, when sent (OptionalCustomerMiddleware), prices
- * the plans for that customer.
+ * the plans and lists the sales for that customer.
  */
 final class CatalogController extends ApiController
 {
@@ -47,9 +47,9 @@ final class CatalogController extends ApiController
         return $this->json($response, ['servers' => $this->catalog->status()]);
     }
 
-    /** GET /sales — the timed sales running now, the soonest to end first. */
+    /** GET /sales — the timed sales running now, the soonest to end first; none for a customer no sale reaches. */
     public function sales(Request $request, Response $response): Response
     {
-        return $this->json($response, ['sales' => $this->sales->running()]);
+        return $this->json($response, ['sales' => $this->sales->running(Customer::optional($request)?->user)]);
     }
 }

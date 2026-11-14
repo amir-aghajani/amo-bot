@@ -12,8 +12,8 @@ use App\Support\Input;
 use App\Support\Persian;
 
 /**
- * How many minutes a receipt sent in the bot may wait before it is accepted on its own (AutoApproveReceiptsTask), a week
- * at most; blank or 0: only by hand.
+ * How many minutes a receipt sent in the bot — or uploaded by a Telegram account (Payment::selfApproving()) — may wait
+ * before it is accepted on its own (AutoApproveReceiptsTask), a week at most; blank or 0: only by hand.
  *
  * @extends Field<int>
  */

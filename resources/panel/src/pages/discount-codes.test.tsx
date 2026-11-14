@@ -210,8 +210,20 @@ describe('the settings', () => {
 
     const field = await screen.findByLabelText('مهلت (دقیقه)')
     fireEvent.change(field, { target: { value: '30' } })
-    fireEvent.click(screen.getByRole('button', { name: 'ذخیره' }))
+    fireEvent.click(within(field.closest('form') as HTMLElement).getByRole('button', { name: 'ذخیره' }))
 
     await until(() => expect(server().sent('PUT', '/api/admin/bot/settings/discounts')[0]?.body).toEqual({ hold_minutes: '30' }))
+  })
+
+  it('save whether agents and «همکار» customers go without the customers’ perks', async () => {
+    open('/discounts/settings')
+    server().on('PUT', '/api/admin/bot/settings/agent_perks', json({ settings: botSettingsRow({ agents_without_perks: true }) }))
+
+    const toggle = await screen.findByRole('switch', { name: 'همکارها فقط با قیمت همکاری بخرند' })
+    fireEvent.click(toggle)
+    fireEvent.click(within(toggle.closest('form') as HTMLElement).getByRole('button', { name: 'ذخیره' }))
+
+    await until(() => expect(server().sent('PUT', '/api/admin/bot/settings/agent_perks')[0]?.body).toEqual({ agents_without_perks: true }))
+    expect(server().sent('PUT', '/api/admin/bot/settings/discounts')).toEqual([])
   })
 })

@@ -63,6 +63,7 @@ final class GoogleSignInTest extends HttpTestCase
             'has_password' => false,
             'two_factor' => false,
             'phone' => null,
+            'phone_exempt' => false,
             'balance' => '0.00',
             'created_at' => '2026-10-07T12:00:00+00:00',
         ], $this->decode($response)['customer']);

@@ -93,6 +93,7 @@ screens, a wallet purchase's or renewal's own confirmation (the website's checko
 | `loyalty_tier_up` | a delivered order moved them up to a higher loyalty tier, with its perks ([loyalty tiers](Loyalty-Cashback-And-Draws.md#loyalty-tiers)) | `null` |
 | `cashback_earned` | a delivered order earned them cashback in their wallet ([cashback](Loyalty-Cashback-And-Draws.md#cashback)) | order |
 | `lottery_won` | they won the shop's nightly draw among its buyers, and were given its prize ([the nightly draw](Loyalty-Cashback-And-Draws.md#the-nightly-draw)) | `null` |
+| `support_message` | a message support wrote to them by hand («ارسال پیام»), in its words — under «📩 پیام از طرف پشتیبانی:» while the shop's bot puts it there ([writing to a customer](Customers.md#writing-to-a-customer)) | `null` |
 
 The notices of how the account is signed in to — `way_in_added`, `way_in_removed`, `password_changed`,
 `two_factor_enabled`, `two_factor_disabled`, `account_merged`, `second_step_locked`, `email_codes_failed` — go to their

@@ -54,10 +54,14 @@ Each part shows only while the shop offers it, as the bot's buttons do.
   they add with a code sent to it (when the address is another account's, the app explains a merge before offering
   it), and Google, which only the website adds — Google refuses to sign in inside Telegram —; «امنیت»: confirming with
   their fingerprint or face («تایید با اثر انگشت», on a phone that has it), a password once they have an email, and the
-  devices signed in, each of which they may sign out. While the shop asks every customer for their number («تایید شماره
-  موبایل», [Bot settings](Bot-Settings.md#general)) and theirs is not in, «ثبت شماره تلفن»: Telegram sends their own
+  devices signed in, each of which they may sign out. While the shop asks customers for their number («تایید شماره
+  موبایل», [Bot settings](Bot-Settings.md#general)) — before everything, or only at the moments it chose, which the
+  line then names («برای خرید و تمدید لازم است») — and theirs is not in, «ثبت شماره تلفن»: Telegram sends their own
   number to the bot, which records it as if they had tapped «📱 ارسال شماره موبایل» there (an older Telegram opens the
-  bot instead).
+  bot instead). While only Iranian numbers count, the line adds «فقط شماره ایران (‎+98)»; a customer whose number is
+  another country's is told so and offered «ثبت شماره ایرانی» — Telegram can only send their Telegram account's number,
+  which the bot takes only if it is Iranian, so the app sends them to support otherwise. The bot's admins and a
+  customer you excused from the number see none of it.
 
 ## How it signs customers in
 

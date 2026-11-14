@@ -97,6 +97,7 @@
 | `loyalty_tier_up` | سفارشی که تحویل شد او را به سطح وفاداری بالاتری برد، با مزایای آن ([سطوح وفاداری](Loyalty-Cashback-And-Draws.md#سطوح-وفاداری)) | `null` |
 | `cashback_earned` | سفارشی که تحویل شد برایش کش‌بک به کیف پولش آورد ([کش‌بک](Loyalty-Cashback-And-Draws.md#کش‌بک)) | سفارش |
 | `lottery_won` | در قرعه‌کشی شبانه فروشگاه میان خریداران برنده شد و جایزه‌اش را گرفت ([قرعه‌کشی شبانه](Loyalty-Cashback-And-Draws.md#قرعه‌کشی-شبانه)) | `null` |
+| `support_message` | پیامی که پشتیبانی با دست خودش برایش نوشت («ارسال پیام»)، با همان کلمات — زیر «📩 پیام از طرف پشتیبانی:» تا وقتی ربات فروشگاه آن را آن‌جا می‌گذارد ([پیام به کاربر](Customers.md#پیام-به-کاربر)) | `null` |
 
 اعلان‌های روش‌های ورود به حساب — `way_in_added`، `way_in_removed`، `password_changed`، `two_factor_enabled`،
 `two_factor_disabled`، `account_merged`، `second_step_locked`، `email_codes_failed` — هم به چت تلگرامش می‌روند و هم به

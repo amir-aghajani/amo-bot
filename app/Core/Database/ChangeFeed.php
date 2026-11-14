@@ -52,6 +52,8 @@ final class ChangeFeed
         'payment_cards' => 'payment_methods',
         'orders' => 'orders',
         'payments' => 'payments',
+        // A bank SMS forwarded (Payments\Deposits): its list and its card's status follow the payments.
+        'deposits' => 'payments',
         'referral_commissions' => 'referrals',
         'referral_alerts' => 'referrals',
         'referral_bonuses' => 'referrals',

@@ -37,6 +37,7 @@ to them, and the shop's notices reach them by email — when the shop's email go
 The row's menu (⋮):
 
 - **«گفتگو در تلگرام»** — opens a chat with them in Telegram (not for a customer without Telegram).
+- **«ارسال پیام»** — a message from support, sent by the shop's bot ([Writing to a customer](#writing-to-a-customer)).
 - **«کیف پول»** — [the wallet](#the-wallet).
 - **«گروه‌ها»** — tick the groups they are in ([groups](#groups)).
 - **«مدیر ربات کردن» / «برداشتن مدیریت ربات»** — the bot's admin role, asked first ([the bot's admins](#the-bots-admins)).
@@ -52,6 +53,39 @@ an agent's own bot or panel: to end an agency, see [Agency](Agency.md).
 
 The shop's admins may ban and unban from its website too — a customer, never an admin nor an agent: their accounts —
 a ban, the groups, two-factor sign-in, the devices — are changed from the panel alone.
+
+## Excused from the phone number
+
+While the bot asks for customers' numbers («تایید شماره موبایل» — [Bot settings](Bot-Settings.md)), a customer you
+excuse is never asked: not before anything, not at a purchase, a renewal, a test or a card payment, in the bot, the mini
+app or on the website. For a customer who has no Telegram number to share, or one you trust without it. Set it on their
+page — the card «شماره موبایل», switch «معاف از ارسال شماره موبایل», saved as you flip it —, from the report group's
+card («📱 معاف از شماره» / «📱 لغو معافیت شماره» — [The report group](Telegram-Group.md#a-customers-card)), or from the
+shop's website by its admins (a customer, never an admin nor an agent). It may be set before the rule is on; it is
+logged with who set it. The list's «موبایل» column marks such a customer without a number «معاف». The bot's admins are
+never asked anyway: on their page the switch is locked, and their card has none. Two accounts merged keep it if either
+had it.
+
+## Writing to a customer
+
+**«ارسال پیام»**, a button in a customer's page header beside «گفتگو در تلگرام», sends them a message through the
+shop's bot — you need not open their chat with your own account, nor share it. Write it in plain text (3,500
+characters at most as Telegram counts them, an emoji two; line breaks kept; the dialog says whether it goes under the
+heading below); it reaches them:
+
+- **in Telegram**, from the bot they use — an agent's customer from the agent's bot —, under «📩 پیام از طرف
+  پشتیبانی:» so they know who is writing. The heading is the bot text «پیام پشتیبانی به مشتری», yours to reword, and
+  «عنوان پیام پشتیبانی» in the bot settings switches it off ([Bot settings](Bot-Settings.md));
+- **by email** instead, to a customer without Telegram or who blocked the bot, when they have one and the shop's email
+  works;
+- **on their website and mini app** either way, among their notices.
+
+You are told what came of it: delivered, emailed, or that it could not reach them (they blocked the bot, Telegram was
+out of reach — send it again a little later). The same from the report group's card («✉️ ارسال پیام»: reply to the
+bot's question with the message — [The report group](Telegram-Group.md#a-customers-card)) and from the shop's website
+by its admins — never there to an admin's account, their own included, nor an agent's, as no other change from the
+website is. Who wrote it is logged, never shown to the customer. They cannot answer it there: to write back, they
+open a ticket.
 
 ## The bot's admins
 
@@ -151,6 +185,8 @@ role and the ban.
 - **«زیرمجموعه‌گیری»** — who brought them, whom they brought (a link to that list) and what it earned them
   ([Referrals](Referrals.md)).
 - **«گروه‌ها»** — their groups, with «ویرایش».
+- **«شماره موبایل»** — whether their number is verified (another country's is said to be asked again while «فقط
+  شماره‌های ایران» is on), and «معاف از ارسال شماره موبایل» ([above](#excused-from-the-phone-number)).
 - **«ورود به وب‌سایت»** — how they sign in to the shop's website: Telegram, Google, an email with or without a password,
   whether two-factor sign-in is on, how many devices are signed in, and the accounts of theirs merged into this one
   (the customer's own doing, from the website). Two things to do from here:

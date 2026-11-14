@@ -4,6 +4,7 @@ import type {
   BotMode,
   BroadcastStatus,
   Delivery,
+  DepositStatus,
   DiscountState,
   DiscountType,
   GiftCodeKind,
@@ -144,6 +145,26 @@ export const PAYMENT_STATUS: Record<PaymentStatus, Status> = {
  * waiting, pending or failed with their page (the payments list's `held`; the dashboard's count).
  */
 export const PAYMENT_HELD: Status = { label: 'نگه داشته شده', tone: 'warning' }
+
+/**
+ * Who approved a card payment a bank SMS named (the payment's `reviewer`: Payments\Deposits\Services\Deposits::REVIEWER),
+ * and how a payment so approved says it under its status.
+ */
+export const BANK_SMS_REVIEWER = 'پیامک بانک'
+export const BANK_SMS_APPROVED = 'تایید با پیامک بانک'
+
+/**
+ * What came of a bank SMS the phone app forwarded («تایید خودکار واریز»): it approved its payment, no open payment asks
+ * its sum, more than one does, it was no deposit to look at, the app's test, or it is still being looked at.
+ */
+export const DEPOSIT_STATUS: Record<DepositStatus, Status> = {
+  received: { label: 'در حال بررسی', tone: 'neutral' },
+  matched: { label: 'تایید شده', tone: 'success' },
+  unmatched: { label: 'بدون پرداخت', tone: 'warning' },
+  ambiguous: { label: 'چند پرداخت', tone: 'warning' },
+  ignored: { label: 'نادیده', tone: 'neutral' },
+  test: { label: 'آزمایشی', tone: 'info' },
+}
 
 export const SUBSCRIPTION_STATUS: Record<SubscriptionStatus, Status> = {
   active: { label: 'فعال', tone: 'success' },

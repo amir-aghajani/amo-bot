@@ -11,10 +11,10 @@ final class AccountPresenter
 {
     /**
      * Their names, their ways in (a Telegram account, null for a website-only customer; an email; whether Google and a
-     * password sign them in; whether two-factor sign-in is on), their phone, their balance and since when they are a
-     * customer.
+     * password sign them in; whether two-factor sign-in is on), their phone and whether the shop's phone rule never asks
+     * them (support excused them, or they are a bot admin), their balance and since when they are a customer.
      *
-     * @return array{id: int, first_name: string|null, last_name: string|null, telegram: array{id: int, username: string|null}|null, email: string|null, google: bool, has_password: bool, two_factor: bool, phone: string|null, balance: string, created_at: string|null}
+     * @return array{id: int, first_name: string|null, last_name: string|null, telegram: array{id: int, username: string|null}|null, email: string|null, google: bool, has_password: bool, two_factor: bool, phone: string|null, phone_exempt: bool, balance: string, created_at: string|null}
      */
     public static function present(User $user): array
     {
@@ -28,6 +28,7 @@ final class AccountPresenter
             'has_password' => $user->password_hash !== null,
             'two_factor' => $user->hasTwoFactor(),
             'phone' => $user->phone,
+            'phone_exempt' => $user->phone_exempt || $user->isAdmin(),
             'balance' => $user->balance(),
             'created_at' => $user->created_at?->toIso8601String(),
         ];

@@ -175,6 +175,58 @@ final class PasarGuardProviderTest extends TestCase
         self::assertSame(['data_limit' => 10, 'status' => 'disabled', 'expire' => 1793491200], $this->panel->params(1));
     }
 
+    /**
+     * PasarGuard's API cannot clear a duration, so one stays on a user whose waiting term was replaced; and PasarGuard
+     * puts a switched-off user that keeps one back on hold when it is switched on. An unlimited service switched off and
+     * switched back on with its term is put active from there: unlimited it stays.
+     */
+    public function testAnUnlimitedServiceSwitchedBackOnWithItsTermStaysUnlimited(): void
+    {
+        $leftover = ['expire' => null, 'on_hold_expire_duration' => self::MONTH];
+        $provider = $this->provider([
+            self::json(200, self::user($leftover + ['status' => 'on_hold'])),  // PasarGuard's reading of "active"
+            self::json(200, self::user($leftover + ['status' => 'active'])),
+        ]);
+
+        $client = $provider->updateClient(new ClientSpec('amir_1', 0, Expiry::never()));
+
+        self::assertSame(['PUT /api/user/by-username/amir_1', 'PUT /api/user/by-username/amir_1'], $this->panel->calls());
+        self::assertSame(['data_limit' => 0, 'status' => 'active', 'expire' => 0], $this->panel->params(0));
+        self::assertSame(['status' => 'active'], $this->panel->params(1), 'from on hold, the panel takes "active" as asked');
+        self::assertTrue($client->enabled);
+        self::assertSame([null, null], [$client->expiry->deadline(), $client->expiry->pendingSeconds()], 'no end at all, the leftover no term');
+    }
+
+    public function testAFixedTermSwitchedBackOnKeepsItsDeadlineThoughTheLeftoverMadeThePanelHoldIt(): void
+    {
+        $deadline = ['expire' => '2030-01-01T00:00:00Z', 'on_hold_expire_duration' => self::MONTH];
+        $provider = $this->provider([
+            self::json(200, self::user($deadline + ['status' => 'disabled'])),
+            self::json(200, self::user($deadline + ['status' => 'on_hold'])),  // held: its next connection would start the old month over the deadline
+            self::json(200, self::user($deadline + ['status' => 'active'])),
+        ]);
+
+        $provider->setClientEnabled('amir_1', true);
+
+        self::assertSame(['GET /api/user/by-username/amir_1', 'PUT /api/user/by-username/amir_1', 'PUT /api/user/by-username/amir_1'], $this->panel->calls());
+        self::assertSame([['status' => 'active'], ['status' => 'active']], [$this->panel->params(1), $this->panel->params(2)]);
+    }
+
+    public function testAWaitingTermOrAnAnswerAlreadyActiveIsLeftAsThePanelGaveIt(): void
+    {
+        $provider = $this->provider([
+            self::json(200, self::user(['status' => 'on_hold'])),
+            self::json(200, self::user(['status' => 'active', 'on_hold_expire_duration' => null])),
+            self::json(200, self::user(['status' => 'on_hold'])),
+        ]);
+
+        $provider->updateClient(new ClientSpec('amir_1', 0, Expiry::afterFirstUse(self::MONTH)));
+        $provider->updateClient(new ClientSpec('amir_1', 0, Expiry::never()));
+        $provider->updateClient(new ClientSpec('amir_1', 0, Expiry::never(), enabled: false));
+
+        self::assertCount(3, $this->panel->calls(), 'one PUT each: a term waiting is on hold by right, and a user kept off is not switched on');
+    }
+
     public function testUpdatingAUserThePanelDoesNotHaveIsNotFound(): void
     {
         $provider = $this->provider([self::json(404, ['detail' => 'User not found'])]);

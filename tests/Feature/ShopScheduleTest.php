@@ -8,6 +8,7 @@ use App\Core\Scheduling\Scheduler;
 use App\Modules\Accounts\Tasks\PruneAccountsTask;
 use App\Modules\Agency\Tasks\AgencyStandingTask;
 use App\Modules\Backups\Tasks\SendBackupsTask;
+use App\Modules\Imports\Tasks\PruneImportsTask;
 use App\Modules\Orders\Tasks\ExpireOrdersTask;
 use App\Modules\Orders\Tasks\ResumeDeliveriesTask;
 use App\Modules\Payments\Tasks\AutoApproveReceiptsTask;
@@ -58,6 +59,7 @@ final class ShopScheduleTest extends DatabaseTestCase
             PruneTicketsTask::class => [60, 'each shop'],
             NightlyDrawTask::class => [10, 'each shop'],
             SendBackupsTask::class => [24 * 60, 'each shop'],
+            PruneImportsTask::class => [24 * 60, 'across shops'],
             CheckReleasesTask::class => [24 * 60, 'across shops'],
             SendReportsTask::class => [1, 'each shop'],
         ], $tasks);

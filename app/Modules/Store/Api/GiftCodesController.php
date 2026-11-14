@@ -14,7 +14,8 @@ use Psr\Http\Message\ServerRequestInterface as Request;
 
 /**
  * A signed-in customer redeems a gift code (Store\Services\CustomerGiftCodes) — through the mini app, once the bot's gates
- * let them (Store\Services\CustomerGates::holdBack()).
+ * let them (Store\Services\CustomerGates::holdBack(); no moment of the phone rule's, so their number only while the
+ * shop asks it before everything).
  */
 final class GiftCodesController extends ApiController
 {

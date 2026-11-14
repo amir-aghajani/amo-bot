@@ -11,6 +11,7 @@ use App\Modules\Discounts\DTO\CodeTarget;
 use App\Modules\Discounts\Exceptions\DiscountCodeRefusedException;
 use App\Modules\Discounts\Services\DiscountCodes;
 use App\Modules\Discounts\Services\Discounts;
+use App\Modules\Discounts\Services\Perks;
 use App\Modules\Orders\DTO\Buyer;
 use App\Modules\Orders\DTO\Quote;
 use App\Modules\Orders\Enums\OrderPricing;
@@ -30,13 +31,16 @@ use App\Support\Money;
  *    renewed with one: renewal());
  * 2. the largest automatic discount (a sale, their own percent, their tier's — never added together);
  * 3. the code they typed, applied to what step 2 left (DiscountCodes::apply()).
- * Whole Toman, never below zero. Wallet top-ups and agents' traffic are never discounted.
+ * Whole Toman, never below zero. Wallet top-ups and agents' traffic are never discounted. One who goes without the
+ * customers' perks (Perks) pays no first-purchase price and types no code; of step 2 only their own percent is theirs —
+ * so where no agent price applies (a plan without one, an extra, a built service), the regular price.
  */
 final class Pricing
 {
     public function __construct(
         private readonly Discounts $discounts,
         private readonly DiscountCodes $codes,
+        private readonly Perks $perks,
     ) {}
 
     /**
@@ -53,7 +57,8 @@ final class Pricing
         }
 
         return new Buyer(
-            firstPurchase: $first && ($user === null || !Order::boughtBy($user->id)->exists()),
+            // One who bought in the bot the shop came from (an import said so) is no newcomer either.
+            firstPurchase: $first && ($user === null || (!$user->boughtElsewhere() && !$this->perks->withheld($user) && !Order::boughtBy($user->id)->exists())),
             agent: $agent && $user !== null && $user->paysAgentPrices(),
         );
     }
@@ -193,6 +198,13 @@ final class Pricing
      */
     private function coded(Quote $quote, ?User $user, ?string $code, CodeTarget $target): Quote
     {
-        return $user === null || $code === null ? $quote : $quote->withCode($this->codes->apply($user, $code, $target, $quote->afterAutomatic()));
+        if ($user === null || $code === null) {
+            return $quote;
+        }
+        if ($this->perks->withheld($user)) {
+            throw new DiscountCodeRefusedException(Perks::NO_CODES);
+        }
+
+        return $quote->withCode($this->codes->apply($user, $code, $target, $quote->afterAutomatic()));
     }
 }

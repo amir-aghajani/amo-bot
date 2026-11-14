@@ -6,6 +6,7 @@ namespace Tests\Feature\Store;
 
 use App\Core\Exceptions\ValidationException;
 use App\Core\Http\ErrorHandler;
+use App\Modules\Accounts\Enums\SignInMethod;
 use App\Modules\Catalog\Models\Plan;
 use App\Modules\Orders\Enums\OrderStatus;
 use App\Modules\Orders\Tasks\ExpireOrdersTask;
@@ -22,6 +23,7 @@ use App\Modules\Store\Services\CustomerReceipts;
 use App\Modules\Telegram\Models\ReportMessage;
 use App\Modules\Telegram\Reports\ReceiptReview;
 use App\Modules\Telegram\Reports\ReportSender;
+use App\Modules\Telegram\Reports\UserManagement;
 use App\Modules\Users\Models\User;
 use App\Modules\Users\Services\CustomerPictures;
 use Illuminate\Support\Carbon;
@@ -35,7 +37,8 @@ use Tests\Support\FakeTelegram;
 
 /**
  * Receipts uploaded from the website: taken as the bot takes one (own payment, a real picture, the size limit), the same
- * compare-and-swap and report, reviewed by support only (never auto-approved), ten an hour, gone with an expired order.
+ * compare-and-swap and report, auto-approved by the method's review window only for a Telegram account (the mini app's,
+ * a website sign-in with Telegram), ten an hour, gone with an expired order.
  */
 final class StoreReceiptsTest extends HttpTestCase
 {
@@ -90,9 +93,8 @@ final class StoreReceiptsTest extends HttpTestCase
         self::assertSame([(string) self::REPORT_GROUP, 'HTML'], [$photo['chat_id'], $photo['parse_mode']]);
         self::assertStringContainsString("🧾 <b>رسید جدید</b> · پرداخت \u{200E}#{$payment->id}", $photo['caption']);
         self::assertStringContainsString('📝 توضیح مشتری: از کارت پدرم', $photo['caption']);
-        self::assertStringContainsString('رسیدی که از وب‌سایت می‌رسد خودکار تایید نمی‌شود', $photo['caption'], "the method's review window is not this receipt's");
-        self::assertStringNotContainsString('۳۰ دقیقه', $photo['caption']);
-        self::assertSame(ReceiptReview::buttons($payment->id), FakeTelegram::markupOf($photo)['inline_keyboard'] ?? null, "the bot admins' buttons under it");
+        self::assertStringContainsString('اگر تا ۳۰ دقیقه بررسی نشود، خودکار تایید می‌شود', $photo['caption'], "a Telegram account's: the method's review window is this receipt's too");
+        self::assertSame([...ReceiptReview::buttons($payment->id), ...UserManagement::buttons($payment->order->user_id)], FakeTelegram::markupOf($photo)['inline_keyboard'] ?? null, "the bot admins' buttons under it, and «⚙️ مدیریت کاربر»");
 
         // Support approves it on the panel: the service is delivered, the customer told, the verdict a reply to the photo.
         $this->telegram()->reset();
@@ -128,22 +130,54 @@ final class StoreReceiptsTest extends HttpTestCase
         self::assertSame([404, 'فایل این رسید دیگر روی سرور نیست.'], [$response->getStatusCode(), $this->decode($response)['message']]);
     }
 
-    public function testTheReviewWindowLeavesAnUploadedReceiptToSupport(): void
+    /**
+     * The mini app's customers — and the website's who signed in with Telegram — are Telegram accounts, as the bot's are:
+     * the review window accepts their uploads too. One an email alone vouches for may be a minute old: it waits for support.
+     */
+    public function testTheReviewWindowAcceptsATelegramAccountsUploadAndLeavesAnEmailOnesToSupport(): void
     {
-        $uploaded = $this->transfer();
-        $this->sendReceipt($uploaded, 'receipt.png');
-        // A receipt of the same method sent in the bot, in the same window: that one the window accepts.
+        $telegrams = $this->transfer();
+        $this->sendReceipt($telegrams, 'receipt.png');
+        // A receipt of the same method sent in the bot, in the same window: the window accepts it as ever.
         $fromTheBot = $this->receipt($this->cardPayment($this->topUpOrder($this->customer, '70000.00'), $this->card));
+        $this->reportGroup();
+        $this->bearer($this->customerSession($this->customer(['telegram_id' => null, 'email' => 'sara@example.com', 'first_name' => 'Sara'])));
+        $emails = $this->transfer('card-2');
+        $this->sendReceipt($emails, 'receipt.png');
+        self::assertStringContainsString('حساب این مشتری به تلگرام وصل نیست، پس رسیدش خودکار تایید نمی‌شود', $this->latestReport(), 'the report group told it waits for them');
 
         Carbon::setTestNow(now()->addMinutes(31));
         $this->service(AutoApproveReceiptsTask::class)->run();
 
-        self::assertSame([PaymentStatus::AwaitingReview, OrderStatus::Pending], [$uploaded->refresh()->status, $uploaded->order->status], 'an upload waits for support, whatever the window');
+        self::assertTrue($telegrams->refresh()->wasAutoApproved(), "a Telegram account's upload, as the bot's receipt");
         self::assertTrue($fromTheBot->refresh()->wasAutoApproved());
+        self::assertSame([PaymentStatus::AwaitingReview, OrderStatus::Pending], [$emails->refresh()->status, $emails->order->status], "an email account's waits for support, whatever the window");
 
         $this->loginAsAdmin();
-        self::assertSame(200, $this->postJson("/api/admin/payments/{$uploaded->id}/approve")->getStatusCode());
-        self::assertSame(OrderStatus::Fulfilled, $uploaded->order->refresh()->status);
+        self::assertSame(200, $this->postJson("/api/admin/payments/{$emails->id}/approve")->getStatusCode());
+        self::assertSame(OrderStatus::Fulfilled, $emails->order->refresh()->status);
+    }
+
+    /** The report a shop owner made: a card receipt sent from the mini app waited for support whatever the window. */
+    public function testAReceiptSentFromTheMiniAppIsAcceptedByTheReviewWindow(): void
+    {
+        $miniApp = $this->miniApp();
+        $this->bearer($this->customerSession($this->customer, ['method' => SignInMethod::MiniApp]));
+        $response = $this->send('POST', $this->storeApi($miniApp, '/orders'), ['plan_id' => $this->plan->id, 'server_id' => $this->server->id, 'method_id' => $this->card->id], ['Idempotency-Key' => 'mini-1']);
+        $payment = Payment::query()->findOrFail($this->decode($response)['checkout']['transfer']['payment_id'] ?? self::fail((string) $response->getBody()));
+        $sent = $this->upload($this->storeApi($miniApp, "/payments/{$payment->id}/receipt"), 'file', 'receipt.png', (string) base64_decode(self::PNG));
+        self::assertSame(200, $sent->getStatusCode(), (string) $sent->getBody());
+
+        Carbon::setTestNow(now()->addMinutes(31));
+        $this->service(AutoApproveReceiptsTask::class)->run();
+
+        self::assertTrue($payment->refresh()->wasAutoApproved());
+        self::assertSame(OrderStatus::Fulfilled, $payment->order->status, 'the service delivered');
+    }
+
+    private function latestReport(): string
+    {
+        return (string) ReportMessage::query()->latest('id')->firstOrFail()->text;
     }
 
     public function testACustomerUploadsTenReceiptsAnHourAtMost(): void

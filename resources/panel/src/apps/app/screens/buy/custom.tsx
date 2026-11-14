@@ -143,7 +143,7 @@ function Builder({ offer }: { offer: StoreCustomServices }) {
   const free = answer !== undefined && Number(answer.quote.amount) === 0
   // The ways to pay the last price quoted: read again as a new price comes, never emptied while a slider moves.
   const payment = usePaymentChoice('purchase', answer === undefined ? undefined : free ? null : answer.quote.amount)
-  const method = free ? (payment.list[0] ?? null) : payment.method
+  const method = free ? payment.free : payment.method
 
   const ordering = useOrdering(
     (body: StoreCustomOrderRequest, key) => store.post('/custom-services/orders', body, { idempotencyKey: key }),

@@ -29,6 +29,20 @@ customer takes it with one button («🎁 دریافت رایگان»), with not
   first-purchase or agent price, only a sale for every plan reaches it, and a code held to some plans never holds for
   it.
 
+### Agents and colleagues
+
+By default an agent, or a customer of a «همکار» group, has the customers' perks on top of the agent price: a sale or
+their loyalty tier comes off it, a code applies, their first purchase may be cheaper still, and they earn cashback, spin
+the wheel and enter the nightly draw. **«همکارها فقط با قیمت همکاری بخرند»**, on «کدهای تخفیف» › «تنظیمات» (card
+«همکارها و نماینده‌ها» — «همکارها» in an agent's shop, which has no agents —, each shop its own), switched on, takes
+every customer perk from whoever pays agent prices, whatever they buy: no sale, no loyalty tier (they stand on none), no
+first-purchase price, a code refused («کد تخفیف برای حساب همکارها فعال نیست.») — the bot's checkout does not offer them
+«🏷 کد تخفیف دارم» —, no cashback, the wheel switched off for them and no place in the nightly draw. A plan's agent price
+is what they pay for it; where no agent price applies — a plan without one, extra traffic, time or devices, a service
+they build — they pay the regular price, with nothing off. The bot and the mini app show them none of it: no tier on the
+wallet screen, no wheel button, no sale banner, no code field. A customer's own discount, which you gave that one
+person, stays. Everyone else buys as before.
+
 ## Discount codes
 
 ### The list

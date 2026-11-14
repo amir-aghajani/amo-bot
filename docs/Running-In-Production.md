@@ -71,6 +71,7 @@ any task can run; its next run counts from its last. While the database cannot b
 | «پاک‌سازی تیکت‌ها» | The pictures of closed tickets and the report groups' old reports of closed tickets, removed | hour |
 | «قرعه‌کشی شبانه» | Once the shop's clock has passed the hour of the draw, the day's draw — once a day, so the interval only sets how soon after the hour it comes ([Loyalty, cashback and draws](Loyalty-Cashback-And-Draws.md#the-nightly-draw)) | 10 minutes |
 | «ارسال پشتیبان به گروه» | Each shop's backup, sent to its report group's «پشتیبان‌گیری» topic: the main shop's group gets the whole installation's, an agent's group its own shop's — in every shop whose group is connected and whose topic is on ([Backups](Backups.md#in-the-report-group)) | day (1440 minutes) |
+| «پاک‌سازی انتقال‌ها» | An import from another bot left open and untouched for 7 days, cancelled; and whatever an ended import still keeps of the other bot's data — its copy of it, the uploaded file, the panels' passwords —, deleted ([Importing from another bot](Importing.md#the-imports-own-data)) | day (1440 minutes) |
 | «بررسی نسخه تازه» | AmoBot's newest release, read from GitHub, so the dashboard says when one is out ([Upgrading](Upgrading.md)) | day (1440 minutes) |
 | «ارسال گزارش‌ها» | The report groups' queued messages, at Telegram's pace ([Report group](Telegram-Group.md#pace)) | minute |
 

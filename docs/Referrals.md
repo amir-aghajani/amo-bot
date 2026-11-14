@@ -90,13 +90,16 @@ bot (and on their website, by email for one without Telegram). It is paid:
 
 It is decided once a newcomer, whatever comes later: a later purchase, a setting changed since, two first purchases paid
 in the same moment. A refund takes it back from neither wallet, and the newcomer's next purchase after a refunded first
-one pays no second gift.
+one pays no second gift. A customer an import found had bought in the bot the shop came from brings none with a purchase
+here, and an imported referral's is decided already — neither side gets one
+([Importing from another bot](Importing.md#referrals)).
 
 ## The plan reward
 
 «جایزه دعوت»: each time the number of a referrer's referrals **who bought** something with a price and kept it (a free
 plan does not count, nor a purchase refunded since) reaches another multiple of «به ازای هر چند زیرمجموعه خریدار», the
-referrer is given a service of «پلن جایزه» free. It is checked as a referral's first paid purchase is paid.
+referrer is given a service of «پلن جایزه» free. It is checked as a referral's first paid purchase is paid. A referral
+who bought in the bot the shop came from (an import found it) counts for none.
 
 - Each such purchase gives at most one milestone: the next one above the last one given, when the count has reached it.
   Two referrals buying at the same moment that cross two milestones give both. A number lowered later never gives

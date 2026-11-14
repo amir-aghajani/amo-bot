@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { DriverDescription, FieldDescription, PaymentMethodResponse, PaymentMethodsResponse, UnregisteredMethodRow, WalletMethodRow } from '@/lib/api-types'
 import { PaymentMethodsPage } from '@/pages/payment-methods'
 import { providers, until } from '@/test/render'
-import { cardMethodRow, cubePayDriverRow, cubePayMethodRow, paymentCardRow } from '@/test/rows'
+import { cardMethodRow, cubePayDriverRow, cubePayMethodRow, depositSettingsRow, paymentCardRow } from '@/test/rows'
 import { json, refusal, server } from '@/test/server'
 
 /*
@@ -85,6 +85,8 @@ const openDialog = () => within(document.querySelector<HTMLElement>('dialog[open
 
 beforeEach(() => {
   vi.spyOn(toast, 'success')
+  // «تایید خودکار واریز» under the list, off (components/payments/deposits has its own tests).
+  server().on('GET', '/api/admin/deposits/settings', json(depositSettingsRow({ enabled: false, key: null, last_test_at: null })))
 })
 
 describe('the payment methods', () => {

@@ -32,6 +32,10 @@ final class AdminBotSettingsApiTest extends HttpTestCase
 {
     /** The renewal group's rules besides `carry_traffic`, as a fresh shop has them. */
     private const WALLET_RANDOM = ['topup_random_count' => 0, 'topup_random_min' => 50000, 'topup_random_max' => 500000, 'topup_random_round' => 1000, 'topup_unique_max' => 0];
+    /** The phone rule's reach as a fresh shop has it: before everything, its four moments on for «فقط موقع این کارها». */
+    private const PHONE_REACH = ['phone_scope' => 'everywhere', 'phone_on_purchase' => true, 'phone_on_renewal' => true, 'phone_on_test' => true, 'phone_on_card' => true, 'phone_iran_only' => false];
+    /** The rest of `general` as a fresh shop has it: a support message under its heading. */
+    private const SUPPORT_HEADER = ['support_header' => true];
     private const RENEWAL_RULES = ['renew_window_days' => 0, 'renew_window_percent' => 0, 'renew_extend' => true, 'renew_reset_traffic' => false, 'renew_reset_time' => false, 'renew_default_method' => 'extend'];
 
     protected function setUp(): void
@@ -49,7 +53,9 @@ final class AdminBotSettingsApiTest extends HttpTestCase
         self::assertSame([
             'enabled' => true,
             'phone_required' => false,
+            ...self::PHONE_REACH,
             'support_contact' => '',
+            'support_header' => true,
             'join_required' => false,
             'qr_enabled' => true,
             'topup_min' => 10000,
@@ -144,6 +150,7 @@ final class AdminBotSettingsApiTest extends HttpTestCase
             'report_reviews' => true,
             'report_backups' => true,
             'hold_minutes' => 60,
+            'agents_without_perks' => false,
             'gift_codes_enabled' => false,
             'wheel_enabled' => false,
             'wheel_cooldown_hours' => 24,
@@ -552,7 +559,7 @@ final class AdminBotSettingsApiTest extends HttpTestCase
     {
         $this->loginAsAgent($this->agentBot());
 
-        $saved = $this->putJson('/api/agent/bot/settings/general', ['enabled' => true, 'phone_required' => true, 'support_contact' => '@agent_support']);
+        $saved = $this->putJson('/api/agent/bot/settings/general', ['enabled' => true, 'phone_required' => true, 'support_contact' => '@agent_support'] + self::PHONE_REACH + self::SUPPORT_HEADER);
         self::assertSame(200, $saved->getStatusCode(), (string) $saved->getBody());
         $settings = $this->decode($this->get('/api/agent/bot/settings'))['settings'];
         self::assertSame('@agent_support', $settings['support_contact']);
@@ -573,7 +580,7 @@ final class AdminBotSettingsApiTest extends HttpTestCase
 
     public function testSavingTheSwitchesReachesTheBot(): void
     {
-        $response = $this->putJson('/api/admin/bot/settings/general', ['enabled' => false, 'phone_required' => true, 'support_contact' => ' @amo_support ']);
+        $response = $this->putJson('/api/admin/bot/settings/general', ['enabled' => false, 'phone_required' => true, 'support_contact' => ' @amo_support '] + self::PHONE_REACH + self::SUPPORT_HEADER);
 
         self::assertSame(200, $response->getStatusCode(), (string) $response->getBody());
         self::assertSame(
@@ -592,7 +599,7 @@ final class AdminBotSettingsApiTest extends HttpTestCase
         self::assertTrue($settings->joinRequired());
         self::assertSame('@amo_support', $settings->supportContact(), 'what the bot shows on its support screen');
 
-        $this->putJson('/api/admin/bot/settings/general', ['enabled' => true, 'phone_required' => false]);
+        $this->putJson('/api/admin/bot/settings/general', ['enabled' => true, 'phone_required' => false] + self::PHONE_REACH + self::SUPPORT_HEADER);
         $this->putJson('/api/admin/bot/settings/channels', ['join_required' => false]);
         self::assertSame(['enabled' => true, 'phone_required' => false, 'join_required' => false], array_intersect_key($this->decode($this->get('/api/admin/bot/settings'))['settings'], array_flip(['enabled', 'phone_required', 'join_required'])));
     }

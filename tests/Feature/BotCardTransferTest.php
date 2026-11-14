@@ -9,6 +9,7 @@ use App\Modules\Catalog\Models\Plan;
 use App\Modules\Notifications\Enums\Delivery;
 use App\Modules\Notifications\Services\CustomerNotifier;
 use App\Modules\Orders\Models\Order;
+use App\Modules\Payments\Deposits\Services\DepositSettings;
 use App\Modules\Payments\Enums\PaymentStatus;
 use App\Modules\Payments\Exceptions\ReceiptInReviewException;
 use App\Modules\Payments\Models\Payment;
@@ -34,7 +35,9 @@ use Tests\Support\FakeTelegram;
  * at all — none picked —: the order and its amount, the way to support (a button while the contact is a link), the
  * method's note and no receipt awaited here — the reminder sends them there too —, unless the contact was emptied since. One receipt at a time: while a
  * receipt of theirs is in review, a customer starts no other card payment and sends no other receipt — told so, and
- * asked again as a receipt is taken —, and the wallet still pays.
+ * asked again as a receipt is taken —, and the wallet still pays. While the shop listens to its bank SMS («تایید خودکار
+ * واریز»), the card's line asks the exact sum, which approves itself, the receipt only should it not — still taken —,
+ * and in support's private chat their message says so, the sum in Rial too.
  */
 final class BotCardTransferTest extends BotTestCase
 {
@@ -149,6 +152,55 @@ final class BotCardTransferTest extends BotTestCase
         $this->send($this->message(null, ['photo' => [['file_id' => 'receipt-1']]]));
         $payment = Payment::query()->sole();
         self::assertSame([PaymentStatus::Pending, null], [$payment->status, $payment->receipt_file_id]);
+    }
+
+    public function testWhileTheShopListensToItsBankSmsTheCardAsksTheExactSumAndNoReceiptButStillTakesOne(): void
+    {
+        $this->service(DepositSettings::class)->enable(true);
+
+        $this->send($this->tap($this->payButton($this->plan, $this->server, $this->card)));
+
+        $asked = Payment::query()->sole()->amount;
+        self::assertSame(1, Money::compare($asked, '120000'), 'a sum of its own: a few Toman more than the order');
+        self::assertSame([$this->cardInstructions($asked, suffix: BotText::PayInstructionsAuto)], $this->said());
+        self::assertStringContainsString('دقیقا همین مبلغ را واریز کنید، تا آخرین رقم', $this->said()[0]);
+        self::assertStringContainsString('نیازی به فرستادن رسید نیست', $this->said()[0]);
+        self::assertStringNotContainsString(trim(self::text(BotText::PayInstructionsSuffix)), $this->said()[0], 'the receipt asked for only should the sum not approve itself');
+        self::assertSame(Money::rials($asked), $this->inlineKeyboard(1)[0][0]['copy_text']['text'], 'the exact sum copied, in Rial');
+
+        // A word typed instead of a receipt is told the sum is enough; «ارسال رسید» still asks for the picture.
+        $this->telegram()->reset();
+        $this->send($this->message('واریز کردم'));
+        self::assertSame([self::text(BotText::ReceiptWaitingAuto)], $this->said());
+        $this->telegram()->reset();
+        $this->send($this->tap(ReceiptHandler::stateFor(Payment::query()->sole())));
+        self::assertSame([self::text(BotText::ReceiptWaiting)], $this->said());
+
+        $this->send($this->message(null, ['photo' => [['file_id' => 'receipt-1']]]));
+        self::assertSame(PaymentStatus::AwaitingReview, Payment::query()->sole()->status, 'a receipt is taken all the same');
+    }
+
+    public function testInSupportsPrivateChatWhileTheShopListensToItsBankSmsTheExactSumIsAskedInRialToo(): void
+    {
+        $this->service(DepositSettings::class)->enable(true);
+        $this->botSettings('general', ['support_contact' => '@amo_support']);
+        $this->botSettings('payments', ['card_to_support' => true]);
+
+        $this->send($this->tap($this->payButton($this->plan, $this->server, $this->card)));
+
+        $payment = Payment::query()->sole();
+        self::assertSame(1, Money::compare($payment->amount, '120000'), 'a sum of its own there too: the SMS names it');
+        self::assertSame([trim(self::text(BotText::CardToSupportAuto, [
+            'order' => $payment->order_id,
+            'amount' => Money::format($payment->amount),
+            'amount_rial' => Money::rials($payment->amount),
+            'contact' => "\u{200E}@amo_support",
+            'outcome' => self::text(BotText::ReceiptOutcomeSubscription),
+            'instructions' => '',
+        ]))], $this->said());
+        self::assertStringContainsString('<code>' . Money::rials($payment->amount) . '</code> ریال', $this->said()[0]);
+        self::assertStringContainsString('خودکار تایید می‌شود', $this->said()[0]);
+        self::assertSame(['https://t.me/amo_support'], array_column($this->inlineKeyboard(0)[0], 'url'), 'the way to support as ever');
     }
 
     public function testInSupportsPrivateChatTheMethodsNoteComesUnderTheWayThereAsOnTheWebsite(): void

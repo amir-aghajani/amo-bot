@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Search, Tags, Users, Wallet } from 'lucide-react'
+import { MessageSquareText, Search, Tags, Users, Wallet } from 'lucide-react'
 import { Balance } from '@/components/balance'
+import { MessageDialog } from '@/components/customer/message-dialog'
 import { EmptyState } from '@/components/empty-state'
 import { FilterSelect } from '@/components/filter-select'
 import { Dash, ListView, PhoneFacts, RowMenu, SortableHead } from '@/components/list-view'
@@ -34,7 +35,8 @@ const SORTS: UserSort[] = ['joined', 'last_seen', 'balance', 'orders', 'services
 
 /**
  * Every customer of the bot or the website, searchable and filterable by status, role and group. Each name opens the
- * customer's page; the row menu bans, gives the admin role, adjusts the wallet and sets the groups.
+ * customer's page; the row menu writes to them («ارسال پیام»), bans, gives the admin role, adjusts the wallet and sets
+ * the groups.
  */
 export function UsersList() {
   const list = usePagedList({
@@ -52,6 +54,7 @@ export function UsersList() {
   const account = useAccountChange(list.replace)
   const [wallet, setWallet] = useState<UserRow | null>(null)
   const [grouping, setGrouping] = useState<UserRow | null>(null)
+  const [messaging, setMessaging] = useState<UserRow | null>(null)
   // A row's dialog is the list's: the list's section going out of sight — a link inside one to «گروه‌ها» — closes it
   // (state adjusted during render), rather than leaving it open over the other section.
   const shown = useSectionShown()
@@ -61,6 +64,7 @@ export function UsersList() {
     if (!shown) {
       setWallet(null)
       setGrouping(null)
+      setMessaging(null)
     }
   }
   // What found nothing, to say what to change: the search, the filters, or both.
@@ -173,6 +177,11 @@ export function UsersList() {
                     <bdi dir="ltr" className="text-footnote">
                       {user.phone}
                     </bdi>
+                  ) : user.phone_exempt && user.role !== 'admin' ? (
+                    // Excused from the phone rule: never asked for it (the customer's page switches it).
+                    <Badge variant="outline" className="font-normal" title="معاف از ارسال شماره موبایل">
+                      معاف
+                    </Badge>
                   ) : (
                     <Dash />
                   )}
@@ -215,6 +224,10 @@ export function UsersList() {
                         <TelegramChatLink user={user} />
                       </DropdownMenuItem>
                     )}
+                    <DropdownMenuItem onSelect={() => setMessaging(user)}>
+                      <MessageSquareText aria-hidden />
+                      ارسال پیام
+                    </DropdownMenuItem>
                     <DropdownMenuItem onSelect={() => setWallet(user)}>
                       <Wallet aria-hidden />
                       کیف پول
@@ -234,6 +247,7 @@ export function UsersList() {
       </ListView>
 
       <WalletModal user={wallet} onClose={() => setWallet(null)} onChanged={list.replace} />
+      <MessageDialog customer={messaging} onClose={() => setMessaging(null)} />
       <GroupsModal
         user={grouping}
         // The groups' counts move.

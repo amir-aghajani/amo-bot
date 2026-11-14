@@ -59,9 +59,10 @@ final class CustomerSessionsTest extends HttpTestCase
             'has_password' => false,
             'two_factor' => false,
             'phone' => '+989121234567',
+            'phone_exempt' => false,
             'balance' => '50000.00',
             'created_at' => '2026-10-07T12:00:00+00:00',
-        ], 'unread_notifications' => 0, 'staff' => null, 'loyalty' => ['tier' => null, 'spent' => '0.00', 'next' => null], 'session' => [
+        ], 'unread_notifications' => 0, 'staff' => null, 'perks' => true, 'loyalty' => ['tier' => null, 'spent' => '0.00', 'next' => null], 'session' => [
             'method' => 'password',
             'biometric' => false,
             'recent_until' => '2026-10-07T12:15:00+00:00',

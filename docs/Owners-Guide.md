@@ -9,7 +9,8 @@ they show them, and a path such as «فروش › پرداخت‌ها» is a gro
 
 Everything here works the same in an agent's panel for the agent's own shop, except where a page says it is the owner's
 alone: the servers, the agents, the mass gift («هدیه همگانی»), custom services, services added by their link, and the
-installation's settings («تنظیمات پنل» — an agent's has «ظاهر» and their own shop's «پشتیبان‌گیری»).
+installation's settings («تنظیمات پنل» — an agent's has «ظاهر» and their own shop's «پشتیبان‌گیری») with the import from
+another bot among them.
 
 ## Setting a shop up
 
@@ -40,6 +41,11 @@ A new shop sells once it has a bot, a server, a plan and a way to pay. In order:
    [gift codes and the lucky wheel](Gift-Codes-And-Lucky-Wheel.md), the [referral program](Referrals.md),
    [agents](Agency.md) with bots of their own, the shop's [mini app](Mini-App.md) inside Telegram, and a
    [website](Website.md) of the shop's own.
+
+**Moving from another bot?** Add its panels as servers (step 2), then bring its customers, their wallets and services,
+its plans, codes, channels and cards over in «تنظیمات پنل › انتقال از ربات دیگر» — nothing changes on the panels, and
+customers are told nothing ([Importing from another bot](Importing.md)); for the import you keep, stop the other bot
+before taking its backup. Then check the plans and cards it brought, and go on from step 4.
 
 Try it as a customer before telling anyone: `/start` the bot, buy the cheapest plan with a card, send a receipt, and
 approve it in the panel.
@@ -91,5 +97,6 @@ live: there is no need to reload.
 | [Website](Website.md) | A shop's own website: its address, sign-ins, captcha, reviews, and the bot's admins working the shop from it |
 | [Mini app](Mini-App.md) | The shop inside Telegram: what customers do in it, switching it on, its look, the bot's buttons that open it |
 | [Panel settings](Panel-Settings.md) | The installation's own settings, the owner's login, the look, the backups ([Backups](Backups.md)), the task schedule, AmoBot's update |
+| [Importing from another bot](Importing.md) | Another bot's customers, wallets, services, plans, codes, channels and cards, brought into the main shop |
 
 The customer's side of every screen — what the bot shows and says — is the [Bot guide](Bot-Guide.md).

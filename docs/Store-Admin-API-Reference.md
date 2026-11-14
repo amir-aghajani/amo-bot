@@ -62,6 +62,8 @@ The shop's daily work; each operation answers like its panel counterpart (linked
 | [`POST /users/{id}/wallet`](#post-usersidwallet) | Credit or debit a customer's wallet |
 | [`POST /users/{id}/orders`](#post-usersidorders) | Make an order for a customer by hand («افزودن سفارش»), paid and delivered at once |
 | [`PUT /users/{id}/groups`](#put-usersidgroups) | Set a customer's groups |
+| [`PUT /users/{id}/phone-exempt`](#put-usersidphone-exempt) | Excuse a customer from the shop's phone rule, or hold them to it again |
+| [`POST /users/{id}/message`](#post-usersidmessage) | Send a customer a message from support («ارسال پیام») |
 | [`POST /users/{id}/two-factor/disable`](#post-usersidtwo-factordisable) | Turn off a customer's two-factor sign-in on the website |
 | [`POST /users/{id}/sessions/end`](#post-usersidsessionsend) | Sign a customer out of the website on every device |
 | [`GET /customer-groups`](#get-customer-groups) | All customer groups, in their order, with each group's member count |
@@ -104,6 +106,7 @@ The shop's daily work; each operation answers like its panel counterpart (linked
 | [`POST /reviews/{id}/approve`](#post-reviewsidapprove) | Approve a pending or rejected review |
 | [`POST /reviews/{id}/reject`](#post-reviewsidreject) | Reject a pending or approved review |
 | [`DELETE /reviews/{id}`](#delete-reviewsid) | Delete a review, whatever its status |
+| [`GET /deposits`](#get-deposits) | The bank SMS a phone app forwarded to the shop («تایید خودکار واریز»), newest first, each with what came of it |
 | [`GET /referrals`](#get-referrals) | The referral program's rules and numbers |
 | [`GET /referrals/referrers`](#get-referralsreferrers) | Customers whose referral link brought someone |
 | [`GET /referrals/invitees`](#get-referralsinvitees) | Who brought whom |
@@ -913,6 +916,62 @@ The customer's groups: exactly the ones listed. An empty list removes them from 
 | Status | What it is | Body |
 |---|---|---|
 | `200` | Changed | [UserResponse](API-Schemas.md#userresponse) |
+| `401` | [SignedOut](API-Schemas.md#response-signedout) | [ErrorResponse](API-Schemas.md#errorresponse) |
+| `403` | [StaffRefused](API-Schemas.md#response-staffrefused) | [ErrorResponse](API-Schemas.md#errorresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### PUT /users/{id}/phone-exempt
+
+Excuse a customer from the shop's phone rule, or hold them to it again. Excused, they are never asked for their phone number, wherever the shop asks it (`phone_required`). On the website's admin API, an admin's account (their own included) or an agent's can only be changed from a panel (403). Logged with who did it.
+
+- **Who:** an admin of the shop, signed in on its website.
+- **In the panels:** [`PUT /api/{panel}/users/{id}/phone-exempt`](Panels-API-Reference.md#put-apipanelusersidphone-exempt).
+
+**Parameters**
+
+| Name | In | Type | Required | What it is |
+|---|---|---|---|---|
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
+
+**Body**, as JSON:
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `phone_exempt` | boolean | yes |  |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | Changed | [UserResponse](API-Schemas.md#userresponse) |
+| `401` | [SignedOut](API-Schemas.md#response-signedout) | [ErrorResponse](API-Schemas.md#errorresponse) |
+| `403` | [StaffRefused](API-Schemas.md#response-staffrefused) | [ErrorResponse](API-Schemas.md#errorresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### POST /users/{id}/message
+
+Send a customer a message from support («ارسال پیام»). The shop's bot sends it to their Telegram chat (an agent's customer hears from the agent's bot), under its text «پیام پشتیبانی به مشتری» (📩 پیام از طرف پشتیبانی) unless the bot settings' `support_header` is off; a customer with no Telegram, or who blocked the bot, gets it by email when they have one and the shop's email works. It is kept on their website either way. Plain text, at most 3,500 characters as Telegram counts them, an emoji two (422 on `text`, as for an empty one). On the website's admin API, an admin's account (their own included) or an agent's is written to only from a panel (403). Answers what came of it; logged with who wrote it.
+
+- **Who:** an admin of the shop, signed in on its website.
+- **In the panels:** [`POST /api/{panel}/users/{id}/message`](Panels-API-Reference.md#post-apipanelusersidmessage).
+
+**Parameters**
+
+| Name | In | Type | Required | What it is |
+|---|---|---|---|---|
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
+
+**Body**, as JSON:
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `text` | string | yes | Plain text, line breaks kept; 1 to 3,500 characters once trimmed, counted as Telegram counts them — an emoji is two (blank: 422). |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | Sent, or tried | [UserMessageResponse](API-Schemas.md#usermessageresponse) |
 | `401` | [SignedOut](API-Schemas.md#response-signedout) | [ErrorResponse](API-Schemas.md#errorresponse) |
 | `403` | [StaffRefused](API-Schemas.md#response-staffrefused) | [ErrorResponse](API-Schemas.md#errorresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
@@ -2000,6 +2059,30 @@ Delete a review, whatever its status. A 403 for an admin's own review.
 | Status | What it is | Body |
 |---|---|---|
 | `204` | [NoContent](API-Schemas.md#response-nocontent) | none |
+| `401` | [SignedOut](API-Schemas.md#response-signedout) | [ErrorResponse](API-Schemas.md#errorresponse) |
+| `403` | [StaffRefused](API-Schemas.md#response-staffrefused) | [ErrorResponse](API-Schemas.md#errorresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### GET /deposits
+
+The bank SMS a phone app forwarded to the shop («تایید خودکار واریز»), newest first, each with what came of it: the card payment it approved, or why none. By status, or searched by sum (digits, in Toman or Rial) or by the SMS's words.
+
+- **Who:** an admin of the shop, signed in on its website.
+- **In the panels:** [`GET /api/{panel}/deposits`](Panels-API-Reference.md#get-apipaneldeposits).
+
+**Parameters**
+
+| Name | In | Type | Required | What it is |
+|---|---|---|---|---|
+| `status` | query | [DepositStatus](API-Schemas.md#depositstatus) | no | One status. Empty for all |
+| `search` | query | string | no | The search text ("#12" finds by number) |
+| `page` | query | integer, at least 1 | no | The page, from 1 (`PageMeta.per_page` rows a page); a page past the last answers the last |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | OK | [DepositsResponse](API-Schemas.md#depositsresponse) |
 | `401` | [SignedOut](API-Schemas.md#response-signedout) | [ErrorResponse](API-Schemas.md#errorresponse) |
 | `403` | [StaffRefused](API-Schemas.md#response-staffrefused) | [ErrorResponse](API-Schemas.md#errorresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |

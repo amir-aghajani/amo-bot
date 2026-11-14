@@ -10,17 +10,17 @@ vi.mock('@/apps/app/config', () => import('@/apps/app/test/config'))
 /*
  * The home screen's banners (screens/home/parts/banners): a dot for each, tapped over 44px without taking its
  * neighbours' taps; the row moves on by itself every five seconds — never while focus is in it, nor while a finger is
- * on it.
+ * on it. No wheel or draw for a customer the perks do not reach.
  */
 
 const SALE: StoreSale = { id: 4, name: 'فروش ویژه پاییز', percent: 20, ends_at: new Date(Date.now() + 2 * 86_400_000).toISOString(), plan_ids: null, order_types: null }
 
 /** The banners of a shop that runs everything, a sale on: four of them, the clock in the test's hands. */
-function open() {
+function open({ perks = true, sales = [SALE] }: { perks?: boolean; sales?: StoreSale[] } = {}) {
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'] })
   const shop = app.shop()
-  const tree = app.screen(<Banners shop={shop} />, { shop })
-  queryClient.setQueryData<StoreSalesResponse>(keys.sales, { sales: [SALE] })
+  const tree = app.screen(<Banners shop={shop} perks={perks} />, { shop })
+  queryClient.setQueryData<StoreSalesResponse>(keys.sales, { sales })
   render(tree)
 
   return screen.getByRole('region', { name: 'بنرها' })
@@ -76,5 +76,14 @@ describe('the banners', () => {
     fireEvent.pointerUp(track)
     wait(5_000)
     expect(shown(banners)).toBe(1)
+  })
+
+  it('leave the wheel and the draw out for a customer the perks do not reach', () => {
+    // GET /sales lists no sale for them either.
+    const banners = open({ perks: false, sales: [] })
+
+    expect(within(banners).getByText('دعوت از دوستان')).toBeTruthy()
+    expect(within(banners).queryByText('گردونه شانس')).toBeNull()
+    expect(within(banners).queryByText('قرعه‌کشی شبانه')).toBeNull()
   })
 })

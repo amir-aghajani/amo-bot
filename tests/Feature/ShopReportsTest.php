@@ -30,6 +30,7 @@ use App\Modules\Telegram\Models\ReportMessage;
 use App\Modules\Telegram\Reports\DeliveryRetry;
 use App\Modules\Telegram\Reports\ShopReports;
 use App\Modules\Telegram\Reports\Topic;
+use App\Modules\Telegram\Reports\UserManagement;
 use App\Modules\Users\Models\User;
 use App\Modules\Users\Services\Customers;
 use App\Modules\Users\Services\WalletService;
@@ -222,7 +223,7 @@ final class ShopReportsTest extends BotTestCase
         self::assertStringContainsString('❗️ علت: ' . htmlspecialchars((string) $order->diagnosis), $error, "the main bot's group is the owner's: the diagnosis");
         self::assertStringEndsWith('«تلاش دوباره برای تحویل» را بزنید — همین‌جا یا در صفحه «سفارش‌ها» در پنل.', $error);
         $failure = ReportMessage::query()->where('topic', Topic::Errors->value)->sole();
-        self::assertSame(DeliveryRetry::buttons($order->id), $failure->keyboard, 'the bot admins\' retry under it');
+        self::assertSame([...DeliveryRetry::buttons($order->id), ...UserManagement::buttons($order->user_id)], $failure->keyboard, 'the bot admins\' retry under it, and «⚙️ مدیریت کاربر»');
         self::assertSame(["delivery:{$order->id}", "delivery:{$order->id}", true], [$failure->ref, $failure->reply_ref, $failure->clears_buttons], 'a failure after an earlier one answers it and takes its button');
         self::assertSame([], $this->reportedIn(Topic::Purchases));
 

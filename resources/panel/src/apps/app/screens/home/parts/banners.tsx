@@ -15,8 +15,8 @@ import { cn } from '@/lib/utils'
 
 /*
  * The home screen's banners, one at a time in a row that moves on by itself (parts/carousel): the shop's word to every
- * customer, the timed sales running now with the time each has left, and the wheel, the nightly draw and invitations
- * while the shop runs them. A tap leads to what the banner speaks of; under the row, a dot for each, 24px apart and
+ * customer, the timed sales running now with the time each has left (`GET /sales`: none for one no sale reaches), and the
+ * wheel and the nightly draw — while the perks reach the customer — and invitations while the shop runs them. A tap leads to what the banner speaks of; under the row, a dot for each, 24px apart and
  * tapped over 44px.
  */
 
@@ -62,8 +62,8 @@ function saleBanner(sale: StoreSale): Banner {
   }
 }
 
-/** The banners of what the shop runs, in order: its word, its sales, then its programs. */
-function bannersOf(shop: StoreResponse, sales: StoreSale[]): Banner[] {
+/** The banners of what the shop runs, in order: its word, its sales, then its programs (the wheel and the draw with `perks`). */
+function bannersOf(shop: StoreResponse, sales: StoreSale[], perks: boolean): Banner[] {
   const { programs } = shop.shop
   const announcement = shop.app?.announcement ?? null
   const banners: Banner[] = []
@@ -80,10 +80,10 @@ function bannersOf(shop: StoreResponse, sales: StoreSale[]): Banner[] {
     })
   }
   banners.push(...sales.map(saleBanner))
-  if (programs.wheel) {
+  if (perks && programs.wheel) {
     banners.push({ key: 'wheel', icon: FerrisWheel, colors: ['#7c4dff', '#d63ad8'], kicker: 'گردونه شانس', title: 'گردونه را بچرخانید و جایزه ببرید', to: '/club/wheel' })
   }
-  if (programs.lottery) {
+  if (perks && programs.lottery) {
     banners.push({ key: 'lottery', icon: Ticket, colors: ['#f7a400', '#f0590e'], kicker: 'قرعه‌کشی شبانه', title: 'هر شب بین خریداران فروشگاه قرعه‌کشی می‌شود', to: '/club/lottery' })
   }
   if (shop.referral.enabled) {
@@ -140,10 +140,10 @@ function Slide({ banner, onOpen }: { banner: Banner; onOpen: () => void }) {
   )
 }
 
-export function Banners({ shop }: { shop: StoreResponse }) {
+export function Banners({ shop, perks }: { shop: StoreResponse; perks: boolean }) {
   const navigate = useNavigate()
   const sales = useQuery({ queryKey: keys.sales, queryFn: () => store.get<StoreSalesResponse>('/sales') })
-  const banners = sales.isPending ? [] : bannersOf(shop, sales.data?.sales ?? [])
+  const banners = sales.isPending ? [] : bannersOf(shop, sales.data?.sales ?? [], perks)
   const { track, index, go, handlers, region } = useCarousel(banners.length)
 
   if (sales.isPending) return <Skeleton className="h-36" />

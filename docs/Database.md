@@ -64,7 +64,12 @@ An upgrade file:
   name (`plans.emoji_id`, `plan_categories.emoji_id`), a customer's own name for a service (`subscriptions.label`) and
   when support last read a ticket (`tickets.support_read_at`) —, a seventh column, a website's switch for sign-in by
   SMS (`websites.phone_login`, a boolean false by default), and the index a sign-in by SMS finds a customer's mobile by
-  (`users`: `bot_id`, `phone`), each added only while it is missing.
+  (`users`: `bot_id`, `phone`), each added only while it is missing; `0.9.0.php` the four tables of «انتقال از ربات
+  دیگر» (`imports`, `import_rows`, `import_links`, `import_problems`) — each made as `schema.php` makes it while the
+  database lacks it, then each of its indexes and foreign keys added again if a run stopped before MySQL got to it, as
+  `0.8.0.php` does for `mini_apps` —, the table of «تایید خودکار واریز»'s bank SMS (`deposits`), made the same way, and
+  two columns of `users`: a nullable `bought_elsewhere_at`, when an import learned a customer had bought in the bot the
+  shop came from, and `phone_exempt` (a boolean false by default), a customer support excused from the phone rule.
 
 `Core\Database\Upgrades` runs, in version order, the upgrades newer than the version the database is at and not newer
 than the code's. The database's version lives in the installation lock (`storage/installed.lock`, `Core\Installation`):
@@ -129,6 +134,22 @@ measured on MySQL and MariaDB:
   `Encrypted` and `EncryptedArray` casts under `APP_KEY`; a value that no longer decrypts reads as empty and is logged.
   What only proves its holder — a customer session's bearer token, the mini app's fingerprint secret for a session — is
   kept as its sha256 alone (`customer_sessions.token_hash`, `biometric_hash`), hidden from the model's arrays.
+- **Another bot's data** («انتقال از ربات دیگر», [Architecture](Architecture.md#imports)) is four tables: `imports` —
+  an import: the bot it is from (`migrator`), how its data came (`source`), its `phase`, how far its reading got
+  (`reading`) and the tables it found (`schema`), the survey, the owner's `choices`, its `stage` and `cursor`, its
+  tally (`counts`) and why it failed (`error`) —; `import_rows` — its staged copy of the other bot's rows, each a JSON
+  object of strings and nulls, the rows' ids their order, deleted as the import ends —; `import_links` — what imports
+  brought, each thing by its kind and the other bot's own key and the row it became (unique by shop, migrator, kind and
+  key), kept for good so a later import brings nothing twice —; and `import_problems` — what an import could not bring,
+  and why, for its report. An import's database connection (`connection`) and its panels' (`panels`) are encrypted with
+  `APP_KEY` by the import itself (`Core\Security\Encrypter`): the connection until its reading ends, the panels' — and
+  the secrets of its staged rows — until it ends. A customer an import learned had bought in the other bot carries
+  `users.bought_elsewhere_at` (`User::boughtElsewhere()`): no newcomer here, whatever they bought in the shop.
+- **The bank's deposit SMS** («تایید خودکار واریز», [Payment methods](Payment-Methods.md#confirmed-by-the-banks-sms))
+  are `deposits`: each SMS a phone app forwarded, once — unique by shop, the app (`source`) and the app's own id for it
+  (`external_id`), so a retry finds it —, with its sum in Rial, bank, sender and words (`body`), what came of it
+  (`status`, and `note` when it approved nothing) and the card payment it approved (`payment_id`). They are kept 90
+  days.
 - **Settings** a panel changes live in the `settings` table, a JSON value per key and bot (`Settings\Services\Settings`);
   the installation's own configuration is `config.php`, never the database ([Configuration](Configuration.md)).
 - **Rows written outside AmoBot** — imported, or added by hand in phpMyAdmin — may lack what AmoBot always writes: a

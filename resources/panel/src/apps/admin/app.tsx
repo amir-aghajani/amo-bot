@@ -137,7 +137,7 @@ export const ADMIN_ROUTES: RouteObject[] = [
                   { path: 'users/groups', element: <UsersPage /> },
                   { path: 'users/:id', element: <CustomerPage servers={ownerServers} serverPage={serverPage} agentPage={agentPage} /> },
                   { path: 'orders', element: <OrdersPage /> },
-                  { path: 'payments', element: <PaymentsPage /> },
+                  { path: 'payments/:section?', element: <PaymentsPage /> },
                   { path: 'subscriptions', element: <SubscriptionsPage servers={ownerServers} serverPage={serverPage} /> },
                   { path: 'referrals/:section?', element: <ReferralsPage /> },
                   { path: 'agents/:section?', element: <AgentsPage /> },

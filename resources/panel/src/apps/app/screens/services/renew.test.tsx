@@ -117,6 +117,26 @@ describe('a renewal', () => {
     expect(server().sent('POST', `${SERVICE}/renewal`)[0]?.body).toEqual({ method_id: 1, method: 'extend', discount_code: 'nowruz', expected_amount: '86400.00' })
   })
 
+  it('takes a free renewal with one button, naming no card transfer while another way is offered', async () => {
+    const free = preview()
+    free.renewal = { ...free.renewal, price: '0.00', discounts: [{ source: 'personal', label: 'تخفیف اختصاصی شما ۱۰۰٪', amount: '120000.00', percent: 100 }] }
+    server()
+      .on('GET', `${SERVICE}/renewal`, json(free))
+      .on('POST', `${SERVICE}/renewal`, json(checkout('renewal', '0.00')))
+    open()
+    // The card first: a card-to-card payment of nothing would be the bot's phone rule's `card` moment.
+    server().on('GET', `${API}/payment-methods`, json({ methods: [CARD, WALLET] }))
+
+    const take = await screen.findByRole('button', { name: 'دریافت رایگان' })
+    await until(() => expect((take as HTMLButtonElement).disabled).toBe(false))
+    expect(screen.queryByRole('radiogroup', { name: 'روش پرداخت' })).toBeNull()
+    fireEvent.click(take)
+
+    await until(() => expect(server().sent('POST', `${SERVICE}/renewal`)).toHaveLength(1))
+    expect(server().sent('POST', `${SERVICE}/renewal`)[0]?.body).toEqual({ method_id: WALLET.id, method: 'extend', expected_amount: '0.00' })
+    expect(server().sent('GET', `${API}/payment-methods`).at(-1)?.query.toString()).toBe('for=renewal')
+  })
+
   it('keeps the attempt’s key across a server failure, and takes a new one after the price changed', async () => {
     const answers = [
       refusal(500, 'خطای سرور'),

@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { rememberCheckout } from '@/apps/app/lib/checkout'
 import PayScreen from '@/apps/app/screens/pay/pay'
 import * as app from '@/apps/app/test/app'
-import { API, GATEWAY, storeCheckout, storeOrder, storePayment, storeSubscription, WALLET } from '@/apps/app/test/rows'
+import { API, GATEWAY, storeCheckout, storeOrder, storePayment, storeSubscription, storeTransfer, WALLET } from '@/apps/app/test/rows'
 import type { StoreOrder, StorePayLink } from '@/lib/api-types'
 import { until } from '@/test/render'
 import { json, refusal, server, withHeaders } from '@/test/server'
@@ -14,9 +14,11 @@ vi.mock('@/apps/app/config', () => import('@/apps/app/test/config'))
 /*
  * An order's payment (screens/pay/pay): what the checkout answered and the order as it stands decide it — a card to pay
  * (its number and the sum in Rial copied as a banking app takes them) and the receipt sent from the phone, then waiting
- * for support; a gateway's page opened in Telegram and asked about — opened no more once its time is up —, the order
- * watched until it is delivered; a service delivered at once. Reopened where the checkout's answer is gone, the order
- * alone says what to do. Minimised in Telegram, the screen reads nothing; back in front, it asks the gateway.
+ * for support — or, while the shop confirms transfers by itself, the exact sum alone, the order watched closely for its
+ * first minutes and the receipt put aside until asked for —; a gateway's page opened in Telegram and asked about —
+ * opened no more once its time is up —, the order watched until it is delivered; a service delivered at once. Reopened
+ * where the checkout's answer is gone, the order alone says what to do. Minimised in Telegram, the screen reads nothing;
+ * back in front, it asks the gateway.
  */
 
 /** Where the payment led: the service, or a checkout again. */
@@ -83,6 +85,91 @@ describe('paying by card', () => {
     fireEvent.change(screen.getByLabelText('تصویر رسید'), { target: { files: [new File(['receipt'], 'receipt.png', { type: 'image/png' })] } })
     await screen.findByRole('img', { name: 'تصویر رسید' })
     expect(mainButton.params.is_active).toBe(true)
+  })
+
+  it('while the shop confirms transfers by itself, asks the exact sum alone, puts the receipt aside, and moves on once the order is paid', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
+    const delivered = storeOrder({ status: 'fulfilled', subscription: { id: 17, name: 'ali_2' }, payments: [storePayment({ status: 'paid' })] })
+    rememberCheckout(storeCheckout({ transfer: storeTransfer({ auto_confirmed: true }) }))
+    let reads = 0
+    open(() => (++reads < 3 ? storeOrder() : delivered))
+
+    await screen.findByText('6037 9977 0000 1119')
+    expect(screen.getByText('۱٬۲۰۰٬۰۰۰ ریال')).toBeTruthy()
+    expect(screen.getByText('دقیقا همین مبلغ را واریز کنید؛ پرداخت شما معمولا تا یک دقیقه خودکار تایید می‌شود و نیازی به فرستادن رسید نیست.')).toBeTruthy()
+    expect(screen.getByText('در انتظار واریز؛ این صفحه خودش به‌روز می‌شود.')).toBeTruthy()
+    // The receipt aside: no picture asked for until the customer asks to send one.
+    expect(screen.getByText('اگر تا چند دقیقه تایید نشد، رسید را بفرستید.')).toBeTruthy()
+    expect(screen.queryByLabelText('تصویر رسید')).toBeNull()
+
+    // Read every few seconds, not every twenty: the bank's SMS comes within a minute.
+    await until(() => expect(reads).toBe(1))
+    await act(() => vi.advanceTimersByTimeAsync(5_000))
+    await until(() => expect(reads).toBe(2))
+    expect(screen.getByText('6037 9977 0000 1119')).toBeTruthy()
+    await act(() => vi.advanceTimersByTimeAsync(5_000))
+
+    await screen.findByRole('heading', { name: 'سرویس شما آماده است' })
+    fireEvent.click(screen.getByRole('button', { name: 'مشاهده سرویس' }))
+    await until(() => expect(where()).toBe('/services/17'))
+  })
+
+  it('keeps the receipt for a transfer the shop did not confirm by itself: asked for, its picture and «ارسال رسید»', async () => {
+    rememberCheckout(storeCheckout({ transfer: storeTransfer({ auto_confirmed: true }) }))
+    open(storeOrder())
+
+    fireEvent.click(await screen.findByRole('button', { name: 'ارسال رسید' }))
+
+    expect(screen.getByLabelText('تصویر رسید')).toBeTruthy()
+    expect(screen.queryByText('اگر تا چند دقیقه تایید نشد، رسید را بفرستید.')).toBeNull()
+    expect((screen.getByRole('button', { name: 'ارسال رسید' }) as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('watches a transfer the shop confirms by itself closely for its first minutes on screen, then as any card payment: every twenty seconds', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] })
+    rememberCheckout(storeCheckout({ transfer: storeTransfer({ auto_confirmed: true }) }))
+    open(storeOrder())
+    const reads = () => server().sent('GET', `${API}/orders/52`).length
+
+    await screen.findByText('6037 9977 0000 1119')
+    await until(() => expect(reads()).toBe(1))
+    vi.setSystemTime(Date.now() + 16 * 60_000)
+    await act(() => vi.advanceTimersByTimeAsync(5_000))
+    await until(() => expect(reads()).toBe(2))
+    await act(() => vi.advanceTimersByTimeAsync(5_000))
+    expect(reads()).toBe(2)
+    await act(() => vi.advanceTimersByTimeAsync(15_000))
+    await until(() => expect(reads()).toBe(3))
+  })
+
+  it('without it, reads a card payment every twenty seconds and asks for the receipt as ever', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
+    rememberCheckout(storeCheckout())
+    open(storeOrder())
+    const reads = () => server().sent('GET', `${API}/orders/52`).length
+
+    await screen.findByText('6037 9977 0000 1119')
+    expect(screen.queryByText(/خودکار تایید می‌شود/)).toBeNull()
+    expect(screen.getByLabelText('تصویر رسید')).toBeTruthy()
+    await until(() => expect(reads()).toBe(1))
+    await act(() => vi.advanceTimersByTimeAsync(5_000))
+    expect(reads()).toBe(1)
+    await act(() => vi.advanceTimersByTimeAsync(15_000))
+    await until(() => expect(reads()).toBe(2))
+  })
+
+  it('in support’s private chat while the shop confirms transfers by itself, gives the exact sum to copy and asks no receipt but on need', async () => {
+    const copy = vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue()
+    rememberCheckout(
+      storeCheckout({ transfer: storeTransfer({ card: null, holder: null, bank: null, contact: { text: '@sample_support', url: 'https://t.me/sample_support' }, auto_confirmed: true }) }),
+    )
+    open(storeOrder())
+
+    await screen.findByRole('heading', { name: 'پرداخت با پشتیبانی' })
+    expect(screen.getByText(/دقیقا همین مبلغ را واریز کنید؛ پرداخت شما معمولا تا یک دقیقه خودکار تایید می‌شود/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: /کپی به ریال/ }))
+    expect(copy).toHaveBeenLastCalledWith('1200000')
+    expect(screen.getByText('در انتظار واریز؛ این صفحه خودش به‌روز می‌شود.')).toBeTruthy()
   })
 
   it('reopened without the checkout’s answer, sends the customer for the card again — the same order shows it', async () => {

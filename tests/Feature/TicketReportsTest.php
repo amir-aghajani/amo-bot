@@ -17,6 +17,7 @@ use App\Modules\Telegram\Models\ReportMessage;
 use App\Modules\Telegram\Reports\GroupButtons;
 use App\Modules\Telegram\Reports\ReportSender;
 use App\Modules\Telegram\Reports\TicketClose;
+use App\Modules\Telegram\Reports\UserManagement;
 use App\Modules\Telegram\Tasks\SendReportsTask;
 use App\Modules\Telegram\Texts\BotText;
 use App\Modules\Telegram\Texts\TelegramHtml;
@@ -73,7 +74,7 @@ final class TicketReportsTest extends BotTestCase
         self::assertStringContainsString('<a href="tg://user?id=5252">Ali</a> · ' . "\u{200E}@ali", $photo['caption']);
         self::assertStringContainsString('📌 موضوع: قطعی اتصال', $photo['caption']);
         self::assertStringContainsString('سرویس وصل نمی‌شود.', $photo['caption']);
-        self::assertSame(TicketClose::buttons($ticket->id), FakeTelegram::markupOf($photo)['inline_keyboard'] ?? null);
+        self::assertSame([...TicketClose::buttons($ticket->id), ...UserManagement::buttons($ticket->user_id)], FakeTelegram::markupOf($photo)['inline_keyboard'] ?? null, 'and «⚙️ مدیریت کاربر»');
     }
 
     public function testALongMessageIsCutToWhatTelegramTakesTheWholeOnThePanel(): void
@@ -105,8 +106,8 @@ final class TicketReportsTest extends BotTestCase
         self::assertSame(['sendMessage', 'editMessageReplyMarkup'], $this->telegram()->calls());
         self::assertSame($first, $this->telegram()->replyTarget(0), 'under the ticket');
         self::assertStringContainsString("💬 <b>پیام مشتری</b> · تیکت \u{200E}#{$ticket->id} · از وب‌سایت", $this->telegram()->params(0)['text']);
-        self::assertSame(TicketClose::buttons($ticket->id), $this->inlineKeyboard(0), 'the button handed down');
-        self::assertSame([], $this->buttonsUnder($first), 'the last report loses its own');
+        self::assertSame([...TicketClose::buttons($ticket->id), ...UserManagement::buttons($ticket->user_id)], $this->inlineKeyboard(0), 'the button handed down');
+        self::assertSame(UserManagement::buttons($ticket->user_id), $this->buttonsUnder($first), 'the last report loses its own — but its «⚙️ مدیریت کاربر»');
         $second = (int) ReportMessage::query()->latest('id')->firstOrFail()->message_id;
 
         $this->tickets->answer($ticket->refresh(), $this->panelActor(), ['body' => 'بررسی می‌کنیم.'], null);
@@ -142,7 +143,7 @@ final class TicketReportsTest extends BotTestCase
             self::assertStringContainsString($body, $text);
         }
         self::assertSame(3, substr_count($text, "💬 <b>پیام مشتری</b> · تیکت \u{200E}#{$ticket->id}"), 'each message under its own line');
-        self::assertSame(TicketClose::buttons($ticket->id), $this->inlineKeyboard(0));
+        self::assertSame([...TicketClose::buttons($ticket->id), ...UserManagement::buttons($ticket->user_id)], $this->inlineKeyboard(0));
 
         // Sent, it is the ticket's last report: the next message goes under it, a report of its own.
         $post = (int) $waiting->refresh()->message_id;
@@ -313,15 +314,16 @@ final class TicketReportsTest extends BotTestCase
 
         $this->send($this->groupTap(TicketClose::PREFIX . $ticket->id, $post, $this->threads['tickets']));
 
+        $manage = UserManagement::buttons($ticket->user_id);
         self::assertSame([TicketStatus::Closed, '🔒 تیکت بسته شد.'], [$ticket->refresh()->status, $this->popup()]);
-        self::assertSame([], $this->buttonsUnder($post));
+        self::assertSame($manage, $this->buttonsUnder($post), 'nothing left to press but «⚙️ مدیریت کاربر»');
         self::assertSame([self::text(BotText::TicketClosed, ['ticket' => (string) $ticket->id, 'subject' => 'قطعی اتصال'])], $this->telegram()->sentTo(5252), 'the customer told');
         $closing = ReportMessage::query()->latest('id')->firstOrFail();
-        self::assertSame(["🔒 تیکت \u{200E}#{$ticket->id} بسته شد — پشتیبانی آن را بست.", "ticket:{$ticket->id}", true, null], [$closing->text, $closing->reply_ref, $closing->clears_buttons, $closing->keyboard]);
+        self::assertSame(["🔒 تیکت \u{200E}#{$ticket->id} بسته شد — پشتیبانی آن را بست.", "ticket:{$ticket->id}", true, $manage], [$closing->text, $closing->reply_ref, $closing->clears_buttons, $closing->keyboard]);
 
         $this->send($this->groupTap(TicketClose::PREFIX . $ticket->id, $post, $this->threads['tickets']));
         self::assertSame(Tickets::CLOSED, $this->popup(), 'a stale button decides nothing');
-        self::assertSame([], $this->buttonsUnder($post));
+        self::assertSame($manage, $this->buttonsUnder($post));
 
         $this->send($this->groupTap(TicketClose::PREFIX . '999', $post, $this->threads['tickets']));
         self::assertSame('این تیکت پیدا نشد.', $this->popup());

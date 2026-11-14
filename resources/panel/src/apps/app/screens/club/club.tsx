@@ -2,6 +2,7 @@ import type { ComponentType } from 'react'
 import { Coins, Crown, FerrisWheel, Gift, Ticket, UsersRound } from 'lucide-react'
 import { Link } from 'react-router'
 import { useAccount, useShop } from '@/apps/app/lib/session'
+import { perksReach } from '@/apps/app/screens/home/parts/programs'
 import { tap } from '@/apps/app/telegram/haptics'
 import { Screen } from '@/apps/app/ui/screen'
 import { Section } from '@/apps/app/ui/section'
@@ -13,7 +14,8 @@ import { formatMoney, formatPercent } from '@/lib/format'
 /*
  * «باشگاه مشتریان»: what the shop gives back to those who buy from it, each part only while it runs — the customer's
  * loyalty tier with its perks and how far the next one is, the cashback every delivered order earns, and the ways in to
- * the lucky wheel, the nightly draw and the referral program.
+ * the lucky wheel, the nightly draw and the referral program. For a customer the perks do not reach (`GET /me` `perks`
+ * false), only the referral program.
  */
 
 /** The customer's tier: its name and perks, a bar to the next tier and what is left to reach it. */
@@ -107,7 +109,8 @@ export default function ClubScreen() {
     )
   }
 
-  const { programs } = shop.shop
+  const perks = perksReach(account)
+  const programs = { ...shop.shop.programs, ...(perks ? {} : { loyalty: false, cashback: false, wheel: false, lottery: false }) }
   const tiles: Tile[] = [
     ...(programs.wheel ? [{ to: '/club/wheel', title: 'گردونه شانس', text: 'بچرخانید و جایزه ببرید', icon: FerrisWheel, tint: ACCENT_FILL }] : []),
     ...(programs.lottery ? [{ to: '/club/lottery', title: 'قرعه‌کشی شبانه', text: 'هر شب جایزه برای خریداران', icon: Ticket, tint: 'var(--app-warning)' }] : []),

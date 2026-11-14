@@ -28,6 +28,7 @@ use App\Modules\Orders\Exceptions\TooManyUnpaidOrdersException;
 use App\Modules\Orders\Models\Order;
 use App\Modules\Orders\Services\OrderService;
 use App\Modules\Orders\Services\Pricing;
+use App\Modules\Payments\Deposits\Services\DepositSettings;
 use App\Modules\Payments\DTO\CheckoutResult;
 use App\Modules\Payments\Enums\CheckoutOutcome;
 use App\Modules\Payments\Exceptions\MethodUnavailableException;
@@ -133,6 +134,7 @@ final class CustomerCheckout
         private readonly RateLimiter $limiter,
         private readonly BotSettings $bot,
         private readonly DiscountCodes $codes,
+        private readonly DepositSettings $deposits,
     ) {}
 
     /**
@@ -483,7 +485,7 @@ final class CustomerCheckout
      * (delivered()). A checkout that paid nothing is refused instead — an online gateway that would not open the payment
      * among them, in the payment's note.
      *
-     * @return array{outcome: string, order: array<string, mixed>, transfer: array{payment_id: int, amount: string, card: string|null, holder: string|null, bank: string|null, instructions: string|null, contact: array{text: string, url: string|null}|null}|null, link: array<string, mixed>|null, subscription: array<string, mixed>|null}
+     * @return array{outcome: string, order: array<string, mixed>, transfer: array{payment_id: int, amount: string, amount_rial: string, card: string|null, holder: string|null, bank: string|null, instructions: string|null, contact: array{text: string, url: string|null}|null, auto_confirmed: bool}|null, link: array<string, mixed>|null, subscription: array<string, mixed>|null}
      * @throws CheckoutRefusedException 422 the wallet short, or its refusal; 409 paid or closed elsewhere a moment ago, or — made again — cancelled since
      */
     public function answer(User $customer, CheckoutResult $result): array
@@ -529,9 +531,10 @@ final class CustomerCheckout
      * A card transfer's details, as the bot shows them (CheckoutScreen): the payment the receipt is for, the amount (and,
      * in Rial, the digits a banking app takes: Money::rials()), the card and the method's note — or, for a payment shown
      * no card, taken in support's private chat (PaymentCards::toSupport()), the way to support instead (`contact`: as
-     * written in the bot's settings, and as a link when it is one).
+     * written in the bot's settings, and as a link when it is one). `auto_confirmed` while its own bank SMS approves it
+     * (DepositSettings::approvesItself()): the exact sum approves itself, no receipt needed unless it does not.
      *
-     * @return array{payment_id: int, amount: string, amount_rial: string, card: string|null, holder: string|null, bank: string|null, instructions: string|null, contact: array{text: string, url: string|null}|null}
+     * @return array{payment_id: int, amount: string, amount_rial: string, card: string|null, holder: string|null, bank: string|null, instructions: string|null, contact: array{text: string, url: string|null}|null, auto_confirmed: bool}
      */
     private function transfer(CheckoutResult $result): array
     {
@@ -547,6 +550,7 @@ final class CustomerCheckout
             'bank' => $card->bank,
             'instructions' => $card->instructions !== '' ? $card->instructions : null,
             'contact' => $card->card === null ? ['text' => $this->bot->supportContact(), 'url' => $this->bot->supportUrl()] : null,
+            'auto_confirmed' => $this->deposits->approvesItself($result->payment()),
         ];
     }
 

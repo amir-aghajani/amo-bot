@@ -82,6 +82,8 @@ const DERIVED: Record<Area, QueryKey[]> = {
     queryKeys.paymentMethods, // each method's payments counted
     queryKeys.dashboards, // the revenue, the receipts to review
     queryKeys.queues, // the sidebar's receipts to review
+    queryKeys.deposits, // a bank SMS's payment, approved by it
+    queryKeys.depositSettings, // when the last SMS came, and those that approved nothing
   ],
   subscriptions: [
     queryKeys.subscriptions,

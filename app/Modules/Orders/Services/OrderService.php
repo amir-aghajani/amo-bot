@@ -12,6 +12,7 @@ use App\Modules\Agency\Exceptions\TrafficShortException;
 use App\Modules\Agency\Services\AgencySettings;
 use App\Modules\Agency\Services\AgencyStanding;
 use App\Modules\Agency\Services\TrafficPool;
+use App\Modules\Bots\CurrentBot;
 use App\Modules\Bots\Exceptions\SellingSuspendedException;
 use App\Modules\Catalog\DTO\CustomPrice;
 use App\Modules\Catalog\Models\Plan;
@@ -733,10 +734,14 @@ final class OrderService
     /**
      * Whether another purchase of the customer's was paid before this one (by `paid_at`, then id) and not given back:
      * any purchase (Order::bought(), the first-purchase price's rule), or with `$withPrice` one with a price
-     * (Order::keptPurchases(), which purchase is a referral's first — ReferralGifts).
+     * (Order::keptPurchases(), which purchase is a referral's first — ReferralGifts). A customer who bought in the bot the
+     * shop came from (User::boughtElsewhere()) bought before whatever they buy here.
      */
     public static function boughtBefore(Order $order, bool $withPrice = false): bool
     {
+        if (User::query()->withoutGlobalScope(CurrentBot::SCOPE)->whereKey($order->user_id)->whereNotNull('bought_elsewhere_at')->exists()) {
+            return true;
+        }
         $paidAt = Payment::query()->where('order_id', $order->id)->whereNotNull('paid_at')->min('paid_at');
         $before = Payment::query()->select('order_id')->whereNotNull('paid_at')->where(static fn(Builder $payment) => $payment
             ->where('paid_at', '<', $paidAt)

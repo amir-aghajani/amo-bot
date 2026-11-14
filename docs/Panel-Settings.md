@@ -3,8 +3,8 @@
 # Panel settings
 
 «تنظیمات» at the foot of the sidebar › «تنظیمات پنل», the owner's: the installation's own settings — what `config.php`
-keeps ([Configuration](Configuration.md)) —, your login, the backups, the scheduled tasks' times and AmoBot's own
-update. Each section is a page of its own, and each card on it is saved on its own («زمان‌بندی کارها» saves its page
+keeps ([Configuration](Configuration.md)) —, your login, the backups, the import from another bot, the scheduled tasks'
+times and AmoBot's own update. Each section is a page of its own, and each card on it is saved on its own («زمان‌بندی کارها» saves its page
 whole). An agent's «تنظیمات پنل» has two sections alone: «ظاهر», and «پشتیبان‌گیری» for their own shop's backups.
 
 **A secret** — a token, a password, a key — is never shown back: its field shows a hint of it (a token's last four
@@ -148,6 +148,23 @@ shop's alone. Four cards:
 
 A restore signs customers out of the websites and the mini app — every shop's, or the one shop's —, never anyone out of
 the panels. What is in a backup, what is not, and moving to another host: [Backups](Backups.md).
+
+## Importing from another bot
+
+«انتقال از ربات دیگر», after «پشتیبان‌گیری» — in the main shop alone: with an agent's shop open, the list leaves it out.
+Another Telegram bot's customers, their wallets and services, its plans, codes, required channels and bank cards brought
+into the main shop, with nothing changed on the VPN panels or in the other bot:
+
+- **«انتقال تازه»** — the bot (today Faoxima), then where its data is read from: «فایل پشتیبان» (its backup, or an export
+  of its database — the largest file the host takes said under it) or «اتصال به دیتابیس». For the import you keep, stop
+  the other bot before its backup, as both tabs say: what changes there after it does not come.
+- **The reading**, then **the review** — what it found, where each of its panels' services go, the switches of what to
+  bring, what stays behind —, **«شروع انتقال»**, and **the writing**: each a step at a time while the page is open,
+  going on where it stopped when you come back; «لغو انتقال» stops it.
+- **The report** — what each kind came to and «آنچه نیامد» —, and «انتقال‌های قبلی», the earlier imports with theirs.
+
+An import left open and untouched a week is cancelled by «پاک‌سازی انتقال‌ها» in [«زمان‌بندی کارها»](#the-task-schedule).
+Everything about it: [Importing from another bot](Importing.md).
 
 ## The task schedule
 

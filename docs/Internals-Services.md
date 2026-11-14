@@ -11,7 +11,7 @@ of them is in [Servers](Servers.md), [Services](Services.md), [Test accounts](Te
 
 | Module | Holds |
 |---|---|
-| `app/Modules/Providers` | Servers, the connector contract, the 3X-UI, PasarGuard and HMPanel connectors, panel health |
+| `app/Modules/Providers` | Servers, the connector contract, the 3X-UI, PasarGuard, HMPanel and Marzban connectors, panel health |
 | `app/Modules/Subscriptions` | Services, provisioning, the operations, grants, renewals, extras, reminders, free test accounts, the automatic removal, the sync |
 | `app/Modules/Bots` | The bots, `CurrentBot` and the shop scope |
 | `app/Modules/Notifications` | Every notice a customer gets, kept for their website and sent by Telegram or email |
@@ -43,6 +43,13 @@ limit the panel enforces).
 - **HMPanel** (`Drivers/HmPanel`, 2.5+): `HmPanelClient` (its `hmp_…` API key, the one way in) → `HmPanelProvider`. The
   inbounds of the 3x-ui panels beneath it, one panel a client; clients found by name through lookup, then called by
   HMPanel's id; 3x-ui's term and IP limit passed on; no status, no rotation; a key's calls per minute kept few.
+- **Marzban** (`Drivers/Marzban`, 0.8+): `MarzbanClient` (an admin's login traded for a bearer token, kept across
+  requests by `MarzbanTokens`) → `MarzbanProvider`. The Xray config's inbounds by tag; a term from the first connection
+  is "on hold"; every update reads the user and sends its next plan back, and a traffic reset puts its status back; no
+  IP limit; rotation by revoking the subscription; a link claimed is asked of the panel's own subscription route; a
+  non-sudo admin's server is read client by client (`listClients()` unsupported). Marzban and PasarGuard cannot clear
+  an on-hold duration through their APIs: a switched-off client without a deadline that carries one reads as waiting,
+  as the panels read it, and PasarGuard's connector puts back active one it put on hold that is not waiting.
 - **Shared** (`Providers/Support`): `PanelConnection` and `PanelCredentials` (the fields every connector's form shares,
   and how a stored server reads them back), `PanelHttp` (the one request shape — the connection's TLS rule and
   timeouts, redirects never followed — and the readings of an answer that is not the API), `Raw` (defensive readers
@@ -64,7 +71,10 @@ its links' prefix reads them with `addresses()` from `base_url` and `meta` alone
 
 `ProviderRegistry::forServer()` reuses a server's client for five minutes while its connection is unchanged, so one
 sign-in serves many calls; a 3X-UI session or a PasarGuard token is not renewed per call (PasarGuard notifies its admins
-of every sign-in). A server not stored yet — a probe of the add-server form — gets a client of its own.
+of every sign-in). A Marzban token outlives even that: `MarzbanTokens` keeps it encrypted in `storage/cache/panel-tokens`
+until shortly before it ends, for that server, its way in and its login alone, so every PHP request — the bot's steps,
+a sync, an import — does not sign in afresh (Marzban, too, tells its admins of each sign-in). A server not stored yet —
+a probe of the add-server form — gets a client of its own.
 
 `ServerService` is everything the owner does with a server: one form for every connector (the server's own fields around
 the connector's form, checked as one, every refusal at once), the probe (each question asked on its own once the
@@ -564,7 +574,9 @@ A customer claims a client made by hand on a panel by sending its link ([Service
   already or someone else's, except the customer's own row marked `deleted` (its client gone, now back): that stale row
   is deleted, the panel untouched, and the client claimed afresh. One without a subscription link is refused.
 - **The row** is `ProvisioningService::adopt()`: through `values()`, as a sync would write it, with `claimed_at`, no
-  plan — unless it replaces the customer's own stale record of the client, whose plan and «تمدید خودکار» carry over —,
+  plan — unless it replaces the customer's own stale record of the client, whose plan and «تمدید خودکار» carry over, or
+  an import of another bot brings it with its plan (`claimed_at` null: sold from that plan, no claim), whether it is a
+  test and the customer's name for it ([Architecture](Architecture.md#imports)) —,
   the panel's IP limit (`ClientInfo::$ipLimit`, so a later update does not wipe
   it) and, for a deadline still ahead, the hours left to it as its term — `starts_at` left null, since the panel does
   not say when its clock started (`ServiceTerms::startedAt()` keeps a start unknown while the clock runs). A client

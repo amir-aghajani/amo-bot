@@ -80,10 +80,10 @@ final class PanelProbeCommandTest extends DatabaseTestCase
 
     public function testAConnectorThatIsNotThereIsAnInvalidCall(): void
     {
-        $probe = $this->probe(['driver' => 'marzban', 'url' => 'https://panel.example', '--token' => 't']);
+        $probe = $this->probe(['driver' => 'nopanel', 'url' => 'https://panel.example', '--token' => 't']);
 
         self::assertSame(Command::INVALID, $probe->getStatusCode());
-        self::assertStringContainsString('No connector "marzban".', $probe->getDisplay());
+        self::assertStringContainsString('No connector "nopanel".', $probe->getDisplay());
         self::assertSame([], $this->panelHttp()->calls());
     }
 

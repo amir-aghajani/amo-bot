@@ -157,6 +157,12 @@ const TRANSFER: NonNullable<StoreCheckout['transfer']> = {
   bank: 'ملت',
   instructions: 'شماره پیگیری را نگه دارید.',
   contact: null,
+  auto_confirmed: false,
+}
+
+/** The card to pay order 52 to, with what else is told (a transfer the shop confirms by itself: `auto_confirmed`). */
+export function storeTransfer(overrides: Partial<NonNullable<StoreCheckout['transfer']>> = {}): NonNullable<StoreCheckout['transfer']> {
+  return { ...TRANSFER, ...overrides }
 }
 
 /** What a checkout of order 52 answered: a card to pay, unless told otherwise. */

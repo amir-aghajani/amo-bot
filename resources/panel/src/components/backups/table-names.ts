@@ -31,6 +31,7 @@ export const TABLE_NAMES: Partial<Record<string, string>> = {
   cashbacks: 'کش‌بک‌ها',
   lottery_draws: 'قرعه‌کشی‌ها',
   payments: 'پرداخت‌ها',
+  deposits: 'واریزهای پیامکی',
   referral_commissions: 'پورسانت‌ها',
   referral_bonuses: 'هدیه‌های شروع',
   referral_rewards: 'جایزه‌های دعوت',
@@ -42,6 +43,7 @@ export const TABLE_NAMES: Partial<Record<string, string>> = {
   report_chats: 'گروه گزارش‌ها',
   report_topics: 'تاپیک‌های گروه گزارش‌ها',
   custom_emojis: 'ایموجی‌های پرمیوم',
+  import_links: 'آنچه از ربات قبلی آمده',
   // A shop's by their parent.
   customer_group_user: 'اعضای گروه‌های کاربران',
   plan_servers: 'سرورهای پلن‌ها',
@@ -63,4 +65,6 @@ export const TABLE_NAMES: Partial<Record<string, string>> = {
   migration_failures: 'سرویس‌های منتقل‌نشده',
   migration_leftovers: 'باقی‌مانده‌های انتقال',
   traffic_transactions: 'تراکنش‌های ترافیک',
+  imports: 'انتقال‌ها از ربات دیگر',
+  import_problems: 'آنچه در انتقال‌ها نیامد',
 }

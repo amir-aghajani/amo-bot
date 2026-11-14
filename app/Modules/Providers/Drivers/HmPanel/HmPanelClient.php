@@ -49,7 +49,7 @@ final class HmPanelClient
 
     /** What to do about a refused key, in HMPanel's own terms — appended to the generic explanation. */
     private const HINT_KEY = 'کلید API پیدا نشد یا لغو شده است، یا ادمینی که کلید به نام اوست در HMPanel غیرفعال یا منقضی شده؛ در «تنظیمات ← API» پنل کلید تازه‌ای بسازید یا آن ادمین را فعال کنید.';
-    private const HINT_ADDRESS = 'آدرس پنل همان آدرس صفحه ورود HMPanel است، بدون مسیرهایی مثل /api یا /dashboard (مثل https://panel.example.com)، و نسخه پنل باید 2.5 یا بالاتر باشد.';
+    private const HINT_ADDRESS = "آدرس پنل همان آدرس صفحه ورود HMPanel است، بدون مسیرهایی مثل \u{2068}/api\u{2069} یا \u{2068}/dashboard\u{2069} (مثل https://panel.example.com)، و نسخه پنل باید 2.5 یا بالاتر باشد.";
     private const HINT_REDIRECT = 'معمولا https به‌جای http، یا آدرس دیگری برای پنل.';
     private const HINT_NOT_API = 'احتمالا آدرس پنل اشتباه است، مثلا آدرس یکی از صفحه‌های پنل یا سایتی دیگر.';
 

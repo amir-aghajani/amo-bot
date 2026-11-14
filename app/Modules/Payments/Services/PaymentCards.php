@@ -9,8 +9,11 @@ use App\Core\Forms\Fields\FieldRefused;
 use App\Modules\Bots\CurrentBot;
 use App\Modules\Orders\Enums\OrderStatus;
 use App\Modules\Orders\Enums\OrderType;
+use App\Modules\Payments\Deposits\Services\Deposits;
+use App\Modules\Payments\Deposits\Services\DepositSettings;
 use App\Modules\Payments\Drivers\Manual\CardNumber;
 use App\Modules\Payments\Enums\PaymentStatus;
+use App\Modules\Payments\Models\Deposit;
 use App\Modules\Payments\Models\Payment;
 use App\Modules\Payments\Models\PaymentCard;
 use App\Modules\Payments\Models\PaymentMethod;
@@ -33,14 +36,23 @@ use Illuminate\Database\Eloquent\Builder;
  *
  * While the shop takes card payments in support's private chat (toSupport()), no card is picked: a payment is shown none
  * (payments.card_id null — "sent to support's chat" wherever it is shown), takes no card's room, and the method is
- * offered whatever its cards' switches and caps. A top-up still asks its few Toman more, a sum no other open payment of
- * the method shown no card asks: support tells the receipts sent to their chat apart by it. Shown a card later, it keeps
- * that sum unless another open payment to the card asks it — then it is given a fresh one.
+ * offered whatever its cards' switches and caps. A top-up still asks its few Toman more (listening to the bank SMS, any
+ * order: below), a sum no other open payment of the method shown no card asks: support tells the receipts sent to their
+ * chat apart by it. Shown a card later, it keeps that sum unless another payment asks it — then it is given a fresh one.
+ *
+ * While the shop listens to its bank SMS («تایید خودکار واریز», Deposits\Services\DepositSettings), every card payment —
+ * a purchase, a renewal, an extra as much as a top-up — asks 1 to VERIFIED_EXTRA_MAX Toman more, a sum no other card
+ * payment of the shop may still be paid at asks (whatever its method or card: takenWhileListening()): the SMS's sum then
+ * names one payment (Deposits). The few Toman are part of what the customer paid: a top-up credits them, a refund gives
+ * them back.
  */
 final class PaymentCards
 {
     /** The most cards a method keeps. */
     public const MOST = 20;
+
+    /** The most Toman a card payment asks above its order while the shop listens to its bank SMS. */
+    public const VERIFIED_EXTRA_MAX = 999;
 
     private const HOLDER_MAX = 100;
     private const BANK_MAX = 60;
@@ -51,6 +63,7 @@ final class PaymentCards
     public function __construct(
         private readonly WalletSettings $wallet,
         private readonly PaymentSettings $settings,
+        private readonly DepositSettings $deposits,
     ) {}
 
     /**
@@ -63,12 +76,12 @@ final class PaymentCards
     }
 
     /**
-     * Whether the method takes a `$type` order of `$amount` now: an enabled card of it has room for it today (a top-up's
-     * few Toman more counted, most()) — or `$customer` holds a payment of it shown a card, waiting for its transfer, on an
-     * open order of that kind and amount: asking again shows them that payment again, its card switched off or full since
-     * or not (PaymentService reuses the order and its payment), and takes no more room. For any amount (null), an enabled
-     * card, or such a payment of any amount. While the shop takes card payments in support's private chat (toSupport()),
-     * any: no card is picked.
+     * Whether the method takes a `$type` order of `$amount` now: an enabled card of it has room for it today (the few
+     * Toman amountFor() may add counted, most()) — or `$customer` holds a payment of it shown a card, waiting for its
+     * transfer, on an open order of that kind and amount: asking again shows them that payment again, its card switched
+     * off or full since or not (PaymentService reuses the order and its payment), and takes no more room. For any amount
+     * (null), an enabled card, or such a payment of any amount. While the shop takes card payments in support's private
+     * chat (toSupport()), any: no card is picked.
      */
     public function offers(PaymentMethod $method, OrderType $type, ?string $amount, ?User $customer = null): bool
     {
@@ -86,9 +99,9 @@ final class PaymentCards
 
     /**
      * A card for a new payment of a `$type` order of `$amount`: one at random among the method's enabled cards with room
-     * for it (a top-up's few Toman more counted, most()); null when none has. Inside the caller's transaction the cards
-     * are locked as they are read, and what they took read as it stands (a locking read): of two payments at once, the
-     * second waits for the first and is held to what it took.
+     * for it (the few Toman amountFor() may add counted, most()); null when none has. Inside the caller's transaction
+     * the cards are locked as they are read, and what they took read as it stands (a locking read): of two payments at
+     * once, the second waits for the first and is held to what it took.
      */
     public function pick(PaymentMethod $method, OrderType $type, string $amount): ?PaymentCard
     {
@@ -99,27 +112,39 @@ final class PaymentCards
 
     /**
      * What a new payment of the method shown `$card` asks for a `$type` order of `$amount`: the amount itself — or, for a
-     * top-up, the amount and 1 to extra() Toman more at random, a sum no other open payment to the card asks (any, should
-     * every one be asked). Shown no card (toSupport()), no other open payment of the method shown none. `$keeping`: the
-     * sum a payment shown no card asked before it is shown `$card` now — kept, unless another open payment to the card
-     * asks it too. In the caller's transaction, after pick(): those payments are read as they stand — with no card to
-     * hold, the method's row is locked first, so of two payments at once the second waits for the first's sum.
+     * top-up (while the shop listens to its bank SMS, any order), the amount and 1 to extra() Toman more at random, a sum
+     * no other open payment to the card asks (any, should every one be asked). Listening, a sum takenWhileListening()
+     * leaves free; shown no card (toSupport()), one no other open payment of the method shown none asks. `$keeping`: the
+     * payment shown no card that is shown `$card` now — it keeps its sum, unless another payment asks it too. In the
+     * caller's transaction, after pick(): those payments are read as they stand — the method's row locked first (every
+     * card method's of the shop, in one order, while listening), so of two payments at once the second waits for the
+     * first's sum.
      */
-    public function amountFor(PaymentMethod $method, ?PaymentCard $card, OrderType $type, string $amount, ?string $keeping = null): string
+    public function amountFor(PaymentMethod $method, ?PaymentCard $card, OrderType $type, string $amount, ?Payment $keeping = null): string
     {
         $most = $this->extra($method, $type, $amount);
         if ($most <= 0) {
-            return Money::normalize($keeping ?? $amount);
+            return Money::normalize($keeping->amount ?? $amount);
         }
 
-        if ($card === null) {
+        $listening = $this->deposits->enabled();
+        if ($listening) {
+            PaymentMethod::query()->where('driver', $method->driver)->orderBy('id')->lockForUpdate()->get();
+        } elseif ($card === null) {
             PaymentMethod::query()->whereKey($method->id)->lockForUpdate()->first();
         }
-        $open = $card === null ? $method->payments()->whereNull('card_id') : $card->payments();
-        $asked = array_flip($open->whereIn('status', [PaymentStatus::Pending->value, PaymentStatus::AwaitingReview->value])
-            ->lockForUpdate()->pluck('amount')->map(static fn(mixed $sum): string => Money::normalize((string) $sum))->all());
-        if ($keeping !== null && !isset($asked[Money::normalize($keeping)])) {
-            return Money::normalize($keeping);
+        $waiting = [PaymentStatus::Pending->value, PaymentStatus::AwaitingReview->value];
+        $open = match (true) {
+            $listening => self::takenWhileListening($method->driver),
+            $card === null => $method->payments()->whereNull('card_id')->whereIn('status', $waiting),
+            default => $card->payments()->whereIn('status', $waiting),
+        };
+        if ($keeping !== null) {
+            $open->whereKeyNot($keeping->id);
+        }
+        $asked = array_flip($open->lockForUpdate()->pluck('amount')->map(static fn(mixed $sum): string => Money::normalize((string) $sum))->all());
+        if ($keeping !== null && !isset($asked[Money::normalize($keeping->amount)])) {
+            return Money::normalize($keeping->amount);
         }
         $free = array_values(array_filter(range(1, $most), static fn(int $extra): bool => !isset($asked[Money::add($amount, $extra)])));
         $extra = $free === [] ? random_int(1, $most) : $free[random_int(0, count($free) - 1)];
@@ -303,6 +328,26 @@ final class PaymentCards
             ->exists();
     }
 
+    /**
+     * The shop's card payments (of `$driver`) whose sum a new one may not ask while the shop listens to its bank SMS: any
+     * its SMS may still approve (Deposits: waiting for the transfer or the receipt's review, or refused on an open order),
+     * and any whose sum a customer may have been shown within Deposits::LISTENS_BACK_HOURS — refused, dropped, or paid
+     * with no SMS naming it yet —: a late transfer of it must find no other payment to pay.
+     *
+     * @return Builder<Payment>
+     */
+    private static function takenWhileListening(string $driver): Builder
+    {
+        $recently = now()->subHours(Deposits::LISTENS_BACK_HOURS);
+
+        return Payment::query()->whereRelation('method', 'driver', $driver)->where(static fn(Builder $taken) => $taken
+            ->whereIn('status', [PaymentStatus::Pending->value, PaymentStatus::AwaitingReview->value])
+            ->orWhere(static fn(Builder $refused) => $refused->where('status', PaymentStatus::Failed->value)->whereRelation('order', 'status', OrderStatus::Pending->value))
+            ->orWhere(static fn(Builder $closed) => $closed->whereIn('status', [PaymentStatus::Failed->value, PaymentStatus::Cancelled->value])->where('updated_at', '>=', $recently))
+            ->orWhere(static fn(Builder $paid) => $paid->where('status', PaymentStatus::Paid->value)->where('paid_at', '>=', $recently)
+                ->whereNotIn('id', Deposit::query()->select('payment_id')->whereNotNull('payment_id'))));
+    }
+
     /** The most a payment of the method for a `$type` order of `$amount` may ask: with the few Toman amountFor() may add. */
     private function most(PaymentMethod $method, OrderType $type, string $amount): string
     {
@@ -311,12 +356,15 @@ final class PaymentCards
 
     /**
      * The most Toman amountFor() may add to a `$type` order of `$amount` paid with the method: a top-up's
-     * WalletSettings::uniqueMax(), held so the sum stays within the method's `max_amount` — none when the amount is its
-     * most already —; nothing for any other order.
+     * WalletSettings::uniqueMax() — while the shop listens to its bank SMS, any order's VERIFIED_EXTRA_MAX, or more —,
+     * held so the sum stays within the method's `max_amount` (none when the amount is its most already); else nothing.
      */
     private function extra(PaymentMethod $method, OrderType $type, string $amount): int
     {
         $extra = $type === OrderType::WalletTopUp ? $this->wallet->uniqueMax() : 0;
+        if ($this->deposits->enabled()) {
+            $extra = max($extra, self::VERIFIED_EXTRA_MAX);
+        }
         if ($extra > 0 && $method->max_amount !== null) {
             $extra = min($extra, max(0, (int) Money::subtract($method->max_amount, $amount)));
         }

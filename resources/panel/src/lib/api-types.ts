@@ -141,7 +141,7 @@ export interface DriverDescription {
   /** Short notes under the description, such as required versions and caveats. */
   notes: string[]
   fields: FieldDescription[]
-  /** Extra facts specific to the driver's family. A database driver: `installable` (the installer offers it). A mail driver: `sender` (which address it can send from, as text). A payment gateway: `kind` (`instant`, settling at once like the wallet; `manual`, a card transfer whose receipt a person approves; or `online`, paid on the gateway's own page and confirmed by the gateway) and `builtin` (part of every shop; never added or deleted). A panel connector: `mark` (the two letters on its card), `vendor`, `docs_url` (its project's address), `inbounds` (services are sold on inbounds the owner picks; without it a server is sold whole) and `link_rotation` («تغییر لینک»). A captcha driver has none. */
+  /** Extra facts specific to the driver's family. A database driver: `installable` (the installer offers it). A mail driver: `sender` (which address it can send from, as text). A payment gateway: `kind` (`instant`, settling at once like the wallet; `manual`, a card transfer whose receipt a person approves; or `online`, paid on the gateway's own page and confirmed by the gateway) and `builtin` (part of every shop; never added or deleted). A panel connector: `mark` (the two letters on its card), `vendor`, `docs_url` (its project's address), `inbounds` (services are sold on inbounds the owner picks; without it a server is sold whole) and `link_rotation` («تغییر لینک»). A migrator (another bot an import reads): `mark` and `vendor` (its project's address). A captcha driver has none. */
   traits: Record<string, string | number | boolean | (string | number | boolean)[] | null>
 }
 
@@ -407,6 +407,8 @@ export interface UserRow {
   email: string | null
   /** In E.164 form, once shared with the bot. */
   phone: string | null
+  /** Excused from the shop's phone rule: never asked for their phone number. */
+  phone_exempt: boolean
   status: UserStatus
   role: UserRole
   balance: string
@@ -504,6 +506,19 @@ export interface UserRoleRequest {
 export interface UserDiscountRequest {
   /** 0 to 100; 0 removes it. */
   percent: WholeNumberInput
+}
+
+export interface UserMessageRequest {
+  /** Plain text, line breaks kept; 1 to 3,500 characters once trimmed, counted as Telegram counts them — an emoji is two (blank: 422). */
+  text: string
+}
+
+export interface UserMessageResponse {
+  delivery: Delivery
+}
+
+export interface UserPhoneExemptRequest {
+  phone_exempt: boolean
 }
 
 /** The customer's groups: exactly the ones listed. An empty list removes them from all groups. */
@@ -1498,7 +1513,7 @@ export interface ProbeResponse {
 }
 
 /** A server's whole form, to add or update it: its connector (`driver`; a saved server keeps its connector) and the fields the connector lists (ServerDriversResponse), by name, as typed. That is: the name; the panel's address and one way in, an API token or an admin's username and password (the other way's credentials are cleared); the connection options, a SOCKS5 proxy among them; and the server's own fields. A secret left blank or out keeps the stored one while the panel's address stays on the same host (after a host change it must be typed again); `clear_<name>: true` empties it. One closed shape per connector, checked against the connector's form by tests/Unit/Drivers/DriverFormsTest. */
-export type ServerRequest = ServerThreeXuiRequest | ServerPasarGuardRequest | ServerHmPanelRequest
+export type ServerRequest = ServerThreeXuiRequest | ServerPasarGuardRequest | ServerHmPanelRequest | ServerMarzbanRequest
 
 /** A server on a 3X-UI panel: its API token, or an admin's username and password plus the two-factor secret when the panel asks for a code. */
 export interface ServerThreeXuiRequest {
@@ -1651,8 +1666,55 @@ export interface ServerHmPanelRequest {
   button_row?: '1' | '2' | '3'
 }
 
+/** A server on a Marzban panel (0.8 and later): an admin's username and password, the one way in — Marzban's API has no keys. The server form's fields without the token's. */
+export interface ServerMarzbanRequest {
+  driver: 'marzban'
+  /** The location's name, as customers see it in the bot; at most 100 characters. Never a premium emoji's tag: one is chosen in `emoji_id`. */
+  name: string
+  /** The premium emoji the bot draws for the name's leading emoji (a custom emoji id, digits): on its location button as the icon, in its texts in the emoji's place. The name must start with an emoji while one is set. Blank or left out: none. */
+  emoji_id?: string
+  /** The panel's address, including its path: http(s), without credentials, query or fragment, and not one of the panel's own pages (Marzban's /dashboard, /api or /docs). */
+  base_url: string
+  /** How to sign in: an admin's username and password, the one way Marzban's API takes. */
+  auth_mode: 'password'
+  /** For `password`: a panel admin's username. */
+  username?: string
+  /** For `password`. Left out or blank: the stored password stays. */
+  password?: string
+  /** True empties the stored password. */
+  clear_password?: boolean
+  /** Whether to verify the panel's TLS certificate; off for a self-signed one. */
+  verify_tls: boolean
+  /** Request timeout in seconds, 5 to 120. */
+  timeout: WholeNumberInput
+  /** A base address to use before the token in subscription links instead of the panel's own: a full address without credentials, query or fragment. Blank: the panel's. */
+  subscription_url?: string
+  /** Every request to the panel goes through a SOCKS5 proxy (the panel's name looked up by the proxy), for a panel the shop's host cannot reach directly. Off: straight to the panel, and the proxy's fields are emptied. */
+  proxy_enabled: boolean
+  /** With `proxy_enabled`: the proxy's host name or IP address, without a scheme or a port (an IPv6 address may be in brackets); at most 255 characters. */
+  proxy_host?: string
+  /** With `proxy_enabled`: the proxy's port, 1 to 65535. */
+  proxy_port?: WholeNumberInput
+  /** With `proxy_enabled`: the proxy's username, at most 255 characters; blank for a proxy without a login. */
+  proxy_username?: string
+  /** With `proxy_enabled`: the proxy's password, only with a username. Left out or blank: the stored password stays while the proxy's host and port stay (after a change it must be typed again). */
+  proxy_password?: string
+  /** True empties the stored proxy password. */
+  clear_proxy_password?: boolean
+  /** How many active services it takes. Blank for no limit; 0 for full. */
+  capacity?: WholeNumberInput
+  /** The owner's notes, at most 1000 characters. */
+  notes?: string
+  /** Off: no new service is placed on it. */
+  is_active: boolean
+  /** The colour of its button among a plan's locations in the bot: blue, green or red. Blank or left out: the client's default. */
+  button_style?: '' | 'primary' | 'success' | 'danger'
+  /** How many location buttons share its row in the bot. Left out: a row of its own. */
+  button_row?: '1' | '2' | '3'
+}
+
 /** A connection to test before saving: a new server's form (ServerRequest), or a saved server's form with its `id`, whose stored secrets fill in blank ones while the address stays on the same host. One closed shape per connector. */
-export type ServerTestRequest = ServerThreeXuiTestRequest | ServerPasarGuardTestRequest | ServerHmPanelTestRequest
+export type ServerTestRequest = ServerThreeXuiTestRequest | ServerPasarGuardTestRequest | ServerHmPanelTestRequest | ServerMarzbanTestRequest
 
 /** A 3X-UI server to test. */
 export interface ServerThreeXuiTestRequest {
@@ -1781,6 +1843,55 @@ export interface ServerHmPanelTestRequest {
   api_token?: string
   /** True empties the stored token. */
   clear_api_token?: boolean
+  /** Whether to verify the panel's TLS certificate; off for a self-signed one. */
+  verify_tls: boolean
+  /** Request timeout in seconds, 5 to 120. */
+  timeout: WholeNumberInput
+  /** A base address to use before the token in subscription links instead of the panel's own: a full address without credentials, query or fragment. Blank: the panel's. */
+  subscription_url?: string
+  /** Every request to the panel goes through a SOCKS5 proxy (the panel's name looked up by the proxy), for a panel the shop's host cannot reach directly. Off: straight to the panel, and the proxy's fields are emptied. */
+  proxy_enabled: boolean
+  /** With `proxy_enabled`: the proxy's host name or IP address, without a scheme or a port (an IPv6 address may be in brackets); at most 255 characters. */
+  proxy_host?: string
+  /** With `proxy_enabled`: the proxy's port, 1 to 65535. */
+  proxy_port?: WholeNumberInput
+  /** With `proxy_enabled`: the proxy's username, at most 255 characters; blank for a proxy without a login. */
+  proxy_username?: string
+  /** With `proxy_enabled`: the proxy's password, only with a username. Left out or blank: the stored password stays while the proxy's host and port stay (after a change it must be typed again). */
+  proxy_password?: string
+  /** True empties the stored proxy password. */
+  clear_proxy_password?: boolean
+  /** How many active services it takes. Blank for no limit; 0 for full. */
+  capacity?: WholeNumberInput
+  /** The owner's notes, at most 1000 characters. */
+  notes?: string
+  /** Off: no new service is placed on it. */
+  is_active: boolean
+  /** The colour of its button among a plan's locations in the bot: blue, green or red. Blank or left out: the client's default. */
+  button_style?: '' | 'primary' | 'success' | 'danger'
+  /** How many location buttons share its row in the bot. Left out: a row of its own. */
+  button_row?: '1' | '2' | '3'
+}
+
+/** A Marzban server to test. */
+export interface ServerMarzbanTestRequest {
+  /** The saved server this form belongs to. */
+  id?: number
+  driver: 'marzban'
+  /** The location's name, as customers see it in the bot; at most 100 characters. Never a premium emoji's tag: one is chosen in `emoji_id`. */
+  name: string
+  /** The premium emoji the bot draws for the name's leading emoji (a custom emoji id, digits): on its location button as the icon, in its texts in the emoji's place. The name must start with an emoji while one is set. Blank or left out: none. */
+  emoji_id?: string
+  /** The panel's address, including its path: http(s), without credentials, query or fragment, and not one of the panel's own pages (Marzban's /dashboard, /api or /docs). */
+  base_url: string
+  /** How to sign in: an admin's username and password, the one way Marzban's API takes. */
+  auth_mode: 'password'
+  /** For `password`: a panel admin's username. */
+  username?: string
+  /** For `password`. Left out or blank: the stored password stays. */
+  password?: string
+  /** True empties the stored password. */
+  clear_password?: boolean
   /** Whether to verify the panel's TLS certificate; off for a self-signed one. */
   verify_tls: boolean
   /** Request timeout in seconds, 5 to 120. */
@@ -2989,7 +3100,7 @@ export interface UnregisteredMethodRow {
 /** A card-to-card method's settings (`ManualMethodRow.config`): the manual driver's form values as stored. A field added after the method was saved shows its default. Its cards are rows of their own (`ManualMethodRow.cards`). */
 export interface ManualGatewayConfig {
   instructions: string
-  /** Minutes a receipt sent in the bot may wait for review before it is approved automatically; 0 for manual approval only. */
+  /** Minutes a receipt sent in the bot (or uploaded by a Telegram account: any mini app customer, or a website customer signed in with Telegram) may wait for review before it is approved automatically; 0 for manual approval only. */
   auto_approve_after: number
 }
 
@@ -3099,7 +3210,7 @@ export interface ManualMethodRequest {
   max_amount?: AmountInput | null
   /** Shown to the customer with the card; blank for none. */
   instructions?: string
-  /** Minutes a receipt sent in the bot may wait for review before it is approved automatically; blank or 0 for manual approval only. */
+  /** Minutes a receipt sent in the bot (or uploaded by a Telegram account: any mini app customer, or a website customer signed in with Telegram) may wait for review before it is approved automatically; blank or 0 for manual approval only. */
   auto_approve_after?: WholeNumberInput
   /** Every card of the method, 1 to 20, in their order, each once: a card left out is deleted — one with payments cannot be (switch it off) —, and no number comes twice. Every refusal is under `cards`, each naming its card by its place («کارت ۲: …»). */
   cards: PaymentCardInput[]
@@ -3259,7 +3370,7 @@ export interface ManualMethodCreateRequest {
   max_amount?: AmountInput | null
   /** Shown to the customer with the card; blank for none. */
   instructions?: string
-  /** Minutes a receipt sent in the bot may wait for review before it is approved automatically; blank or 0 for manual approval only. */
+  /** Minutes a receipt sent in the bot (or uploaded by a Telegram account: any mini app customer, or a website customer signed in with Telegram) may wait for review before it is approved automatically; blank or 0 for manual approval only. */
   auto_approve_after?: WholeNumberInput
   /** Every card of the method, 1 to 20, in their order, each once: a card left out is deleted — one with payments cannot be (switch it off) —, and no number comes twice. Every refusal is under `cards`, each naming its card by its place («کارت ۲: …»). */
   cards: PaymentCardInput[]
@@ -3736,6 +3847,62 @@ export interface WheelSpinRow {
   created_at: string | null
 }
 
+/** What came of a forwarded bank SMS: `received` (being looked at), `matched` (it approved a card payment), `unmatched` (no open card payment asks its sum, or ForApp did not recognise it as a bank's deposit), `ambiguous` (more than one does; none approved), `ignored` (a withdrawal, no sum read in Rial, or older than three days), `test` (the app's test). */
+export type DepositStatus = 'received' | 'matched' | 'unmatched' | 'ambiguous' | 'ignored' | 'test'
+
+export interface DepositRow {
+  id: number
+  /** The phone app: `forapp`. */
+  source: string
+  status: DepositStatus
+  /** The sum the SMS said, in Rial; null when none was read. */
+  amount_rial: number | null
+  /** The same in Toman, as the shop prices. */
+  amount: string | null
+  bank: string | null
+  sender: string | null
+  /** The SMS as it came. */
+  body: string | null
+  /** Why it approved nothing. */
+  note: string | null
+  /** The card payment it approved. */
+  payment: {
+    id: number
+    order_id: number
+    customer: UserRef
+  } | null
+  /** When the phone got it. */
+  received_at: string | null
+  created_at: string | null
+}
+
+export interface DepositsResponse {
+  deposits: DepositRow[]
+  meta: PageMeta
+}
+
+export interface DepositSettingsRequest {
+  enabled: boolean
+}
+
+export interface DepositSettingsResponse {
+  enabled: boolean
+  /** The key the app sends as `X-API-Key`; null while the shop does not listen. */
+  key: string | null
+  /** The phone apps the shop takes, each with the address its owner pastes in it. */
+  sources: {
+    key: string
+    label: string
+    webhook_url: string
+  }[]
+  /** When the last SMS came (not a test). */
+  last_received_at: string | null
+  /** When the app's last test came. */
+  last_test_at: string | null
+  /** SMS of the last seven days that approved nothing (unmatched or ambiguous): support to look at. */
+  waiting: number
+}
+
 export interface WheelSpinsResponse {
   spins: WheelSpinRow[]
   meta: PageMeta
@@ -4101,11 +4268,27 @@ export interface SaleRequest {
 export interface BotSettingsData {
   /** «کدهای تخفیف»: how many minutes an order made with a discount code may stay unpaid. After that, if untouched and no receipt is with support, it is cancelled and the code's use is freed. 0: as long as any unpaid order (two days by default). */
   hold_minutes: number
+  /** «همکارها فقط با قیمت همکاری»: whoever pays agent prices (an agent, or in a «همکار» group) goes without the customers' perks, whatever they buy — no sale, loyalty tier, discount code, first-purchase price, cashback, lucky wheel or nightly draw; a plan's agent price where it has one, the regular price elsewhere (a plan without one, extras, a built service); their own discount stays. */
+  agents_without_perks: boolean
   enabled: boolean
   phone_required: boolean
+  /** While `phone_required`: `everywhere` asks a customer's number before the bot serves them anything at all; `moments` only at the moments switched on (`phone_on_*`). */
+  phone_scope: 'everywhere' | 'moments'
+  /** With `phone_scope` `moments`: asked before a service is bought. */
+  phone_on_purchase: boolean
+  /** With `phone_scope` `moments`: asked before a service is renewed or given extra traffic, time or devices. */
+  phone_on_renewal: boolean
+  /** With `phone_scope` `moments`: asked before a free test is taken. */
+  phone_on_test: boolean
+  /** With `phone_scope` `moments`: asked before a card-to-card payment, whatever it pays for. */
+  phone_on_card: boolean
+  /** While `phone_required`: only Iranian numbers (+98) count. Another country's is refused when shared (the bot text «فقط شماره ایران»), and a customer whose number on file is one is asked again; excuse one from the number to let them through. */
+  phone_iran_only: boolean
   join_required: boolean
   /** The Telegram id or link the bot's «پشتیبانی» screen shows; may be empty. */
   support_contact: string
+  /** Whether a message support writes to a customer («ارسال پیام») comes under the bot text «پیام پشتیبانی به مشتری» (📩 پیام از طرف پشتیبانی); off, the words alone. */
+  support_header: boolean
   /** The smallest top-up, in Toman. */
   topup_min: number
   /** The amounts offered as buttons, ascending. */
@@ -4352,6 +4535,7 @@ export type BotSettingsGroup =
   | 'cashback'
   | 'lottery'
   | 'discounts'
+  | 'agent_perks'
 
 export interface BotSettingsResponse {
   settings: BotSettingsData
@@ -4515,10 +4699,15 @@ export type BotSettingsRequest =
   | BotCashbackSettingsRequest
   | BotLotterySettingsRequest
   | BotDiscountsSettingsRequest
+  | BotAgentPerksSettingsRequest
 
 export interface BotDiscountsSettingsRequest {
   /** 0 to 1440 minutes. */
   hold_minutes: WholeNumberInput
+}
+
+export interface BotAgentPerksSettingsRequest {
+  agents_without_perks: boolean
 }
 
 export interface BotCashbackSettingsRequest {
@@ -4637,11 +4826,21 @@ export type RenewalMethod = 'extend' | 'reset_traffic' | 'reset_time'
 /** How a buyer has their new service named: `sequential` by the shop's pattern, `random`, or `custom` (the name they type) — the latter two while the shop offers them. */
 export type ClientNameMode = 'sequential' | 'random' | 'custom'
 
+/** A moment the shop may ask a customer's number at instead of before everything: `purchase` (a service bought or built), `renewal` (a service renewed, or given extra traffic, time or devices), `test` (a free test taken), `card` (a card-to-card payment, whatever it pays for). */
+export type PhoneMoment = 'purchase' | 'renewal' | 'test' | 'card'
+
 export interface BotGeneralSettingsRequest {
   enabled: boolean
   phone_required: boolean
+  phone_scope: 'everywhere' | 'moments'
+  phone_on_purchase: boolean
+  phone_on_renewal: boolean
+  phone_on_test: boolean
+  phone_on_card: boolean
+  phone_iran_only: boolean
   /** At most 190 characters. */
   support_contact?: string
+  support_header: boolean
 }
 
 export interface BotChannelsSettingsRequest {
@@ -5179,6 +5378,8 @@ export interface ScheduleRequest {
   nightly_draw_minutes: WholeNumberInput
   /** Minutes between two runs of `send_backups`, 1 to 10080; 1440 by default. */
   send_backups_minutes: WholeNumberInput
+  /** Minutes between two runs of `prune_imports`, 1 to 10080; 1440 by default. */
+  prune_imports_minutes: WholeNumberInput
   /** Minutes between two runs of `check_releases`, 1 to 10080; 1440 by default. */
   check_releases_minutes: WholeNumberInput
   /** Minutes between two runs of `send_reports`, 1 to 10080; 1 by default. */
@@ -5524,6 +5725,334 @@ export interface AgentChangedResponse {
   delivery: Delivery | null
 }
 
+/** Where an import stands: `reading` the other bot's data into a staged copy, a step a request; `review`, waiting for the owner's choices; `importing`, writing it into the shop, a step a request; then `done`, `failed` (`error` says why) or `cancelled`. One import at a time is in any of the first three. The staged copy and the uploaded file are deleted once it ends. */
+export type ImportPhase = 'reading' | 'review' | 'importing' | 'done' | 'failed' | 'cancelled'
+
+/** The stages an import writes in, in this order: the servers its panels are added as, the customer groups, the customers (with their balances), who brought whom, the plans, the services, the discount codes, the gift codes, the required channels and the bank cards. */
+export type ImportStage = 'servers' | 'groups' | 'customers' | 'referrals' | 'plans' | 'services' | 'discount_codes' | 'gift_codes' | 'channels' | 'cards'
+
+/** Why an import did not bring something. Only counted, with no row of its own (the owner's own choice, or nothing to act on): `reseller` (a customer or service of the other bot's reseller bots, not chosen), `panel_skipped` (its panel was left behind, or could not be added), `not_chosen`, `used_up`, `expired`, `ended`, `removed` (an earlier import brought it and the owner deleted it from the shop since: never brought back). Each of the others is a row naming the thing: `unreadable`, `not_telegram` (no valid Telegram id), `no_customer` (a service whose customer did not come), `not_on_panel` (its client is not on the panel), `panel_unreachable` (the panel did not answer: running an import again later picks it up), `no_link` (the panel gives it no subscription link), `kept_already` (the same client is another customer's service in the shop), `server_not_added`, `plan_no_server`, `agents_only_plan`, `code_taken`, `scope_lost`, `multi_use_gift`, `channel_refused`, `card_invalid`, `one_customer` (a gift code the other bot kept for one customer), `refused` (the shop's own check of it refused it: its words in `detail`), `failed` (writing it failed unexpectedly: the app's log has it). */
+export type ImportProblemReason =
+  | 'reseller'
+  | 'panel_skipped'
+  | 'not_chosen'
+  | 'used_up'
+  | 'expired'
+  | 'ended'
+  | 'removed'
+  | 'unreadable'
+  | 'not_telegram'
+  | 'no_customer'
+  | 'not_on_panel'
+  | 'panel_unreachable'
+  | 'no_link'
+  | 'kept_already'
+  | 'server_not_added'
+  | 'plan_no_server'
+  | 'agents_only_plan'
+  | 'code_taken'
+  | 'scope_lost'
+  | 'multi_use_gift'
+  | 'channel_refused'
+  | 'card_invalid'
+  | 'one_customer'
+  | 'refused'
+  | 'failed'
+
+/** How far the current phase is. Reading: no stage, `done` the bytes of the backup file read or the rows of the database staged, `total` the file's size or the rows counted at the start. Importing: the stage it writes, with its records written and their number. `total` is null while it is not known. */
+export interface ImportProgress {
+  stage: ImportStage | null
+  /** The stage in the owner's words («مشتری‌ها»). */
+  stage_label: string | null
+  done: number
+  total: number | null
+}
+
+/** How much of each kind the other bot's data holds: its customers, those with a balance (`balances`), its live services and test accounts, plans, discount and gift codes, required channels, bank cards, and the customers of its reseller bots (`resellers`). */
+export interface ImportSurveyCounts {
+  customers: number
+  balances: number
+  services: number
+  tests: number
+  plans: number
+  discount_codes: number
+  gift_codes: number
+  channels: number
+  cards: number
+  resellers: number
+}
+
+/** A VPN panel the other bot sold on. Its services are found on the server it maps to by their client names, and adopted as they stand: nothing on the panel changes. Its connection (with its secrets) never leaves the server. */
+export interface ImportSurveyPanel {
+  /** What the other bot's services name it by: its key in `ImportChoices.panels`. */
+  key: string
+  name: string
+  /** The other bot's word for its kind (`marzban`, `x-ui_single` …), as it is. */
+  type: string
+  /** The panel's address. */
+  url: string | null
+  /** The panel connector of this shop that speaks to it (`DriverDescription.key` of `GET /servers/drivers`); null when none does. */
+  driver: string | null
+  /** Why no connector does, in the owner's words, when `driver` is null. */
+  unsupported: string | null
+  /** It can be added as a new server of the shop (the choice `add`): a connector speaks to it and the other bot kept its connection. */
+  addable: boolean
+  /** Its services the import would bring. */
+  services: number
+  /** A server of the shop with the same connector on the same address (scheme, host and port), which the proposed choices map it to; null for none. */
+  suggested_server_id: number | null
+}
+
+/** A customer group the other bot's customers would join (its agents', say): the shop's group of that name, or a new one. */
+export interface ImportSurveyGroup {
+  name: string
+  /** A new group pays plans' agent prices («همکار»). */
+  agent_pricing: boolean
+  customers: number
+}
+
+/** An admin of the other bot, whom the import may make an admin of this shop too (`ImportChoices.admins`). */
+export interface ImportSurveyAdmin {
+  /** The other bot's key for them as a customer. */
+  key: string
+  telegram_id: number
+  /** Telegram handle without "@". */
+  username: string | null
+  /** Their role there, in its words (`administrator`, `support`). */
+  role: string | null
+}
+
+/** Something the other bot has that the import does not bring, and how much. */
+export interface ImportLeftBehind {
+  /** In the owner's words («تاریخچه پرداخت‌ها»). */
+  what: string
+  count: number
+}
+
+/** What the other bot's data holds, for the owner to review before anything is written. */
+export interface ImportSurvey {
+  /** The other bot's version, when its data tells. */
+  version: string | null
+  counts: ImportSurveyCounts
+  /** The customers' balances together, Toman (debts taken off). */
+  balance_total: string
+  panels: ImportSurveyPanel[]
+  groups: ImportSurveyGroup[]
+  admins: ImportSurveyAdmin[]
+  /** What the import leaves behind: payment history, tickets, the bot's settings and texts … */
+  left: ImportLeftBehind[]
+  /** Worth reading before starting, in the owner's words. */
+  warnings: string[]
+}
+
+/** Where a panel's services go: `server`, one of the shop's servers with the panel's connector (`server_id`); `add`, the panel added as a new server (an `addable` one alone; refused or out of reach, its services stay behind); `skip`, its services stay behind — the one choice for a panel no connector speaks to. */
+export interface ImportPanelChoice {
+  action: 'server' | 'add' | 'skip'
+  /** The server, for `server`; null otherwise. */
+  server_id: number | null
+}
+
+/** What an import brings and where each panel's services go, as the owner chose in the review. A customer, a balance or anything else an earlier import brought is recognised and not brought twice. */
+export interface ImportChoices {
+  /** Each panel with services, by its `ImportSurveyPanel.key`. */
+  panels: Record<string, ImportPanelChoice>
+  /** Customers' wallet balances, debts too, are credited (once, however often it runs). */
+  balances: boolean
+  /** Customers banned there are banned here. */
+  banned: boolean
+  /** Customers' mobile numbers come. */
+  phones: boolean
+  /** Who brought whom. */
+  referrals: boolean
+  /** Customers' personal discount percent. */
+  discounts: boolean
+  /** Customers join the survey's groups (its agents', paying agent prices). */
+  groups: boolean
+  /** The other bot's admins become admins of this shop. */
+  admins: boolean
+  /** The customers and services of the other bot's reseller bots come too, as the main shop's. */
+  resellers: boolean
+  /** Live services come, as they stand on their panels: link, usage and end. */
+  services: boolean
+  /** Free test accounts come too (with `services`). */
+  tests: boolean
+  /** The plans and their categories come. */
+  plans: boolean
+  /** The plans come switched on, sold at once; otherwise off, for the owner to check first. */
+  plans_on: boolean
+  /** Discount codes still usable come. */
+  discount_codes: boolean
+  /** Gift codes still usable come, as wallet gift codes (one use each). */
+  gift_codes: boolean
+  /** The required channels come; the bot must be an admin of each. */
+  channels: boolean
+  /** The bank cards come, to the shop's card-to-card method. */
+  cards: boolean
+}
+
+/** What an import did with one kind: rows it created, rows it matched to what the shop already had (`linked`), and things it did not bring (`skipped`: by the owner's choice, or a problem). */
+export interface ImportCount {
+  created: number
+  linked: number
+  skipped: number
+}
+
+export interface ImportReasonCount {
+  reason: ImportProblemReason
+  /** The reason in the owner's words. */
+  label: string
+  count: number
+}
+
+/** What an import could not bring, by reason — the counted ones with the rest. */
+export interface ImportProblemsSummary {
+  total: number
+  by_reason: ImportReasonCount[]
+}
+
+/** An import from another bot, as the owner's page shows it in every phase. */
+export interface ImportState {
+  /** As used in `/imports/{id}`. */
+  id: number
+  /** The bot it reads (`DriverDescription.key` of `ImportsResponse.migrators`). */
+  migrator: string
+  migrator_label: string
+  /** How the data arrived: an uploaded backup file, or a connection to the bot's database. */
+  source: 'backup' | 'database'
+  /** The backup file's name as uploaded; null for a database. */
+  file_name: string | null
+  phase: ImportPhase
+  progress: ImportProgress
+  /** The other bot's version, when its data tells. */
+  version: string | null
+  /** What the data holds, once read; null before. */
+  survey: ImportSurvey | null
+  /** The owner's choices, once saved; null before. */
+  choices: ImportChoices | null
+  /** What the review starts from while no choices are saved: each panel to a server of the same connector on the same address, else added when it can be, else left behind; every switch on but `admins`, `resellers`, `plans_on` and `channels`. Null otherwise. */
+  proposed: ImportChoices | null
+  /** What it did, by kind (customers, balances, groups, servers, plans, categories, services, discount_codes, gift_codes, channels, cards), once it writes; null before. */
+  counts: Record<string, ImportCount> | null
+  problems: ImportProblemsSummary
+  /** Why it failed, in the owner's words; null otherwise. */
+  error: string | null
+  /** Who started it. */
+  reviewer: string | null
+  /** When it started writing. */
+  started_at: string | null
+  finished_at: string | null
+  created_at: string | null
+  updated_at: string | null
+}
+
+export interface ImportResponse {
+  import: ImportState
+}
+
+/** The import after a step, and whether the step ran. */
+export interface ImportStepResponse {
+  import: ImportState
+  /** False when another step was already on the import (another tab, `import:run`): nothing was done, and asking again at once would only find it busy. True for a step that ran, and for an import not reading or writing, which a step leaves as it is. */
+  stepped: boolean
+}
+
+/** The owner's «انتقال از ربات دیگر» page. */
+export interface ImportsResponse {
+  /** The bots an import reads, each with its `mark` and `vendor` (traits). */
+  migrators: DriverDescription[]
+  /** The import under way; null for none. */
+  current: ImportState | null
+  /** The latest ten that ended, newest first. */
+  history: ImportState[]
+  /** The largest backup file this host takes in one upload (PHP's smaller limit); 0 when it does not say. */
+  upload_max_bytes: number
+}
+
+/** Something an import could not bring, and why. */
+export interface ImportProblem {
+  /** The kind of thing, as `ImportState.counts` names it (`customers`, `services`, `plans`, `servers`, `discount_codes` …). */
+  kind: string
+  /** The other bot's key for it. */
+  source_key: string
+  reason: ImportProblemReason
+  /** The reason in the owner's words. */
+  label: string
+  /** What finds it (a customer's Telegram id, a client's name and panel …) or the panel's own words; null for nothing more. */
+  detail: string | null
+  created_at: string | null
+}
+
+export interface ImportProblemsResponse {
+  problems: ImportProblem[]
+  /** The rows, on every page. */
+  total: number
+  page: number
+  per_page: number
+}
+
+/** The other bot's backup file, as a browser form uploads it, and the bot it is of. */
+export interface ImportBackupRequest {
+  /** A migrator's key (`ImportsResponse.migrators`). */
+  migrator: string
+  file: Blob
+}
+
+/** A connection to the other bot's MySQL database, and the bot it is of. */
+export interface ImportDatabaseRequest {
+  /** A migrator's key (`ImportsResponse.migrators`). */
+  migrator: string
+  /** The database server's name or IP alone (`localhost`). */
+  host: string
+  /** 1 to 65535; MySQL's own 3306 when left out or blank. */
+  port?: WholeNumberInput
+  database: string
+  username: string
+  /** As typed (not trimmed); blank for none. Kept encrypted until the database is read, and never sent back. */
+  password?: string
+}
+
+/** The owner's choices as the review saves them: a switch left out takes its default (`ImportState.proposed`'s), and every panel with services needs its choice. */
+export interface ImportChoicesInput {
+  /** Each panel with services, by its `ImportSurveyPanel.key`. */
+  panels?: Record<string, ImportPanelChoice>
+  /** Customers' wallet balances, debts too, are credited (once, however often it runs). */
+  balances?: boolean
+  /** Customers banned there are banned here. */
+  banned?: boolean
+  /** Customers' mobile numbers come. */
+  phones?: boolean
+  /** Who brought whom. */
+  referrals?: boolean
+  /** Customers' personal discount percent. */
+  discounts?: boolean
+  /** Customers join the survey's groups (its agents', paying agent prices). */
+  groups?: boolean
+  /** The other bot's admins become admins of this shop. */
+  admins?: boolean
+  /** The customers and services of the other bot's reseller bots come too, as the main shop's. */
+  resellers?: boolean
+  /** Live services come, as they stand on their panels: link, usage and end. */
+  services?: boolean
+  /** Free test accounts come too (with `services`). */
+  tests?: boolean
+  /** The plans and their categories come. */
+  plans?: boolean
+  /** The plans come switched on, sold at once; otherwise off, for the owner to check first. */
+  plans_on?: boolean
+  /** Discount codes still usable come. */
+  discount_codes?: boolean
+  /** Gift codes still usable come, as wallet gift codes (one use each). */
+  gift_codes?: boolean
+  /** The required channels come; the bot must be an admin of each. */
+  channels?: boolean
+  /** The bank cards come, to the shop's card-to-card method. */
+  cards?: boolean
+}
+
+export interface ImportChoicesRequest {
+  choices: ImportChoicesInput
+}
+
 /** The website's settings, as the panel shows them. Secrets are never included, only whether one is stored. */
 export interface Website {
   /** When off, the Store API answers 404 for its key. */
@@ -5739,8 +6268,14 @@ export interface StoreResponse {
     name: string
     /** Whether the shop takes orders now: its bot is switched on, and — an agent's shop — the main shop has not suspended its selling. When false, purchases, renewals, extras and top-ups are refused (503) — receipts too while the bot is off, but not while the selling is suspended (an order made before is still paid) —, and while the selling is suspended a renewal's preview and a discount code's check for a renewal or an extra are a 422 on `status`; the catalogue can still be read (an agent's suspended shop offers no plan) and customers can still sign in. */
     taking_orders: boolean
-    /** Whether the shop's bot asks every customer to share their own phone number first («تایید شماره»). A Telegram customer without one (`GET /me`'s `phone` null) shares it from the mini app with Telegram's `requestContact`, which sends their contact to the bot; until then the mini app takes no order, gift code or service added by its link from them (422 on `status`). */
+    /** Whether the shop's bot asks every customer to share their own phone number first («تایید شماره»), before it serves them anything at all. A Telegram customer without one (`GET /me`'s `phone` null) shares it from the mini app with Telegram's `requestContact`, which sends their contact to the bot; until then the mini app takes no order, gift code or service added by its link from them (422 on `status`). Never asked of a customer support excused from it (`GET /me`'s `phone_exempt`). */
     phone_required: boolean
+    /** Where the shop's bot asks a customer's number only at the moments it chose, instead of before everything: those moments, in this order — a purchase (a service built too), a renewal (extra traffic, time or devices too), a free test, a card-to-card payment (whatever it pays for, a wallet top-up too). Through the mini app such an order — and through either key a free test, at `test` — is refused from a customer without their number (422 on `status`); nothing else waits for it, and the number is shared as with `phone_required`. Empty while the number is asked before everything (`phone_required`) or not at all. */
+    phone_moments: PhoneMoment[]
+    /** While the shop asks numbers (`phone_required` or `phone_moments`): only Iranian numbers (+98) count. Another country's is refused when shared, and a customer whose number on file is one (`GET /me`'s `phone`) is asked again, as one with none. */
+    phone_iran_only: boolean
+    /** Whether a card-to-card payment is confirmed by itself from the bank's SMS («تایید خودکار واریز»): the customer transfers the exact sum it asks (its last digits are its own) and needs send no receipt. The checkout's `transfer.auto_confirmed` says the same of one payment. */
+    card_auto_confirmed: boolean
     /** Whether a customer can add a service to their account by its link now (`POST /subscriptions/claim`, «افزودن سرویس با لینک»): the main shop's alone, while its admin switches it on (off by default). Always false in an agent's shop. */
     service_claims: boolean
     /** Whether a customer can hand one of their services to another customer of the shop now (`POST /subscriptions/{id}/transfer`, «انتقال سرویس»): while the shop's admin switches it on (off by default), in any shop. */
@@ -5749,7 +6284,7 @@ export interface StoreResponse {
     custom_services: boolean
     /** The ways a buyer may name their new service (`name_mode` of `POST /orders`), `sequential` (the shop's pattern) first and always; `random` and `custom` while the shop's admin offers them. Just `sequential`: ask nothing. */
     name_modes: ClientNameMode[]
-    /** Which of the shop's programs run now, as its bot shows their buttons: free test accounts (`GET /test-account`), the lucky wheel (`GET /wheel`), the nightly draw (`GET /lottery`), gift codes (`POST /gift-codes/redeem`), loyalty tiers (the shop has at least one: `GET /me`'s `loyalty`), cashback, money sent to another customer (`POST /wallet/transfer`) — and, this door's own, the reviews. */
+    /** Which of the shop's programs run now, as its bot shows their buttons: free test accounts (`GET /test-account`), the lucky wheel (`GET /wheel`), the nightly draw (`GET /lottery`), gift codes (`POST /gift-codes/redeem`), loyalty tiers (the shop has at least one: `GET /me`'s `loyalty`), cashback, money sent to another customer (`POST /wallet/transfer`) — and, this door's own, the reviews. The wheel, the draw, loyalty tiers and cashback never reach a customer whose `GET /me` `perks` is false. */
     programs: {
       test_accounts: boolean
       wheel: boolean
@@ -6024,6 +6559,8 @@ export interface StoreCustomer {
   two_factor: boolean
   /** Their verified mobile number in E.164 form (+98912…): the one they shared with the bot, or proved by a texted code on the website. While the website signs in by SMS it is a way in; null if none. */
   phone: string | null
+  /** The shop's phone rule never asks them for their number (`shop.phone_required`, `shop.phone_moments`), through either key: support excused them, or they are a bot admin. */
+  phone_exempt: boolean
   /** Their wallet balance in Toman, as a decimal string ('120000.00'). Below zero is an agent's debt. */
   balance: string
   /** When they became a customer of the shop. */
@@ -6034,14 +6571,16 @@ export interface StoreMeResponse {
   customer: StoreCustomer
 }
 
-/** The answer of `GET /me` and `PATCH /me`: the account, the unread notification count (for a bell icon), what the admin API allows them (for an admin of the shop), their loyalty standing, and this session. */
+/** The answer of `GET /me` and `PATCH /me`: the account, the unread notification count (for a bell icon), what the admin API allows them (for an admin of the shop), whether the customers' perks reach them, their loyalty standing, and this session. */
 export interface StoreAccountResponse {
   customer: StoreCustomer
   /** How many of their notifications are unread (`GET /notifications`). */
   unread_notifications: number
+  /** Whether the customers' perks reach them. False while «همکارها فقط با قیمت همکاری» is on and they pay agent prices (an agent, or in a group with agent prices): whatever they buy, no sale (`GET /sales` lists none), loyalty tier, discount code (`POST /discount-codes/check` and the checkouts refuse one with a 422), first-purchase price, cashback, lucky wheel (`GET /wheel` is a 422) or nightly draw; a plan's agent price where it has one, the regular price elsewhere; their own discount stays. Hide the code field, the wheel, the draw and cashback while it is false. */
+  perks: boolean
   /** Null for a customer who is not an admin of the shop, while the website lets no admins in, through the mini app's key (it has no admin API), and for a session the mini app signed in (`session.method` mini_app), which the admin API refuses through the website's key too. */
   staff: StoreStaff | null
-  /** Their loyalty tier («سطح وفاداری»), what they spent and the next tier. The tier's discount applies at checkout and its cashback adds to the shop's. In a shop with no tiers, `tier` and `next` are null. */
+  /** Their loyalty tier («سطح وفاداری»), what they spent and the next tier. The tier's discount applies at checkout and its cashback adds to the shop's. In a shop with no tiers, and for a customer the perks do not reach (`perks` false), `tier` and `next` are null. */
   loyalty: LoyaltyStanding
   /** This session: how it was signed in, whether the mini app keeps a fingerprint secret for it (`PUT /me/biometric`), and until when it counts as recently signed in. */
   session: {
@@ -6329,7 +6868,7 @@ export interface StorePlan {
   badge: PlanBadge | null
   /** Toman, as a decimal string ('120000.00'). */
   price: string
-  /** The price of a customer's first purchase in the shop («قیمت خرید اول»), in Toman, below `price` ('0.00' makes it free). `POST /orders` charges it while the customer has bought no service. Null when there is none, or (with a customer's token) when that customer has already bought. Renewals are at `price`. */
+  /** The price of a customer's first purchase in the shop («قیمت خرید اول»), in Toman, below `price` ('0.00' makes it free). `POST /orders` charges it while the customer has bought no service. Null when there is none, or (with a customer's token) when that customer has already bought — here, or in the bot the shop was brought from — or goes without the customers' perks (`GET /me` `perks` false). Renewals are at `price`. */
   first_purchase_price: string | null
   /** The price for the shop's agents and members of groups with agent prices («قیمت نماینده»), in Toman, below `price`, for purchases and renewals. Null when there is none, or when the reader is a guest or a customer who gets no agent price. The checkout charges the customer's lowest price. */
   agent_price: string | null
@@ -6990,14 +7529,14 @@ export interface StoreReceiptRequest {
 
 /** The outcome of a checkout (a purchase, renewal, extra traffic, time or devices, or top-up). A checkout that paid nothing is a refusal instead: a wallet short of the price (a 422 on `method_id`, saying how much is missing), a price another than the website showed (a 409 on `expected_amount`, saying the price now), an online gateway that would not open the payment (a 422 on `method_id`, in the customer's words; the order stays open), an order whose online payment is held for support (a 422 on `status`, naming the order), or an order paid or closed at the same moment elsewhere (a 409). */
 export interface StoreCheckout {
-  /** `settled`: paid at once (by the wallet). The order is `fulfilled` (the service is in `subscription`) or `failed` (the money is taken and support will finish it; the order's internal notes are never shown). Also returned when a repeated request's order was paid since (by card or online too) and is finished: delivered, failed or `refunded`. `transfer`: transfer to the card in `transfer`, then upload the receipt (`POST /payments/{id}/receipt`); the payment waits for the receipt, or support has it. `link`: pay on the online gateway's page in `link`; the gateway tells the shop by itself, and `POST /payments/{id}/check` asks it now. `processing`: paid, and the delivery is in progress. */
+  /** `settled`: paid at once (by the wallet). The order is `fulfilled` (the service is in `subscription`) or `failed` (the money is taken and support will finish it; the order's internal notes are never shown). Also returned when a repeated request's order was paid since (by card or online too) and is finished: delivered, failed or `refunded`. `transfer`: transfer to the card in `transfer`, then upload the receipt (`POST /payments/{id}/receipt`); the payment waits for the receipt, or support has it — while `transfer.auto_confirmed`, the exact sum is approved by itself, the receipt only if it is not. `link`: pay on the online gateway's page in `link`; the gateway tells the shop by itself, and `POST /payments/{id}/check` asks it now. `processing`: paid, and the delivery is in progress. */
   outcome: 'settled' | 'transfer' | 'link' | 'processing'
   order: StoreOrder
-  /** For `transfer`: where to send the money, and the payment the receipt is for. Null otherwise. A payment taken in support's private chat (made while the bot setting «هدایت پرداخت کارت به کارت به پیوی پشتیبانی» is on) is shown no card: `card`, `holder` and `bank` are null and `contact` says where to go — tell the customer to send the order's number there, get the card from support, and send the receipt to support too; support approves the payment in its panel. */
+  /** For `transfer`: where to send the money, and the payment the receipt is for. Null otherwise. A payment taken in support's private chat (made while the bot setting «هدایت پرداخت کارت به کارت به پیوی پشتیبانی» is on) is shown no card: `card`, `holder` and `bank` are null and `contact` says where to go — tell the customer to send the order's number there, get the card from support, and send the receipt to support too; support approves the payment in its panel — while `auto_confirmed`, the exact sum approves it by itself, the receipt to support only if it does not. */
   transfer: {
     /** The payment to upload the receipt for. */
     payment_id: number
-    /** The amount to transfer, in Toman: the payment's own. A wallet top-up's may be a few Toman more than the order's (the bot setting of a random sum added to card-to-card top-ups), so its receipt is told apart; the whole of it is credited. */
+    /** The amount to transfer, in Toman: the payment's own. A wallet top-up's may be a few Toman more than the order's (the bot setting of a random sum added to card-to-card top-ups), so its receipt is told apart; the whole of it is credited. While the shop confirms transfers by itself (`auto_confirmed`), every card payment's is 1 to 999 Toman more than its order's (held within the method's most, so none when the order's is that most already), a sum no other card payment of the shop may still be paid at asks: part of what the customer pays (a top-up credits it, a refund gives it back). */
     amount: string
     /** `amount` in Rial — ten to the Toman, as Iran's banks count —: whole, in Latin digits, no separators (`1200000` for 120000 Toman). What a banking app takes: copy these digits. */
     amount_rial: string
@@ -7016,6 +7555,8 @@ export interface StoreCheckout {
       /** It as a link to open: a handle as its t.me address, a web or t.me address, a phone number as `tel:`; null when it is none of these. */
       url: string | null
     } | null
+    /** Whether the shop confirms this transfer by itself («تایید خودکار واریز»: a phone app forwards the bank's text messages): a transfer of exactly `amount`, to the last digit, approves the payment, usually within a minute — its order then paid and delivered as with an approved receipt, and the order's payment `paid`. Tell the customer to transfer exactly that sum and that no receipt is needed; the receipt (`POST /payments/{id}/receipt`) stays open for a transfer not confirmed within a few minutes. Read the order again every few seconds meanwhile (`GET /orders/{id}`). True for a payment taken in support's private chat too: the card support gives, the same exact sum. False otherwise — and for a payment whose `amount` is its order's own (no room was left above it for a sum of its own) —: support approves the receipt. */
+    auto_confirmed: boolean
   } | null
   /** For `link`: the online gateway's page to pay on, and the payment it is for. Null otherwise. */
   link: StorePayLink | null
@@ -7254,7 +7795,7 @@ export interface StoreReferralResponse {
   rewards: number
 }
 
-/** The kind of notice; one for each message the bot sends a customer on its own. Payments: approved (the service delivered or the wallet charged, or the delivery failed and support will finish it), an online payment that came in once its order had closed (its money put in the wallet), receipt rejected, order cancelled by support, payment refunded to the wallet, wallet top-up refunded, payment reminder. «انتقال موجودی»: money they sent another customer from their wallet (kept here whichever door they used; in Telegram only when they sent it from the website), money another customer sent them. Services: switched off, back on, deleted, moved (with its new link), given away by support («انتقال سرویس», to its previous owner) or received from another customer (to its new one), given days or traffic; reminders («یادآوری») of a service ending soon or running low on traffic; auto-renewal («تمدید خودکار») done, short of money, or paid but not delivered. Referrals: a new customer joined through their link, a commission, a commission taken back (the wallet top-up that earned it refunded), a start gift («هدیه شروع», for the referrer or the new customer), a free service for invitations («جایزه دعوت»). Agency: request approved or rejected, agency changed or ended, the bot's traffic too low for an order. Account security: two-factor sign-in turned off (by support or by them) or on, a way in added or removed, a password set, another account merged into it, the second step locked after failed codes, emailed codes locked after failures (these go to every channel they have: Telegram and email). Tickets: support's answer, and closing. Rewards: moved up a loyalty tier («سطح وفاداری»), cashback earned («کش‌بک»), won the nightly draw («قرعه‌کشی شبانه»). */
+/** The kind of notice; one for each message the bot sends a customer on its own. Payments: approved (the service delivered or the wallet charged, or the delivery failed and support will finish it), an online payment that came in once its order had closed (its money put in the wallet), receipt rejected, order cancelled by support, payment refunded to the wallet, wallet top-up refunded, payment reminder. «انتقال موجودی»: money they sent another customer from their wallet (kept here whichever door they used; in Telegram only when they sent it from the website), money another customer sent them. Services: switched off, back on, deleted, moved (with its new link), given away by support («انتقال سرویس», to its previous owner) or received from another customer (to its new one), given days or traffic; reminders («یادآوری») of a service ending soon or running low on traffic; auto-renewal («تمدید خودکار») done, short of money, or paid but not delivered. Referrals: a new customer joined through their link, a commission, a commission taken back (the wallet top-up that earned it refunded), a start gift («هدیه شروع», for the referrer or the new customer), a free service for invitations («جایزه دعوت»). Agency: request approved or rejected, agency changed or ended, the bot's traffic too low for an order. Account security: two-factor sign-in turned off (by support or by them) or on, a way in added or removed, a password set, another account merged into it, the second step locked after failed codes, emailed codes locked after failures (these go to every channel they have: Telegram and email). Tickets: support's answer, and closing. Rewards: moved up a loyalty tier («سطح وفاداری»), cashback earned («کش‌بک»), won the nightly draw («قرعه‌کشی شبانه»). Support: a message support wrote by hand («ارسال پیام»). */
 export type StoreNoticeType =
   | 'payment_settled'
   | 'payment_credited'
@@ -7304,6 +7845,7 @@ export type StoreNoticeType =
   | 'loyalty_tier_up'
   | 'cashback_earned'
   | 'lottery_won'
+  | 'support_message'
 
 /** A notification the bot sent the customer, with the same text as the Telegram message (sent, or that would have been sent). */
 export interface StoreNotification {
@@ -7624,6 +8166,10 @@ export type PanelWrite =
   | { method: 'POST'; path: `/users/${number}/orders`; body: ManualOrderRequest; answer: ManualOrderResponse }
   /** Set a customer's groups. Replaces their groups with the ones listed. On the website's admin API, an admin's account (their own included) or an agent's can only be changed from a panel (403): a «همکار» group (`agent_pricing`) would set their prices. There, a «همکار» group the customer is not in yet asks the `catalog` grant and a recent sign-in, as a granted operation does (403 `فروشگاه گذاشتن مشتری در گروه «همکار» را به مدیران وب‌سایت نسپرده است.`, or the recent sign-in's refusal); the plain groups, and a «همکار» group they are in already, ask neither. A 422 on `group_ids` when one is not a group of the shop. */
   | { method: 'PUT'; path: `/users/${number}/groups`; body: UserGroupsRequest; answer: UserResponse }
+  /** Excuse a customer from the shop's phone rule, or hold them to it again. Excused, they are never asked for their phone number, wherever the shop asks it (`phone_required`). On the website's admin API, an admin's account (their own included) or an agent's can only be changed from a panel (403). Logged with who did it. */
+  | { method: 'PUT'; path: `/users/${number}/phone-exempt`; body: UserPhoneExemptRequest; answer: UserResponse }
+  /** Send a customer a message from support («ارسال پیام»). The shop's bot sends it to their Telegram chat (an agent's customer hears from the agent's bot), under its text «پیام پشتیبانی به مشتری» (📩 پیام از طرف پشتیبانی) unless the bot settings' `support_header` is off; a customer with no Telegram, or who blocked the bot, gets it by email when they have one and the shop's email works. It is kept on their website either way. Plain text, at most 3,500 characters as Telegram counts them, an emoji two (422 on `text`, as for an empty one). On the website's admin API, an admin's account (their own included) or an agent's is written to only from a panel (403). Answers what came of it; logged with who wrote it. */
+  | { method: 'POST'; path: `/users/${number}/message`; body: UserMessageRequest; answer: UserMessageResponse }
   /** Turn off a customer's two-factor sign-in on the website. For a customer who lost the phone it was on: afterwards the password alone signs them in. The customer is notified and the log records who did it. A 422 when it is not on. */
   | { method: 'POST'; path: `/users/${number}/two-factor/disable`; body: undefined; answer: CustomerAccountResponse }
   /** Sign a customer out of the website on every device. All their sessions end; the log records who did it. */
@@ -7682,6 +8228,10 @@ export type PanelWrite =
   | { method: 'POST'; path: `/reviews/${number}/reject`; body: undefined; answer: ReviewResponse }
   /** Delete a review, whatever its status. A 403 for an admin's own review. */
   | { method: 'DELETE'; path: `/reviews/${number}`; body: undefined; answer: void }
+  /** Listen to the bank SMS, or stop. Listening, every new card-to-card payment asks a sum no other open one asks (1 to 999 Toman above its order), and a deposit of that sum approves it; the key is made the first time. */
+  | { method: 'PUT'; path: '/deposits/settings'; body: DepositSettingsRequest; answer: DepositSettingsResponse }
+  /** A new key for the webhook: the old one stops working at once, and the phone app must be given the new one. */
+  | { method: 'POST'; path: '/deposits/settings/key'; body: undefined; answer: DepositSettingsResponse }
   /** Add a payment method. Names a driver and fills in that driver's form. */
   | { method: 'POST'; path: '/payment-methods'; body: PaymentMethodCreateRequest; answer: PaymentMethodResponse }
   /** Reorder the payment methods. */
@@ -7830,6 +8380,18 @@ export type PanelWrite =
   | { method: 'POST'; path: '/settings/config/sms/test'; body: SmsTestRequest; answer: SmsTestResponse }
   /** Save one group of the config.php settings. */
   | { method: 'PUT'; path: `/settings/config/${ConfigGroup}`; body: ConfigSettingsRequest; answer: ConfigSettingsResponse }
+  /** Start an import from the other bot's backup file: its own backup (Faoxima's `backup.zip`, as its report channel gets it), a phpMyAdmin or mysqldump export (`.sql`), or either gzipped (`.gz`) or zipped (`.zip`) — told apart by its bytes, not its name. The file is kept and the import starts reading it (phase `reading`); the page then calls `POST /imports/{id}/continue` until it is read. A 422 says why one is refused: under `migrator` a bot not in the list; under `file` none, one past the host's upload limit, or no database backup; under `import` another import under way. */
+  | { method: 'POST'; path: '/imports'; body: ImportBackupRequest; answer: ImportResponse }
+  /** Start an import from the other bot's MySQL database, read once over this connection and only read. The connection is tried at once and kept encrypted until the database is read; a 422 under the field at fault says why it is refused (a field missing or malformed — every one at once —, `host` out of reach or the host without pdo_mysql, `username` and `password` refused, `database` unknown or not this user's), never repeating the password. Nothing is kept of a refused one. `migrator` and `import` are refused as for a backup file. */
+  | { method: 'POST'; path: '/imports/database'; body: ImportDatabaseRequest; answer: ImportResponse }
+  /** An import under way (`reading`, `review`, `importing`) is cancelled: what it already wrote stays, and its uploaded file and the staged copy of the other bot's data are deleted. An ended one's record is deleted with its report; what it brought stays, and a later import still knows it. */
+  | { method: 'DELETE'; path: `/imports/${number}`; body: undefined; answer: void }
+  /** One step of reading (`reading`) or writing (`importing`), about 15 seconds; the page calls it until the phase changes. Another step already on the import (another tab, `import:run`) leaves it as it stands and says so (`stepped` false): the page waits a moment before asking again. Data that is not the chosen bot's, or a backup file that cannot be read to its end, fails the import (`error` says why). */
+  | { method: 'POST'; path: `/imports/${number}/continue`; body: undefined; answer: ImportStepResponse }
+  /** Save the owner's choices in the review: where each panel's services go and what to bring. A 422 under `choices.…` says what is refused (a panel with services left without a choice, a server of another connector, adding a panel that cannot be added, a switch that is not a boolean); under `import`, an import not in review. */
+  | { method: 'PUT'; path: `/imports/${number}/choices`; body: ImportChoicesRequest; answer: ImportResponse }
+  /** From the review to writing (`importing`) with the choices saved; the page then calls continue. A 422 under `import` when it is not in review. */
+  | { method: 'POST'; path: `/imports/${number}/start`; body: undefined; answer: ImportResponse }
 
 /** Every write of the web installer's API (`/api/install`), in the same form as PanelWrite. */
 export type InstallWrite =
@@ -7910,7 +8472,7 @@ export type StoreWrite =
   | { method: 'POST'; path: '/me/identities/email'; body: StoreEmailLinkRequest; answer: StoreCodeSentResponse }
   /** Finish adding an email with the emailed code. Only the account the code was sent for can use it. The address and its password become this account's and the customer is notified. If another account of the shop has the address, a merge is offered (202); after the merge, the remaining account has the address and the chosen password. A 403 when the session's sign-in is not recent; a 422 when the account already has an email, the merge is not allowed, or on `code` when it is wrong, expired, used, tried five times or another account's; a 429 after too many failures, or when the budget of wrong codes for the address or this account is spent (10 an hour, 20 a day). */
   | { method: 'POST'; path: '/me/identities/email/verify'; body: StoreEmailLinkVerifyRequest; answer: StoreMeResponse | StoreMergeOfferResponse }
-  /** Remove a way in from the customer's account. Never the last one — and a mobile number counts as a way in that stays only where a sign-in by SMS opens this very account by it: through a website's key while it signs in by SMS, an Iranian mobile, and of the accounts holding the number the one such a sign-in opens. Removing the email also removes the password and two-factor sign-in, and the address gets an email saying so; removing Telegram also removes the handle; removing the mobile number in a shop whose bot asks every customer's number (`shop.phone_required`) has the bot ask it again. The customer is notified. A 403 when the session's sign-in is not recent; a 422 when the account has no way in of that kind, or it is the last one — and on `kind` for the Telegram account through the mini app's key (the app and the bot know the customer by it). */
+  /** Remove a way in from the customer's account. Never the last one — and a mobile number counts as a way in that stays only where a sign-in by SMS opens this very account by it: through a website's key while it signs in by SMS, an Iranian mobile, and of the accounts holding the number the one such a sign-in opens. Removing the email also removes the password and two-factor sign-in, and the address gets an email saying so; removing Telegram also removes the handle; removing the mobile number in a shop whose bot asks customers' numbers (`shop.phone_required`, `shop.phone_moments`) has the bot ask it again. The customer is notified. A 403 when the session's sign-in is not recent; a 422 when the account has no way in of that kind, or it is the last one — and on `kind` for the Telegram account through the mini app's key (the app and the bot know the customer by it). */
   | { method: 'DELETE'; path: `/me/identities/${StoreIdentityKind}`; body: undefined; answer: StoreMeResponse }
   /** Accept a merge offer (the 202 of a `POST /me/identities/…`). The two accounts become one: the older account stays and takes over everything the other owned, then also gets the way in being added. A password set this way ends every other session of the account. This session is signed in to the remaining account, and the customer is notified. A 403 when the session's sign-in is not recent; a 422 when the ticket is not this account's, is used or expired, the other account no longer has that way in, or the merge is no longer allowed. */
   | { method: 'POST'; path: '/me/merge'; body: StoreMergeRequest; answer: StoreMeResponse }
@@ -7938,7 +8500,7 @@ export type StoreWrite =
   | { method: 'POST'; path: `/subscriptions/${number}/extra-time`; body: StoreExtraTimeRequest; answer: StoreCheckoutResponse }
   /** Buy extra devices for a service («کاربر اضافه»): `devices` more on its IP limit, paid with `method_id`, through the same checkout as every purchase. Priced for 30 days and charged for the days left of the period in use (whole days, at least 1: to its end date, or to the start of a renewal bought before then; its whole term while it waits for its first connection; 30 for one that never ends), rounded up to whole Toman — as `GET …/extras` shows. The devices last until that period ends: a renewal brings its own device limit (`StoreRenewal`), and they are bought again for the new period. The wallet adds them at once; a card waits for its receipt; an online gateway answers its page. A 422 on `status` while the service cannot take them (switched off by support, gone from its panel, a free test account, an unlimited device limit, its time or traffic ran out, or a server whose panel does not enforce the limit); on `devices` for an amount not on offer, or when none is sold (see `GET …/extras`); on `method_id` and `idempotency_key` as for `POST /orders`. The 422s for five unpaid orders and a receipt still in review, and the 409s (`expected_amount` among them), 429 and 503, as for `POST /orders`. Repeated with the same `Idempotency-Key`, it returns the order that key made, as it is now. */
   | { method: 'POST'; path: `/subscriptions/${number}/extra-devices`; body: StoreExtraDevicesRequest; answer: StoreCheckoutResponse }
-  /** Buy a plan on one of its locations, paid with `method_id`. The same checkout as the bot's purchases, at the customer's price: the lowest of the price, the first-purchase price (`first_purchase_price`, until they have bought a service) and the agent price (`agent_price`, for an agent or a member of a group with agent prices). The order is created only with the payment method. The service is named on its panel by the shop's pattern, or — while the shop offers it (`shop.name_modes` of `GET /`) — by a random name or the one the customer typed (`name_mode`, `client_name`). The wallet pays at once (the service is delivered, or the order fails and waits for support); a card waits for its receipt (`POST /payments/{id}/receipt`); an online gateway answers its page to pay on (`link`) and tells the shop once paid (`POST /payments/{id}/check` asks it sooner). A 422 on `plan_id` for a plan not on sale now (switched off, on no location that can deliver it now, or in an agent's shop more traffic than the agent has left to sell); on `server_id` for a server it is not sold on now while another location is; on `name_mode` for a way of naming the shop does not offer; on `client_name` for a typed name that is refused; on `method_id` for a method that cannot pay it, a wallet short of the price (the message says how much is missing), or an online gateway that would not open the payment (the order stays open); on `idempotency_key` for a key used for a different order or first sent with another `method_id`. A 422 (no field) while the customer has 5 unpaid orders; paid or expired orders free the room. A 422 on `status` for a card method while the shop takes one receipt at a time and the customer's last receipt is still in review (the message names its order; nothing is ordered, and the wallet still pays). A 422 on `status`, with any method, for an order whose online payment is held for support (the message names the order: nothing is paid — tell the customer not to pay again but to write to support). A 409 on `expected_amount` when the request names the amount the website showed and the order costs another now (nothing ordered; the message says the price now). A 409 when the order was paid or closed at the same moment elsewhere, or, for a repeated request, when the order was cancelled since (with its own message). A 429 with `Retry-After` past 30 ordering requests in 10 minutes (purchases, renewals and top-ups together, repeats included). A 503 while the shop takes no orders because its bot is switched off or — an agent's shop — the main shop suspended its selling (`shop.taking_orders` of `GET /`), repeats included. Repeated with the same `Idempotency-Key`, it returns the order that key made, as it is now: never a second order or a second charge. */
+  /** Buy a plan on one of its locations, paid with `method_id`. The same checkout as the bot's purchases, at the customer's price: the lowest of the price, the first-purchase price (`first_purchase_price`, until they have bought a service) and the agent price (`agent_price`, for an agent or a member of a group with agent prices). For a customer the perks do not reach (`GET /me` `perks` false), their agent price where the plan has one and the price elsewhere, with no sale, tier or code — a `discount_code` is a 422. The order is created only with the payment method. The service is named on its panel by the shop's pattern, or — while the shop offers it (`shop.name_modes` of `GET /`) — by a random name or the one the customer typed (`name_mode`, `client_name`). The wallet pays at once (the service is delivered, or the order fails and waits for support); a card waits for its receipt (`POST /payments/{id}/receipt`); an online gateway answers its page to pay on (`link`) and tells the shop once paid (`POST /payments/{id}/check` asks it sooner). A 422 on `plan_id` for a plan not on sale now (switched off, on no location that can deliver it now, or in an agent's shop more traffic than the agent has left to sell); on `server_id` for a server it is not sold on now while another location is; on `name_mode` for a way of naming the shop does not offer; on `client_name` for a typed name that is refused; on `method_id` for a method that cannot pay it, a wallet short of the price (the message says how much is missing), or an online gateway that would not open the payment (the order stays open); on `idempotency_key` for a key used for a different order or first sent with another `method_id`. A 422 (no field) while the customer has 5 unpaid orders; paid or expired orders free the room. A 422 on `status` for a card method while the shop takes one receipt at a time and the customer's last receipt is still in review (the message names its order; nothing is ordered, and the wallet still pays). A 422 on `status`, with any method, for an order whose online payment is held for support (the message names the order: nothing is paid — tell the customer not to pay again but to write to support). A 409 on `expected_amount` when the request names the amount the website showed and the order costs another now (nothing ordered; the message says the price now). A 409 when the order was paid or closed at the same moment elsewhere, or, for a repeated request, when the order was cancelled since (with its own message). A 429 with `Retry-After` past 30 ordering requests in 10 minutes (purchases, renewals and top-ups together, repeats included). A 503 while the shop takes no orders because its bot is switched off or — an agent's shop — the main shop suspended its selling (`shop.taking_orders` of `GET /`), repeats included. Repeated with the same `Idempotency-Key`, it returns the order that key made, as it is now: never a second order or a second charge. */
   | { method: 'POST'; path: '/orders'; body: StoreOrderRequest; answer: StoreCheckoutResponse }
   /** Upload the receipt of a card transfer. For the payment the checkout returned (`transfer.payment_id`): a picture, with an optional note from the customer. Support always reviews it (in the panel or the report group): a card method's automatic approval window applies only to receipts sent in the bot, never to uploads. Returns the order, with the payment awaiting review. A 404 for another customer's payment; a 422 on `status` while the payment awaits no receipt (one was already sent, or it was rejected, paid, cancelled, or is not a card transfer), or while the shop takes one receipt at a time and another receipt of the customer's is still in review (the message names its order), on `file` when it is not a JPEG, PNG or WebP of at most 10 MB, or on `note` when it is too long. A 429 with `Retry-After` past 10 pictures in an hour (receipts and ticket pictures share this budget). A 503 while the host has less than 200 MB of free disk, once the shop's uploads for the day reach 1024 MB, or while the shop takes no orders (its bot is switched off). A form larger than PHP accepts is a 413; a form field that is not UTF-8 is a 422 on that field. */
   | { method: 'POST'; path: `/payments/${number}/receipt`; body: StoreReceiptRequest; answer: StoreOrderResponse }
@@ -7948,11 +8510,11 @@ export type StoreWrite =
   | { method: 'POST'; path: '/wallet/top-up'; body: StoreTopUpRequest; answer: StoreCheckoutResponse }
   /** «انتقال موجودی»: send `amount` from the wallet to another customer of the shop, found by their numeric Telegram id — as the bot does it, with no fee. Only while the shop offers it (`transfer` of `GET /wallet`, off by default), and only from the wallet's own balance, never an agent's credit. The recipient's wallet gets the whole amount at once; each wallet's ledger has a line naming the other customer («انتقال موجودی به …», «دریافت موجودی از …»); the recipient is told in the bot and among their notices (`wallet_received`), this customer among their notices and in Telegram (`wallet_sent`); the report group hears of it. A 403 when the session's sign-in is not recent (call `POST /me/reauthenticate` first): a bearer token alone gives no money away. A 422 on `status` while the shop offers none; on `telegram_id` as `GET` refuses it; on `amount` for no whole number of Toman, below `min` or above `max`, more than the balance, or past the daily cap (the message says what today leaves); on `idempotency_key` for a missing or malformed key, or one sent before with another recipient or amount. It looks the recipient up as `GET` does (one of its 10 in 10 minutes); at most 10 transfers an hour per customer, then a 429 with `Retry-After`. Repeated with the same `Idempotency-Key`, it answers the transfer that key made, with the wallet as it is now: never a second transfer. */
   | { method: 'POST'; path: '/wallet/transfer'; body: StoreWalletTransferRequest; answer: StoreWalletTransferResponse }
-  /** Check a discount code before paying. Returns the quote the order would be made at: the base price (the customer's price for the plan, or the cost of that much extra), the automatic discount and the code's discount as lines, and the total. Nothing is ordered. A 422 on `code` when it does not apply: unknown in this shop, switched off, outside its dates, for another type of order, plan or server, only for a first purchase, for a larger order, or used up. The rest of the request is refused as its checkout would refuse it: a 422 on `plan_id`, `server_id`, `status`, `gb`, `days` or `devices`, a 404 for a service not theirs — in an agent's shop whose selling the main shop suspended, a purchase on `plan_id` and a renewal or an extra on `status`, where the checkout answers a 503. Each code that does not apply uses one of the customer's 20 tries an hour (shared with the checkout's `discount_code`), then a 429 with `Retry-After`. */
+  /** Check a discount code before paying. Returns the quote the order would be made at: the base price (the customer's price for the plan, or the cost of that much extra), the automatic discount and the code's discount as lines, and the total. Nothing is ordered. A 422 on `code` when it does not apply: unknown in this shop, switched off, outside its dates, for another type of order, plan or server, only for a first purchase, for a larger order, or used up — and any code for a customer the perks do not reach (`GET /me` `perks` false), as their checkouts refuse `discount_code`. The rest of the request is refused as its checkout would refuse it: a 422 on `plan_id`, `server_id`, `status`, `gb`, `days` or `devices`, a 404 for a service not theirs — in an agent's shop whose selling the main shop suspended, a purchase on `plan_id` and a renewal or an extra on `status`, where the checkout answers a 503. Each code that does not apply uses one of the customer's 20 tries an hour (shared with the checkout's `discount_code`), then a 429 with `Retry-After`. */
   | { method: 'POST'; path: '/discount-codes/check'; body: StoreDiscountCheckRequest; answer: StoreDiscountQuoteResponse }
   /** Redeem a gift code, as the bot's «🎁 کد هدیه» does. The code may be typed in any case, with dashes and spaces anywhere and Persian digits. Toman are added to the wallet; a plan code delivers a free service (the answer has its order and, once delivered, the service; nothing is sent in Telegram). A 422 on `code` when the shop takes no codes now, the code does not exist, is already redeemed (by them or someone else) or expired, or its service cannot be delivered now (the code stays theirs to try again). Every try that names no code of the shop counts against the customer and their address network: 10 wrong tries an hour per customer and 30 per network, then a 429 with `Retry-After`. */
   | { method: 'POST'; path: '/gift-codes/redeem'; body: StoreGiftCodeRequest; answer: StoreGiftCodeResponse }
-  /** Take a free test account on one of the servers `GET /test-account` offers: the service, made at once, counts against the customer's quota as the bot's does. A 404 while the shop gives none; a 422 on `server_id` for a server not giving one now, or on `status` when what the bot asks first — a Telegram account linked, their own number while the shop asks it (`shop.phone_required`), the shop's channels joined — is not met or the quota refuses (its words say why); a 502 when the server's panel failed (nothing counted). */
+  /** Take a free test account on one of the servers `GET /test-account` offers: the service, made at once, counts against the customer's quota as the bot's does. A 404 while the shop gives none; a 422 on `server_id` for a server not giving one now, or on `status` when what the bot asks first — a Telegram account linked, their own number while the shop asks it (`shop.phone_required`, or `shop.phone_moments` has `test`), the shop's channels joined — is not met or the quota refuses (its words say why); a 502 when the server's panel failed (nothing counted). */
   | { method: 'POST'; path: '/test-account'; body: StoreTestAccountRequest; answer: StoreSubscriptionResponse }
   /** Spin the lucky wheel: the cost comes off the wallet, a slice is drawn among those that can reach the customer now, and its prize is given at once — as the bot's «بچرخان» does. Where it landed (`landed`, an index into `slices`) is for the wheel's animation. A prize that could not be given gives the cost back and starts no cooldown (`failure`). A 422 on `status` when what the bot asks first — a Telegram account linked, their own number while the shop asks it (`shop.phone_required`), the shop's channels joined — is not met, while off, for buyers only, too soon (the words say until when) or with no slice that can reach them, nothing spent; a 422 on `status` when the wallet is short. */
   | { method: 'POST'; path: '/wheel/spin'; body: undefined; answer: StoreWheelSpinResponse }

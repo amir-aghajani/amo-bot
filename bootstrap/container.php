@@ -56,6 +56,9 @@ use App\Modules\Bots\Scheduling\BotShops;
 use App\Modules\Bots\ShopScopeMiddleware;
 use App\Modules\Catalog\Services\CustomServiceSettings;
 use App\Modules\Discounts\Services\DiscountSettings;
+use App\Modules\Imports\Imports;
+use App\Modules\Imports\Migrators\Faoxima\FaoximaMigrator;
+use App\Modules\Imports\Sources\Stager;
 use App\Modules\Installer\Services\InstallKey;
 use App\Modules\Payments\Contracts\RefundedOrders;
 use App\Modules\Payments\Drivers\Aban\AbanDriver;
@@ -72,6 +75,8 @@ use App\Modules\Payments\GatewayRegistry;
 use App\Modules\Payments\Services\OnlinePayments;
 use App\Modules\Payments\Services\PaymentSettings;
 use App\Modules\Providers\Drivers\HmPanel\HmPanelDriver;
+use App\Modules\Providers\Drivers\Marzban\MarzbanDriver;
+use App\Modules\Providers\Drivers\Marzban\MarzbanTokens;
 use App\Modules\Providers\Drivers\PasarGuard\PasarGuardDriver;
 use App\Modules\Providers\Drivers\ThreeXui\ThreeXuiDriver;
 use App\Modules\Providers\ProviderRegistry;
@@ -278,6 +283,10 @@ return [
     // The backups: one made to download, uploads waiting to be restored, the states kept from before a restore.
     'backups.path' => factory(fn(Application $app) => $app->storagePath('backups')),
     Backups::class => autowire()->constructorParameter('folder', get('backups.path')),
+    // «انتقال از ربات دیگر»: each import's uploaded backup file and what is unpacked of it, and its step's lock.
+    'imports.path' => factory(fn(Application $app) => $app->storagePath('imports')),
+    Stager::class => autowire()->constructorParameter('folder', get('imports.path')),
+    Imports::class => autowire()->constructorParameter('migrators', get('import.migrators'))->constructorParameter('folder', get('imports.path')),
     MiniApps::class => autowire()->constructorParameter('logos', get('miniapp.logos')),
     MiniAppAddress::class => get(MiniApps::class),
 
@@ -297,7 +306,10 @@ return [
     // --- Domain registries: register additional drivers here ---------------------------------
     // The panel connectors, by what servers.driver holds (Providers\Drivers) — and, on them, the client of each
     // server's panel, kept a while (ProviderRegistry).
-    'panel.drivers' => factory(static fn(ContainerInterface $c): Registry => new Registry([$c->get(ThreeXuiDriver::class), $c->get(PasarGuardDriver::class), $c->get(HmPanelDriver::class)])),
+    'panel.drivers' => factory(static fn(ContainerInterface $c): Registry => new Registry([$c->get(ThreeXuiDriver::class), $c->get(PasarGuardDriver::class), $c->get(HmPanelDriver::class), $c->get(MarzbanDriver::class)])),
+    // The bearer tokens a panel signed in with gives, kept encrypted across requests (Marzban's: MarzbanTokens).
+    'panel.tokens' => factory(fn(Application $app) => $app->storagePath('cache/panel-tokens')),
+    MarzbanTokens::class => autowire()->constructorParameter('directory', get('panel.tokens')),
     ProviderRegistry::class => factory(static function (PanelHttp $http, ContainerInterface $c): ProviderRegistry {
         $registry = new ProviderRegistry($http);
         foreach ($c->get('panel.drivers')->all() as $driver) {
@@ -310,6 +322,8 @@ return [
     // The ways the shop takes money, by what payment_methods.driver holds (Payments\Drivers).
     'payment.drivers' => factory(static fn(ContainerInterface $c): Registry => new Registry([$c->get(WalletDriver::class), $c->get(OutsideDriver::class), $c->get(ManualDriver::class), $c->get(CubePayDriver::class), $c->get(ZarinpalDriver::class), $c->get(AtlasPayDriver::class), $c->get(AbanDriver::class), $c->get(PlisioDriver::class), $c->get(AqayePardakhtDriver::class), $c->get(VarizaDriver::class)])),
     GatewayRegistry::class => autowire()->constructorParameter('drivers', get('payment.drivers')),
+    // The other bots an import reads, by what imports.migrator holds (Imports\Migrators).
+    'import.migrators' => factory(static fn(ContainerInterface $c): Registry => new Registry([$c->get(FaoximaMigrator::class)])),
     // The pictures the shop is sent, each kind in a folder of its own (Users\Enums\PictureFolder): the receipts customers
     // upload from the shops' websites, the support tickets' — one sent in the bot stays Telegram's file.
     'receipts.path' => factory(fn(Application $app) => $app->storagePath('uploads/receipts')),

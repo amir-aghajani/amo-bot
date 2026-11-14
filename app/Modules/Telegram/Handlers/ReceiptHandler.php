@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Telegram\Handlers;
 
 use App\Modules\Orders\Enums\OrderType;
+use App\Modules\Payments\Deposits\Services\DepositSettings;
 use App\Modules\Payments\Drivers\Manual\ManualGateway;
 use App\Modules\Payments\Enums\PaymentStatus;
 use App\Modules\Payments\Exceptions\ReceiptInReviewException;
@@ -25,9 +26,10 @@ use App\Support\Persian;
  * State `receipt:{payment}`: after a card's details, the chat waits for the receipt — a picture only (a photo, or a
  * picture sent as a file, judged by its bytes) — while the payment still awaits one (PaymentService::awaitsReceipt(),
  * the website's rule too). The picture is kept by its Telegram file id for support to review; the customer is told the
- * longest they may wait when the method approves on a timer. A reminder's «ارسال رسید» is the same callback, entering
- * the state again. While the shop takes one receipt at a time (ReceiptsInReview), a customer whose other receipt is in
- * review is told so and the flow ends. A receipt sent as an album is its first picture: the chat waits on the album
+ * longest they may wait when the method approves on a timer. While the shop listens to its bank SMS (DepositSettings),
+ * a plain message is told the exact sum approves itself, the receipt only should it not (ReceiptWaitingAuto). A
+ * reminder's «ارسال رسید» is the same callback, entering the state again. While the shop takes one receipt at a time
+ * (ReceiptsInReview), a customer whose other receipt is in review is told so and the flow ends. A receipt sent as an album is its first picture: the chat waits on the album
  * (ALBUM) so its other pictures pass unanswered, and anything else sent then is served as at no step.
  */
 final class ReceiptHandler implements Handler
@@ -44,6 +46,7 @@ final class ReceiptHandler implements Handler
         private readonly MainMenu $menu,
         private readonly BotTexts $texts,
         private readonly Dispatcher $dispatcher,
+        private readonly DepositSettings $deposits,
     ) {}
 
     /** The state that waits for this payment's receipt — and the callback that enters it again. */
@@ -102,8 +105,10 @@ final class ReceiptHandler implements Handler
 
         $picture = $update->picture($this->pictures->isPicture(...));
         if ($picture === null) {
-            // A plain message is a reminder that a receipt is awaited; anything else is the wrong kind of file.
-            $ctx->reply($this->texts->get(in_array($update->contentKind(), ['text', null], true) ? BotText::ReceiptWaiting : BotText::ReceiptNotImage));
+            // A plain message is a reminder that a receipt is awaited — or, while the bank's SMS confirms this payment's
+            // own sum, that the exact sum needs none; anything else is the wrong kind of file.
+            $waiting = $this->deposits->approvesItself($payment) ? BotText::ReceiptWaitingAuto : BotText::ReceiptWaiting;
+            $ctx->reply($this->texts->get(in_array($update->contentKind(), ['text', null], true) ? $waiting : BotText::ReceiptNotImage));
 
             return;
         }

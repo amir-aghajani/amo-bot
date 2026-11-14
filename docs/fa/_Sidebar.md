@@ -8,6 +8,7 @@
   - [مرجع config.php (انگلیسی)](../Config-Reference.md)
   - [به‌روزرسانی](Upgrading.md)
   - [پشتیبان‌گیری](Backups.md)
+  - [انتقال از ربات دیگر](Importing.md)
   - [دستورهای کنسول](Console-Commands.md)
 - راهنمای مالک فروشگاه
   - [نمای کلی](Owners-Guide.md)

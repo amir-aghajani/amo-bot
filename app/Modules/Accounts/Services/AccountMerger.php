@@ -268,6 +268,14 @@ final class AccountMerger
         if ($merged->last_seen_at !== null && ($survivor->last_seen_at === null || $merged->last_seen_at->gt($survivor->last_seen_at))) {
             $fill += $take('last_seen_at');
         }
+        // Bought in the bot the shop came from, as either account was: no newcomer.
+        if ($merged->bought_elsewhere_at !== null && $survivor->bought_elsewhere_at === null) {
+            $fill += $take('bought_elsewhere_at');
+        }
+        // Excused from the phone rule, as either account was.
+        if ($merged->phone_exempt && !$survivor->phone_exempt) {
+            $fill['phone_exempt'] = true;
+        }
 
         $this->db->table('users')->where('id', $merged->id)->update(['telegram_id' => null, 'email' => null, 'google_sub' => null, 'referral_code' => null]);
         if ($fill !== []) {

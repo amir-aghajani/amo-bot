@@ -3,7 +3,7 @@ import { appBuild } from '@/apps/app/config'
 import { useAccount, useShop } from '@/apps/app/lib/session'
 import { PhoneSection } from '@/apps/app/screens/account/parts/phone'
 import { ProfileCard } from '@/apps/app/screens/account/parts/profile-card'
-import { clubOpen, reviewsOpen } from '@/apps/app/screens/home/parts/programs'
+import { clubOpen, perksReach, reviewsOpen } from '@/apps/app/screens/home/parts/programs'
 import { openAddress, openTelegramLink } from '@/apps/app/telegram/webapp'
 import { Screen } from '@/apps/app/ui/screen'
 import { Row, Section } from '@/apps/app/ui/section'
@@ -57,7 +57,7 @@ export default function AccountScreen() {
     <Screen title="حساب من" bottom="tabs">
       <ProfileCard customer={customer} tier={about.programs.loyalty ? (loyalty.tier?.name ?? null) : null} />
 
-      <PhoneSection phone={customer.phone} required={about.phone_required} botUrl={bot?.url ?? null} />
+      <PhoneSection phone={customer.phone} required={about.phone_required} moments={about.phone_moments} exempt={customer.phone_exempt} iranOnly={about.phone_iran_only} botUrl={bot?.url ?? null} />
 
       <Section title="روش‌های ورود" footer="حساب شما در ربات، مینی‌اپ و وب‌سایت فروشگاه یکی است.">
         <Row
@@ -86,7 +86,7 @@ export default function AccountScreen() {
       </Section>
 
       <Section>
-        {clubOpen(shop.data) && <Row icon={Crown} tint="#ff2d55" title="باشگاه مشتریان" to="/club" />}
+        {clubOpen(shop.data, perksReach(account.data)) && <Row icon={Crown} tint="#ff2d55" title="باشگاه مشتریان" to="/club" />}
         <Row icon={Headset} tint="#1fa5e0" title="پشتیبانی" subtitle="تیکت‌های شما" to="/support" />
         <Row icon={BookOpen} tint="#af52de" title="آموزش" to="/tutorial" />
         {reviewsOpen(shop.data) && <Row icon={MessageSquareQuote} tint="#e6a100" title="نظرات مشتریان" to="/reviews" />}

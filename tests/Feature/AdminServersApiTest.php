@@ -40,7 +40,7 @@ final class AdminServersApiTest extends HttpTestCase
     {
         $data = $this->decode($this->get('/api/admin/servers/drivers'));
 
-        self::assertSame(['3x-ui', 'pasarguard', 'hmpanel'], array_column($data['drivers'], 'key'), 'in the order they are registered');
+        self::assertSame(['3x-ui', 'pasarguard', 'hmpanel', 'marzban'], array_column($data['drivers'], 'key'), 'in the order they are registered');
         $driver = $data['drivers'][0];
         self::assertSame(['key' => '3x-ui', 'label' => '3X-UI'], ['key' => $driver['key'], 'label' => $driver['label']]);
         self::assertSame(['mark' => '3X', 'vendor' => 'MHSanaei', 'docs_url' => 'https://github.com/MHSanaei/3x-ui', 'inbounds' => true, 'link_rotation' => true], $driver['traits'], 'what the picker draws it by, and what its panels can do');
@@ -115,10 +115,10 @@ final class AdminServersApiTest extends HttpTestCase
     public function testAServerIsOnAConnectorThisInstallationHasAndStaysOnIt(): void
     {
         // A connector none of the requests' shapes names: a request no panel sends.
-        $response = $this->unchecked()->postJson('/api/admin/servers', ['driver' => 'marzban', 'name' => 'x', 'base_url' => 'https://x.example']);
+        $response = $this->unchecked()->postJson('/api/admin/servers', ['driver' => 'nopanel', 'name' => 'x', 'base_url' => 'https://x.example']);
         self::assertSame(422, $response->getStatusCode());
         self::assertSame(['driver'], array_keys($this->decode($response)['errors']));
-        self::assertSame(['driver'], array_keys($this->decode($this->unchecked()->postJson('/api/admin/servers/test', ['driver' => 'marzban', 'name' => 'x', 'base_url' => 'https://x.example']))['errors']), 'nor is one probed');
+        self::assertSame(['driver'], array_keys($this->decode($this->unchecked()->postJson('/api/admin/servers/test', ['driver' => 'nopanel', 'name' => 'x', 'base_url' => 'https://x.example']))['errors']), 'nor is one probed');
 
         $server = $this->panelServer();
         $pasarguard = ['driver' => 'pasarguard', 'api_token' => 'pg_key_6f1c2a3b-4d5e-4f60-8a1b-2c3d4e5f6a7b'] + self::tokenForm();
@@ -301,7 +301,7 @@ final class AdminServersApiTest extends HttpTestCase
     public function testAServersFormIsItsDescribedFieldsAsTheServerKeepsThem(): void
     {
         $server = $this->panelServer(overrides: ['api_token' => null, 'username' => 'admin', 'password' => 'pw', 'meta' => ['verify_tls' => false, 'timeout' => 45, 'subscription_url' => 'https://sub.example.com/s']]);
-        $this->panelServer('Gone', ['driver' => 'marzban']);
+        $this->panelServer('Gone', ['driver' => 'nopanel']);
 
         $fields = array_column(array_column($this->decode($this->get('/api/admin/servers/drivers'))['drivers'], null, 'key')['3x-ui']['fields'], 'name');
         $servers = array_column($this->decode($this->get('/api/admin/servers'))['servers'], 'form', 'name');
@@ -410,7 +410,7 @@ final class AdminServersApiTest extends HttpTestCase
         $this->panelServer('NoLinks', ['serves_subscriptions' => false]);
         $this->panelServer('Off', ['serves_subscriptions' => true, 'is_active' => false]);
         $this->panelServer('Full', ['serves_subscriptions' => true, 'capacity' => 0]);
-        $this->panelServer('Gone', ['serves_subscriptions' => true, 'driver' => 'marzban']);
+        $this->panelServer('Gone', ['serves_subscriptions' => true, 'driver' => 'nopanel']);
 
         $reasons = array_column($this->decode($this->get('/api/admin/servers'))['servers'], 'unsellable_reason', 'name');
 
@@ -456,7 +456,7 @@ final class AdminServersApiTest extends HttpTestCase
 
     public function testAServerWhoseConnectorIsGoneIsNotCheckedButSaidWhy(): void
     {
-        $server = $this->panelServer('Gone', ['driver' => 'marzban']);
+        $server = $this->panelServer('Gone', ['driver' => 'nopanel']);
 
         foreach (['check' => "/api/admin/servers/{$server->id}/test", 'inbounds' => "/api/admin/servers/{$server->id}/inbounds/sync"] as $what => $path) {
             $response = $this->postJson($path);

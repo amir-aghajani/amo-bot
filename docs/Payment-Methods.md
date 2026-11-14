@@ -106,12 +106,14 @@ website. It waits under «فروش › پرداخت‌ها» › «در انتظ
 
 ## Approving receipts by themselves
 
-With a review window of, say, 30 minutes, a receipt **sent in the bot** that nobody approved or rejected in that time is
-approved by itself, and its order delivered — as if support had approved it; the payments list marks it «تایید
-خودکار». The customer is told only the longest wait — «حداکثر تا ۳۰ دقیقه دیگر» —, never that it is automatic.
+With a review window of, say, 30 minutes, a receipt **sent in the bot** — or uploaded in the mini app — that nobody
+approved or rejected in that time is approved by itself, and its order delivered — as if support had approved it; the
+payments list marks it «تایید خودکار». The customer is told only the longest wait — «حداکثر تا ۳۰ دقیقه دیگر» —, never
+that it is automatic.
 
-- A receipt **uploaded on the website is never approved by itself**: its account may be an email made a minute ago. The
-  report group's line says so under it.
+- A receipt **uploaded on the website is approved by itself only when the customer's account is a Telegram account**
+  (they signed in with Telegram), as every mini app customer's is. One whose account only an email or a mobile number
+  vouches for never is: it may have been made a minute ago. The report group's line says so under it.
 - It approves only while the order is still waiting: a receipt whose order was paid another way meanwhile stays with
   support. And it approves only a receipt still in review: one support rejects or cancels in the same moment stays
   rejected or cancelled.
@@ -122,6 +124,49 @@ approved by itself, and its order delivered — as if support had approved it; t
 - It applies to a method switched off too, for the receipts it already has.
 
 A window trades checking for speed: a fake receipt is approved too. Keep it for a card whose statements you watch.
+
+## Confirmed by the bank's SMS
+
+The bank texts you every deposit to your card. **ForApp** («فوراپ», [github.com/erfjab/forapp](https://github.com/erfjab/forapp)),
+a free open-source Android app, reads those SMS on the phone that gets them and forwards each to the shop — which then
+approves the card payment it pays, by itself, in seconds: the customer transfers the exact sum and is done, with no
+receipt to send and nobody to wait for. Unlike a review window, nothing is approved that the bank did not say came in.
+
+**Setting it up** — «روش‌های پرداخت» › the card «تایید خودکار واریز»: switch it on and save. The card «اتصال فوراپ» then
+shows the steps: download ForApp («دانلود فوراپ») on the phone that receives the bank's SMS and let it read them; add a
+webhook destination; paste the shop's **webhook address** and **API key** from the card (each with «کپی»); send the
+app's test message. The card says when the last test and the last SMS came — «هنوز پیامی نرسیده است.» until then.
+Each shop has its own address and key (an agent's too); «ساخت کلید تازه» makes a new key, and the old one stops
+working at once — give the app the new one.
+
+**How a payment is matched** — while it is on, every card-to-card payment (a purchase, a renewal, an extra, a top-up,
+in the bot, on the website and in the mini app) asks the price plus 1 to 999 Toman at random, a sum no other card
+payment of the shop may still be paid at asks: an open one, one whose receipt you refused while its order is open, and
+one refused, dropped or approved by hand in the last three days (its customer may still transfer the sum shown). The
+customer is told to pay exactly that sum, to the last digit, and that it is confirmed by itself, usually within a
+minute. A method whose «بیشترین مبلغ (تومان)» leaves no room above the price asks the price itself, and its customer is
+asked for the receipt as usual. When an SMS ForApp recognised as a bank's deposit has the sum of exactly one open
+payment — waiting for the transfer, for its receipt to be reviewed, or refused while its order is open — made before the
+SMS came, the payment is approved as support would: the service is delivered and the customer told. The payments list
+shows «تایید با پیامک بانک» on it, and so does its report in the report group. The few Toman are part of what the
+customer paid: a top-up credits them, and a refund gives back the whole payment.
+
+**Never on a guess** — nothing is approved when:
+
+- **no open payment asks the sum** (a customer who rounded it, a transfer from someone else, an SMS from before the
+  payment was made), or **ForApp did not recognise the SMS as a bank's deposit**: «💰 واریز بدون پرداخت» in the report
+  group's «رسیدها», with the SMS and why — match it to the customer's receipt by hand;
+- **more than one does** (payments made before you switched it on ask the price itself): «⚠️ واریز با چند پرداخت
+  هم‌مبلغ», naming them — none is approved, you pick the right one;
+- **the SMS is a withdrawal**, has no sum ForApp could read in Rial, or is more than three days old: kept, and nothing
+  else.
+
+A payment you or the review window approved before its SMS came is only confirmed by it: nobody is told twice. Every SMS
+that came — and what came of it — is listed in «پرداخت‌ها» › «واریزهای پیامکی», with its tabs («بدون پرداخت», «چند
+پرداخت», «تایید شده», «نادیده», «آزمایشی») and its text; it is kept 90 days. The same SMS sent twice counts once.
+
+A customer's receipt still works as before: one who sent it anyway is approved by the SMS all the same. Only a card
+whose SMS reach the phone is confirmed this way — a payment to another card waits for its receipt as usual.
 
 ## Every online gateway
 

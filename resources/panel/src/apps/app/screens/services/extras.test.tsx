@@ -76,6 +76,29 @@ describe('extras for a service', () => {
     expect(server().sent('POST', `${SERVICE}/extra-traffic`)[0]?.body).toEqual({ gb: 25, method_id: 1, expected_amount: '45000' })
   })
 
+  it('takes a free extra with one button, naming no card transfer while another way is offered', async () => {
+    const free: StoreExtraOffer = {
+      ...TRAFFIC,
+      offer_price: '0.00',
+      discount: { ...PERSONAL, label: 'تخفیف اختصاصی شما ۱۰۰٪', percent: 100 },
+      options: [{ quantity: 10, price: '18000.00', offer_price: '0.00' }],
+      custom: null,
+    }
+    server().on('POST', `${SERVICE}/extra-traffic`, json(checkout('extra_traffic', '0.00')))
+    open({ traffic: free, time: null, devices: null })
+    // The card first: a card-to-card payment of nothing would be the bot's phone rule's `card` moment.
+    server().on('GET', `${API}/payment-methods`, json({ methods: [CARD, WALLET] }))
+
+    fireEvent.click(await screen.findByRole('radio', { name: /۱۰ گیگابایت/ }))
+    const take = await screen.findByRole('button', { name: 'دریافت رایگان' })
+    await until(() => expect((take as HTMLButtonElement).disabled).toBe(false))
+    expect(screen.queryByRole('radiogroup', { name: 'روش پرداخت' })).toBeNull()
+    fireEvent.click(take)
+
+    await until(() => expect(server().sent('POST', `${SERVICE}/extra-traffic`)).toHaveLength(1))
+    expect(server().sent('POST', `${SERVICE}/extra-traffic`)[0]?.body).toEqual({ gb: 10, method_id: WALLET.id, expected_amount: '0.00' })
+  })
+
   it('says devices are priced for the days left of the period', async () => {
     server().on('POST', `${SERVICE}/extra-devices`, json(checkout('extra_devices', '18000.00')))
     open()

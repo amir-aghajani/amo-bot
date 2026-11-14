@@ -28,7 +28,7 @@ final class LayersTest extends TestCase
         // A merge offer counts the other account's services (Subscriptions); its housekeeping keeps the notices as long as the
         // owner's «زمان‌بندی کارها» says (Settings).
         'Accounts' => ['Auth', 'Bots', 'Notifications', 'Settings', 'Subscriptions', 'Telegram', 'Users'],
-        'Admin' => ['Accounts', 'Agency', 'Auth', 'Backups', 'Bots', 'Catalog', 'Discounts', 'Orders', 'Payments', 'Providers', 'Referrals', 'Reviews', 'Rewards', 'Settings', 'Store', 'Subscriptions', 'Support', 'Telegram', 'Users'],
+        'Admin' => ['Accounts', 'Agency', 'Auth', 'Backups', 'Bots', 'Catalog', 'Discounts', 'Imports', 'Orders', 'Payments', 'Providers', 'Referrals', 'Reviews', 'Rewards', 'Settings', 'Store', 'Subscriptions', 'Support', 'Telegram', 'Users'],
         // An agent's shop opens with a wallet of its own (Payments' built-in method); an order's traffic, drawn from the agent's pool (Orders).
         'Agency' => ['Auth', 'Bots', 'Notifications', 'Orders', 'Payments', 'Settings', 'Subscriptions', 'Telegram', 'Users'],
         // An actor may be a customer — one of the shop's admins —, named by who reads the decision (Users).
@@ -48,6 +48,13 @@ final class LayersTest extends TestCase
         // named (Catalog, Providers), for a customer who bought nothing (Orders), its uses its orders; its hold is a bot
         // setting (Settings); a customer's own discount is set under whoever set it (Auth's Actor).
         'Discounts' => ['Auth', 'Bots', 'Catalog', 'Orders', 'Providers', 'Settings', 'Users'],
+        // Another bot's data brought into the main shop: what it writes is each module's own rows, through each module's
+        // services — customers and their wallets (Users), servers and their clients, only read (Providers), plans
+        // (Catalog), services adopted as a claimed one is (Subscriptions), codes (Discounts, Rewards), a code's order
+        // types (Orders), cards of the card-to-card method (Payments), required channels, which Telegram is asked about
+        // (Telegram); a referral it brings is marked as decided, so no start gift is paid for it (Referrals); a backup file too
+        // large is refused in the backups' words of the host's limit (Backups).
+        'Imports' => ['Backups', 'Bots', 'Catalog', 'Discounts', 'Orders', 'Payments', 'Providers', 'Referrals', 'Rewards', 'Subscriptions', 'Telegram', 'Users'],
         'Installer' => ['Auth', 'Settings', 'Telegram'],
         // A loyalty tier reached is announced with its name and perks (Discounts' LoyaltyTier); a refund says the cashback it took
         // back (Rewards' Cashback).

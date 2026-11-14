@@ -21,6 +21,7 @@ use App\Modules\Telegram\Keyboard\MainMenu;
 use App\Modules\Telegram\Models\ReportMessage;
 use App\Modules\Telegram\Reports\ReportSender;
 use App\Modules\Telegram\Reports\TicketClose;
+use App\Modules\Telegram\Reports\UserManagement;
 use App\Modules\Telegram\Texts\BotText;
 use App\Modules\Telegram\Texts\BotTexts;
 use App\Modules\Telegram\Texts\TelegramHtml;
@@ -536,7 +537,7 @@ final class BotTicketsTest extends BotTestCase
         self::assertStringContainsString("🎫 <b>تیکت جدید</b> · \u{200E}#{$ticket->id}", $report['text']);
         self::assertStringContainsString('📌 موضوع: قطعی اتصال', $report['text']);
         self::assertStringContainsString('📨 از ربات', $report['text']);
-        self::assertSame(TicketClose::buttons($ticket->id), FakeTelegram::markupOf($report)['inline_keyboard'] ?? null);
+        self::assertSame([...TicketClose::buttons($ticket->id), ...UserManagement::buttons($ticket->user_id)], FakeTelegram::markupOf($report)['inline_keyboard'] ?? null);
 
         // What follows, under it — a picture sent in Telegram said in a line.
         $this->send($this->message(null, ['photo' => [['file_id' => 'shot-1']], 'caption' => 'این هم تصویرش']));

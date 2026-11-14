@@ -2,9 +2,9 @@
 
 # Servers
 
-«سرورها», the owner's alone: the VPN panels the shop sells on — 3X-UI v3, PasarGuard 3.1+ or HMPanel 2.5+. Every shop
-sells on the same servers: an agent's plans are built on them too, and a server's services are every shop's. An agent's
-panel has no servers page.
+«سرورها», the owner's alone: the VPN panels the shop sells on — 3X-UI v3, PasarGuard 3.1+, HMPanel 2.5+ or Marzban 0.8+.
+Every shop sells on the same servers: an agent's plans are built on them too, and a server's services are every shop's.
+An agent's panel has no servers page.
 
 ## The list
 
@@ -21,17 +21,17 @@ address, and in amber why it cannot sell, when it cannot; then «وضعیت», �
 
 ## Adding a server
 
-«افزودن سرور» asks which software runs the panel — «3X-UI», «PasarGuard» or «HMPanel (HMray)», each with its notes and a
-link to its project —, then its form:
+«افزودن سرور» asks which software runs the panel — «3X-UI», «PasarGuard», «HMPanel (HMray)» or «Marzban», each with its
+notes and a link to its project —, then its form:
 
 | Field | What it takes |
 |---|---|
 | «نام سرور» | 100 characters at most. **Customers see it**: it is the server's «لوکیشن» in the bot, on the shop's website and its status page — name it as a customer should read it («آلمان ۱») |
 | «ایموجی پرمیوم نام» | Optional: a premium emoji from the bot's list ([Bot texts and keyboards](Bot-Texts-And-Keyboards.md#premium-emoji)). Picked, its plain emoji becomes the name's first, and the bot draws that one premium: the location's button gets it as its icon — in place of the «🌍» its wording starts with —, and the texts that name the location (`%server%`) show it in its place. The website, the status page and the panels show the plain one. While it is chosen the name must start with an emoji |
-| «آدرس پنل» | The panel's own address, 255 characters at most, http or https: 3X-UI's with its web base path (`https://host:2053/AbCdEf`), without the `/panel` or `/login` of its pages after it; PasarGuard's dashboard address without `/dashboard` (`https://panel.example.com:8000`), no `/api` either; HMPanel's the address its sign-in page opens at (`https://panel.example.com`), without `/api`, `/dashboard`, `/clients` or any page of it. No `user:pass@`, `?` or `#` |
-| «احراز هویت» | «توکن API» (3X-UI) or «کلید API» (PasarGuard, HMPanel) — recommended —, or «نام کاربری و رمز». HMPanel offers its key alone: its API takes no admin's password |
+| «آدرس پنل» | The panel's own address, 255 characters at most, http or https: 3X-UI's with its web base path (`https://host:2053/AbCdEf`), without the `/panel` or `/login` of its pages after it; PasarGuard's dashboard address without `/dashboard` (`https://panel.example.com:8000`), no `/api` either; HMPanel's the address its sign-in page opens at (`https://panel.example.com`), without `/api`, `/dashboard`, `/clients` or any page of it; Marzban's dashboard address without `/dashboard` (`https://panel.example.com:8000`), no `/api` or `/docs` either. No `user:pass@`, `?` or `#` |
+| «احراز هویت» | «توکن API» (3X-UI) or «کلید API» (PasarGuard, HMPanel) — recommended —, or «نام کاربری و رمز». HMPanel offers its key alone: its API takes no admin's password. Marzban offers «نام کاربری و رمز» alone: its API has no keys |
 | «توکن API» / «کلید API» | 3X-UI's from *Settings → Security → API Token*, an **Admin** token (a Monitor or Node one only reads the status). PasarGuard's from *API Keys* (version 5.1 and later): the whole `pg_key_…` key, which the panel shows once, with full rights over users and reading groups and the system. HMPanel's from «تنظیمات ← API» (*Settings → API*): the whole `hmp_…` key, which the panel shows once, made with the scope `*` — or with `clients.read`, `clients.write`, `clients.renew` and `inbounds.read` |
-| «نام کاربری» / «رمز عبور» | The panel admin you sign in with (PasarGuard: an admin made in the dashboard — the one of its env file signs in only in debug mode) |
+| «نام کاربری» / «رمز عبور» | The panel admin you sign in with (PasarGuard: an admin made in the dashboard — the one of its env file signs in only in debug mode; Marzban: a sudo admin, who sees every user — another sees only the users it made) |
 | «کلید TOTP» | 3X-UI only, when its two-factor login is on: the Base32 secret it showed as you turned it on. The shop makes each sign-in's code from it |
 
 Under «تنظیمات پیشرفته»:
@@ -138,8 +138,8 @@ whose connector this installation no longer has is not checked: «کانکتور
 ### Inbounds
 
 The panel's inbounds as the shop last read them — PasarGuard's groups play their part; HMPanel's are the inbounds of
-the 3X-UI panels beneath it, each named after its panel («Germany · DE») —, each with its protocol, port, clients and
-the «فروش» switch. A plan sold on the whole server uses every inbound marked «فروش» and enabled on the
+the 3X-UI panels beneath it, each named after its panel («Germany · DE»); Marzban's are those of its Xray config, each
+by its tag —, each with its protocol, port, clients and the «فروش» switch. A plan sold on the whole server uses every inbound marked «فروش» and enabled on the
 panel, at the moment of each purchase; a plan that pins its inbounds uses those whatever the switch says
 ([Plans](Plans.md)); a service moved here, on a plan without this server, gets the inbounds marked. Every service is
 one client on the panel, attached to its inbounds.
@@ -296,7 +296,7 @@ switched off is not counted), and the main bot's
 report group hears it in «خطاها»: «🔴 پنل سرور «…» جواب نمی‌دهد», with the reason, when a panel that answered stops,
 and «🟢 پنل سرور «…» دوباره جواب می‌دهد» when it answers again ([Report group](Telegram-Group.md)).
 
-## The three connectors
+## The connectors
 
 **3X-UI** (v3 and later, MHSanaei's):
 
@@ -316,6 +316,11 @@ and «🟢 پنل سرور «…» دوباره جواب می‌دهد» when it
 - Its status shows CPU, RAM, disk and uptime of the panel's host; the cores run on its nodes, so their state reads
   «نامشخص».
 - «تغییر لینک» revokes the link: every earlier one stops working.
+- **A term from the first connection cannot be cleared** from a service through PasarGuard's API, and PasarGuard 5
+  puts any switched-off service still carrying one on hold when it is switched on. When the shop switches on or updates
+  a service it knows is not waiting — one with a fixed end, or with none —, it puts it back active, so it never starts
+  its old term over its end at its next connection; a switched-off service with no end that still carries a duration is read as waiting, as the
+  panel reads it.
 
 **HMPanel** («HMPanel (HMray)» in «افزودن سرور», 2.5 and later) — a panel that runs several 3X-UI panels beneath it:
 
@@ -340,6 +345,45 @@ and «🟢 پنل سرور «…» دوباره جواب می‌دهد» when it
 - **An error of HMPanel's own** (an answer of 500 or more) to a change counts as no clear answer: HMPanel may have made
   the change before it failed, so the shop asks the panel before doing it again — a service is never made twice, under
   another name.
+
+**Marzban** (0.8 and later, Gozargah's):
+
+- **An admin's username and password, the one way in**: Marzban's API has no keys. The shop trades them for a token —
+  a day long by default — and keeps it across requests, encrypted, for this server, its address, its way there and
+  that login, until shortly before it ends (10 minutes, or a tenth of its life when that is shorter): it signs in again
+  only then, or when the panel refuses the token (a password changed, say). Marzban tells its Telegram admins of every
+  sign-in: to hear none of the shop's, put the shop's host's IP in `LOGIN_NOTIFY_WHITE_LIST`, in Marzban's settings, as
+  the card's note says.
+- **Give a sudo admin.** Another admin sees only the users it made: its server is never read whole — the sync, and an
+  [import](Importing.md), ask for its services one at a time —, and another admin's user is refused with a hint to sign
+  in as a sudo admin.
+- **Its inbounds** are those of the panel's Xray config («Core Settings» in its dashboard), each by its tag, with its
+  protocol, port, transport and security; none of them is switched off on the panel. A service is made on its plan's
+  inbounds, with a proxy of each protocol they speak (the panel makes their ids and passwords). An inbound the panel no
+  longer has is refused before anything is sent, saying to read the inbounds again; one the panel refuses — an inbound
+  gone, a protocol disabled on it — says to look at «Core Settings».
+- A service's term starts at its first connection (Marzban's *on hold*) or ends on its day; one made switched off is
+  made, then switched off — taken back when the panel refuses that. The comment, naming the customer's Telegram id, is
+  the user's note (500 characters at most). Every change reads the user first and keeps a *next plan* set on the panel.
+  A traffic reset leaves a switched-off service off and one waiting for its first connection on hold — Marzban's own
+  reset would switch both on.
+- **A waiting term cannot be cleared**: Marzban's API keeps a service's on-hold duration once its term is replaced, and
+  the panel reads a switched-off service with no end that still carries one as waiting — so does the shop. A service
+  that was waiting, was later given unlimited time and is then switched off, comes back on hold when switched on.
+- **It has no IP limit**: a plan's device count is not applied, and no «کاربر اضافه» is sold on it.
+- A client's name is 3 to 32 English letters, digits and `_` ([Bot settings](Bot-Settings.md#service-usernames)).
+- «تغییر لینک» revokes the link (Marzban's *revoke_sub*): new proxy credentials, and every earlier link stops working.
+- The link is the user's subscription link — on the panel's own address when Marzban gives only its path —, or «آدرس
+  اشتراک» in front of its token. Every answer carries a freshly signed link, so a service's kept link changes with each
+  sync — every one keeps working until the link is revoked. A link a customer claims is checked by asking the panel's
+  own subscription route whose it is — a route of several folders too ([Services added by their link](Service-Claims.md)).
+- Its status shows the panel host's CPU and RAM and Xray's state and version — no disk or uptime. A user counts as
+  online when Marzban saw it in the last minute.
+- The sync reads a sudo admin's users 500 at a time; a panel of more than 50,000 is asked service by service instead.
+
+**Rebecca**, a fork of Marzban (Faoxima offers it), has no connector: its current version (1.x) puts every user in a
+service, as PasarGuard puts them in groups, and takes no choice of inbounds as Marzban does — it needs a connector of its
+own.
 
 Another panel is a driver ([Drivers](Drivers.md#a-vpn-panel-connector)). For developers, `panel:probe` tries a panel
 from a console as «تست اتصال» does ([Console commands](Console-Commands.md)); a shop never needs it.

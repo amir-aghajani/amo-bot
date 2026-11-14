@@ -4,6 +4,7 @@ import { useShop } from '@/apps/app/lib/session'
 import { store } from '@/apps/app/lib/store'
 import { Banners } from '@/apps/app/screens/home/parts/banners'
 import { Greeting } from '@/apps/app/screens/home/parts/greeting'
+import { perksReach } from '@/apps/app/screens/home/parts/programs'
 import { ServiceCarousel } from '@/apps/app/screens/home/parts/service-carousel'
 import { Shortcuts } from '@/apps/app/screens/home/parts/shortcuts'
 import { WalletCard } from '@/apps/app/screens/home/parts/wallet-card'
@@ -43,6 +44,7 @@ export default function HomeScreen() {
   }
 
   const customer = account.data?.customer
+  const perks = perksReach(account.data)
 
   return (
     <Screen bottom="tabs">
@@ -50,8 +52,8 @@ export default function HomeScreen() {
       {!shop.data.shop.taking_orders && <Notice tone="warning">فروشگاه فعلا سفارش تازه نمی‌گیرد؛ سرویس‌ها و کیف پول شما مثل همیشه در دسترس است.</Notice>}
       <ServiceCarousel />
       <WalletCard balance={customer?.balance} />
-      <Banners shop={shop.data} />
-      <Shortcuts shop={shop.data} />
+      <Banners shop={shop.data} perks={perks} />
+      <Shortcuts shop={shop.data} perks={perks} />
     </Screen>
   )
 }

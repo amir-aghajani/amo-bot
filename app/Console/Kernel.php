@@ -9,6 +9,7 @@ use App\Console\Commands\BotPollCommand;
 use App\Console\Commands\BotWebhookDeleteCommand;
 use App\Console\Commands\BotWebhookSetCommand;
 use App\Console\Commands\DbRebuildCommand;
+use App\Console\Commands\ImportRunCommand;
 use App\Console\Commands\PanelProbeCommand;
 use App\Console\Commands\ScheduleRunCommand;
 use App\Core\Application;
@@ -32,6 +33,7 @@ final class Kernel
         BotWebhookSetCommand::class,
         BotWebhookDeleteCommand::class,
         PanelProbeCommand::class,
+        ImportRunCommand::class,
         ScheduleRunCommand::class,
     ];
 

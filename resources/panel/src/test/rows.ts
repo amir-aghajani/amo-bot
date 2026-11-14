@@ -8,11 +8,16 @@ import type {
   CustomerAccount,
   CustomerGroupRow,
   DashboardResponse,
+  DepositRow,
+  DepositSettingsResponse,
   DiscountCodeRow,
   DriverDescription,
   DriverValues,
   FieldDescription,
   GiftCodeRow,
+  ImportChoices,
+  ImportState,
+  ImportSurvey,
   LoyaltyStanding,
   ManualMethodRow,
   OrderRow,
@@ -51,8 +56,15 @@ export function botSettingsRow(overrides: Partial<BotSettingsData> = {}): BotSet
   return {
     enabled: true,
     phone_required: false,
+    phone_scope: 'everywhere',
+    phone_on_purchase: true,
+    phone_on_renewal: true,
+    phone_on_test: true,
+    phone_on_card: true,
+    phone_iran_only: false,
     join_required: false,
     support_contact: '',
+    support_header: true,
     topup_min: 10000,
     topup_presets: [50000, 100000],
     topup_random_count: 0,
@@ -161,6 +173,7 @@ export function botSettingsRow(overrides: Partial<BotSettingsData> = {}): BotSet
     lottery_entries: 'order',
     lottery_exclude_agents: true,
     hold_minutes: 60,
+    agents_without_perks: false,
     ...overrides,
   }
 }
@@ -287,6 +300,43 @@ export function onlinePaymentRow(overrides: Partial<PaymentRow> = {}): PaymentRo
   })
 }
 
+/**
+ * «تایید خودکار واریز» on, as its page reads it: the key ForApp sends, its one address, a test 5 minutes before
+ * 2026-10-06 09:00 and no bank SMS yet, none of the week waiting on support.
+ */
+export function depositSettingsRow(overrides: Partial<DepositSettingsResponse> = {}): DepositSettingsResponse {
+  return {
+    enabled: true,
+    key: 'dpk_7f3a9c2e1b4d',
+    sources: [{ key: 'forapp', label: 'فوراپ', webhook_url: 'https://shop.example/webhooks/deposits/forapp/1' }],
+    last_received_at: null,
+    last_test_at: '2026-10-06T08:55:00Z',
+    waiting: 0,
+    ...overrides,
+  }
+}
+
+/**
+ * Deposit 31: 150٬370 Toman to the shop's card in a Mellat SMS, which approved card payment 7 of customer 10's order 12.
+ */
+export function depositRow(overrides: Partial<DepositRow> = {}): DepositRow {
+  return {
+    id: 31,
+    source: 'forapp',
+    status: 'matched',
+    amount_rial: 1503700,
+    amount: '150370.00',
+    bank: 'ملت',
+    sender: '+98700717',
+    body: 'بانک ملت\nواریز: 1,503,700 ریال\nمانده: 9,000,000',
+    note: null,
+    payment: { id: 7, order_id: 12, customer: { id: 10, name: 'امیر', username: 'amir', telegram_id: 123456789, email: null } },
+    received_at: '2026-10-06T09:00:00Z',
+    created_at: '2026-10-06T09:00:02Z',
+    ...overrides,
+  }
+}
+
 /** An order as the orders screen lists it: the wallet top-up payment 7 pays, still to be paid. */
 export function orderRow(overrides: Partial<OrderRow> = {}): OrderRow {
   return {
@@ -329,6 +379,7 @@ export function userRow(overrides: Partial<UserRow> = {}): UserRow {
     telegram_id: 123456789,
     email: null,
     phone: '+989120000001',
+    phone_exempt: false,
     status: 'active',
     role: 'customer',
     balance: '25000.00',
@@ -953,6 +1004,102 @@ export function saleRow(overrides: Partial<SaleRow> = {}): SaleRow {
     enabled: true,
     state: 'active',
     created_at: '2026-10-06T09:00:00Z',
+    ...overrides,
+  }
+}
+
+/** Faoxima's migrator as GET /imports describes it: its card's words and traits; it takes no form. */
+export function migratorRow(): DriverDescription {
+  return {
+    key: 'faoxima',
+    label: 'Faoxima',
+    description: 'مشتری‌ها، موجودی‌ها، سرویس‌ها، پلن‌ها، کدها، کانال‌ها و کارت‌های ربات Faoxima.',
+    notes: ['نسخه‌های 1.x'],
+    traits: { mark: 'FX', vendor: 'https://github.com/Mmd-Amir/Faoxima' },
+    fields: [],
+  }
+}
+
+/**
+ * What a Faoxima bot's data holds: 120 customers (8 of reseller bots, 30 with a balance), 84 services and 5 tests, two
+ * panels — «آلمان» a 3x-ui one on server 1's address, «گارد» one no connector speaks to —, its agents' group and one admin.
+ */
+export function importSurvey(overrides: Partial<ImportSurvey> = {}): ImportSurvey {
+  return {
+    version: null,
+    counts: { customers: 120, balances: 30, services: 84, tests: 5, plans: 6, discount_codes: 3, gift_codes: 2, channels: 1, cards: 2, resellers: 8 },
+    balance_total: '4250000',
+    panels: [
+      { key: 'Germany', name: 'آلمان', type: 'x-ui_single', url: 'https://de.example.com:2053/panel-path', driver: '3x-ui', unsupported: null, addable: true, services: 80, suggested_server_id: 1 },
+      {
+        key: 'guard-1',
+        name: 'گارد',
+        type: 'guard',
+        url: 'https://guard.example.com',
+        driver: null,
+        unsupported: 'AmoBot هنوز به پنل Guard وصل نمی‌شود.',
+        addable: false,
+        services: 4,
+        suggested_server_id: null,
+      },
+    ],
+    groups: [{ name: 'نماینده عادی', agent_pricing: true, customers: 12 }],
+    admins: [{ key: '5550001', telegram_id: 5550001, username: 'old_admin', role: 'administrator' }],
+    left: [
+      { what: 'تاریخچه پرداخت‌ها', count: 940 },
+      { what: 'تیکت‌ها', count: 37 },
+    ],
+    warnings: ['۳ مشتری بدهکارند؛ بدهی‌شان به کیف پولشان منتقل می‌شود.'],
+    ...overrides,
+  }
+}
+
+/** The review's choices as the server proposes them for importSurvey(): «آلمان» to server 1, «گارد» left behind. */
+export function importChoices(overrides: Partial<ImportChoices> = {}): ImportChoices {
+  return {
+    panels: { Germany: { action: 'server', server_id: 1 }, 'guard-1': { action: 'skip', server_id: null } },
+    balances: true,
+    banned: true,
+    phones: true,
+    referrals: true,
+    discounts: true,
+    groups: true,
+    admins: false,
+    resellers: false,
+    services: true,
+    tests: true,
+    plans: true,
+    plans_on: false,
+    discount_codes: true,
+    gift_codes: true,
+    channels: false,
+    cards: true,
+    ...overrides,
+  }
+}
+
+/** Import 7, from a Faoxima bot's `backup.zip` by root: reading, none of its 1000 bytes read yet. */
+export function importState(overrides: Partial<ImportState> = {}): ImportState {
+  return {
+    id: 7,
+    migrator: 'faoxima',
+    migrator_label: 'Faoxima',
+    source: 'backup',
+    file_name: 'backup.zip',
+    phase: 'reading',
+    progress: { stage: null, stage_label: null, done: 0, total: 1000 },
+    version: null,
+    survey: null,
+    choices: null,
+    proposed: null,
+    counts: null,
+    problems: { total: 0, by_reason: [] },
+    error: null,
+    reviewer: 'root',
+    started_at: null,
+    finished_at: null,
+    created_at: '2026-11-13T09:00:00Z',
+    updated_at: '2026-11-13T09:00:00Z',
     ...overrides,
   }
 }

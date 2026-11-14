@@ -12,6 +12,7 @@ use App\Modules\Agency\Services\AgencySettings;
 use App\Modules\Auth\Exceptions\ActorRefusedException;
 use App\Modules\Telegram\Models\ReportMessage;
 use App\Modules\Telegram\Reports\AgencyReview;
+use App\Modules\Telegram\Reports\UserManagement;
 use App\Modules\Telegram\Texts\BotText;
 use App\Modules\Telegram\Update\Update;
 use App\Modules\Users\Models\User;
@@ -58,8 +59,8 @@ final class AgencyReviewTest extends BotTestCase
         self::assertStringContainsString("🤝 <b>درخواست نمایندگی</b> · \u{200E}#{$request->id}", $report->text);
         self::assertStringContainsString('<code>' . self::CHAT . '</code>', $report->text, 'who asked');
         self::assertStringContainsString('📝 توضیح مشتری: کانال فروش دارم', $report->text);
-        self::assertSame(AgencyReview::buttons($request->id), (array) $report->keyboard);
-        self::assertSame([["ag:no:{$request->id}", "ag:ok:{$request->id}"]], array_map(static fn(array $row): array => array_column($row, 'callback_data'), (array) $report->keyboard), 'the wire format: «رد» and «تایید»');
+        self::assertSame([...AgencyReview::buttons($request->id), ...UserManagement::buttons($this->customer->id)], (array) $report->keyboard);
+        self::assertSame([["ag:no:{$request->id}", "ag:ok:{$request->id}"], ["um:n:{$this->customer->id}"]], array_map(static fn(array $row): array => array_column($row, 'callback_data'), (array) $report->keyboard), 'the wire format: «رد» and «تایید», then «⚙️ مدیریت کاربر»');
     }
 
     public function testABotAdminApprovesOnALevelAndTheCustomerIsTold(): void

@@ -107,7 +107,8 @@ had; «سروری برای اکانت تست نیست» only when no server is l
   tests among them.
 - **Newcomers only** refuses a customer with a purchase that had a price — paid at some point, whatever came of it
   since: a refunded one too, though a refund makes the customer a newcomer again for
-  [first-purchase prices](Plans.md#first-purchase-price). A free plan, a gift and a test make no buyer.
+  [first-purchase prices](Plans.md#first-purchase-price). A free plan, a gift and a test make no buyer. One an import
+  found had bought in the bot the shop came from is refused too ([Importing from another bot](Importing.md#customers)).
 - **The bot's admins** are held to the switch alone — no quota, no newcomers' rule, and the cap never refuses them —, to
   try it as often as they like; their tests still count toward the cap.
 - **Two taps at once** never take more than the quota: the test is judged and counted before the panel is asked. A

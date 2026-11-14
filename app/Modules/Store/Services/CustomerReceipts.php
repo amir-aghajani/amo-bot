@@ -25,8 +25,9 @@ use Psr\Http\Message\UploadedFileInterface;
 /**
  * A card transfer's receipt uploaded from the website, taken as the bot takes one: for the customer's own payment while
  * it awaits a receipt, judged as a picture by its bytes, kept among the shop's uploads, then the bot's compare-and-swap
- * and report (PaymentService::submitUpload()). Unlike the bot's, an uploaded receipt never auto-approves: it always waits
- * for support. Uploads share the customer's one picture budget with their tickets (CustomerPictures::budget()). While
+ * and report (PaymentService::submitUpload()). It auto-approves as the bot's does only for a customer whose account is a
+ * Telegram account — the mini app's, a website sign-in with Telegram (Payment::selfApproving()) —; any other waits for
+ * support. Uploads share the customer's one picture budget with their tickets (CustomerPictures::budget()). While
  * the shop takes one receipt at a time, none is taken while another of theirs is in review (ReceiptsInReview).
  */
 final class CustomerReceipts

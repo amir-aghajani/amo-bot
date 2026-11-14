@@ -125,6 +125,13 @@ describe('what it says', () => {
     const status = within(dialog()).getByText('وضعیت').nextElementSibling
     expect(status?.textContent?.replace(/\s+/g, ' ').trim()).toBe('ناموفق توسط @agent_shop_bot')
   })
+
+  it('says a card payment a bank SMS named was approved so', () => {
+    show(paymentRow({ status: 'paid', reviewer: 'پیامک بانک', actions: { ...paymentRow().actions, approve: false, reject: false } }))
+
+    const status = within(dialog()).getByText('وضعیت').nextElementSibling
+    expect(status?.textContent?.replace(/\s+/g, ' ').trim()).toBe('پرداخت‌شده تایید با پیامک بانک')
+  })
 })
 
 /** The dialog as the payments page holds it: an operation's answer is the payment it shows, and a refusal reads it again — as `refreshed`. */

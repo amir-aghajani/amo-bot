@@ -1,12 +1,12 @@
-import type { ReactNode } from 'react'
-import { Copy, CreditCard, Headset, Hourglass, Landmark, ReceiptText } from 'lucide-react'
+import { useState, type ReactNode } from 'react'
+import { Copy, CreditCard, Headset, Hourglass, Landmark, LoaderCircle, ReceiptText } from 'lucide-react'
 import { useNavigate } from 'react-router'
 import { openContact, orderNumber } from '@/apps/app/screens/pay/parts/order-words'
 import { Outcome, PayAgain } from '@/apps/app/screens/pay/parts/outcome'
 import { ReceiptForm } from '@/apps/app/screens/pay/parts/receipt'
 import { Step } from '@/apps/app/screens/pay/parts/step'
 import { tap } from '@/apps/app/telegram/haptics'
-import { MainAction } from '@/apps/app/ui/button'
+import { Button, MainAction } from '@/apps/app/ui/button'
 import { CopyValue } from '@/apps/app/ui/fields'
 import { Fact, Section } from '@/apps/app/ui/section'
 import { Notice } from '@/apps/app/ui/states'
@@ -20,8 +20,16 @@ import { cn } from '@/lib/utils'
  * Paying an order card to card: the card to transfer to — tapped, its number is copied — and the sum, shown in Toman
  * and copied in Rial as a banking app takes it, the shop's instructions, then the receipt's upload. A shop that takes
  * card payments in support's private chat shows no card: the customer sends the order's number there. Once the receipt
- * is sent the payment waits for support; a receipt refused is paid again as a new attempt.
+ * is sent the payment waits for support; a receipt refused is paid again as a new attempt. While the shop confirms
+ * transfers by itself (`auto_confirmed`: the bank's SMS), the exact sum is the whole of it — the screen says so, watches
+ * the order (the screen above) and moves on once it is paid —, the receipt only should it not be confirmed in minutes.
  */
+
+/** What a transfer the shop confirms by itself asks: the exact sum, no receipt. */
+const EXACT_SUM = 'دقیقا همین مبلغ را واریز کنید؛ پرداخت شما معمولا تا یک دقیقه خودکار تایید می‌شود و نیازی به فرستادن رسید نیست.'
+
+/** … and when the receipt is still wanted. */
+const RECEIPT_LATER = 'اگر تا چند دقیقه تایید نشد، رسید را بفرستید.'
 
 type Transfer = NonNullable<StoreCheckout['transfer']>
 
@@ -128,6 +136,7 @@ export function CardTransfer({ order, payment, transfer }: CardTransferProps) {
   }
   if (transfer?.contact) {
     const { contact } = transfer
+    const auto = transfer.auto_confirmed
 
     return (
       <>
@@ -135,12 +144,22 @@ export function CardTransfer({ order, payment, transfer }: CardTransferProps) {
           tone="accent"
           icon={Headset}
           title="پرداخت با پشتیبانی"
-          text="کارت این پرداخت را پشتیبانی می‌دهد: شماره سفارش را برای پشتیبانی بفرستید، مبلغ را واریز کنید و رسید را همان‌جا بفرستید."
+          text={
+            auto
+              ? 'کارت این پرداخت را پشتیبانی می‌دهد: شماره سفارش را برای پشتیبانی بفرستید و دقیقا همین مبلغ را واریز کنید؛ پرداخت شما معمولا تا یک دقیقه خودکار تایید می‌شود و نیازی به فرستادن رسید نیست. اگر تا چند دقیقه تایید نشد، رسید را برای پشتیبانی بفرستید.'
+              : 'کارت این پرداخت را پشتیبانی می‌دهد: شماره سفارش را برای پشتیبانی بفرستید، مبلغ را واریز کنید و رسید را همان‌جا بفرستید.'
+          }
         />
         <Section>
           <Fact label="سفارش">{orderNumber(order.id)}</Fact>
-          <Fact label="مبلغ">{formatMoney(transfer.amount)}</Fact>
+          {!auto && <Fact label="مبلغ">{formatMoney(transfer.amount)}</Fact>}
         </Section>
+        {auto && (
+          <>
+            <TransferAmount amount={transfer.amount} rial={transfer.amount_rial} />
+            <Watching />
+          </>
+        )}
         <div className="card p-4">
           <CopyValue label="پشتیبانی" value={contact.text} />
         </div>
@@ -155,6 +174,7 @@ export function CardTransfer({ order, payment, transfer }: CardTransferProps) {
   }
 
   const amount = transfer?.amount ?? payment.amount
+  const auto = transfer?.auto_confirmed === true
 
   return (
     <>
@@ -172,14 +192,50 @@ export function CardTransfer({ order, payment, transfer }: CardTransferProps) {
           </div>
         )}
         <TransferAmount amount={amount} rial={transfer?.amount_rial ?? rialOf(amount)} />
+        {auto && <Notice>{EXACT_SUM}</Notice>}
         {transfer !== null && transfer.instructions !== null && (
           <Notice>
             <p className="whitespace-pre-line">{transfer.instructions}</p>
           </Notice>
         )}
       </Step>
-      <ReceiptForm paymentId={payment.id} number="۲" title="ارسال رسید" />
+      {auto ? (
+        <>
+          <Watching />
+          <LaterReceipt paymentId={payment.id} />
+        </>
+      ) : (
+        <ReceiptForm paymentId={payment.id} number="۲" title="ارسال رسید" />
+      )}
     </>
+  )
+}
+
+/** The screen watching for the transfer the shop confirms by itself: it moves on by itself once it is. */
+function Watching() {
+  return (
+    <p role="status" className="text-hint flex items-center justify-center gap-2 text-footnote">
+      <LoaderCircle aria-hidden className="size-4 animate-spin" />
+      در انتظار واریز؛ این صفحه خودش به‌روز می‌شود.
+    </p>
+  )
+}
+
+/** The receipt, for a transfer the shop did not confirm by itself: put aside until asked for, then its form and «ارسال رسید». */
+function LaterReceipt({ paymentId }: { paymentId: number }) {
+  const [asked, setAsked] = useState(false)
+  if (asked) return <ReceiptForm paymentId={paymentId} number="۲" title="ارسال رسید" />
+
+  return (
+    <div className="flex flex-col items-start gap-3 rounded-2xl bg-fill p-4">
+      <span className="flex items-start gap-3">
+        <ReceiptText aria-hidden className="text-hint size-5 shrink-0" />
+        <span className="text-footnote">{RECEIPT_LATER}</span>
+      </span>
+      <Button variant="secondary" size="sm" onClick={() => setAsked(true)} className="ms-8">
+        ارسال رسید
+      </Button>
+    </div>
   )
 }
 

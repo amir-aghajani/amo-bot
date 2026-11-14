@@ -31,6 +31,12 @@ final class Urls
      */
     public const PAYMENT_WEBHOOK = '/payments/webhooks/{driver:[a-z0-9]+}';
 
+    /**
+     * A phone app's forwarded bank SMS (Payments\Deposits): the app's key, then the shop's id — the shop's key comes in a
+     * header (`X-API-Key`), as the app sends it.
+     */
+    public const DEPOSIT_WEBHOOK = '/webhooks/deposits/{source:[a-z0-9]+}/{bot:[0-9]+}';
+
     /** The website's API (the Store API): its version, then the store key that names the shop — no secret. */
     public const STORE = '/api/store/v1/{store:[0-9a-f]{24}}';
 
@@ -73,6 +79,12 @@ final class Urls
     public function paymentWebhook(string $driver): string
     {
         return $this->base() . self::fill(self::PAYMENT_WEBHOOK, ['driver' => $driver]);
+    }
+
+    /** Where a phone app forwards a shop's bank SMS (Payments\Deposits), its owner pasting it in the app. */
+    public function depositWebhook(string $source, int $bot): string
+    {
+        return $this->base() . self::fill(self::DEPOSIT_WEBHOOK, ['source' => $source, 'bot' => (string) $bot]);
     }
 
     /** The base address of a website's API, handed to its developer. */

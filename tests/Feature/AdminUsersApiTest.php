@@ -6,10 +6,12 @@ namespace Tests\Feature;
 
 use App\Core\Database\Page;
 use App\Modules\Bots\CurrentBot;
+use App\Modules\Notifications\Models\Notification;
 use App\Modules\Orders\Enums\OrderStatus;
 use App\Modules\Subscriptions\Enums\SubscriptionStatus;
 use App\Modules\Users\Enums\UserStatus;
 use App\Modules\Users\Models\User;
+use App\Modules\Users\Services\UserActions;
 use App\Modules\Users\Services\WalletService;
 use Tests\HttpTestCase;
 
@@ -133,6 +135,54 @@ final class AdminUsersApiTest extends HttpTestCase
         self::assertArrayHasKey('status', $this->decode($bad)['errors']);
 
         self::assertSame(404, $this->patchJson('/api/admin/users/999999', ['status' => 'banned'])->getStatusCode());
+    }
+
+    public function testSupportSendsACustomerAMessageAndHearsWhatCameOfIt(): void
+    {
+        $this->telegram();
+        $ali = $this->customer(['telegram_id' => 1001]);
+
+        $sent = $this->postJson("/api/admin/users/{$ali->id}/message", ['text' => "  سلام\r\nسرویس شما فعال شد.  "]);
+        self::assertSame(200, $sent->getStatusCode(), (string) $sent->getBody());
+        self::assertSame(['delivery' => 'told'], $this->decode($sent));
+        self::assertSame(["📩 پیام از طرف پشتیبانی:\n\nسلام\nسرویس شما فعال شد."], $this->telegram()->sentTo(1001), 'trimmed, its line breaks kept');
+
+        foreach (['', str_repeat('ا', UserActions::MESSAGE_MAX + 1)] as $text) {
+            $refused = $this->unchecked()->postJson("/api/admin/users/{$ali->id}/message", ['text' => $text]);
+            self::assertSame(422, $refused->getStatusCode());
+            self::assertArrayHasKey('text', $this->decode($refused)['errors']);
+        }
+        $blank = $this->postJson("/api/admin/users/{$ali->id}/message", ['text' => '   ']);
+        self::assertSame(['متن پیام را بنویسید.'], $this->decode($blank)['errors']['text'], 'blank once trimmed');
+        self::assertCount(1, $this->telegram()->sentTo(1001), 'none of them sent');
+
+        // No Telegram, no email: nothing could go — but it is kept on their website.
+        $web = $this->customer(['telegram_id' => null, 'first_name' => 'Web']);
+        self::assertSame(['delivery' => 'no_telegram'], $this->decode($this->postJson("/api/admin/users/{$web->id}/message", ['text' => 'سلام'])));
+        self::assertSame(1, Notification::query()->where('user_id', $web->id)->count());
+    }
+
+    public function testACustomerIsExcusedFromThePhoneRuleAndHeldToItAgain(): void
+    {
+        $ali = $this->customer(['telegram_id' => 1001]);
+        self::assertFalse($this->decode($this->get("/api/admin/users/{$ali->id}"))['user']['phone_exempt'], 'held to it, as everyone');
+
+        $excused = $this->putJson("/api/admin/users/{$ali->id}/phone-exempt", ['phone_exempt' => true]);
+        self::assertSame(200, $excused->getStatusCode(), (string) $excused->getBody());
+        self::assertTrue($this->decode($excused)['user']['phone_exempt']);
+        self::assertTrue($ali->refresh()->phone_exempt);
+
+        self::assertFalse($this->decode($this->unchecked()->putJson("/api/admin/users/{$ali->id}/phone-exempt", ['phone_exempt' => 'false']))['user']['phone_exempt'], '"false" is off, never a truthy string');
+        $bad = $this->unchecked()->putJson("/api/admin/users/{$ali->id}/phone-exempt", ['phone_exempt' => 'maybe']);
+        self::assertSame(422, $bad->getStatusCode());
+        self::assertArrayHasKey('phone_exempt', $this->decode($bad)['errors']);
+        self::assertFalse($ali->refresh()->phone_exempt);
+
+        // An agent's panel excuses customers of their own shop.
+        $bot = $this->agentBot();
+        $customer = CurrentBot::run($bot, fn(): User => $this->customer(['telegram_id' => 1002]));
+        $this->loginAsAgent($bot);
+        self::assertTrue($this->decode($this->putJson("/api/agent/users/{$customer->id}/phone-exempt", ['phone_exempt' => true]))['user']['phone_exempt']);
     }
 
     public function testTheBotsAdminRoleIsGivenAndTakenFromTheTable(): void

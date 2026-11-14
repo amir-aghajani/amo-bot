@@ -99,7 +99,7 @@ final class Restorer
         $restored = ForeignKeys::without($this->db, fn(): array => $this->db->transaction(function () use ($path, $scope, $tables, $analysis, $deleteActs): array {
             $owners = $scope->isShop() ? $this->ownersRows($scope, $deleteActs) : null;
             $epochs = $scope->isShop() ? [] : $this->db->table('bots')->pluck('panel_epoch', 'id')->all();
-            foreach (array_diff(BackupTables::TRANSIENT, BackupTables::KEPT_ON_RESTORE) as $table) {
+            foreach (array_diff(BackupTables::TRANSIENT, BackupTables::KEPT_ON_RESTORE, $scope->isShop() ? BackupTables::OWNERS_TRANSIENT : []) as $table) {
                 $this->db->table($table)->when($scope->shop !== null, static fn(Builder $query) => $query->where('bot_id', $scope->shop))->delete();
             }
             foreach (array_reverse($tables) as $table) {

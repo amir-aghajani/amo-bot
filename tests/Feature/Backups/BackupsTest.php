@@ -19,6 +19,13 @@ use App\Modules\Backups\Restorer;
 use App\Modules\Bots\CurrentBot;
 use App\Modules\Bots\Models\Bot;
 use App\Modules\Catalog\Models\Plan;
+use App\Modules\Imports\Enums\ImportPhase;
+use App\Modules\Imports\Enums\ImportSource;
+use App\Modules\Imports\Enums\ProblemReason;
+use App\Modules\Imports\Models\Import;
+use App\Modules\Imports\Models\ImportLink;
+use App\Modules\Imports\Models\ImportProblem;
+use App\Modules\Imports\Models\ImportRow;
 use App\Modules\Providers\Models\Server;
 use App\Modules\Subscriptions\Models\Subscription;
 use App\Modules\Users\Models\User;
@@ -147,6 +154,32 @@ final class BackupsTest extends DatabaseTestCase
         self::assertSame(['Berlin'], Server::query()->pluck('name')->all(), 'the servers too: the owner\'s');
         self::assertSame(0, $this->db()->table('customer_sessions')->count(), 'every sign-in gone: a restored one would open again');
         self::assertSame(1, Bot::query()->whereKey($this->shop->id)->count());
+    }
+
+    public function testAnImportsRecordReportAndLinksComeBackWithTheWholeInstallationButNeverItsStagedCopy(): void
+    {
+        $done = Import::query()->create(['bot_id' => Bot::MAIN, 'migrator' => 'faoxima', 'source' => ImportSource::Backup, 'phase' => ImportPhase::Done, 'counts' => ['customers' => ['created' => 1]]]);
+        ImportProblem::query()->create(['import_id' => $done->id, 'kind' => 'customers', 'source_key' => '7', 'reason' => ProblemReason::NotATelegramAccount]);
+        ImportLink::query()->create(['bot_id' => Bot::MAIN, 'migrator' => 'faoxima', 'kind' => 'customer', 'source_key' => '501', 'target_id' => $this->ali->id, 'import_id' => $done->id]);
+        $open = Import::query()->create(['bot_id' => Bot::MAIN, 'migrator' => 'faoxima', 'source' => ImportSource::Backup, 'phase' => ImportPhase::Reading]);
+        ImportRow::query()->create(['import_id' => $open->id, 'table_name' => 'user', 'data' => '{"id":"501"}']);
+        $theShops = $this->backup(BackupScope::shop($this->shop->id));
+        $path = $this->backup(BackupScope::installation());
+
+        $contents = $this->service(BackupReader::class)->read($path);
+        self::assertSame([2, 1, 1], [$contents->rows['imports'] ?? null, $contents->rows['import_problems'] ?? null, $contents->rows['import_links'] ?? null], 'the owner\'s imports, their reports, what they brought');
+        self::assertArrayNotHasKey('import_rows', $contents->rows, 'never the staged copy: it holds the other bot\'s panel passwords');
+
+        $this->restore($theShops);
+        self::assertSame(1, ImportRow::query()->count(), 'an agent\'s shop restored leaves the owner\'s import alone');
+
+        ImportLink::query()->delete();
+        ImportProblem::query()->delete();
+        $this->restore($path);
+        self::assertSame([$done->id, $open->id], Import::query()->orderBy('id')->pluck('id')->all());
+        self::assertSame(1, ImportProblem::query()->where('import_id', $done->id)->count());
+        self::assertSame($this->ali->id, ImportLink::query()->where('source_key', '501')->value('target_id'), 'a later import knows the customer again');
+        self::assertSame(0, ImportRow::query()->count(), 'the staged copy is only true now: gone');
     }
 
     public function testTheWholeInstallationsRestoreBringsNoAgentsPanelSessionBack(): void
@@ -316,6 +349,21 @@ final class BackupsTest extends DatabaseTestCase
 
         self::assertFileDoesNotExist($path);
         self::assertFileDoesNotExist($path . '.part');
+    }
+
+    /** Every table is read in one transaction of the writer's: the file is the database as it stood at one moment. */
+    public function testEveryTableOfABackupIsReadInOneTransaction(): void
+    {
+        $outside = $this->db()->transactionLevel();
+        $levels = [];
+        $this->whileListening(QueryExecuted::class, function (QueryExecuted $query) use (&$levels): void {
+            if (str_starts_with($query->sql, 'select') && (str_contains($query->sql, self::sqlTable('users')) || str_contains($query->sql, self::sqlTable('subscriptions')))) {
+                $levels[] = $this->db()->transactionLevel();
+            }
+        }, fn() => $this->service(BackupWriter::class)->write(BackupScope::installation(), $this->scratchDir() . '/once.json.gz'));
+
+        self::assertNotSame([], $levels);
+        self::assertSame([$outside + 1], array_values(array_unique($levels)));
     }
 
     public function testAPlansEntryOnAServerGoneSinceIsLeftOutAndAServiceOnOneRefusesTheFile(): void

@@ -126,7 +126,7 @@ describe('a server’s connection', () => {
   })
 
   it('is not shown while this installation lacks its connector', async () => {
-    facts(serverRow({ driver: 'marzban', form: null }))
+    facts(serverRow({ driver: 'nopanel', form: null }))
 
     expect(await screen.findByText('اشتراک‌های فعال')).toBeTruthy()
     expect(screen.queryByText('احراز هویت')).toBeNull()

@@ -121,12 +121,14 @@ app/
     Bots           the bots, and whose shop the code works in
     Catalog        plans, their categories, which servers can sell them
     Discounts      discount codes, timed sales, loyalty tiers, a customer's own discount
+    Imports        another bot's shop brought into the main shop: its backup or database read, reviewed, written;
+                   the migrators (Faoxima)
     Installer      the web installer's API (/api/install)
     Notifications  what the shop tells a customer: kept for their website, sent to Telegram or by email
     Orders         the order's lifecycle
     Payments       gateways (wallet, card-to-card, CubePay, Zarinpal, AtlasPay, AbanGateway, Plisio, AqayePardakht,
                    Variza, and "outside": money support took for an order it made), the checkout, the settlement
-    Providers      the VPN panels: the contract, 3X-UI, PasarGuard and HMPanel, servers and inbounds
+    Providers      the VPN panels: the contract, 3X-UI, PasarGuard, HMPanel and Marzban, servers and inbounds
     Referrals      invite links and commissions
     Reviews        customers' reviews of the shop: written on its website, decided by support
     Rewards        cashback, gift codes, the lucky wheel, the nightly draw

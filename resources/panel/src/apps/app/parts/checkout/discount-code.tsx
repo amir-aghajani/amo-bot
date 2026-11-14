@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { TicketPercent, X } from 'lucide-react'
+import { useAccount } from '@/apps/app/lib/session'
 import { fieldProblem, problemOf, store } from '@/apps/app/lib/store'
 import { tap } from '@/apps/app/telegram/haptics'
 import { Button } from '@/apps/app/ui/button'
@@ -15,7 +16,8 @@ import { formatMoney } from '@/lib/format'
  * each code that does not hold costs one of the customer's twenty tries an hour —, and again whenever what it is for
  * changes (another location, another amount may refuse it); the quote it makes is the price the order is sent with. The
  * field draws what a CodeState says, so a checkout that quotes codes its own way (the built service's quote takes the
- * code) gives it its own state.
+ * code) gives it its own state. A customer the perks do not reach (`GET /me` `perks` false), whom every code is refused,
+ * is shown no field.
  */
 
 /** A code applied, and the quote it made: the price before, each discount, and what is left to pay. */
@@ -76,11 +78,15 @@ function saving(applied: AppliedCode): string | null {
 /**
  * The code's field: a line to open it, the field and its «اعمال», or the code applied with what it saves — the line and
  * the code applied drawn as a list's row is (a 32px icon square, the words after it), as the checkout's other rows are.
+ * Nothing for a customer the perks do not reach.
  */
 export function DiscountCodeField({ state }: { state: CodeState }) {
   const [open, setOpen] = useState(false)
   const [typed, setTyped] = useState('')
+  const { data: account } = useAccount()
   const { applied } = state
+
+  if (account?.perks === false) return null
 
   if (applied !== null) {
     const saved = saving(applied)

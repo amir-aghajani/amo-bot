@@ -192,6 +192,21 @@ final class NightlyDrawTest extends DatabaseTestCase
         self::assertSame([$this->ali->id, $agent->id], array_keys($this->dayBefore()), 'agents in, while the settings let them');
     }
 
+    public function testWhileThoseWhoPayAgentPricesGoWithoutPerksNeitherAgentsNorColleaguesEnter(): void
+    {
+        $this->lotteryOn(['lottery_exclude_agents' => false]);
+        $agent = $this->agent(overrides: ['telegram_id' => 6006]);
+        $colleague = $this->customer(['telegram_id' => 7007]);
+        $this->customerGroup('همکاران', [$colleague], ['agent_pricing' => true]);
+        foreach ([$this->ali, $agent, $colleague] as $buyer) {
+            $this->entry($buyer, '2026-10-10 12:00:00');
+        }
+        self::assertSame([$this->ali->id, $agent->id, $colleague->id], array_keys($this->dayBefore()));
+
+        $this->botSettings('agent_perks', ['agents_without_perks' => true]);
+        self::assertSame([$this->ali->id], array_keys($this->dayBefore()), '«همکارها فقط با قیمت همکاری» outweighs the draw\'s own switch');
+    }
+
     public function testEveryOrderIsAnEntryOrEveryBuyerOne(): void
     {
         foreach (['10:00', '11:00', '12:00'] as $at) {

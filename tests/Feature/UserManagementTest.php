@@ -4,9 +4,16 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Modules\Auth\Actor;
 use App\Modules\Auth\Exceptions\ActorRefusedException;
+use App\Modules\Bots\Enums\SellingSuspension;
+use App\Modules\Payments\Enums\PaymentStatus;
+use App\Modules\Telegram\Keyboard\InlineKeyboard;
 use App\Modules\Telegram\Models\ReportMessage;
 use App\Modules\Telegram\Reports\GroupButtons;
+use App\Modules\Telegram\Reports\ReceiptReview;
+use App\Modules\Telegram\Reports\ReportSender;
+use App\Modules\Telegram\Reports\ShopReports;
 use App\Modules\Telegram\Reports\Topic;
 use App\Modules\Telegram\Reports\UserManagement;
 use App\Modules\Telegram\Update\Update;
@@ -23,7 +30,8 @@ use Tests\BotTestCase;
  * the state it asks for, so it stands however often it is pressed), every press rewriting the card as the account now
  * stands; the front lists as many groups as fit. Only in the shop's report group, only for its bot admins; never the
  * admin's own account nor an agent's, never an admin banned nor put in a «همکار» group, never an admin made of someone
- * with their own discount or in a «همکار» group.
+ * with their own discount or in a «همکار» group. A customer gone takes their own button off a report — no other — for
+ * good.
  */
 final class UserManagementTest extends BotTestCase
 {
@@ -80,8 +88,9 @@ final class UserManagementTest extends BotTestCase
             "ud:o:{$sara->id}", "uo:o:{$sara->id}",
             "uh:o:{$sara->id}", "um:g:{$sara->id}",
             "ua:o:{$sara->id}", "um:r:{$sara->id}",
+            "ux:a:{$sara->id}", "um:ps:{$sara->id}:1",
             "um:o:{$sara->id}", "um:b:{$sara->id}",
-        ], $this->callbacks(0), 'the sections, the groups and the role, then refresh and the ban — each row\'s first on the right');
+        ], $this->callbacks(0), 'the sections, the groups and the role, a message and the phone rule\'s excuse, then refresh and the ban — each row\'s first on the right');
     }
 
     public function testManageFindsTheCustomerByTelegramIdUsernameOrNumberInAnyDigits(): void
@@ -154,7 +163,7 @@ final class UserManagementTest extends BotTestCase
         $this->send($this->press("um:bs:{$this->ali->id}:banned"));
         self::assertSame(UserStatus::Banned, $this->ali->refresh()->status);
         self::assertStringContainsString("\n🚦 وضعیت: ⛔️ مسدود\n", $this->params(0)['text']);
-        self::assertSame('✅ رفع مسدودی', $this->inlineKeyboard(0)[4][1]['text']);
+        self::assertSame('✅ رفع مسدودی', $this->inlineKeyboard(0)[5][1]['text'], 'the last row, beside «🔄 تازه‌سازی»');
         self::assertSame('⛔️ مسدود شد.', $this->popup());
 
         $this->send($this->press("um:bs:{$this->ali->id}:active"));
@@ -285,11 +294,166 @@ final class UserManagementTest extends BotTestCase
     public function testACustomerGoneMeanwhileTakesTheButtonsAway(): void
     {
         $id = $this->ali->id;
+        $admin = User::query()->where('telegram_id', self::GROUP_ADMIN)->sole();
+        self::assertSame([], UserManagement::kept(UserManagement::main($this->ali, $admin)), 'nothing of a card stays: only a report\'s «⚙️ مدیریت کاربر» does');
         $this->ali->delete();
 
         $this->send($this->press("um:o:{$id}"));
         self::assertSame(['editMessageReplyMarkup', 'answerCallbackQuery'], $this->calls());
         self::assertSame('این کاربر دیگر پیدا نشد.', $this->popup());
+    }
+
+    public function testTheyAreExcusedFromThePhoneRuleAndHeldToItAgainTheCardFollowing(): void
+    {
+        $this->send($this->press("um:ps:{$this->ali->id}:1"));
+
+        self::assertTrue($this->ali->refresh()->phone_exempt);
+        self::assertSame('📱 دیگر برای شماره موبایل نگه داشته نمی‌شود.', $this->popup());
+        $card = $this->params(0);
+        self::assertStringContainsString('📱 موبایل: ثبت نشده · بدون نیاز به شماره', $card['text']);
+        self::assertContains("um:ps:{$this->ali->id}:0", $this->callbacks(0), 'the button names the way back');
+
+        // Pressed again from the same (stale) card, it stands: the state the button names, never flipped back.
+        $this->send($this->press("um:ps:{$this->ali->id}:1"));
+        self::assertTrue($this->ali->refresh()->phone_exempt);
+
+        $this->send($this->press("um:ps:{$this->ali->id}:0"));
+        self::assertFalse($this->ali->refresh()->phone_exempt);
+        self::assertContains("um:ps:{$this->ali->id}:1", $this->callbacks(0));
+    }
+
+    public function testNoAdminsCardOffersThePhoneExcuseNorDoesALockedOne(): void
+    {
+        $boss = User::query()->where('telegram_id', self::GROUP_ADMIN)->sole();
+        $other = $this->admin(['telegram_id' => 9191, 'username' => 'other']);
+        $agent = $this->agent(overrides: ['telegram_id' => 9292]);
+
+        foreach ([[$other, 'another admin: the rule never asks them'], [$agent, "an agent's: only what reads"], [$boss, 'their own: only what reads']] as [$user, $why]) {
+            $callbacks = array_column(array_merge(...UserManagement::main($user, $boss)), 'callback_data');
+            self::assertSame([], array_values(array_filter($callbacks, static fn(string $data): bool => str_starts_with($data, 'um:ps:'))), $why);
+        }
+
+        $this->send($this->press("um:ps:{$agent->id}:1"));
+        self::assertSame(ActorRefusedException::AGENT_ACCOUNT, $this->popup());
+        self::assertFalse($agent->refresh()->phone_exempt);
+    }
+
+    public function testEveryReportAboutACustomerCarriesTheButtonATransferOneForEach(): void
+    {
+        $server = $this->fakeServer();
+        $service = $this->subscription($this->ali, $this->plan([], $server), $server, 'ali_1');
+        $sara = $this->customer(['telegram_id' => 8080, 'username' => 'sara']);
+        $reports = $this->service(ShopReports::class);
+
+        $reports->serviceClaimed($service);
+        self::assertSame(UserManagement::buttons($this->ali->id), ReportMessage::query()->latest('id')->firstOrFail()->keyboard);
+
+        $service->forceFill(['user_id' => $sara->id])->save();
+        $reports->serviceTransferred($service->load('user'), $this->ali, Actor::customer($this->ali));
+        $row = (array) ReportMessage::query()->latest('id')->firstOrFail()->keyboard;
+        self::assertSame(
+            [[['⚙️ مدیریت مالک جدید', "um:n:{$sara->id}"], ['⚙️ مدیریت مالک قبلی', "um:n:{$this->ali->id}"]]],
+            array_map(static fn(array $buttons): array => array_map(static fn(array $button): array => [$button['text'], $button['callback_data']], $buttons), $row),
+            'one row, whose first is read first: on the right',
+        );
+
+        $this->send($this->groupTap("um:n:{$sara->id}", 6262, $this->threads['purchases']));
+        self::assertStringStartsWith("⚙️ <b>مدیریت کاربر</b> · \u{200E}#{$sara->id}", $this->params(0)['text']);
+        self::assertSame([(string) $this->threads['purchases'], 6262], [$this->params(0)['message_thread_id'], json_decode($this->params(0)['reply_parameters'], true)['message_id']], 'under the report, in its topic');
+    }
+
+    public function testTheButtonStaysWhenAReportsOtherButtonsGo(): void
+    {
+        $payment = $this->receipt($this->cardPayment($this->topUpOrder($this->ali, '250000'), $this->cardMethod()));
+        $this->service(ReportSender::class)->flush();
+        $post = (int) ReportMessage::query()->where('topic', Topic::Receipts->value)->sole()->message_id;
+        $manage = UserManagement::buttons($this->ali->id);
+
+        $this->send($this->groupTap("rv:no:{$payment->id}", $post, $this->threads['receipts']));
+        self::assertSame($manage, array_slice($this->buttonsUnder($post) ?? [], -1), 'asked why: under the reasons');
+
+        $this->send($this->groupTap("rv:nx:{$payment->id}", $post, $this->threads['receipts']));
+        self::assertSame(PaymentStatus::Failed, $payment->refresh()->status, 'rejected');
+        self::assertSame($manage, $this->buttonsUnder($post), 'decided: only «⚙️ مدیریت کاربر» left');
+    }
+
+    public function testACustomerGoneTakesOnlyTheirButtonOffAReport(): void
+    {
+        $payment = $this->receipt($this->cardPayment($this->topUpOrder($this->ali, '250000'), $this->cardMethod()));
+        $this->service(ReportSender::class)->flush();
+        $post = (int) ReportMessage::query()->where('topic', Topic::Receipts->value)->sole()->message_id;
+        $id = $this->ali->id;
+        User::query()->whereKey($id)->delete();
+
+        $this->send($this->groupTap("um:n:{$id}", $post, $this->threads['receipts']));
+        self::assertSame('این کاربر دیگر پیدا نشد.', $this->popup());
+        self::assertSame(ReceiptReview::buttons($payment->id), $this->buttonsUnder($post), 'the receipt\'s own buttons stay');
+    }
+
+    public function testACustomerGoneTakesOnlyTheirButtonOffATransferReport(): void
+    {
+        $server = $this->fakeServer();
+        $service = $this->subscription($this->ali, $this->plan([], $server), $server, 'ali_1');
+        $sara = $this->customer(['telegram_id' => 8080, 'username' => 'sara']);
+        $service->forceFill(['user_id' => $sara->id])->save();
+        $this->service(ShopReports::class)->serviceTransferred($service->load('user'), $this->ali, Actor::customer($this->ali));
+        $this->service(ReportSender::class)->flush();
+        $report = ReportMessage::query()->latest('id')->firstOrFail();
+        $post = (int) $report->message_id;
+        $id = $this->ali->id;
+        User::query()->whereKey($id)->delete();
+
+        $this->send($this->groupTap("um:n:{$id}", $post, $this->threads[$report->topic->value]));
+
+        $saras = [[UserManagement::button($sara->id, '⚙️ مدیریت مالک جدید')]];
+        self::assertSame($saras, $this->buttonsUnder($post), "the new owner's button stays, on the row they shared");
+        self::assertSame($saras, $report->refresh()->keyboard, "and in the report's record");
+    }
+
+    public function testAGoneCustomersButtonStaysGoneWhenAFollowUpClearsTheReportsButtons(): void
+    {
+        $close = InlineKeyboard::make()->row(InlineKeyboard::callback('بستن', 'tc:c:1'))->build()['inline_keyboard'];
+        ReportMessage::query()->create(['topic' => Topic::Tickets, 'priority' => Topic::Tickets->priority(), 'text' => 'تیکت', 'keyboard' => [...$close, ...UserManagement::buttons($this->ali->id)], 'ref' => 'ticket:1']);
+        $this->service(ReportSender::class)->flush();
+        $post = (int) ReportMessage::query()->where('ref', 'ticket:1')->value('message_id');
+        $id = $this->ali->id;
+        User::query()->whereKey($id)->delete();
+        $this->send($this->groupTap("um:n:{$id}", $post, $this->threads['tickets']));
+        self::assertSame($close, $this->buttonsUnder($post));
+
+        ReportMessage::query()->create(['topic' => Topic::Tickets, 'priority' => Topic::Tickets->priority(), 'text' => 'بسته شد', 'reply_ref' => 'ticket:1', 'clears_buttons' => true]);
+        $this->telegram()->reset();
+        $this->service(ReportSender::class)->flush();
+
+        self::assertSame([], $this->buttonsUnder($post), 'cleared: no «⚙️ مدیریت کاربر» of theirs brought back from the record');
+    }
+
+    public function testTheAgentsSellingStoppedAndOpenedAgainCarryTheirButton(): void
+    {
+        $agent = $this->agent(overrides: ['telegram_id' => 9292]);
+        $bot = $agent->ownBot ?? self::fail('no shop');
+        $reports = $this->service(ShopReports::class);
+
+        $reports->agencySuspended($bot, SellingSuspension::Expired);
+        $reports->agencyResumed($bot);
+
+        $keyboards = ReportMessage::query()->where('topic', Topic::Agency->value)->oldest('id')->get()->map(static fn(ReportMessage $report): ?array => $report->keyboard)->all();
+        self::assertSame([UserManagement::buttons($agent->id), UserManagement::buttons($agent->id)], $keyboards, 'stopped, then open again');
+    }
+
+    /** The tests' own press (BotTestCase::groupTap()): it carries the buttons as the bot last set them, steps before. */
+    public function testAPressCarriesTheButtonsAnEarlierStepSet(): void
+    {
+        $payment = $this->receipt($this->cardPayment($this->topUpOrder($this->ali, '250000'), $this->cardMethod()));
+        $this->service(ReportSender::class)->flush();
+        $post = (int) ReportMessage::query()->where('topic', Topic::Receipts->value)->sole()->message_id;
+        $this->send($this->groupTap("rv:no:{$payment->id}", $post, $this->threads['receipts']));
+        $asked = $this->buttonsUnder($post);
+        self::assertNotNull($asked);
+        $this->send($this->groupText('/manage @ali'));
+
+        $press = $this->groupTap("rv:no:{$payment->id}", $post, $this->threads['receipts']);
+        self::assertSame($asked, $press->raw['callback_query']['message']['reply_markup']['inline_keyboard'] ?? null, 'as the first step left them, not as the report went out');
     }
 
     /** A press on the card's buttons, by the report group's bot admin. */

@@ -21,22 +21,30 @@ import type { OrderStatus, StoreCheckout, StoreOrder, StoreOrderResponse } from 
 /*
  * An order's payment (`/pay/:orderId`), opened in place of the screen that ordered it. What the checkout answered
  * (lib/checkout keeps it for the order: the card to transfer to is answered there alone) and the order as it stands
- * (`GET /orders/{id}`, read again every few seconds while something is awaited and the app is in front) decide what it
- * shows: the service delivered, a delivery under way, a card to pay and the receipt to send, a gateway's page to pay on,
- * or why the order ended as it did. Back leads home — or to the services, or the wallet, it was about —, never into the
- * checkout.
+ * (`GET /orders/{id}`, read again every few seconds while something is awaited and the app is in front — a transfer the
+ * shop confirms by itself, closely for its first minutes on screen) decide what it shows: the service delivered, a
+ * delivery under way, a card to pay and the receipt to send, a gateway's page to pay on, or why the order ended as it
+ * did. Back leads home — or to the services, or the wallet, it was about —, never into the checkout.
  */
 
 /** An order's states that wait for nothing more. */
 const ENDED: readonly OrderStatus[] = ['fulfilled', 'failed', 'cancelled', 'refunded']
 
-/** How often the order is read again: often while a gateway or a delivery is awaited, now and then while support has it (a receipt, a payment held), never once it ended. */
-function watchEvery(order: StoreOrder | undefined): number | false {
+/** How long a card transfer the shop confirms by itself is watched closely: past it, one still unconfirmed is the receipt's. */
+const CLOSELY_FOR = 15 * 60_000
+
+/**
+ * How often the order is read again: often while a gateway or a delivery is awaited — or, `closely`, a card transfer the
+ * shop confirms by itself (the bank's SMS, usually within a minute) —, now and then while support has it (a receipt, a
+ * payment held), never once it ended.
+ */
+function watchEvery(order: StoreOrder | undefined, closely: boolean): number | false {
   if (order === undefined || ENDED.includes(order.status)) return false
   if (order.status === 'paid' || order.status === 'processing') return 3_000
   const payment = order.payments[0]
+  if (payment?.method.kind === 'online' && payment.status === 'pending' && !payment.held) return 5_000
 
-  return payment?.method.kind === 'online' && payment.status === 'pending' && !payment.held ? 5_000 : 20_000
+  return closely && payment?.method.kind === 'manual' && (payment.status === 'pending' || payment.status === 'awaiting_review') ? 5_000 : 20_000
 }
 
 export default function PayScreen() {
@@ -45,6 +53,8 @@ export default function PayScreen() {
   const navigate = useNavigate()
   const known = orderId > 0
   const [remembered] = useState(() => (known ? rememberedCheckout(orderId) : null))
+  const [opened] = useState(() => Date.now())
+  const auto = remembered?.transfer?.auto_confirmed === true
   const active = useAppActive()
   const query = useQuery({
     queryKey: keys.order(orderId),
@@ -53,7 +63,7 @@ export default function PayScreen() {
     // What the checkout answered stands until the order is read (at once: it may have moved on since).
     initialData: remembered === null ? undefined : { order: remembered.order },
     initialDataUpdatedAt: 0,
-    refetchInterval: (current) => (active ? watchEvery(current.state.data?.order) : false),
+    refetchInterval: (current) => (active ? watchEvery(current.state.data?.order, auto && Date.now() - opened < CLOSELY_FOR) : false),
   })
   const order = query.data?.order
   useEndNews(order?.status)

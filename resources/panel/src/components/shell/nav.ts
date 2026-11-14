@@ -195,6 +195,12 @@ export const BOT_GROUP: NavGroup = {
 /** The foot of the column: the settings, which open their own. */
 export const SETTINGS: NavItem = { id: 'settings', title: 'تنظیمات', to: '/bot-settings', icon: Settings }
 
+/** «پرداخت‌ها»: every payment with the receipts to review, and the bank SMS the phone app forwarded («تایید خودکار واریز»). */
+export const PAYMENT_SECTIONS: NavSection<'payments' | 'deposits'>[] = [
+  { value: 'payments', title: 'پرداخت‌ها', to: '/payments' },
+  { value: 'deposits', title: 'واریزهای پیامکی', to: '/payments/deposits' },
+]
+
 export const USER_SECTIONS: NavSection<'users' | 'groups'>[] = [
   { value: 'users', title: 'کاربران', to: '/users' },
   { value: 'groups', title: 'گروه‌ها', to: '/users/groups' },
@@ -213,10 +219,10 @@ export const BROADCAST_MESSAGES: NavSection<'messages'> = { value: 'messages', t
 /**
  * The bot settings' sections — a subject each (the renewal one holds two groups: its rule and «تمدید خودکار»); services
  * added by their link («افزودن سرویس با لینک») are the main shop's alone. The gift codes' switch, the lucky wheel's rules,
- * cashback's switch, the nightly draw's rules and the test accounts' rules are groups of the bot settings too, set on
- * their own pages.
+ * cashback's switch, the nightly draw's rules, the discounts' two (on «کدهای تخفیف» › «تنظیمات») and the test accounts'
+ * rules are groups of the bot settings too, set on their own pages.
  */
-export type BotSettingsSection = Exclude<BotSettingsGroup, 'auto_renew' | 'gift_codes' | 'wheel' | 'cashback' | 'lottery' | 'discounts' | 'test_accounts' | 'custom_services'>
+export type BotSettingsSection = Exclude<BotSettingsGroup, 'auto_renew' | 'gift_codes' | 'wheel' | 'cashback' | 'lottery' | 'discounts' | 'agent_perks' | 'test_accounts' | 'custom_services'>
 
 export const BOT_SETTINGS_SECTIONS: NavSection<BotSettingsSection>[] = [
   { value: 'general', title: 'عمومی', to: '/bot-settings/general' },

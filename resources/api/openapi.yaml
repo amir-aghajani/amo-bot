@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: AmoBot API
-  version: 0.8.0
+  version: 0.9.0
   description: |
     AmoBot's HTTP API. Every answer is JSON; the panels are static files that render their own pages.
 
@@ -46,8 +46,11 @@ info:
       data Telegram hands it (`POST /auth/mini-app`), and no other origin, captcha or admin API is there. As the bot
       answers nothing before its gates, an order (a plan, a service built, a renewal, extras, a wallet top-up), a gift
       code and a service added by its link are refused through the mini app's key (422 on `status`) while the shop asks
-      every customer for their number and this one has none (`shop.phone_required`), or has not joined the shop's
-      required channels — as a free test and a spin of the wheel are through either key. What only one
+      every customer for their number and this one has none (`shop.phone_required`) — where it asks it only at the
+      moments it chose (`shop.phone_moments`), just an order that is one of them: a purchase (a service built too), a
+      renewal (extras too), a card-to-card payment —, or has not joined the shop's required channels — as a free test
+      and a spin of the wheel are through either key (a free test also while `shop.phone_moments` has `test`). A
+      customer support excused from the number (`GET /me`'s `phone_exempt`) is never asked it. What only one
       of the two has is marked `x-door` — `website` (the website's ways in and its captcha) or `mini_app` (its sign-in,
       its logo and the fingerprint secret) —: under the other's key it is a 404. Proving a way in again by the mini
       app's launch data or by the fingerprint secret works through the mini app's key alone.
@@ -1208,6 +1211,32 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/UserResponse' }
         default: { $ref: '#/components/responses/Error' }
+  /api/{panel}/users/{id}/phone-exempt:
+    parameters: [{ $ref: '#/components/parameters/Panel' }, { $ref: '#/components/parameters/Id' }, { $ref: '#/components/parameters/Shop' }]
+    put:
+      x-staff: true
+      summary: "Excuse a customer from the shop's phone rule, or hold them to it again. Excused, they are never asked for their phone number, wherever the shop asks it (`phone_required`). On the website's admin API, an admin's account (their own included) or an agent's can only be changed from a panel (403). Logged with who did it."
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/UserPhoneExemptRequest' } } } }
+      responses:
+        '200':
+          description: Changed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserResponse' }
+        default: { $ref: '#/components/responses/Error' }
+  /api/{panel}/users/{id}/message:
+    parameters: [{ $ref: '#/components/parameters/Panel' }, { $ref: '#/components/parameters/Id' }, { $ref: '#/components/parameters/Shop' }]
+    post:
+      x-staff: true
+      summary: "Send a customer a message from support («ارسال پیام»). The shop's bot sends it to their Telegram chat (an agent's customer hears from the agent's bot), under its text «پیام پشتیبانی به مشتری» (📩 پیام از طرف پشتیبانی) unless the bot settings' `support_header` is off; a customer with no Telegram, or who blocked the bot, gets it by email when they have one and the shop's email works. It is kept on their website either way. Plain text, at most 3,500 characters as Telegram counts them, an emoji two (422 on `text`, as for an empty one). On the website's admin API, an admin's account (their own included) or an agent's is written to only from a panel (403). Answers what came of it; logged with who wrote it."
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/UserMessageRequest' } } } }
+      responses:
+        '200':
+          description: Sent, or tried
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserMessageResponse' }
+        default: { $ref: '#/components/responses/Error' }
   /api/{panel}/users/{id}/two-factor/disable:
     parameters: [{ $ref: '#/components/parameters/Panel' }, { $ref: '#/components/parameters/Id' }, { $ref: '#/components/parameters/Shop' }]
     post:
@@ -1782,6 +1811,55 @@ paths:
         '204': { $ref: '#/components/responses/NoContent' }
         default: { $ref: '#/components/responses/Error' }
 
+  /api/{panel}/deposits:
+    parameters: [{ $ref: '#/components/parameters/Panel' }, { $ref: '#/components/parameters/Shop' }]
+    get:
+      x-staff: true
+      summary: "The bank SMS a phone app forwarded to the shop («تایید خودکار واریز»), newest first, each with what came of it: the card payment it approved, or why none. By status, or searched by sum (digits, in Toman or Rial) or by the SMS's words."
+      parameters:
+        - { name: status, in: query, description: 'One status. Empty for all', schema: { $ref: '#/components/schemas/DepositStatus' } }
+        - { $ref: '#/components/parameters/Search' }
+        - { $ref: '#/components/parameters/Page' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DepositsResponse' }
+        default: { $ref: '#/components/responses/Error' }
+  /api/{panel}/deposits/settings:
+    parameters: [{ $ref: '#/components/parameters/Panel' }, { $ref: '#/components/parameters/Shop' }]
+    get:
+      summary: "«تایید خودکار واریز»: whether the shop listens to its bank SMS, where each phone app posts them and the key it sends (`X-API-Key`), when the last came, and how many of the week approved nothing."
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DepositSettingsResponse' }
+        default: { $ref: '#/components/responses/Error' }
+    put:
+      summary: "Listen to the bank SMS, or stop. Listening, every new card-to-card payment asks a sum no other open one asks (1 to 999 Toman above its order), and a deposit of that sum approves it; the key is made the first time."
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/DepositSettingsRequest' } } } }
+      responses:
+        '200':
+          description: Saved
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DepositSettingsResponse' }
+        default: { $ref: '#/components/responses/Error' }
+  /api/{panel}/deposits/settings/key:
+    parameters: [{ $ref: '#/components/parameters/Panel' }, { $ref: '#/components/parameters/Shop' }]
+    post:
+      summary: "A new key for the webhook: the old one stops working at once, and the phone app must be given the new one."
+      x-no-body: true
+      responses:
+        '200':
+          description: Made
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DepositSettingsResponse' }
+        default: { $ref: '#/components/responses/Error' }
   /api/{panel}/payment-methods:
     parameters: [{ $ref: '#/components/parameters/Panel' }, { $ref: '#/components/parameters/Shop' }]
     get:
@@ -3114,6 +3192,106 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/ConfigSettingsResponse' }
         default: { $ref: '#/components/responses/Error' }
+  /api/admin/imports:
+    parameters: [{ $ref: '#/components/parameters/Shop' }]
+    get:
+      summary: "«انتقال از ربات دیگر», the owner's: the bots an import reads (`migrators`), the import under way (one at a time), and the latest ten that ended, newest first. What an import brings goes into the main shop, whatever shop the request names; nothing is ever written to the other bot's database, and nothing changes on the VPN panels."
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ImportsResponse' }
+        default: { $ref: '#/components/responses/Error' }
+    post:
+      summary: "Start an import from the other bot's backup file: its own backup (Faoxima's `backup.zip`, as its report channel gets it), a phpMyAdmin or mysqldump export (`.sql`), or either gzipped (`.gz`) or zipped (`.zip`) — told apart by its bytes, not its name. The file is kept and the import starts reading it (phase `reading`); the page then calls `POST /imports/{id}/continue` until it is read. A 422 says why one is refused: under `migrator` a bot not in the list; under `file` none, one past the host's upload limit, or no database backup; under `import` another import under way."
+      requestBody: { required: true, content: { multipart/form-data: { schema: { $ref: '#/components/schemas/ImportBackupRequest' } } } }
+      responses:
+        '201':
+          description: Started
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ImportResponse' }
+        default: { $ref: '#/components/responses/Error' }
+  /api/admin/imports/database:
+    parameters: [{ $ref: '#/components/parameters/Shop' }]
+    post:
+      summary: "Start an import from the other bot's MySQL database, read once over this connection and only read. The connection is tried at once and kept encrypted until the database is read; a 422 under the field at fault says why it is refused (a field missing or malformed — every one at once —, `host` out of reach or the host without pdo_mysql, `username` and `password` refused, `database` unknown or not this user's), never repeating the password. Nothing is kept of a refused one. `migrator` and `import` are refused as for a backup file."
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ImportDatabaseRequest' } } } }
+      responses:
+        '201':
+          description: Started
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ImportResponse' }
+        default: { $ref: '#/components/responses/Error' }
+  /api/admin/imports/{id}:
+    parameters: [{ $ref: '#/components/parameters/Id' }, { $ref: '#/components/parameters/Shop' }]
+    get:
+      summary: An import as it stands.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ImportResponse' }
+        default: { $ref: '#/components/responses/Error' }
+    delete:
+      summary: "An import under way (`reading`, `review`, `importing`) is cancelled: what it already wrote stays, and its uploaded file and the staged copy of the other bot's data are deleted. An ended one's record is deleted with its report; what it brought stays, and a later import still knows it."
+      responses:
+        '204': { $ref: '#/components/responses/NoContent' }
+        default: { $ref: '#/components/responses/Error' }
+  /api/admin/imports/{id}/continue:
+    parameters: [{ $ref: '#/components/parameters/Id' }, { $ref: '#/components/parameters/Shop' }]
+    post:
+      summary: "One step of reading (`reading`) or writing (`importing`), about 15 seconds; the page calls it until the phase changes. Another step already on the import (another tab, `import:run`) leaves it as it stands and says so (`stepped` false): the page waits a moment before asking again. Data that is not the chosen bot's, or a backup file that cannot be read to its end, fails the import (`error` says why)."
+      x-no-body: true
+      responses:
+        '200':
+          description: The import as the step left it
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ImportStepResponse' }
+        default: { $ref: '#/components/responses/Error' }
+  /api/admin/imports/{id}/choices:
+    parameters: [{ $ref: '#/components/parameters/Id' }, { $ref: '#/components/parameters/Shop' }]
+    put:
+      summary: "Save the owner's choices in the review: where each panel's services go and what to bring. A 422 under `choices.…` says what is refused (a panel with services left without a choice, a server of another connector, adding a panel that cannot be added, a switch that is not a boolean); under `import`, an import not in review."
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ImportChoicesRequest' } } } }
+      responses:
+        '200':
+          description: Saved
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ImportResponse' }
+        default: { $ref: '#/components/responses/Error' }
+  /api/admin/imports/{id}/start:
+    parameters: [{ $ref: '#/components/parameters/Id' }, { $ref: '#/components/parameters/Shop' }]
+    post:
+      summary: "From the review to writing (`importing`) with the choices saved; the page then calls continue. A 422 under `import` when it is not in review."
+      x-no-body: true
+      responses:
+        '200':
+          description: Started
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ImportResponse' }
+        default: { $ref: '#/components/responses/Error' }
+  /api/admin/imports/{id}/problems:
+    parameters: [{ $ref: '#/components/parameters/Id' }, { $ref: '#/components/parameters/Shop' }]
+    get:
+      parameters:
+        - { name: reason, in: query, required: false, description: 'Only the problems of this reason. Left out, every reason (the server reads an empty value as left out)', schema: { $ref: '#/components/schemas/ImportProblemReason' } }
+        - { name: kind, in: query, required: false, description: 'Only the problems of this kind of thing (`ImportProblem.kind`: `customers`, `services` …). Left out or empty, every kind', schema: { type: string } }
+        - { name: page, in: query, required: false, description: 'The page, from 1, 50 rows a page; a page past the last answers an empty list', schema: { type: integer, minimum: 1 } }
+      summary: "What the import could not bring and why, a row each, 50 a page. A reason that is only counted (ImportProblemReason) has no rows: its count is in `ImportState.problems`."
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ImportProblemsResponse' }
+        default: { $ref: '#/components/responses/Error' }
 
   # ------------------------------------------------------------------ the Store API: a shop's website (docs/Store-API.md)
   # Under the website's store key, which names the shop: no panel, no session, no CSRF header. A customer's requests
@@ -3660,7 +3838,7 @@ paths:
       - { $ref: '#/components/parameters/Store' }
       - { name: kind, in: path, required: true, description: 'The way in to remove', schema: { $ref: '#/components/schemas/StoreIdentityKind' } }
     delete:
-      summary: "Remove a way in from the customer's account. Never the last one — and a mobile number counts as a way in that stays only where a sign-in by SMS opens this very account by it: through a website's key while it signs in by SMS, an Iranian mobile, and of the accounts holding the number the one such a sign-in opens. Removing the email also removes the password and two-factor sign-in, and the address gets an email saying so; removing Telegram also removes the handle; removing the mobile number in a shop whose bot asks every customer's number (`shop.phone_required`) has the bot ask it again. The customer is notified. A 403 when the session's sign-in is not recent; a 422 when the account has no way in of that kind, or it is the last one — and on `kind` for the Telegram account through the mini app's key (the app and the bot know the customer by it)."
+      summary: "Remove a way in from the customer's account. Never the last one — and a mobile number counts as a way in that stays only where a sign-in by SMS opens this very account by it: through a website's key while it signs in by SMS, an Iranian mobile, and of the accounts holding the number the one such a sign-in opens. Removing the email also removes the password and two-factor sign-in, and the address gets an email saying so; removing Telegram also removes the handle; removing the mobile number in a shop whose bot asks customers' numbers (`shop.phone_required`, `shop.phone_moments`) has the bot ask it again. The customer is notified. A 403 when the session's sign-in is not recent; a 422 when the account has no way in of that kind, or it is the last one — and on `kind` for the Telegram account through the mini app's key (the app and the bot know the customer by it)."
       security: [{ customer: [] }]
       responses:
         '200':
@@ -3689,7 +3867,7 @@ paths:
   /api/store/v1/{store}/plans:
     parameters: [{ $ref: '#/components/parameters/Store' }]
     get:
-      summary: "What the shop sells now, as the bot's «خرید اشتراک» offers it. Every active category in order (empty ones too), then the plans with no category (or a switched-off one) as a group without a category. A plan is listed only while it can be delivered: switched on, on a server that can sell it, and in an agent's shop covered by the agent's traffic. Each plan lists the servers a customer can pick. Anyone may read it. With a customer's bearer token it is priced for that customer: `first_purchase_price` is null once they have bought, and `agent_price` is set only for an agent or a member of a group with agent prices. A token that is not valid is a 401, never the guest catalogue."
+      summary: "What the shop sells now, as the bot's «خرید اشتراک» offers it. Every active category in order (empty ones too), then the plans with no category (or a switched-off one) as a group without a category. A plan is listed only while it can be delivered: switched on, on a server that can sell it, and in an agent's shop covered by the agent's traffic. Each plan lists the servers a customer can pick. Anyone may read it. With a customer's bearer token it is priced for that customer: `first_purchase_price` is null once they have bought (here, or in the bot the shop was brought from) and while they go without the customers' perks, and `agent_price` is set only for an agent or a member of a group with agent prices. A token that is not valid is a 401, never the guest catalogue."
       security: [{}, { customer: [] }]
       responses:
         '200':
@@ -3726,13 +3904,15 @@ paths:
   /api/store/v1/{store}/sales:
     parameters: [{ $ref: '#/components/parameters/Store' }]
     get:
-      summary: "The timed sales running now («فروش ویژه»): each one's name, percent, end and what it holds for, the soonest to end first — for a banner. Each plan's own price already carries the largest of them that holds for its reader (`StorePlan.discount`)."
+      summary: "The timed sales running now («فروش ویژه»): each one's name, percent, end and what it holds for, the soonest to end first — for a banner. Each plan's own price already carries the largest of them that holds for its reader (`StorePlan.discount`). With a customer's bearer token, none for one who goes without the customers' perks (`GET /me` `perks` false), whom no sale reaches. A token that is not valid is a 401."
+      security: [{}, { customer: [] }]
       responses:
         '200':
           description: OK
           content:
             application/json:
               schema: { $ref: '#/components/schemas/StoreSalesResponse' }
+        '401': { $ref: '#/components/responses/SignedOut' }
         default: { $ref: '#/components/responses/Error' }
   /api/store/v1/{store}/tutorial:
     parameters: [{ $ref: '#/components/parameters/Store' }]
@@ -4070,7 +4250,7 @@ paths:
         '401': { $ref: '#/components/responses/SignedOut' }
         default: { $ref: '#/components/responses/Error' }
     post:
-      summary: "Buy a plan on one of its locations, paid with `method_id`. The same checkout as the bot's purchases, at the customer's price: the lowest of the price, the first-purchase price (`first_purchase_price`, until they have bought a service) and the agent price (`agent_price`, for an agent or a member of a group with agent prices). The order is created only with the payment method. The service is named on its panel by the shop's pattern, or — while the shop offers it (`shop.name_modes` of `GET /`) — by a random name or the one the customer typed (`name_mode`, `client_name`). The wallet pays at once (the service is delivered, or the order fails and waits for support); a card waits for its receipt (`POST /payments/{id}/receipt`); an online gateway answers its page to pay on (`link`) and tells the shop once paid (`POST /payments/{id}/check` asks it sooner). A 422 on `plan_id` for a plan not on sale now (switched off, on no location that can deliver it now, or in an agent's shop more traffic than the agent has left to sell); on `server_id` for a server it is not sold on now while another location is; on `name_mode` for a way of naming the shop does not offer; on `client_name` for a typed name that is refused; on `method_id` for a method that cannot pay it, a wallet short of the price (the message says how much is missing), or an online gateway that would not open the payment (the order stays open); on `idempotency_key` for a key used for a different order or first sent with another `method_id`. A 422 (no field) while the customer has 5 unpaid orders; paid or expired orders free the room. A 422 on `status` for a card method while the shop takes one receipt at a time and the customer's last receipt is still in review (the message names its order; nothing is ordered, and the wallet still pays). A 422 on `status`, with any method, for an order whose online payment is held for support (the message names the order: nothing is paid — tell the customer not to pay again but to write to support). A 409 on `expected_amount` when the request names the amount the website showed and the order costs another now (nothing ordered; the message says the price now). A 409 when the order was paid or closed at the same moment elsewhere, or, for a repeated request, when the order was cancelled since (with its own message). A 429 with `Retry-After` past 30 ordering requests in 10 minutes (purchases, renewals and top-ups together, repeats included). A 503 while the shop takes no orders because its bot is switched off or — an agent's shop — the main shop suspended its selling (`shop.taking_orders` of `GET /`), repeats included. Repeated with the same `Idempotency-Key`, it returns the order that key made, as it is now: never a second order or a second charge."
+      summary: "Buy a plan on one of its locations, paid with `method_id`. The same checkout as the bot's purchases, at the customer's price: the lowest of the price, the first-purchase price (`first_purchase_price`, until they have bought a service) and the agent price (`agent_price`, for an agent or a member of a group with agent prices). For a customer the perks do not reach (`GET /me` `perks` false), their agent price where the plan has one and the price elsewhere, with no sale, tier or code — a `discount_code` is a 422. The order is created only with the payment method. The service is named on its panel by the shop's pattern, or — while the shop offers it (`shop.name_modes` of `GET /`) — by a random name or the one the customer typed (`name_mode`, `client_name`). The wallet pays at once (the service is delivered, or the order fails and waits for support); a card waits for its receipt (`POST /payments/{id}/receipt`); an online gateway answers its page to pay on (`link`) and tells the shop once paid (`POST /payments/{id}/check` asks it sooner). A 422 on `plan_id` for a plan not on sale now (switched off, on no location that can deliver it now, or in an agent's shop more traffic than the agent has left to sell); on `server_id` for a server it is not sold on now while another location is; on `name_mode` for a way of naming the shop does not offer; on `client_name` for a typed name that is refused; on `method_id` for a method that cannot pay it, a wallet short of the price (the message says how much is missing), or an online gateway that would not open the payment (the order stays open); on `idempotency_key` for a key used for a different order or first sent with another `method_id`. A 422 (no field) while the customer has 5 unpaid orders; paid or expired orders free the room. A 422 on `status` for a card method while the shop takes one receipt at a time and the customer's last receipt is still in review (the message names its order; nothing is ordered, and the wallet still pays). A 422 on `status`, with any method, for an order whose online payment is held for support (the message names the order: nothing is paid — tell the customer not to pay again but to write to support). A 409 on `expected_amount` when the request names the amount the website showed and the order costs another now (nothing ordered; the message says the price now). A 409 when the order was paid or closed at the same moment elsewhere, or, for a repeated request, when the order was cancelled since (with its own message). A 429 with `Retry-After` past 30 ordering requests in 10 minutes (purchases, renewals and top-ups together, repeats included). A 503 while the shop takes no orders because its bot is switched off or — an agent's shop — the main shop suspended its selling (`shop.taking_orders` of `GET /`), repeats included. Repeated with the same `Idempotency-Key`, it returns the order that key made, as it is now: never a second order or a second charge."
       security: [{ customer: [] }]
       parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/StoreOrderRequest' } } } }
@@ -4197,7 +4377,7 @@ paths:
   /api/store/v1/{store}/discount-codes/check:
     parameters: [{ $ref: '#/components/parameters/Store' }]
     post:
-      summary: "Check a discount code before paying. Returns the quote the order would be made at: the base price (the customer's price for the plan, or the cost of that much extra), the automatic discount and the code's discount as lines, and the total. Nothing is ordered. A 422 on `code` when it does not apply: unknown in this shop, switched off, outside its dates, for another type of order, plan or server, only for a first purchase, for a larger order, or used up. The rest of the request is refused as its checkout would refuse it: a 422 on `plan_id`, `server_id`, `status`, `gb`, `days` or `devices`, a 404 for a service not theirs — in an agent's shop whose selling the main shop suspended, a purchase on `plan_id` and a renewal or an extra on `status`, where the checkout answers a 503. Each code that does not apply uses one of the customer's 20 tries an hour (shared with the checkout's `discount_code`), then a 429 with `Retry-After`."
+      summary: "Check a discount code before paying. Returns the quote the order would be made at: the base price (the customer's price for the plan, or the cost of that much extra), the automatic discount and the code's discount as lines, and the total. Nothing is ordered. A 422 on `code` when it does not apply: unknown in this shop, switched off, outside its dates, for another type of order, plan or server, only for a first purchase, for a larger order, or used up — and any code for a customer the perks do not reach (`GET /me` `perks` false), as their checkouts refuse `discount_code`. The rest of the request is refused as its checkout would refuse it: a 422 on `plan_id`, `server_id`, `status`, `gb`, `days` or `devices`, a 404 for a service not theirs — in an agent's shop whose selling the main shop suspended, a purchase on `plan_id` and a renewal or an extra on `status`, where the checkout answers a 503. Each code that does not apply uses one of the customer's 20 tries an hour (shared with the checkout's `discount_code`), then a 429 with `Retry-After`."
       security: [{ customer: [] }]
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/StoreDiscountCheckRequest' } } } }
       responses:
@@ -4238,7 +4418,7 @@ paths:
   /api/store/v1/{store}/test-account:
     parameters: [{ $ref: '#/components/parameters/Store' }]
     get:
-      summary: "The free test accounts («اکانت تست») the customer can take now: each server giving one, with its traffic and term — or, when they can take none, why (`refusal`): what the bot asks first — a Telegram account linked, their own number while the shop asks it (`shop.phone_required`), the shop's channels joined — not met, or their quota spent. A 404 while the shop gives none."
+      summary: "The free test accounts («اکانت تست») the customer can take now: each server giving one, with its traffic and term — or, when they can take none, why (`refusal`): what the bot asks first — a Telegram account linked, their own number while the shop asks it (`shop.phone_required`, or `shop.phone_moments` has `test`), the shop's channels joined — not met, or their quota spent. A 404 while the shop gives none."
       security: [{ customer: [] }]
       responses:
         '200':
@@ -4249,7 +4429,7 @@ paths:
         '401': { $ref: '#/components/responses/SignedOut' }
         default: { $ref: '#/components/responses/Error' }
     post:
-      summary: "Take a free test account on one of the servers `GET /test-account` offers: the service, made at once, counts against the customer's quota as the bot's does. A 404 while the shop gives none; a 422 on `server_id` for a server not giving one now, or on `status` when what the bot asks first — a Telegram account linked, their own number while the shop asks it (`shop.phone_required`), the shop's channels joined — is not met or the quota refuses (its words say why); a 502 when the server's panel failed (nothing counted)."
+      summary: "Take a free test account on one of the servers `GET /test-account` offers: the service, made at once, counts against the customer's quota as the bot's does. A 404 while the shop gives none; a 422 on `server_id` for a server not giving one now, or on `status` when what the bot asks first — a Telegram account linked, their own number while the shop asks it (`shop.phone_required`, or `shop.phone_moments` has `test`), the shop's channels joined — is not met or the quota refuses (its words say why); a 502 when the server's panel failed (nothing counted)."
       security: [{ customer: [] }]
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/StoreTestAccountRequest' } } } }
       responses:
@@ -4263,7 +4443,7 @@ paths:
   /api/store/v1/{store}/wheel:
     parameters: [{ $ref: '#/components/parameters/Store' }]
     get:
-      summary: "The lucky wheel («گردونه شانس») as the customer finds it: its slices in order, a spin's cost and cooldown, and when they may spin next. A 422 on `status` while it is off, or for buyers only and they have bought nothing (its words say which)."
+      summary: "The lucky wheel («گردونه شانس») as the customer finds it: its slices in order, a spin's cost and cooldown, and when they may spin next. A 422 on `status` while it is off — for a customer the perks do not reach (`GET /me` `perks` false) too —, or for buyers only and they have bought nothing (its words say which)."
       security: [{ customer: [] }]
       responses:
         '200':
@@ -4457,7 +4637,7 @@ components:
     Shop:
       name: X-Shop
       in: header
-      description: "The shop the request works in, by its bot's id (`ShopRef.id`; 1 is the main bot). The owner's panel sends the shop its tab shows, taken from the tab's address (`/admin/s/7/…`; `/admin/…` is the main bot), so the session remembers no shop and two tabs can work in two shops. Without it, the request works in the main shop. A value that is not a bot id is a 422 on `shop`; a bot that does not exist is a 404 on `shop` (never the main shop instead), for a sign-in too once its credentials are right. A sign-in returns the session in the shop named. Sections that cover the whole installation ignore it: servers work across every bot's services, and the agency and the panel settings always work in the main shop. An agent's panel sends none, since their shop is their bot; naming another bot is a 403 on `shop`."
+      description: "The shop the request works in, by its bot's id (`ShopRef.id`; 1 is the main bot). The owner's panel sends the shop its tab shows, taken from the tab's address (`/admin/s/7/…`; `/admin/…` is the main bot), so the session remembers no shop and two tabs can work in two shops. Without it, the request works in the main shop. A value that is not a bot id is a 422 on `shop`; a bot that does not exist is a 404 on `shop` (never the main shop instead), for a sign-in too once its credentials are right. A sign-in returns the session in the shop named. Sections that cover the whole installation ignore it: servers work across every bot's services, and the agency, the panel settings and the imports from another bot always work in the main shop. An agent's panel sends none, since their shop is their bot; naming another bot is a 403 on `shop`."
       schema: { type: integer, minimum: 1 }
     ShopQuery: { name: shop, in: query, description: "The shop, as in `X-Shop`, for pictures, videos and download links, which cannot send a header (the panel adds it to every such address). Only reads may use it; a write names the shop in the header (else a 422 on `shop`). A header and a query naming two different shops are a 422 too.", schema: { type: integer, minimum: 1 } }
     Id: { name: id, in: path, required: true, description: "The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is", schema: { type: integer } }
@@ -4730,7 +4910,7 @@ components:
         fields: { type: array, items: { $ref: '#/components/schemas/FieldDescription' } }
         traits:
           type: object
-          description: "Extra facts specific to the driver's family. A database driver: `installable` (the installer offers it). A mail driver: `sender` (which address it can send from, as text). A payment gateway: `kind` (`instant`, settling at once like the wallet; `manual`, a card transfer whose receipt a person approves; or `online`, paid on the gateway's own page and confirmed by the gateway) and `builtin` (part of every shop; never added or deleted). A panel connector: `mark` (the two letters on its card), `vendor`, `docs_url` (its project's address), `inbounds` (services are sold on inbounds the owner picks; without it a server is sold whole) and `link_rotation` («تغییر لینک»). A captcha driver has none."
+          description: "Extra facts specific to the driver's family. A database driver: `installable` (the installer offers it). A mail driver: `sender` (which address it can send from, as text). A payment gateway: `kind` (`instant`, settling at once like the wallet; `manual`, a card transfer whose receipt a person approves; or `online`, paid on the gateway's own page and confirmed by the gateway) and `builtin` (part of every shop; never added or deleted). A panel connector: `mark` (the two letters on its card), `vendor`, `docs_url` (its project's address), `inbounds` (services are sold on inbounds the owner picks; without it a server is sold whole) and `link_rotation` («تغییر لینک»). A migrator (another bot an import reads): `mark` and `vendor` (its project's address). A captcha driver has none."
           additionalProperties:
             nullable: true
             oneOf:
@@ -5032,10 +5212,11 @@ components:
       description: "A customer, as a row of the users table. (The panel login is not a customer.)"
       type: object
       additionalProperties: false
-      required: [id, name, username, telegram_id, email, phone, status, role, balance, discount_percent, counts, groups, created_at, last_seen_at]
+      required: [id, name, username, telegram_id, email, phone, phone_exempt, status, role, balance, discount_percent, counts, groups, created_at, last_seen_at]
       properties:
         <<: *userRefProperties
         phone: { type: string, nullable: true, description: 'In E.164 form, once shared with the bot.' }
+        phone_exempt: { type: boolean, description: "Excused from the shop's phone rule: never asked for their phone number." }
         status: { $ref: '#/components/schemas/UserStatus' }
         role: { $ref: '#/components/schemas/UserRole' }
         balance: { type: string }
@@ -5153,6 +5334,27 @@ components:
       required: [percent]
       properties:
         percent: { allOf: [{ $ref: '#/components/schemas/WholeNumberInput' }], description: '0 to 100; 0 removes it.' }
+
+    UserMessageRequest:
+      type: object
+      additionalProperties: false
+      required: [text]
+      properties:
+        text: { type: string, minLength: 1, maxLength: 3500, description: 'Plain text, line breaks kept; 1 to 3,500 characters once trimmed, counted as Telegram counts them — an emoji is two (blank: 422).' }
+
+    UserMessageResponse:
+      type: object
+      additionalProperties: false
+      required: [delivery]
+      properties:
+        delivery: { $ref: '#/components/schemas/Delivery' }
+
+    UserPhoneExemptRequest:
+      type: object
+      additionalProperties: false
+      required: [phone_exempt]
+      properties:
+        phone_exempt: { type: boolean }
 
     UserGroupsRequest:
       description: "The customer's groups: exactly the ones listed. An empty list removes them from all groups."
@@ -6255,6 +6457,7 @@ components:
         - $ref: '#/components/schemas/ServerThreeXuiRequest'
         - $ref: '#/components/schemas/ServerPasarGuardRequest'
         - $ref: '#/components/schemas/ServerHmPanelRequest'
+        - $ref: '#/components/schemas/ServerMarzbanRequest'
 
     ServerThreeXuiRequest:
       description: "A server on a 3X-UI panel: its API token, or an admin's username and password plus the two-factor secret when the panel asks for a code."
@@ -6313,12 +6516,42 @@ components:
         <<: *serverFormProperties
         auth_mode: { type: string, enum: [token], description: 'How to sign in: HMPanel''s API key, the one way its API takes.' }
 
+    ServerMarzbanRequest:
+      description: "A server on a Marzban panel (0.8 and later): an admin's username and password, the one way in — Marzban's API has no keys. The server form's fields without the token's."
+      type: object
+      additionalProperties: false
+      required: [driver, name, base_url, auth_mode, verify_tls, timeout, proxy_enabled, is_active]
+      properties: &serverMarzbanProperties
+        driver: { type: string, enum: [marzban] }
+        name: { type: string, description: "The location's name, as customers see it in the bot; at most 100 characters. Never a premium emoji's tag: one is chosen in `emoji_id`." }
+        emoji_id: { type: string, description: "The premium emoji the bot draws for the name's leading emoji (a custom emoji id, digits): on its location button as the icon, in its texts in the emoji's place. The name must start with an emoji while one is set. Blank or left out: none." }
+        base_url: { type: string, description: "The panel's address, including its path: http(s), without credentials, query or fragment, and not one of the panel's own pages (Marzban's /dashboard, /api or /docs)." }
+        auth_mode: { type: string, enum: [password], description: "How to sign in: an admin's username and password, the one way Marzban's API takes." }
+        username: *serverUsername
+        password: *serverPassword
+        clear_password: *serverClearPassword
+        verify_tls: { type: boolean, description: "Whether to verify the panel's TLS certificate; off for a self-signed one." }
+        timeout: { allOf: [{ $ref: '#/components/schemas/WholeNumberInput' }], description: 'Request timeout in seconds, 5 to 120.' }
+        subscription_url: { type: string, description: "A base address to use before the token in subscription links instead of the panel's own: a full address without credentials, query or fragment. Blank: the panel's." }
+        proxy_enabled: { type: boolean, description: "Every request to the panel goes through a SOCKS5 proxy (the panel's name looked up by the proxy), for a panel the shop's host cannot reach directly. Off: straight to the panel, and the proxy's fields are emptied." }
+        proxy_host: { type: string, description: "With `proxy_enabled`: the proxy's host name or IP address, without a scheme or a port (an IPv6 address may be in brackets); at most 255 characters." }
+        proxy_port: { allOf: [{ $ref: '#/components/schemas/WholeNumberInput' }], description: 'With `proxy_enabled`: the proxy''s port, 1 to 65535.' }
+        proxy_username: { type: string, description: 'With `proxy_enabled`: the proxy''s username, at most 255 characters; blank for a proxy without a login.' }
+        proxy_password: { type: string, description: "With `proxy_enabled`: the proxy's password, only with a username. Left out or blank: the stored password stays while the proxy's host and port stay (after a change it must be typed again)." }
+        clear_proxy_password: { type: boolean, description: "True empties the stored proxy password." }
+        capacity: { allOf: [{ $ref: '#/components/schemas/WholeNumberInput' }], description: 'How many active services it takes. Blank for no limit; 0 for full.' }
+        notes: { type: string, description: "The owner's notes, at most 1000 characters." }
+        is_active: { type: boolean, description: 'Off: no new service is placed on it.' }
+        button_style: { type: string, enum: ['', primary, success, danger], description: "The colour of its button among a plan's locations in the bot: blue, green or red. Blank or left out: the client's default." }
+        button_row: { type: string, enum: ['1', '2', '3'], description: 'How many location buttons share its row in the bot. Left out: a row of its own.' }
+
     ServerTestRequest:
       description: "A connection to test before saving: a new server's form (ServerRequest), or a saved server's form with its `id`, whose stored secrets fill in blank ones while the address stays on the same host. One closed shape per connector."
       oneOf:
         - $ref: '#/components/schemas/ServerThreeXuiTestRequest'
         - $ref: '#/components/schemas/ServerPasarGuardTestRequest'
         - $ref: '#/components/schemas/ServerHmPanelTestRequest'
+        - $ref: '#/components/schemas/ServerMarzbanTestRequest'
 
     ServerThreeXuiTestRequest:
       description: "A 3X-UI server to test."
@@ -6346,6 +6579,15 @@ components:
       properties:
         id: { type: integer, description: *testedServerId }
         <<: *serverHmPanelProperties
+
+    ServerMarzbanTestRequest:
+      description: "A Marzban server to test."
+      type: object
+      additionalProperties: false
+      required: [driver, name, base_url, auth_mode, verify_tls, timeout, proxy_enabled, is_active]
+      properties:
+        id: { type: integer, description: *testedServerId }
+        <<: *serverMarzbanProperties
 
     InboundSellableRequest:
       description: Whether an inbound is sold on plans that sell the whole server.
@@ -7539,7 +7781,7 @@ components:
       required: [instructions, auto_approve_after]
       properties:
         instructions: { type: string }
-        auto_approve_after: { type: integer, description: 'Minutes a receipt sent in the bot may wait for review before it is approved automatically; 0 for manual approval only.' }
+        auto_approve_after: { type: integer, description: 'Minutes a receipt sent in the bot (or uploaded by a Telegram account: any mini app customer, or a website customer signed in with Telegram) may wait for review before it is approved automatically; 0 for manual approval only.' }
 
     CubePayGatewayConfig:
       description: "A CubePay method's settings (`CubePayMethodRow.config`): the merchant's API token, kept encrypted and never shown — only whether one is kept and a hint to recognise it —, and the fee passed on to customers: a percent of the amount and a fixed sum on every payment."
@@ -7659,7 +7901,7 @@ components:
         min_amount: &methodMinAmount { allOf: [{ $ref: '#/components/schemas/AmountInput' }], nullable: true, description: 'The least amount to pay it is offered for: whole Toman, blank or null for no least. Left out on an update: unchanged.' }
         max_amount: &methodMaxAmount { allOf: [{ $ref: '#/components/schemas/AmountInput' }], nullable: true, description: 'The most amount to pay it is offered for (not less than `min_amount`): whole Toman, blank or null for no most. Left out on an update: unchanged.' }
         instructions: { type: string, description: 'Shown to the customer with the card; blank for none.' }
-        auto_approve_after: { allOf: [{ $ref: '#/components/schemas/WholeNumberInput' }], description: 'Minutes a receipt sent in the bot may wait for review before it is approved automatically; blank or 0 for manual approval only.' }
+        auto_approve_after: { allOf: [{ $ref: '#/components/schemas/WholeNumberInput' }], description: 'Minutes a receipt sent in the bot (or uploaded by a Telegram account: any mini app customer, or a website customer signed in with Telegram) may wait for review before it is approved automatically; blank or 0 for manual approval only.' }
         cards: { type: array, items: { $ref: '#/components/schemas/PaymentCardInput' }, description: 'Every card of the method, 1 to 20, in their order, each once: a card left out is deleted — one with payments cannot be (switch it off) —, and no number comes twice. Every refusal is under `cards`, each naming its card by its place («کارت ۲: …»).' }
 
     WalletMethodRequest:
@@ -8246,6 +8488,75 @@ components:
         subscription: { allOf: [{ $ref: '#/components/schemas/NamedRef' }], nullable: true, description: 'The service that got the traffic or days, or the plan''s new service, by its client''s name on the panel.' }
         created_at: { type: string, format: date-time, nullable: true }
 
+    DepositStatus:
+      description: "What came of a forwarded bank SMS: `received` (being looked at), `matched` (it approved a card payment), `unmatched` (no open card payment asks its sum, or ForApp did not recognise it as a bank's deposit), `ambiguous` (more than one does; none approved), `ignored` (a withdrawal, no sum read in Rial, or older than three days), `test` (the app's test)."
+      type: string
+      enum: [received, matched, unmatched, ambiguous, ignored, test]
+
+    DepositRow:
+      type: object
+      additionalProperties: false
+      required: [id, source, status, amount_rial, amount, bank, sender, body, note, payment, received_at, created_at]
+      properties:
+        id: { type: integer }
+        source: { type: string, description: 'The phone app: `forapp`.' }
+        status: { $ref: '#/components/schemas/DepositStatus' }
+        amount_rial: { type: integer, nullable: true, description: 'The sum the SMS said, in Rial; null when none was read.' }
+        amount: { type: string, nullable: true, description: 'The same in Toman, as the shop prices.' }
+        bank: { type: string, nullable: true }
+        sender: { type: string, nullable: true }
+        body: { type: string, nullable: true, description: 'The SMS as it came.' }
+        note: { type: string, nullable: true, description: 'Why it approved nothing.' }
+        payment:
+          type: object
+          nullable: true
+          additionalProperties: false
+          required: [id, order_id, customer]
+          description: The card payment it approved.
+          properties:
+            id: { type: integer }
+            order_id: { type: integer }
+            customer: { $ref: '#/components/schemas/UserRef' }
+        received_at: { type: string, format: date-time, nullable: true, description: 'When the phone got it.' }
+        created_at: { type: string, format: date-time, nullable: true }
+
+    DepositsResponse:
+      type: object
+      additionalProperties: false
+      required: [deposits, meta]
+      properties:
+        deposits: { type: array, items: { $ref: '#/components/schemas/DepositRow' } }
+        meta: { $ref: '#/components/schemas/PageMeta' }
+
+    DepositSettingsRequest:
+      type: object
+      additionalProperties: false
+      required: [enabled]
+      properties:
+        enabled: { type: boolean }
+
+    DepositSettingsResponse:
+      type: object
+      additionalProperties: false
+      required: [enabled, key, sources, last_received_at, last_test_at, waiting]
+      properties:
+        enabled: { type: boolean }
+        key: { type: string, nullable: true, description: "The key the app sends as `X-API-Key`; null while the shop does not listen." }
+        sources:
+          type: array
+          description: 'The phone apps the shop takes, each with the address its owner pastes in it.'
+          items:
+            type: object
+            additionalProperties: false
+            required: [key, label, webhook_url]
+            properties:
+              key: { type: string }
+              label: { type: string }
+              webhook_url: { type: string }
+        last_received_at: { type: string, format: date-time, nullable: true, description: 'When the last SMS came (not a test).' }
+        last_test_at: { type: string, format: date-time, nullable: true, description: "When the app's last test came." }
+        waiting: { type: integer, description: 'SMS of the last seven days that approved nothing (unmatched or ambiguous): support to look at.' }
+
     WheelSpinsResponse:
       type: object
       additionalProperties: false
@@ -8644,13 +8955,21 @@ components:
     BotSettingsData:
       type: object
       additionalProperties: false
-      required: [enabled, phone_required, join_required, support_contact, topup_min, topup_presets, topup_random_count, topup_random_min, topup_random_max, topup_random_round, topup_unique_max, wallet_transfer_enabled, wallet_transfer_min, wallet_transfer_max, wallet_transfer_daily, card_protect, card_to_support, receipt_single, qr_enabled, carry_traffic, auto_renew_days, auto_renew_default, extras_enabled, extra_traffic_price, extra_traffic_options, extra_traffic_min, extra_traffic_max, extra_time_price, extra_time_options, extra_time_min, extra_time_max, extra_devices_price, extra_devices_options, extra_devices_min, extra_devices_max, expiry_reminder, expiry_reminder_days, traffic_reminder, traffic_reminder_percent, expired_cleanup, expired_cleanup_hours, test_enabled, test_per_user, test_period_days, test_daily_limit, test_newcomers_only, test_cleanup, test_cleanup_hours, test_unused_days, renew_window_days, renew_window_percent, renew_extend, renew_reset_traffic, renew_reset_time, renew_default_method, transfer_enabled, name_pattern, test_name_pattern, name_random, name_custom, referral_enabled, referral_rate, referral_renewal_rate, referral_first_only, referral_start_referrer, referral_start_invitee, referral_start_when, referral_reward_every, referral_reward_plan_id, referral_alert_burst, referral_alert_minutes, referral_alert_idle, report_purchases, report_renewals, report_tests, report_deletions, report_wallet, report_receipts, report_users, report_errors, report_tickets, report_reviews, report_backups, gift_codes_enabled, wheel_enabled, wheel_cooldown_hours, wheel_buyers_only, wheel_cost, cashback_enabled, lottery_enabled, lottery_hour, lottery_winners, lottery_prize, lottery_wallet, lottery_traffic_gb, lottery_days, lottery_plan_id, lottery_entries, lottery_exclude_agents, hold_minutes]
+      required: [enabled, phone_required, phone_scope, phone_on_purchase, phone_on_renewal, phone_on_test, phone_on_card, phone_iran_only, join_required, support_contact, support_header, topup_min, topup_presets, topup_random_count, topup_random_min, topup_random_max, topup_random_round, topup_unique_max, wallet_transfer_enabled, wallet_transfer_min, wallet_transfer_max, wallet_transfer_daily, card_protect, card_to_support, receipt_single, qr_enabled, carry_traffic, auto_renew_days, auto_renew_default, extras_enabled, extra_traffic_price, extra_traffic_options, extra_traffic_min, extra_traffic_max, extra_time_price, extra_time_options, extra_time_min, extra_time_max, extra_devices_price, extra_devices_options, extra_devices_min, extra_devices_max, expiry_reminder, expiry_reminder_days, traffic_reminder, traffic_reminder_percent, expired_cleanup, expired_cleanup_hours, test_enabled, test_per_user, test_period_days, test_daily_limit, test_newcomers_only, test_cleanup, test_cleanup_hours, test_unused_days, renew_window_days, renew_window_percent, renew_extend, renew_reset_traffic, renew_reset_time, renew_default_method, transfer_enabled, name_pattern, test_name_pattern, name_random, name_custom, referral_enabled, referral_rate, referral_renewal_rate, referral_first_only, referral_start_referrer, referral_start_invitee, referral_start_when, referral_reward_every, referral_reward_plan_id, referral_alert_burst, referral_alert_minutes, referral_alert_idle, report_purchases, report_renewals, report_tests, report_deletions, report_wallet, report_receipts, report_users, report_errors, report_tickets, report_reviews, report_backups, gift_codes_enabled, wheel_enabled, wheel_cooldown_hours, wheel_buyers_only, wheel_cost, cashback_enabled, lottery_enabled, lottery_hour, lottery_winners, lottery_prize, lottery_wallet, lottery_traffic_gb, lottery_days, lottery_plan_id, lottery_entries, lottery_exclude_agents, hold_minutes, agents_without_perks]
       properties:
         hold_minutes: { type: integer, description: "«کدهای تخفیف»: how many minutes an order made with a discount code may stay unpaid. After that, if untouched and no receipt is with support, it is cancelled and the code's use is freed. 0: as long as any unpaid order (two days by default)." }
+        agents_without_perks: { type: boolean, description: "«همکارها فقط با قیمت همکاری»: whoever pays agent prices (an agent, or in a «همکار» group) goes without the customers' perks, whatever they buy — no sale, loyalty tier, discount code, first-purchase price, cashback, lucky wheel or nightly draw; a plan's agent price where it has one, the regular price elsewhere (a plan without one, extras, a built service); their own discount stays." }
         enabled: { type: boolean }
         phone_required: { type: boolean }
+        phone_scope: { type: string, enum: [everywhere, moments], description: "While `phone_required`: `everywhere` asks a customer's number before the bot serves them anything at all; `moments` only at the moments switched on (`phone_on_*`)." }
+        phone_on_purchase: { type: boolean, description: 'With `phone_scope` `moments`: asked before a service is bought.' }
+        phone_on_renewal: { type: boolean, description: 'With `phone_scope` `moments`: asked before a service is renewed or given extra traffic, time or devices.' }
+        phone_on_test: { type: boolean, description: 'With `phone_scope` `moments`: asked before a free test is taken.' }
+        phone_on_card: { type: boolean, description: 'With `phone_scope` `moments`: asked before a card-to-card payment, whatever it pays for.' }
+        phone_iran_only: { type: boolean, description: "While `phone_required`: only Iranian numbers (+98) count. Another country's is refused when shared (the bot text «فقط شماره ایران»), and a customer whose number on file is one is asked again; excuse one from the number to let them through." }
         join_required: { type: boolean }
         support_contact: { type: string, description: 'The Telegram id or link the bot''s «پشتیبانی» screen shows; may be empty.' }
+        support_header: { type: boolean, description: "Whether a message support writes to a customer («ارسال پیام») comes under the bot text «پیام پشتیبانی به مشتری» (📩 پیام از طرف پشتیبانی); off, the words alone." }
         topup_min: { type: integer, description: 'The smallest top-up, in Toman.' }
         topup_presets: { type: array, items: { type: integer }, description: 'The amounts offered as buttons, ascending.' }
         topup_random_count: { type: integer, description: 'How many buttons of amounts drawn at random the top-up screen offers beside the presets, 0 to 8; 0: none.' }
@@ -8776,7 +9095,7 @@ components:
 
     BotSettingsGroup:
       type: string
-      enum: [general, channels, wallet, wallet_transfers, payments, renewal, auto_renew, extras, reminders, expired_services, test_accounts, service_claims, service_transfers, client_names, custom_services, referral, reports, qr, gift_codes, wheel, cashback, lottery, discounts]
+      enum: [general, channels, wallet, wallet_transfers, payments, renewal, auto_renew, extras, reminders, expired_services, test_accounts, service_claims, service_transfers, client_names, custom_services, referral, reports, qr, gift_codes, wheel, cashback, lottery, discounts, agent_perks]
 
     BotSettingsResponse:
       type: object
@@ -8989,6 +9308,7 @@ components:
         - $ref: '#/components/schemas/BotCashbackSettingsRequest'
         - $ref: '#/components/schemas/BotLotterySettingsRequest'
         - $ref: '#/components/schemas/BotDiscountsSettingsRequest'
+        - $ref: '#/components/schemas/BotAgentPerksSettingsRequest'
 
     BotDiscountsSettingsRequest:
       type: object
@@ -8996,6 +9316,13 @@ components:
       required: [hold_minutes]
       properties:
         hold_minutes: { allOf: [{ $ref: '#/components/schemas/WholeNumberInput' }], description: '0 to 1440 minutes.' }
+
+    BotAgentPerksSettingsRequest:
+      type: object
+      additionalProperties: false
+      required: [agents_without_perks]
+      properties:
+        agents_without_perks: { type: boolean }
 
     BotCashbackSettingsRequest:
       type: object
@@ -9124,14 +9451,26 @@ components:
       type: string
       enum: [sequential, random, custom]
 
+    PhoneMoment:
+      description: 'A moment the shop may ask a customer''s number at instead of before everything: `purchase` (a service bought or built), `renewal` (a service renewed, or given extra traffic, time or devices), `test` (a free test taken), `card` (a card-to-card payment, whatever it pays for).'
+      type: string
+      enum: [purchase, renewal, test, card]
+
     BotGeneralSettingsRequest:
       type: object
       additionalProperties: false
-      required: [enabled, phone_required]
+      required: [enabled, phone_required, phone_scope, phone_on_purchase, phone_on_renewal, phone_on_test, phone_on_card, phone_iran_only, support_header]
       properties:
         enabled: { type: boolean }
         phone_required: { type: boolean }
+        phone_scope: { type: string, enum: [everywhere, moments] }
+        phone_on_purchase: { type: boolean }
+        phone_on_renewal: { type: boolean }
+        phone_on_test: { type: boolean }
+        phone_on_card: { type: boolean }
+        phone_iran_only: { type: boolean }
         support_contact: { type: string, description: 'At most 190 characters.' }
+        support_header: { type: boolean }
 
     BotChannelsSettingsRequest:
       type: object
@@ -9679,7 +10018,7 @@ components:
       description: "Every task's fields, saved whole (a missing one is refused), each by its ScheduleField `name`. A value equal to its default is kept as none."
       type: object
       additionalProperties: false
-      required: [auto_approve_receipts_minutes, online_payments_minutes, resume_deliveries_minutes, expire_orders_minutes, send_broadcasts_minutes, auto_renew_minutes, next_period_minutes, grants_minutes, migrations_minutes, sync_subscriptions_minutes, send_reminders_minutes, cleanup_services_minutes, agency_standing_minutes, prune_updates_minutes, prune_accounts_minutes, prune_tickets_minutes, nightly_draw_minutes, send_backups_minutes, check_releases_minutes, send_reports_minutes, expire_orders_hours, online_payments_check_minutes, online_payments_late_hours, online_payments_late_check_minutes, online_payments_review_hours, notices_keep_days, ticket_pictures_keep_days, reports_keep_days, reports_wait_hours]
+      required: [auto_approve_receipts_minutes, online_payments_minutes, resume_deliveries_minutes, expire_orders_minutes, send_broadcasts_minutes, auto_renew_minutes, next_period_minutes, grants_minutes, migrations_minutes, sync_subscriptions_minutes, send_reminders_minutes, cleanup_services_minutes, agency_standing_minutes, prune_updates_minutes, prune_accounts_minutes, prune_tickets_minutes, nightly_draw_minutes, send_backups_minutes, prune_imports_minutes, check_releases_minutes, send_reports_minutes, expire_orders_hours, online_payments_check_minutes, online_payments_late_hours, online_payments_late_check_minutes, online_payments_review_hours, notices_keep_days, ticket_pictures_keep_days, reports_keep_days, reports_wait_hours]
       properties:
         auto_approve_receipts_minutes: { allOf: [{ $ref: '#/components/schemas/WholeNumberInput' }], description: 'Minutes between two runs of `auto_approve_receipts`, 1 to 10080; 1 by default.' }
         online_payments_minutes: { allOf: [{ $ref: '#/components/schemas/WholeNumberInput' }], description: 'Minutes between two runs of `online_payments`, 1 to 10080; 1 by default.' }
@@ -9699,6 +10038,7 @@ components:
         prune_tickets_minutes: { allOf: [{ $ref: '#/components/schemas/WholeNumberInput' }], description: 'Minutes between two runs of `prune_tickets`, 1 to 10080; 60 by default.' }
         nightly_draw_minutes: { allOf: [{ $ref: '#/components/schemas/WholeNumberInput' }], description: 'Minutes between two runs of `nightly_draw`, 1 to 10080; 10 by default.' }
         send_backups_minutes: { allOf: [{ $ref: '#/components/schemas/WholeNumberInput' }], description: 'Minutes between two runs of `send_backups`, 1 to 10080; 1440 by default.' }
+        prune_imports_minutes: { allOf: [{ $ref: '#/components/schemas/WholeNumberInput' }], description: 'Minutes between two runs of `prune_imports`, 1 to 10080; 1440 by default.' }
         check_releases_minutes: { allOf: [{ $ref: '#/components/schemas/WholeNumberInput' }], description: 'Minutes between two runs of `check_releases`, 1 to 10080; 1440 by default.' }
         send_reports_minutes: { allOf: [{ $ref: '#/components/schemas/WholeNumberInput' }], description: 'Minutes between two runs of `send_reports`, 1 to 10080; 1 by default.' }
         expire_orders_hours: { allOf: [{ $ref: '#/components/schemas/WholeNumberInput' }], description: "Hours an unpaid order nobody touched waits before it is dropped (one whose money may be with support never is). 1 to 720; 48 by default." }
@@ -10087,6 +10427,284 @@ components:
         agent: { $ref: '#/components/schemas/AgentRow' }
         delivery: { allOf: [{ $ref: '#/components/schemas/Delivery' }], nullable: true, description: 'Whether the agent was notified of their new terms; null when the terms did not change (no notice was sent).' }
 
+    # ---------------------------------------------------------------- imports from another bot («انتقال از ربات دیگر»)
+
+    ImportPhase:
+      description: "Where an import stands: `reading` the other bot's data into a staged copy, a step a request; `review`, waiting for the owner's choices; `importing`, writing it into the shop, a step a request; then `done`, `failed` (`error` says why) or `cancelled`. One import at a time is in any of the first three. The staged copy and the uploaded file are deleted once it ends."
+      type: string
+      enum: [reading, review, importing, done, failed, cancelled]
+
+    ImportStage:
+      description: "The stages an import writes in, in this order: the servers its panels are added as, the customer groups, the customers (with their balances), who brought whom, the plans, the services, the discount codes, the gift codes, the required channels and the bank cards."
+      type: string
+      enum: [servers, groups, customers, referrals, plans, services, discount_codes, gift_codes, channels, cards]
+
+    ImportProblemReason:
+      description: "Why an import did not bring something. Only counted, with no row of its own (the owner's own choice, or nothing to act on): `reseller` (a customer or service of the other bot's reseller bots, not chosen), `panel_skipped` (its panel was left behind, or could not be added), `not_chosen`, `used_up`, `expired`, `ended`, `removed` (an earlier import brought it and the owner deleted it from the shop since: never brought back). Each of the others is a row naming the thing: `unreadable`, `not_telegram` (no valid Telegram id), `no_customer` (a service whose customer did not come), `not_on_panel` (its client is not on the panel), `panel_unreachable` (the panel did not answer: running an import again later picks it up), `no_link` (the panel gives it no subscription link), `kept_already` (the same client is another customer's service in the shop), `server_not_added`, `plan_no_server`, `agents_only_plan`, `code_taken`, `scope_lost`, `multi_use_gift`, `channel_refused`, `card_invalid`, `one_customer` (a gift code the other bot kept for one customer), `refused` (the shop's own check of it refused it: its words in `detail`), `failed` (writing it failed unexpectedly: the app's log has it)."
+      type: string
+      enum: [reseller, panel_skipped, not_chosen, used_up, expired, ended, removed, unreadable, not_telegram, no_customer, not_on_panel, panel_unreachable, no_link, kept_already, server_not_added, plan_no_server, agents_only_plan, code_taken, scope_lost, multi_use_gift, channel_refused, card_invalid, one_customer, refused, failed]
+
+    ImportProgress:
+      description: "How far the current phase is. Reading: no stage, `done` the bytes of the backup file read or the rows of the database staged, `total` the file's size or the rows counted at the start. Importing: the stage it writes, with its records written and their number. `total` is null while it is not known."
+      type: object
+      additionalProperties: false
+      required: [stage, stage_label, done, total]
+      properties:
+        stage: { allOf: [{ $ref: '#/components/schemas/ImportStage' }], nullable: true }
+        stage_label: { type: string, nullable: true, description: "The stage in the owner's words («مشتری‌ها»)." }
+        done: { type: integer }
+        total: { type: integer, nullable: true }
+
+    ImportSurveyCounts:
+      description: "How much of each kind the other bot's data holds: its customers, those with a balance (`balances`), its live services and test accounts, plans, discount and gift codes, required channels, bank cards, and the customers of its reseller bots (`resellers`)."
+      type: object
+      additionalProperties: false
+      required: [customers, balances, services, tests, plans, discount_codes, gift_codes, channels, cards, resellers]
+      properties:
+        customers: { type: integer }
+        balances: { type: integer }
+        services: { type: integer }
+        tests: { type: integer }
+        plans: { type: integer }
+        discount_codes: { type: integer }
+        gift_codes: { type: integer }
+        channels: { type: integer }
+        cards: { type: integer }
+        resellers: { type: integer }
+
+    ImportSurveyPanel:
+      description: "A VPN panel the other bot sold on. Its services are found on the server it maps to by their client names, and adopted as they stand: nothing on the panel changes. Its connection (with its secrets) never leaves the server."
+      type: object
+      additionalProperties: false
+      required: [key, name, type, url, driver, unsupported, addable, services, suggested_server_id]
+      properties:
+        key: { type: string, description: "What the other bot's services name it by: its key in `ImportChoices.panels`." }
+        name: { type: string }
+        type: { type: string, description: "The other bot's word for its kind (`marzban`, `x-ui_single` …), as it is." }
+        url: { type: string, nullable: true, description: "The panel's address." }
+        driver: { type: string, nullable: true, description: "The panel connector of this shop that speaks to it (`DriverDescription.key` of `GET /servers/drivers`); null when none does." }
+        unsupported: { type: string, nullable: true, description: "Why no connector does, in the owner's words, when `driver` is null." }
+        addable: { type: boolean, description: "It can be added as a new server of the shop (the choice `add`): a connector speaks to it and the other bot kept its connection." }
+        services: { type: integer, description: "Its services the import would bring." }
+        suggested_server_id: { type: integer, nullable: true, description: "A server of the shop with the same connector on the same address (scheme, host and port), which the proposed choices map it to; null for none." }
+
+    ImportSurveyGroup:
+      description: "A customer group the other bot's customers would join (its agents', say): the shop's group of that name, or a new one."
+      type: object
+      additionalProperties: false
+      required: [name, agent_pricing, customers]
+      properties:
+        name: { type: string }
+        agent_pricing: { type: boolean, description: "A new group pays plans' agent prices («همکار»)." }
+        customers: { type: integer }
+
+    ImportSurveyAdmin:
+      description: "An admin of the other bot, whom the import may make an admin of this shop too (`ImportChoices.admins`)."
+      type: object
+      additionalProperties: false
+      required: [key, telegram_id, username, role]
+      properties:
+        key: { type: string, description: "The other bot's key for them as a customer." }
+        telegram_id: { type: integer }
+        username: { type: string, nullable: true, description: 'Telegram handle without "@".' }
+        role: { type: string, nullable: true, description: "Their role there, in its words (`administrator`, `support`)." }
+
+    ImportLeftBehind:
+      description: "Something the other bot has that the import does not bring, and how much."
+      type: object
+      additionalProperties: false
+      required: [what, count]
+      properties:
+        what: { type: string, description: "In the owner's words («تاریخچه پرداخت‌ها»)." }
+        count: { type: integer }
+
+    ImportSurvey:
+      description: "What the other bot's data holds, for the owner to review before anything is written."
+      type: object
+      additionalProperties: false
+      required: [version, counts, balance_total, panels, groups, admins, left, warnings]
+      properties:
+        version: { type: string, nullable: true, description: "The other bot's version, when its data tells." }
+        counts: { $ref: '#/components/schemas/ImportSurveyCounts' }
+        balance_total: { type: string, description: "The customers' balances together, Toman (debts taken off)." }
+        panels: { type: array, items: { $ref: '#/components/schemas/ImportSurveyPanel' } }
+        groups: { type: array, items: { $ref: '#/components/schemas/ImportSurveyGroup' } }
+        admins: { type: array, items: { $ref: '#/components/schemas/ImportSurveyAdmin' } }
+        left: { type: array, items: { $ref: '#/components/schemas/ImportLeftBehind' }, description: "What the import leaves behind: payment history, tickets, the bot's settings and texts …" }
+        warnings: { type: array, items: { type: string }, description: "Worth reading before starting, in the owner's words." }
+
+    ImportPanelChoice:
+      description: "Where a panel's services go: `server`, one of the shop's servers with the panel's connector (`server_id`); `add`, the panel added as a new server (an `addable` one alone; refused or out of reach, its services stay behind); `skip`, its services stay behind — the one choice for a panel no connector speaks to."
+      type: object
+      additionalProperties: false
+      required: [action, server_id]
+      properties:
+        action: { type: string, enum: [server, add, skip] }
+        server_id: { type: integer, nullable: true, description: "The server, for `server`; null otherwise." }
+
+    ImportChoices:
+      description: "What an import brings and where each panel's services go, as the owner chose in the review. A customer, a balance or anything else an earlier import brought is recognised and not brought twice."
+      type: object
+      additionalProperties: false
+      required: [panels, balances, banned, phones, referrals, discounts, groups, admins, resellers, services, tests, plans, plans_on, discount_codes, gift_codes, channels, cards]
+      properties: &importChoicesProperties
+        panels: { type: object, additionalProperties: { $ref: '#/components/schemas/ImportPanelChoice' }, description: "Each panel with services, by its `ImportSurveyPanel.key`." }
+        balances: { type: boolean, description: "Customers' wallet balances, debts too, are credited (once, however often it runs)." }
+        banned: { type: boolean, description: "Customers banned there are banned here." }
+        phones: { type: boolean, description: "Customers' mobile numbers come." }
+        referrals: { type: boolean, description: "Who brought whom." }
+        discounts: { type: boolean, description: "Customers' personal discount percent." }
+        groups: { type: boolean, description: "Customers join the survey's groups (its agents', paying agent prices)." }
+        admins: { type: boolean, description: "The other bot's admins become admins of this shop." }
+        resellers: { type: boolean, description: "The customers and services of the other bot's reseller bots come too, as the main shop's." }
+        services: { type: boolean, description: "Live services come, as they stand on their panels: link, usage and end." }
+        tests: { type: boolean, description: "Free test accounts come too (with `services`)." }
+        plans: { type: boolean, description: "The plans and their categories come." }
+        plans_on: { type: boolean, description: "The plans come switched on, sold at once; otherwise off, for the owner to check first." }
+        discount_codes: { type: boolean, description: "Discount codes still usable come." }
+        gift_codes: { type: boolean, description: "Gift codes still usable come, as wallet gift codes (one use each)." }
+        channels: { type: boolean, description: "The required channels come; the bot must be an admin of each." }
+        cards: { type: boolean, description: "The bank cards come, to the shop's card-to-card method." }
+
+    ImportCount:
+      description: "What an import did with one kind: rows it created, rows it matched to what the shop already had (`linked`), and things it did not bring (`skipped`: by the owner's choice, or a problem)."
+      type: object
+      additionalProperties: false
+      required: [created, linked, skipped]
+      properties:
+        created: { type: integer }
+        linked: { type: integer }
+        skipped: { type: integer }
+
+    ImportReasonCount:
+      type: object
+      additionalProperties: false
+      required: [reason, label, count]
+      properties:
+        reason: { $ref: '#/components/schemas/ImportProblemReason' }
+        label: { type: string, description: "The reason in the owner's words." }
+        count: { type: integer }
+
+    ImportProblemsSummary:
+      description: "What an import could not bring, by reason — the counted ones with the rest."
+      type: object
+      additionalProperties: false
+      required: [total, by_reason]
+      properties:
+        total: { type: integer }
+        by_reason: { type: array, items: { $ref: '#/components/schemas/ImportReasonCount' } }
+
+    ImportState:
+      description: "An import from another bot, as the owner's page shows it in every phase."
+      type: object
+      additionalProperties: false
+      required: [id, migrator, migrator_label, source, file_name, phase, progress, version, survey, choices, proposed, counts, problems, error, reviewer, started_at, finished_at, created_at, updated_at]
+      properties:
+        id: { type: integer, description: "As used in `/imports/{id}`." }
+        migrator: { type: string, description: "The bot it reads (`DriverDescription.key` of `ImportsResponse.migrators`)." }
+        migrator_label: { type: string }
+        source: { type: string, enum: [backup, database], description: "How the data arrived: an uploaded backup file, or a connection to the bot's database." }
+        file_name: { type: string, nullable: true, description: "The backup file's name as uploaded; null for a database." }
+        phase: { $ref: '#/components/schemas/ImportPhase' }
+        progress: { $ref: '#/components/schemas/ImportProgress' }
+        version: { type: string, nullable: true, description: "The other bot's version, when its data tells." }
+        survey: { allOf: [{ $ref: '#/components/schemas/ImportSurvey' }], nullable: true, description: "What the data holds, once read; null before." }
+        choices: { allOf: [{ $ref: '#/components/schemas/ImportChoices' }], nullable: true, description: "The owner's choices, once saved; null before." }
+        proposed: { allOf: [{ $ref: '#/components/schemas/ImportChoices' }], nullable: true, description: "What the review starts from while no choices are saved: each panel to a server of the same connector on the same address, else added when it can be, else left behind; every switch on but `admins`, `resellers`, `plans_on` and `channels`. Null otherwise." }
+        counts: { type: object, nullable: true, additionalProperties: { $ref: '#/components/schemas/ImportCount' }, description: "What it did, by kind (customers, balances, groups, servers, plans, categories, services, discount_codes, gift_codes, channels, cards), once it writes; null before." }
+        problems: { $ref: '#/components/schemas/ImportProblemsSummary' }
+        error: { type: string, nullable: true, description: "Why it failed, in the owner's words; null otherwise." }
+        reviewer: { type: string, nullable: true, description: Who started it. }
+        started_at: { type: string, format: date-time, nullable: true, description: "When it started writing." }
+        finished_at: { type: string, format: date-time, nullable: true }
+        created_at: { type: string, format: date-time, nullable: true }
+        updated_at: { type: string, format: date-time, nullable: true }
+
+    ImportResponse:
+      type: object
+      additionalProperties: false
+      required: [import]
+      properties:
+        import: { $ref: '#/components/schemas/ImportState' }
+
+    ImportStepResponse:
+      description: "The import after a step, and whether the step ran."
+      type: object
+      additionalProperties: false
+      required: [import, stepped]
+      properties:
+        import: { $ref: '#/components/schemas/ImportState' }
+        stepped: { type: boolean, description: "False when another step was already on the import (another tab, `import:run`): nothing was done, and asking again at once would only find it busy. True for a step that ran, and for an import not reading or writing, which a step leaves as it is." }
+
+    ImportsResponse:
+      description: "The owner's «انتقال از ربات دیگر» page."
+      type: object
+      additionalProperties: false
+      required: [migrators, current, history, upload_max_bytes]
+      properties:
+        migrators: { type: array, items: { $ref: '#/components/schemas/DriverDescription' }, description: "The bots an import reads, each with its `mark` and `vendor` (traits)." }
+        current: { allOf: [{ $ref: '#/components/schemas/ImportState' }], nullable: true, description: "The import under way; null for none." }
+        history: { type: array, items: { $ref: '#/components/schemas/ImportState' }, description: "The latest ten that ended, newest first." }
+        upload_max_bytes: { type: integer, description: "The largest backup file this host takes in one upload (PHP's smaller limit); 0 when it does not say." }
+
+    ImportProblem:
+      description: "Something an import could not bring, and why."
+      type: object
+      additionalProperties: false
+      required: [kind, source_key, reason, label, detail, created_at]
+      properties:
+        kind: { type: string, description: "The kind of thing, as `ImportState.counts` names it (`customers`, `services`, `plans`, `servers`, `discount_codes` …)." }
+        source_key: { type: string, description: "The other bot's key for it." }
+        reason: { $ref: '#/components/schemas/ImportProblemReason' }
+        label: { type: string, description: "The reason in the owner's words." }
+        detail: { type: string, nullable: true, description: "What finds it (a customer's Telegram id, a client's name and panel …) or the panel's own words; null for nothing more." }
+        created_at: { type: string, format: date-time, nullable: true }
+
+    ImportProblemsResponse:
+      type: object
+      additionalProperties: false
+      required: [problems, total, page, per_page]
+      properties:
+        problems: { type: array, items: { $ref: '#/components/schemas/ImportProblem' } }
+        total: { type: integer, description: "The rows, on every page." }
+        page: { type: integer }
+        per_page: { type: integer }
+
+    ImportBackupRequest:
+      description: "The other bot's backup file, as a browser form uploads it, and the bot it is of."
+      type: object
+      additionalProperties: false
+      required: [migrator, file]
+      properties:
+        migrator: { type: string, description: "A migrator's key (`ImportsResponse.migrators`)." }
+        file: { type: string, format: binary }
+
+    ImportDatabaseRequest:
+      description: "A connection to the other bot's MySQL database, and the bot it is of."
+      type: object
+      additionalProperties: false
+      required: [migrator, host, database, username]
+      properties:
+        migrator: { type: string, description: "A migrator's key (`ImportsResponse.migrators`)." }
+        host: { type: string, description: "The database server's name or IP alone (`localhost`)." }
+        port: { allOf: [{ $ref: '#/components/schemas/WholeNumberInput' }], description: "1 to 65535; MySQL's own 3306 when left out or blank." }
+        database: { type: string }
+        username: { type: string }
+        password: { type: string, description: "As typed (not trimmed); blank for none. Kept encrypted until the database is read, and never sent back." }
+
+    ImportChoicesInput:
+      description: "The owner's choices as the review saves them: a switch left out takes its default (`ImportState.proposed`'s), and every panel with services needs its choice."
+      type: object
+      additionalProperties: false
+      properties: *importChoicesProperties
+
+    ImportChoicesRequest:
+      type: object
+      additionalProperties: false
+      required: [choices]
+      properties:
+        choices: { $ref: '#/components/schemas/ImportChoicesInput' }
+
     # ---------------------------------------------------------------- the website (the panels' «وب‌سایت», the Store API)
 
     Website:
@@ -10325,18 +10943,21 @@ components:
         shop:
           type: object
           additionalProperties: false
-          required: [name, bot, taking_orders, phone_required, service_claims, service_transfers, custom_services, name_modes, programs]
+          required: [name, bot, taking_orders, phone_required, phone_moments, phone_iran_only, card_auto_confirmed, service_claims, service_transfers, custom_services, name_modes, programs]
           properties:
             name: { type: string, description: "The main shop's name (APP_NAME); for an agent's shop, their bot's title (else its username)." }
             taking_orders: { type: boolean, description: "Whether the shop takes orders now: its bot is switched on, and — an agent's shop — the main shop has not suspended its selling. When false, purchases, renewals, extras and top-ups are refused (503) — receipts too while the bot is off, but not while the selling is suspended (an order made before is still paid) —, and while the selling is suspended a renewal's preview and a discount code's check for a renewal or an extra are a 422 on `status`; the catalogue can still be read (an agent's suspended shop offers no plan) and customers can still sign in." }
-            phone_required: { type: boolean, description: "Whether the shop's bot asks every customer to share their own phone number first («تایید شماره»). A Telegram customer without one (`GET /me`'s `phone` null) shares it from the mini app with Telegram's `requestContact`, which sends their contact to the bot; until then the mini app takes no order, gift code or service added by its link from them (422 on `status`)." }
+            phone_required: { type: boolean, description: "Whether the shop's bot asks every customer to share their own phone number first («تایید شماره»), before it serves them anything at all. A Telegram customer without one (`GET /me`'s `phone` null) shares it from the mini app with Telegram's `requestContact`, which sends their contact to the bot; until then the mini app takes no order, gift code or service added by its link from them (422 on `status`). Never asked of a customer support excused from it (`GET /me`'s `phone_exempt`)." }
+            phone_moments: { type: array, items: { $ref: '#/components/schemas/PhoneMoment' }, description: "Where the shop's bot asks a customer's number only at the moments it chose, instead of before everything: those moments, in this order — a purchase (a service built too), a renewal (extra traffic, time or devices too), a free test, a card-to-card payment (whatever it pays for, a wallet top-up too). Through the mini app such an order — and through either key a free test, at `test` — is refused from a customer without their number (422 on `status`); nothing else waits for it, and the number is shared as with `phone_required`. Empty while the number is asked before everything (`phone_required`) or not at all." }
+            phone_iran_only: { type: boolean, description: "While the shop asks numbers (`phone_required` or `phone_moments`): only Iranian numbers (+98) count. Another country's is refused when shared, and a customer whose number on file is one (`GET /me`'s `phone`) is asked again, as one with none." }
+            card_auto_confirmed: { type: boolean, description: "Whether a card-to-card payment is confirmed by itself from the bank's SMS («تایید خودکار واریز»): the customer transfers the exact sum it asks (its last digits are its own) and needs send no receipt. The checkout's `transfer.auto_confirmed` says the same of one payment." }
             service_claims: { type: boolean, description: "Whether a customer can add a service to their account by its link now (`POST /subscriptions/claim`, «افزودن سرویس با لینک»): the main shop's alone, while its admin switches it on (off by default). Always false in an agent's shop." }
             service_transfers: { type: boolean, description: "Whether a customer can hand one of their services to another customer of the shop now (`POST /subscriptions/{id}/transfer`, «انتقال سرویس»): while the shop's admin switches it on (off by default), in any shop." }
             custom_services: { type: boolean, description: "Whether a customer can build a service of the traffic and days they choose now («سرویس دلخواه», `GET /custom-services`): the main shop's alone, while its admin switches it on (off by default), both price lists sell and one of its servers can take a new client. Always false in an agent's shop." }
             name_modes: { type: array, items: { $ref: '#/components/schemas/ClientNameMode' }, description: "The ways a buyer may name their new service (`name_mode` of `POST /orders`), `sequential` (the shop's pattern) first and always; `random` and `custom` while the shop's admin offers them. Just `sequential`: ask nothing." }
             programs:
               type: object
-              description: "Which of the shop's programs run now, as its bot shows their buttons: free test accounts (`GET /test-account`), the lucky wheel (`GET /wheel`), the nightly draw (`GET /lottery`), gift codes (`POST /gift-codes/redeem`), loyalty tiers (the shop has at least one: `GET /me`'s `loyalty`), cashback, money sent to another customer (`POST /wallet/transfer`) — and, this door's own, the reviews."
+              description: "Which of the shop's programs run now, as its bot shows their buttons: free test accounts (`GET /test-account`), the lucky wheel (`GET /wheel`), the nightly draw (`GET /lottery`), gift codes (`POST /gift-codes/redeem`), loyalty tiers (the shop has at least one: `GET /me`'s `loyalty`), cashback, money sent to another customer (`POST /wallet/transfer`) — and, this door's own, the reviews. The wheel, the draw, loyalty tiers and cashback never reach a customer whose `GET /me` `perks` is false."
               additionalProperties: false
               required: [test_accounts, wheel, lottery, gift_codes, loyalty, cashback, wallet_transfers, reviews]
               properties:
@@ -10639,7 +11260,7 @@ components:
       description: "The signed-in customer's account."
       type: object
       additionalProperties: false
-      required: [id, first_name, last_name, telegram, email, google, has_password, two_factor, phone, balance, created_at]
+      required: [id, first_name, last_name, telegram, email, google, has_password, two_factor, phone, phone_exempt, balance, created_at]
       properties:
         id: { type: integer }
         first_name: { type: string, nullable: true }
@@ -10658,6 +11279,7 @@ components:
         has_password: { type: boolean, description: 'They can sign in with their email and a password.' }
         two_factor: { type: boolean, description: 'Password sign-in also asks for their authenticator app''s code (or a recovery code).' }
         phone: { type: string, nullable: true, description: "Their verified mobile number in E.164 form (+98912…): the one they shared with the bot, or proved by a texted code on the website. While the website signs in by SMS it is a way in; null if none." }
+        phone_exempt: { type: boolean, description: "The shop's phone rule never asks them for their number (`shop.phone_required`, `shop.phone_moments`), through either key: support excused them, or they are a bot admin." }
         balance: { type: string, description: "Their wallet balance in Toman, as a decimal string ('120000.00'). Below zero is an agent's debt." }
         created_at: { type: string, format: date-time, nullable: true, description: "When they became a customer of the shop." }
 
@@ -10669,18 +11291,19 @@ components:
         customer: { $ref: '#/components/schemas/StoreCustomer' }
 
     StoreAccountResponse:
-      description: "The answer of `GET /me` and `PATCH /me`: the account, the unread notification count (for a bell icon), what the admin API allows them (for an admin of the shop), their loyalty standing, and this session."
+      description: "The answer of `GET /me` and `PATCH /me`: the account, the unread notification count (for a bell icon), what the admin API allows them (for an admin of the shop), whether the customers' perks reach them, their loyalty standing, and this session."
       type: object
       additionalProperties: false
-      required: [customer, unread_notifications, staff, loyalty, session]
+      required: [customer, unread_notifications, staff, perks, loyalty, session]
       properties:
         customer: { $ref: '#/components/schemas/StoreCustomer' }
         unread_notifications: { type: integer, description: 'How many of their notifications are unread (`GET /notifications`).' }
+        perks: { type: boolean, description: "Whether the customers' perks reach them. False while «همکارها فقط با قیمت همکاری» is on and they pay agent prices (an agent, or in a group with agent prices): whatever they buy, no sale (`GET /sales` lists none), loyalty tier, discount code (`POST /discount-codes/check` and the checkouts refuse one with a 422), first-purchase price, cashback, lucky wheel (`GET /wheel` is a 422) or nightly draw; a plan's agent price where it has one, the regular price elsewhere; their own discount stays. Hide the code field, the wheel, the draw and cashback while it is false." }
         staff:
           allOf: [{ $ref: '#/components/schemas/StoreStaff' }]
           nullable: true
           description: "Null for a customer who is not an admin of the shop, while the website lets no admins in, through the mini app's key (it has no admin API), and for a session the mini app signed in (`session.method` mini_app), which the admin API refuses through the website's key too."
-        loyalty: { allOf: [{ $ref: '#/components/schemas/LoyaltyStanding' }], description: "Their loyalty tier («سطح وفاداری»), what they spent and the next tier. The tier's discount applies at checkout and its cashback adds to the shop's. In a shop with no tiers, `tier` and `next` are null." }
+        loyalty: { allOf: [{ $ref: '#/components/schemas/LoyaltyStanding' }], description: "Their loyalty tier («سطح وفاداری»), what they spent and the next tier. The tier's discount applies at checkout and its cashback adds to the shop's. In a shop with no tiers, and for a customer the perks do not reach (`perks` false), `tier` and `next` are null." }
         session:
           type: object
           description: "This session: how it was signed in, whether the mini app keeps a fingerprint secret for it (`PUT /me/biometric`), and until when it counts as recently signed in."
@@ -11011,7 +11634,7 @@ components:
         description: { type: string, nullable: true }
         badge: { allOf: [{ $ref: '#/components/schemas/PlanBadge' }], nullable: true, description: "The label its card wears, as the shop set it on the plan; null for none." }
         price: { type: string, description: "Toman, as a decimal string ('120000.00')." }
-        first_purchase_price: { type: string, nullable: true, description: "The price of a customer's first purchase in the shop («قیمت خرید اول»), in Toman, below `price` ('0.00' makes it free). `POST /orders` charges it while the customer has bought no service. Null when there is none, or (with a customer's token) when that customer has already bought. Renewals are at `price`." }
+        first_purchase_price: { type: string, nullable: true, description: "The price of a customer's first purchase in the shop («قیمت خرید اول»), in Toman, below `price` ('0.00' makes it free). `POST /orders` charges it while the customer has bought no service. Null when there is none, or (with a customer's token) when that customer has already bought — here, or in the bot the shop was brought from — or goes without the customers' perks (`GET /me` `perks` false). Renewals are at `price`." }
         agent_price: { type: string, nullable: true, description: "The price for the shop's agents and members of groups with agent prices («قیمت نماینده»), in Toman, below `price`, for purchases and renewals. Null when there is none, or when the reader is a guest or a customer who gets no agent price. The checkout charges the customer's lowest price." }
         offer_price: { type: string, description: "What the reader pays today, in Toman: the lowest price that applies to them (`price`, `first_purchase_price`, `agent_price`) minus their largest automatic discount (`discount`). Equal to `price` when nothing applies. A discount code is applied on top of this at checkout." }
         discount: { allOf: [{ $ref: '#/components/schemas/StorePlanDiscount' }], nullable: true, description: "The automatic discount in `offer_price`: a sale on the plan, the reader's personal percent or their loyalty tier's, whichever is largest (never two together). Null for none." }
@@ -11707,17 +12330,17 @@ components:
         outcome:
           type: string
           enum: [settled, transfer, link, processing]
-          description: "`settled`: paid at once (by the wallet). The order is `fulfilled` (the service is in `subscription`) or `failed` (the money is taken and support will finish it; the order's internal notes are never shown). Also returned when a repeated request's order was paid since (by card or online too) and is finished: delivered, failed or `refunded`. `transfer`: transfer to the card in `transfer`, then upload the receipt (`POST /payments/{id}/receipt`); the payment waits for the receipt, or support has it. `link`: pay on the online gateway's page in `link`; the gateway tells the shop by itself, and `POST /payments/{id}/check` asks it now. `processing`: paid, and the delivery is in progress."
+          description: "`settled`: paid at once (by the wallet). The order is `fulfilled` (the service is in `subscription`) or `failed` (the money is taken and support will finish it; the order's internal notes are never shown). Also returned when a repeated request's order was paid since (by card or online too) and is finished: delivered, failed or `refunded`. `transfer`: transfer to the card in `transfer`, then upload the receipt (`POST /payments/{id}/receipt`); the payment waits for the receipt, or support has it — while `transfer.auto_confirmed`, the exact sum is approved by itself, the receipt only if it is not. `link`: pay on the online gateway's page in `link`; the gateway tells the shop by itself, and `POST /payments/{id}/check` asks it now. `processing`: paid, and the delivery is in progress."
         order: { $ref: '#/components/schemas/StoreOrder' }
         transfer:
           type: object
           nullable: true
-          description: "For `transfer`: where to send the money, and the payment the receipt is for. Null otherwise. A payment taken in support's private chat (made while the bot setting «هدایت پرداخت کارت به کارت به پیوی پشتیبانی» is on) is shown no card: `card`, `holder` and `bank` are null and `contact` says where to go — tell the customer to send the order's number there, get the card from support, and send the receipt to support too; support approves the payment in its panel."
+          description: "For `transfer`: where to send the money, and the payment the receipt is for. Null otherwise. A payment taken in support's private chat (made while the bot setting «هدایت پرداخت کارت به کارت به پیوی پشتیبانی» is on) is shown no card: `card`, `holder` and `bank` are null and `contact` says where to go — tell the customer to send the order's number there, get the card from support, and send the receipt to support too; support approves the payment in its panel — while `auto_confirmed`, the exact sum approves it by itself, the receipt to support only if it does not."
           additionalProperties: false
-          required: [payment_id, amount, amount_rial, card, holder, bank, instructions, contact]
+          required: [payment_id, amount, amount_rial, card, holder, bank, instructions, contact, auto_confirmed]
           properties:
             payment_id: { type: integer, description: 'The payment to upload the receipt for.' }
-            amount: { type: string, description: "The amount to transfer, in Toman: the payment's own. A wallet top-up's may be a few Toman more than the order's (the bot setting of a random sum added to card-to-card top-ups), so its receipt is told apart; the whole of it is credited." }
+            amount: { type: string, description: "The amount to transfer, in Toman: the payment's own. A wallet top-up's may be a few Toman more than the order's (the bot setting of a random sum added to card-to-card top-ups), so its receipt is told apart; the whole of it is credited. While the shop confirms transfers by itself (`auto_confirmed`), every card payment's is 1 to 999 Toman more than its order's (held within the method's most, so none when the order's is that most already), a sum no other card payment of the shop may still be paid at asks: part of what the customer pays (a top-up credits it, a refund gives it back)." }
             amount_rial: { type: string, description: "`amount` in Rial — ten to the Toman, as Iran's banks count —: whole, in Latin digits, no separators (`1200000` for 120000 Toman). What a banking app takes: copy these digits." }
             card: { type: string, nullable: true, description: "The card number: 16 digits, no separators. Each payment is shown one of its method's cards, picked at random, and always that one after — the same card on a request made again. Null while the card is given in support's private chat (`contact`)." }
             holder: { type: string, nullable: true, description: "The card holder's name. Null while the card is given in support's private chat (`contact`)." }
@@ -11732,6 +12355,7 @@ components:
               properties:
                 text: { type: string, description: "Support's contact as the shop wrote it (a Telegram handle, a link, a phone number)." }
                 url: { type: string, nullable: true, description: 'It as a link to open: a handle as its t.me address, a web or t.me address, a phone number as `tel:`; null when it is none of these.' }
+            auto_confirmed: { type: boolean, description: "Whether the shop confirms this transfer by itself («تایید خودکار واریز»: a phone app forwards the bank's text messages): a transfer of exactly `amount`, to the last digit, approves the payment, usually within a minute — its order then paid and delivered as with an approved receipt, and the order's payment `paid`. Tell the customer to transfer exactly that sum and that no receipt is needed; the receipt (`POST /payments/{id}/receipt`) stays open for a transfer not confirmed within a few minutes. Read the order again every few seconds meanwhile (`GET /orders/{id}`). True for a payment taken in support's private chat too: the card support gives, the same exact sum. False otherwise — and for a payment whose `amount` is its order's own (no room was left above it for a sum of its own) —: support approves the receipt." }
         link: { allOf: [{ $ref: '#/components/schemas/StorePayLink' }], nullable: true, description: "For `link`: the online gateway's page to pay on, and the payment it is for. Null otherwise." }
         subscription: { allOf: [{ $ref: '#/components/schemas/StoreSubscription' }], nullable: true, description: "Once delivered: the service a purchase created, a renewal renewed or extras were added to. Null otherwise, and on a repeated request once the service is no longer the customer's (handed to another customer)." }
 
@@ -11984,9 +12608,9 @@ components:
         rewards: { type: integer, description: 'How many free services they got for their invitations («جایزه دعوت»).' }
 
     StoreNoticeType:
-      description: "The kind of notice; one for each message the bot sends a customer on its own. Payments: approved (the service delivered or the wallet charged, or the delivery failed and support will finish it), an online payment that came in once its order had closed (its money put in the wallet), receipt rejected, order cancelled by support, payment refunded to the wallet, wallet top-up refunded, payment reminder. «انتقال موجودی»: money they sent another customer from their wallet (kept here whichever door they used; in Telegram only when they sent it from the website), money another customer sent them. Services: switched off, back on, deleted, moved (with its new link), given away by support («انتقال سرویس», to its previous owner) or received from another customer (to its new one), given days or traffic; reminders («یادآوری») of a service ending soon or running low on traffic; auto-renewal («تمدید خودکار») done, short of money, or paid but not delivered. Referrals: a new customer joined through their link, a commission, a commission taken back (the wallet top-up that earned it refunded), a start gift («هدیه شروع», for the referrer or the new customer), a free service for invitations («جایزه دعوت»). Agency: request approved or rejected, agency changed or ended, the bot's traffic too low for an order. Account security: two-factor sign-in turned off (by support or by them) or on, a way in added or removed, a password set, another account merged into it, the second step locked after failed codes, emailed codes locked after failures (these go to every channel they have: Telegram and email). Tickets: support's answer, and closing. Rewards: moved up a loyalty tier («سطح وفاداری»), cashback earned («کش‌بک»), won the nightly draw («قرعه‌کشی شبانه»)."
+      description: "The kind of notice; one for each message the bot sends a customer on its own. Payments: approved (the service delivered or the wallet charged, or the delivery failed and support will finish it), an online payment that came in once its order had closed (its money put in the wallet), receipt rejected, order cancelled by support, payment refunded to the wallet, wallet top-up refunded, payment reminder. «انتقال موجودی»: money they sent another customer from their wallet (kept here whichever door they used; in Telegram only when they sent it from the website), money another customer sent them. Services: switched off, back on, deleted, moved (with its new link), given away by support («انتقال سرویس», to its previous owner) or received from another customer (to its new one), given days or traffic; reminders («یادآوری») of a service ending soon or running low on traffic; auto-renewal («تمدید خودکار») done, short of money, or paid but not delivered. Referrals: a new customer joined through their link, a commission, a commission taken back (the wallet top-up that earned it refunded), a start gift («هدیه شروع», for the referrer or the new customer), a free service for invitations («جایزه دعوت»). Agency: request approved or rejected, agency changed or ended, the bot's traffic too low for an order. Account security: two-factor sign-in turned off (by support or by them) or on, a way in added or removed, a password set, another account merged into it, the second step locked after failed codes, emailed codes locked after failures (these go to every channel they have: Telegram and email). Tickets: support's answer, and closing. Rewards: moved up a loyalty tier («سطح وفاداری»), cashback earned («کش‌بک»), won the nightly draw («قرعه‌کشی شبانه»). Support: a message support wrote by hand («ارسال پیام»)."
       type: string
-      enum: [payment_settled, payment_credited, payment_rejected, order_cancelled, payment_refunded, topup_refunded, wallet_sent, wallet_received, payment_reminder, service_disabled, service_enabled, service_deleted, service_moved, service_transferred, service_received, service_granted, expiry_reminder, traffic_reminder, auto_renewed, auto_renew_short, renewal_failed, referral_joined, referral_commission, referral_commission_back, referral_start_gift, referral_reward, agency_approved, agency_rejected, agency_changed, agency_revoked, agency_traffic_short, agency_expiring, agency_minimum_short, agency_suspended, agency_resumed, two_factor_disabled, way_in_added, way_in_removed, password_changed, two_factor_enabled, account_merged, second_step_locked, email_codes_failed, ticket_answered, ticket_closed, loyalty_tier_up, cashback_earned, lottery_won]
+      enum: [payment_settled, payment_credited, payment_rejected, order_cancelled, payment_refunded, topup_refunded, wallet_sent, wallet_received, payment_reminder, service_disabled, service_enabled, service_deleted, service_moved, service_transferred, service_received, service_granted, expiry_reminder, traffic_reminder, auto_renewed, auto_renew_short, renewal_failed, referral_joined, referral_commission, referral_commission_back, referral_start_gift, referral_reward, agency_approved, agency_rejected, agency_changed, agency_revoked, agency_traffic_short, agency_expiring, agency_minimum_short, agency_suspended, agency_resumed, two_factor_disabled, way_in_added, way_in_removed, password_changed, two_factor_enabled, account_merged, second_step_locked, email_codes_failed, ticket_answered, ticket_closed, loyalty_tier_up, cashback_earned, lottery_won, support_message]
 
     StoreNotification:
       description: "A notification the bot sent the customer, with the same text as the Telegram message (sent, or that would have been sent)."

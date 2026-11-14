@@ -12,6 +12,9 @@ use App\Modules\Accounts\Services\CustomerSessions;
 use App\Modules\Accounts\Services\TwoFactor;
 use App\Modules\Auth\Actor;
 use App\Modules\Auth\Exceptions\ActorRefusedException;
+use App\Modules\Notifications\Enums\Delivery;
+use App\Modules\Notifications\Services\CustomerNotifier;
+use App\Modules\Telegram\Api\Limits;
 use App\Modules\Users\Enums\UserRole;
 use App\Modules\Users\Enums\UserStatus;
 use App\Modules\Users\Enums\WalletTransactionType;
@@ -20,23 +23,32 @@ use App\Modules\Users\Models\User;
 use App\Modules\Users\Models\WalletTransaction;
 use App\Support\Input;
 use App\Support\Money;
+use App\Support\Validation;
 use Psr\Log\LoggerInterface;
 
 /**
  * Support's decisions about a customer's account, from the panels, the website's admin side or the report group: ban,
- * the admin role (the panels and the report group), their groups, a wallet adjustment, turning two-factor sign-in off,
- * signing out everywhere. An admin never adjusts their own wallet; from the website never touches an admin's or an
- * agent's account; from the report group never their own account nor an agent's, never bans an admin (the role goes
- * first), never puts one in a «همکار» group (its agent prices would be theirs) nor makes an admin of someone in one or
- * with their own discount, never touches another admin's website sign-in. Each is logged with who did it.
+ * the admin role (the panels and the report group), an excuse from the phone rule, their groups, a wallet adjustment,
+ * turning two-factor sign-in off, signing out everywhere — and a message written to them. An admin never adjusts their
+ * own wallet; from the website never touches an admin's or an agent's account; from the report group never their own
+ * account nor an agent's, never bans an admin (the role goes first), never puts one in a «همکار» group (its agent
+ * prices would be theirs) nor makes an admin of someone in one or with their own discount, never touches another
+ * admin's website sign-in. Each is logged with who did it.
  */
 final class UserActions
 {
+    /**
+     * A support message's longest, as Telegram counts it (Limits::length(): an emoji is two): a message holds 4096, the
+     * heading and some room besides.
+     */
+    public const MESSAGE_MAX = 3500;
+
     public function __construct(
         private readonly WalletService $wallet,
         private readonly TwoFactor $twoFactor,
         private readonly CustomerSessions $sessions,
         private readonly CustomerGroups $groups,
+        private readonly CustomerNotifier $notifier,
         private readonly LoggerInterface $logger,
     ) {}
 
@@ -58,6 +70,59 @@ final class UserActions
 
         $user->forceFill(['status' => $status])->save();
         $this->logger->info('Customer #{customer} made {status} by {reviewer}', ['customer' => $user->id, 'status' => $status->value, 'reviewer' => $actor->reviewer]);
+
+        return $user;
+    }
+
+    /**
+     * Sends the customer a message support wrote (CustomerNotifier::supportMessage()): to their Telegram chat through
+     * their shop's bot — their email when they have no Telegram or turned the bot away —, and kept on their website.
+     * Plain text, MESSAGE_MAX at most. Logged with who wrote it; what came of it is returned. From the website, never to
+     * an admin's account (their own included) nor an agent's, as mayTouch() says.
+     *
+     * @param array<string, mixed> $input {text}
+     * @throws ActorRefusedException 403 from the website, an admin's account or an agent's
+     * @throws ValidationException 422 on `text`: empty or too long
+     */
+    public function message(User $user, Actor $actor, array $input): Delivery
+    {
+        $text = str_replace("\r\n", "\n", Input::text($input, 'text'));
+        if ($text === '') {
+            throw ValidationException::on('text', 'متن پیام را بنویسید.');
+        }
+        if (Limits::length($text) > self::MESSAGE_MAX) {
+            throw ValidationException::on('text', Validation::tooLong('متن پیام', self::MESSAGE_MAX));
+        }
+        // The report group's card offers it on agents' cards too, and never on the admin's own (CustomerMessage).
+        if ($actor->isStaff()) {
+            $this->mayTouch($user, $actor);
+        }
+
+        $delivery = $this->notifier->supportMessage($user, $text);
+        $this->logger->info('Support message to customer #{customer} by {reviewer}: {delivery}', ['customer' => $user->id, 'reviewer' => $actor->reviewer, 'delivery' => $delivery->value]);
+
+        return $delivery;
+    }
+
+    /**
+     * Excuses the customer from the shop's phone rule — never asked for their number (Telegram\Gates\PhoneRequirement)
+     * — or ends that.
+     *
+     * @param array<string, mixed> $input {phone_exempt}
+     * @throws ActorRefusedException 403 from the website, an admin's account or an agent's; from the report group, their
+     *                               own account or an agent's
+     * @throws ValidationException 422 on `phone_exempt`
+     */
+    public function setPhoneExempt(User $user, Actor $actor, array $input): User
+    {
+        $exempt = $input['phone_exempt'] ?? null;
+        if (!Input::isBoolean($exempt)) {
+            throw ValidationException::on('phone_exempt', Validation::NOT_A_SWITCH);
+        }
+        $this->mayTouch($user, $actor);
+
+        $user->forceFill(['phone_exempt' => Input::truthy($exempt)])->save();
+        $this->logger->info('Customer #{customer} {exempt} the phone rule by {reviewer}', ['customer' => $user->id, 'exempt' => $user->phone_exempt ? 'excused from' : 'held to', 'reviewer' => $actor->reviewer]);
 
         return $user;
     }

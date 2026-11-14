@@ -8,6 +8,7 @@ use App\Core\Scheduling\Task;
 use App\Modules\Discounts\Services\DiscountSettings;
 use App\Modules\Orders\Models\Order;
 use App\Modules\Orders\Models\RequestKey;
+use App\Modules\Payments\Models\Deposit;
 use App\Modules\Payments\Services\PaymentService;
 use App\Modules\Settings\Services\ScheduleSettings;
 
@@ -16,8 +17,8 @@ use App\Modules\Settings\Services\ScheduleSettings;
  * code goes sooner, once the code's hold is over (DiscountSettings::holdMinutes()), which frees its use. An order whose
  * money may be with support — a receipt in review, a card transfer taken in support's private chat (Order::expirable()),
  * an online payment held for support — is never dropped: support decides it; nor one whose online gateway's page still
- * takes money (PaymentService::expire()). Also forgets request keys older than RequestKey::KEEP_DAYS. Runs every
- * INTERVAL_MINUTES by default (the owner's «زمان‌بندی کارها») in every shop.
+ * takes money (PaymentService::expire()). Also forgets request keys older than RequestKey::KEEP_DAYS and bank SMS older
+ * than Deposit::KEEP_DAYS. Runs every INTERVAL_MINUTES by default (the owner's «زمان‌بندی کارها») in every shop.
  */
 final class ExpireOrdersTask implements Task
 {
@@ -50,5 +51,6 @@ final class ExpireOrdersTask implements Task
         }
 
         RequestKey::query()->where('created_at', '<', now()->subDays(RequestKey::KEEP_DAYS))->delete();
+        Deposit::query()->where('created_at', '<', now()->subDays(Deposit::KEEP_DAYS))->delete();
     }
 }

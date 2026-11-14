@@ -107,7 +107,11 @@ function Renewal({ service }: { service: StoreSubscription }) {
   const check: CodeContext | null = renewal === undefined || !settled ? null : { for: 'renewal', subscription_id: id, method: renewal.method, ...picked }
   const code = useDiscountCheck(check)
   const amount = renewal === undefined ? undefined : (code.applied?.quote.amount ?? renewal.price)
-  const payment = usePaymentChoice('renewal', amount)
+  const free = amount !== undefined && Number(amount) === 0
+  // A free renewal names a way to pay, whatever its bounds (no card transfer while another is): the shop settles it with
+  // nothing taken.
+  const payment = usePaymentChoice('renewal', free ? null : amount)
+  const way = free ? payment.free : payment.method
   const ordering = useOrdering(
     (body: StoreRenewalRequest, key) => store.post(`/subscriptions/${id}/renewal`, body, { idempotencyKey: key }),
     (error) => {
@@ -132,9 +136,9 @@ function Renewal({ service }: { service: StoreSubscription }) {
     [dismiss],
   )
   const body: StoreRenewalRequest | null =
-    renewal === undefined || amount === undefined || payment.method === null || !settled || preview.isFetching || code.busy || !payment.ready
+    renewal === undefined || amount === undefined || way === null || !settled || preview.isFetching || code.busy || !payment.ready
       ? null
-      : { method_id: payment.method.id, method: renewal.method, ...picked, ...(code.applied === null ? {} : { discount_code: code.applied.code }), expected_amount: amount }
+      : { method_id: way.id, method: renewal.method, ...picked, ...(code.applied === null ? {} : { discount_code: code.applied.code }), expected_amount: amount }
   const opens = windowWords(service.renewal_window)
   // The preview's refusal is the shop's own word on why (its window among them): said once, in its words.
   const refused = preview.isError && preview.error instanceof ApiError && preview.error.status === 422
@@ -169,14 +173,14 @@ function Renewal({ service }: { service: StoreSubscription }) {
             )}
             <Summary renewal={renewal} />
             <DiscountCodeField state={{ ...code, error: code.error ?? ordering.problem('discount_code'), apply: changing(code.apply), remove: changing(code.remove) }} />
-            <PaymentMethods choice={{ ...payment, choose: changing(payment.choose) }} error={ordering.problem('method_id')} />
+            {!free && <PaymentMethods choice={{ ...payment, choose: changing(payment.choose) }} error={ordering.problem('method_id')} />}
             <Bill renewal={renewal} quote={code.applied?.quote ?? null} />
             <OrderNotice ordering={ordering} fields={SHOWN} />
           </>
         ))}
 
       <MainAction
-        text={amount === undefined ? null : `پرداخت ${formatMoney(amount)}`}
+        text={amount === undefined ? null : free ? 'دریافت رایگان' : `پرداخت ${formatMoney(amount)}`}
         enabled={body !== null && !ordering.held}
         busy={ordering.busy}
         shine

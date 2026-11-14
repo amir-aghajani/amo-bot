@@ -6,6 +6,7 @@ namespace Tests\Feature\Store;
 
 use App\Modules\Catalog\Models\Plan;
 use App\Modules\Orders\Models\Order;
+use App\Modules\Payments\Deposits\Services\DepositSettings;
 use App\Modules\Payments\Enums\PaymentStatus;
 use App\Modules\Payments\Exceptions\ReceiptInReviewException;
 use App\Modules\Payments\Models\Payment;
@@ -13,12 +14,14 @@ use App\Modules\Payments\Models\PaymentMethod;
 use App\Modules\Providers\Models\Server;
 use App\Modules\Store\Models\Website;
 use App\Modules\Users\Models\User;
+use App\Support\Money;
 use Illuminate\Support\Carbon;
 use Tests\HttpTestCase;
 
 /**
  * A card payment on the website, as the bot takes one: the checkout's answer gives the card — or, while the shop takes
- * card payments in support's private chat, no card but the way to support (`contact`). One receipt at a time: while a
+ * card payments in support's private chat, no card but the way to support (`contact`) —, and whether the shop confirms
+ * it by itself (`auto_confirmed`: its bank SMS, at a sum of its own). One receipt at a time: while a
  * receipt of the customer's is in review, a card checkout and another receipt are each a 422 on `status` naming its
  * order, until the shop takes several.
  */
@@ -51,7 +54,32 @@ final class StoreCardPaymentsTest extends HttpTestCase
     {
         $transfer = $this->decode($this->placeOrder($this->website, $this->plan, $this->server, $this->card, key: 'card-1'))['checkout']['transfer'];
 
-        self::assertSame(['card' => '6037997700001119', 'holder' => 'AmoBot', 'instructions' => 'فقط از کارت خودتان', 'contact' => null], array_intersect_key($transfer, array_flip(['card', 'holder', 'instructions', 'contact'])));
+        self::assertSame(['card' => '6037997700001119', 'holder' => 'AmoBot', 'instructions' => 'فقط از کارت خودتان', 'contact' => null, 'auto_confirmed' => false], array_intersect_key($transfer, array_flip(['card', 'holder', 'instructions', 'contact', 'auto_confirmed'])));
+    }
+
+    public function testWhileTheShopListensToItsBankSmsTheTransferSaysItIsConfirmedByItselfAtASumOfItsOwn(): void
+    {
+        $this->service(DepositSettings::class)->enable(true);
+
+        $transfer = $this->decode($this->placeOrder($this->website, $this->plan, $this->server, $this->card, key: 'card-1'))['checkout']['transfer'];
+
+        $payment = Payment::query()->sole();
+        self::assertTrue($transfer['auto_confirmed']);
+        self::assertSame(1, Money::compare($transfer['amount'], '120000'), 'a few Toman more than the order: the SMS names the payment by it');
+        self::assertSame([$payment->amount, Money::rials($payment->amount), '6037997700001119'], [$transfer['amount'], $transfer['amount_rial'], $transfer['card']]);
+    }
+
+    public function testInSupportsPrivateChatTooTheTransferIsConfirmedByItselfAtASumOfItsOwn(): void
+    {
+        $this->service(DepositSettings::class)->enable(true);
+        $this->botSettings('general', ['support_contact' => '@amo_support']);
+        $this->botSettings('payments', ['card_to_support' => true]);
+
+        $transfer = $this->decode($this->placeOrder($this->website, $this->plan, $this->server, $this->card, key: 'card-1'))['checkout']['transfer'];
+
+        self::assertSame([true, null, '@amo_support'], [$transfer['auto_confirmed'], $transfer['card'], $transfer['contact']['text']], 'the card support gives, the same exact sum');
+        self::assertSame(1, Money::compare($transfer['amount'], '120000'));
+        self::assertSame(Payment::query()->sole()->amount, $transfer['amount']);
     }
 
     public function testInSupportsPrivateChatTheCheckoutGivesNoCardButTheWayToSupport(): void
@@ -73,6 +101,7 @@ final class StoreCardPaymentsTest extends HttpTestCase
             'bank' => null,
             'instructions' => 'فقط از کارت خودتان',
             'contact' => ['text' => '@amo_support', 'url' => 'https://t.me/amo_support'],
+            'auto_confirmed' => false,
         ], $checkout['transfer']);
         self::assertSame([PaymentStatus::Pending, null], [Payment::query()->sole()->status, Payment::query()->sole()->card_id], 'support approves it in the panels; no card was picked for it');
 

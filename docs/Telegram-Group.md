@@ -41,8 +41,8 @@ without the right to manage topics.
 | «اکانت‌های تست» | A free test taken — on the bot, the website or the mini app: the customer, the service, its location, its traffic and end, and how many tests the customer has taken in the shop ([Test accounts](Test-Accounts.md#what-a-test-is)) |
 | «حذف سرویس‌ها» | A service support deleted («🗑»): the customer, the service and its plan («اکانت تست» for a test), its location, the traffic and time it still had (or that its panel had lost it already), who of support and their note, and a client left on its panel when «حذف فقط از فروشگاه» was chosen; a purchase's service a refund took back, with its order ([Services](Services.md#a-services-dialog)); and the ended services «حذف خودکار سرویس‌های منقضی‌شده» removed («🧹»), one report a run: each by its client, customer and location, as many as fit a message, then how many more. A test the clean-up removes is not reported — its taking was |
 | «شارژ کیف پول» | A wallet top-up, and the balance; money one customer sent another («انتقال موجودی»), with both balances; an online payment that came after its order closed, its amount gone to the customer's wallet («💳 پرداخت آنلاین پس از بسته شدن سفارش») |
-| «رسیدها» | A copy of each card receipt with what it pays for and the card it was shown («🏦 کارت: …», or «🏦 کارت در پیوی پشتیبانی داده شد» for one taken in support's private chat), «✅ تایید» and «❌ رد»; then its verdict as a reply to it; and receipts support dismissed at once («🗑»): how many, and support's note |
-| «کاربران جدید» | A newcomer, and who brought them, with «⚙️ مدیریت کاربر» — their card, to manage them right there ([below](#a-customers-card)) |
+| «رسیدها» | A copy of each card receipt with what it pays for and the card it was shown («🏦 کارت: …», or «🏦 کارت در پیوی پشتیبانی داده شد» for one taken in support's private chat), «✅ تایید» and «❌ رد»; then its verdict as a reply to it; receipts support dismissed at once («🗑»): how many, and support's note; and the bank SMS that approved nothing while «تایید خودکار واریز» is on — «💰 واریز بدون پرداخت», «⚠️ واریز با چند پرداخت هم‌مبلغ» ([Payment methods](Payment-Methods.md#confirmed-by-the-banks-sms)) |
+| «کاربران جدید» | A newcomer, and who brought them; a referrer whose referrals look made up ([Referrals](Referrals.md)) |
 | «خطاها» | A paid order whose delivery failed, with why and «🔁 تلاش دوباره برای تحویل»; an online payment held for support, once («⚠️ پرداخت آنلاین برای بررسی پشتیبانی نگه داشته شد»): the customer, what it pays for, the amount and the method, its id at the gateway, why and what the gateway said, and — when support's «استعلام از درگاه» is what found it — who asked; and, for one still waiting, that its order takes no other payment and is never cancelled by itself until you look at it ([Payment methods](Payment-Methods.md#a-payment-held-for-you)); in the main bot's group also a server's panel that stopped answering («🔴») and answers again («🟢»), and a move of a server's services to another starting («🚚») and ending — done («✅»), stopped because the target could take no more («⛔️»), or cancelled («⏹») — with its numbers ([Servers](Servers.md#moving-its-services)) |
 | «نمایندگی» | The main bot's group alone: a request to become an agent with its buttons, then the verdict; a purchase of traffic; an agent's selling suspended («⛔️», with why and what opens it again) and opened again («✅») ([Agency](Agency.md)) |
 | «تیکت‌ها» | A ticket opened, then every later message, its closing, opening again and rating — [Support tickets](Support-Tickets.md#from-the-report-group) |
@@ -80,10 +80,14 @@ first standing; a decision made elsewhere takes the buttons off.
 
 ### A customer's card
 
-«⚙️ مدیریت کاربر», under every newcomer's report in «کاربران جدید», posts the customer's card under it; for anyone else,
-write `/manage` and who in the group, in any topic: their Telegram id (`/manage 123456789`), their username
-(`/manage @ali`) or their number in the shop (`/manage #12`), in Persian or Latin digits. It does from the group what
-the panel's customer page does ([A customer's page](Customers.md#a-customers-page)).
+«⚙️ مدیریت کاربر», under every report about a customer — a newcomer, a purchase, a renewal, a top-up, a receipt, a test,
+a service claimed, handed on or deleted, a failed delivery, a held payment, a ticket, a review, an agency request, a
+referral alert —, posts the customer's card under it. A report about two — money or a service handed from one customer
+to another — has one for each, saying whose («⚙️ مدیریت فرستنده» / «⚙️ مدیریت گیرنده», «⚙️ مدیریت مالک قبلی» /
+«⚙️ مدیریت مالک جدید»). It stays when the report's other buttons go: a receipt decided, a ticket closed, a delivery
+retried. For anyone else, write `/manage` and who in the group, in any topic: their Telegram id
+(`/manage 123456789`), their username (`/manage @ali`) or their number in the shop (`/manage #12`), in Persian or Latin
+digits. It does from the group what the panel's customer page does ([A customer's page](Customers.md#a-customers-page)).
 
 **The front** says who they are: their phone, since when and when last seen, their wallet, their services (running, of
 all) and paid orders, their own discount, their role, whether they are banned (and whether they blocked the bot), their
@@ -118,13 +122,21 @@ back to the front:
   first.
 - **«🎖 مدیر ربات شود» / «🎖 برداشتن نقش مدیر»** — the bot's admin role, and **«⛔️ مسدود شود» / «✅ رفع مسدودی»** — a
   ban, each asked again first ([the bot's admins](Customers.md#the-bots-admins), [Banning](Customers.md#banning)).
+- **«✉️ ارسال پیام»** — the bot asks for the message; your reply to it is sent to the customer from support, as the
+  panel's «ارسال پیام» sends it ([Writing to a customer](Customers.md#writing-to-a-customer)), the front comes back,
+  and what came of it is said under your reply — «✅ پیام در تلگرام به او رسید.», sent by email instead, or that they
+  blocked the bot. On every card but your own.
+- **«📱 معاف از شماره» / «📱 لغو معافیت شماره»** — excuses them from the phone number the bot asks for, or ends that,
+  at a press: as the button named it, so a double tap leaves it so. The front's mobile line says «بدون نیاز به شماره»
+  while it holds. No admin's card has it: the rule never asks them
+  ([Excused from the phone number](Customers.md#excused-from-the-phone-number)).
 - **«🔄 تازه‌سازی»** — the front again, as the account now stands.
 
-**Typed answers** — an amount, a percent, days and traffic — are asked by the bot in a message under the card, naming
-the admin who pressed: write the answer as **a reply to that message**. A good answer rewrites the card and the
-question goes; a wrong one is told why, and the question stays for another reply. Any bot admin may answer it, once: a
-second reply to a question already answered — before it is gone, or by another admin — does nothing and says so; press
-the card's button again for another change.
+**Typed answers** — an amount, a percent, days and traffic, a message's text — are asked by the bot in a message under
+the card, naming the admin who pressed: write the answer as **a reply to that message**. A good answer rewrites the card
+and the question goes; a wrong one is told why, and the question stays for another reply. Any bot admin may answer it,
+once: a second reply to a question already answered — before it is gone, or by another admin — does nothing and says
+so; press the card's button again for another change.
 
 Every press rewrites the card as the account now stands, so whoever reads the group sees the same; the panel shows the
 change as well, and the log keeps who made it. From the group an admin never changes **their own account** nor **an

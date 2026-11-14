@@ -3,6 +3,7 @@ import { keepPreviousData, useQuery, type UseQueryResult } from '@tanstack/react
 import { CreditCard, Globe, Plus, Wallet, type LucideIcon } from 'lucide-react'
 import { Link } from 'react-router'
 import { keys } from '@/apps/app/lib/query'
+import { useShop } from '@/apps/app/lib/session'
 import { store } from '@/apps/app/lib/store'
 import { Choices } from '@/apps/app/parts/checkout/choice'
 import { tap } from '@/apps/app/telegram/haptics'
@@ -34,6 +35,11 @@ interface PaymentChoice {
   wallet: StoreWalletResponse | null
   /** The way picked that can pay it — the customer's, else the first that can —; null while none can. */
   method: StorePaymentMethod | null
+  /**
+   * The way a free order names — the shop settles it with nothing taken, whatever way it names: the first that is no card
+   * transfer, so the bot's phone rule never takes it for a card-to-card payment (its `card` moment); null while none is.
+   */
+  free: StorePaymentMethod | null
   /** The ways are read for this very amount (not the last one's while the next is read). */
   ready: boolean
   /** Whether a way can pay the amount: the wallet only while what it can spend covers it. */
@@ -61,7 +67,9 @@ export function usePaymentChoice(kind: PaymentKind, amount: string | null | unde
   const covers = (method: StorePaymentMethod) => method.kind !== 'instant' || asked === null || wallet.data === undefined || Number(wallet.data.spendable) >= Number(amount)
   const method = list.find((candidate) => candidate.id === chosen && covers(candidate)) ?? list.find(covers) ?? null
 
-  return { amount, methods, list, wallet: wallet.data ?? null, method, ready: methods.isSuccess && !methods.isPlaceholderData, covers, choose: setChosen }
+  const free = list.find((candidate) => candidate.kind !== 'manual') ?? list[0] ?? null
+
+  return { amount, methods, list, wallet: wallet.data ?? null, method, free, ready: methods.isSuccess && !methods.isPlaceholderData, covers, choose: setChosen }
 }
 
 /** Each kind of way: its icon, its square's colour and what it means. */
@@ -74,6 +82,9 @@ const KINDS: Record<GatewayKind, { icon: LucideIcon; tint: string; text: string 
 /** A way of no kind the app knows (its driver gone): a card's look. */
 const UNKNOWN = KINDS.manual
 
+/** A card transfer while the shop confirms it from the bank's SMS (`shop.card_auto_confirmed`): no receipt to send. */
+const AUTO_CONFIRMED = 'واریز کارت به کارت با تایید خودکار'
+
 interface PaymentMethodsProps {
   choice: PaymentChoice
   /** The order's refusal of the way picked (its `method_id`). */
@@ -83,6 +94,7 @@ interface PaymentMethodsProps {
 /** The ways to pay, as a list to pick one of. */
 export function PaymentMethods({ choice, error }: PaymentMethodsProps) {
   const { methods, list, wallet, method, amount } = choice
+  const autoConfirmed = useShop().data?.shop.card_auto_confirmed === true
 
   if (methods.isPending) {
     return (
@@ -115,7 +127,7 @@ export function PaymentMethods({ choice, error }: PaymentMethodsProps) {
           return {
             value: option.id,
             title: <span className="block truncate">{option.label}</span>,
-            detail: option.kind === 'instant' && wallet !== null ? `موجودی: ${formatBalance(wallet.balance)}` : text,
+            detail: option.kind === 'instant' && wallet !== null ? `موجودی: ${formatBalance(wallet.balance)}` : option.kind === 'manual' && autoConfirmed ? AUTO_CONFIRMED : text,
             icon,
             tint,
             disabled: short !== null,

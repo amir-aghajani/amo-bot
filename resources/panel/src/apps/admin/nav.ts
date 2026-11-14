@@ -10,6 +10,7 @@ import {
   MARKETING_GROUP,
   MINI_APP_SETTINGS,
   panelSettings,
+  PAYMENT_SECTIONS,
   REFERRAL_SECTIONS,
   REVIEWS,
   SALES_GROUP,
@@ -44,10 +45,11 @@ export const GIFTS_SECTION: NavSection<'gifts'> = { value: 'gifts', title: 'هد
 /**
  * «تنظیمات پنل»: config.php's groups — the shop's email among them, which the websites' sign-up codes go by, and its
  * SMS, which their sign-in codes by phone number go by —, the owner's login — config.php keeps it too —, the panel's look in this browser, AmoBot's own update, the scheduled
- * tasks' timings (the database's, for the whole installation) and the backups (the whole installation's in the main
- * shop, an agent's shop's alone in theirs); the advanced settings last.
+ * tasks' timings (the database's, for the whole installation), the backups (the whole installation's in the main
+ * shop, an agent's shop's alone in theirs) and another bot's data brought into the main shop (its own); the advanced
+ * settings last.
  */
-export const PANEL_SETTINGS_SECTIONS: NavSection<ConfigGroup | 'login' | 'appearance' | 'update' | 'schedule' | 'backups'>[] = [
+export const PANEL_SETTINGS_SECTIONS: NavSection<ConfigGroup | 'login' | 'appearance' | 'update' | 'schedule' | 'backups' | 'import'>[] = [
   { value: 'telegram', title: 'ربات تلگرام', to: '/settings/telegram' },
   { value: 'database', title: 'دیتابیس', to: '/settings/database' },
   { value: 'app', title: 'برنامه', to: '/settings/app' },
@@ -58,6 +60,7 @@ export const PANEL_SETTINGS_SECTIONS: NavSection<ConfigGroup | 'login' | 'appear
   { value: 'update', title: 'به‌روزرسانی', to: '/settings/update' },
   { value: 'schedule', title: 'زمان‌بندی کارها', to: '/settings/schedule' },
   BACKUPS_SECTION,
+  { value: 'import', title: 'انتقال از ربات دیگر', to: '/settings/import', mainShop: true },
   { value: 'advanced', title: 'پیشرفته', to: '/settings/advanced' },
 ]
 
@@ -74,6 +77,7 @@ export const ADMIN_NAV: PanelNav = {
   ],
   sections: {
     users: USER_SECTIONS,
+    payments: PAYMENT_SECTIONS,
     referrals: REFERRAL_SECTIONS,
     agents: AGENCY_SECTIONS,
     broadcasts: [BROADCAST_MESSAGES, GIFTS_SECTION],

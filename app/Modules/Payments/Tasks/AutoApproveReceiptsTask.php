@@ -16,8 +16,9 @@ use Psr\Log\LoggerInterface;
 
 /**
  * Accepts receipts nobody reviewed within their card method's review window, as support would (PaymentActions::
- * autoApprove()). Only receipts sent in the bot: one uploaded from the website — whose account may be a throwaway email —
- * always waits for support. Every minute, in every shop.
+ * autoApprove()). Only receipts sent in the bot, or uploaded by a customer whose account is a Telegram account (the mini
+ * app's, a website sign-in with Telegram — Payment::selfApproving()): one an email or a phone number alone vouches for
+ * — a throwaway account, maybe — always waits for support. Every minute, in every shop.
  */
 final class AutoApproveReceiptsTask implements Task
 {
@@ -36,13 +37,12 @@ final class AutoApproveReceiptsTask implements Task
         }
     }
 
-    /** Approves the method's bot receipts waiting past its window, oldest first. */
+    /** Approves the method's receipts that may approve on their own and wait past its window, oldest first. */
     private function approve(PaymentMethod $method, int $window): void
     {
-        $due = Payment::query()
+        $due = Payment::whereSelfApproving(Payment::query())
             ->where('payment_method_id', $method->id)
             ->where('status', PaymentStatus::AwaitingReview->value)
-            ->whereNotNull('receipt_file_id')
             ->where('receipt_at', '<=', now()->subMinutes($window))
             // What an approval reads: the method, and the order with what its delivery reads.
             ->with(['method', 'order' => static fn(Relation $order) => $order->with(OrderService::DELIVERY_RELATIONS)])

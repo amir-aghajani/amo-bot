@@ -143,7 +143,11 @@ function Extras({ service, offer, fresh, refresh }: ExtrasProps) {
   const code = useDiscountCheck(check)
   const quote = code.applied?.quote ?? null
   const total = price === null ? undefined : (quote?.amount ?? price.amount)
-  const payment = usePaymentChoice(words?.order ?? 'extra_traffic', total)
+  const free = total !== undefined && Number(total) === 0
+  // A free extra names a way to pay, whatever its bounds (no card transfer while another is): the shop settles it with
+  // nothing taken.
+  const payment = usePaymentChoice(words?.order ?? 'extra_traffic', free ? null : total)
+  const method = free ? payment.free : payment.method
   const ordering = useOrdering(
     (request: ExtraRequest, key) => send(service.id, request, key),
     (error) => {
@@ -157,13 +161,13 @@ function Extras({ service, offer, fresh, refresh }: ExtrasProps) {
   )
   const { changing } = ordering
   const request: ExtraRequest | null =
-    kind === null || price === null || total === undefined || payment.method === null || !payment.ready || !fresh || code.busy || settledTyped !== typed
+    kind === null || price === null || total === undefined || method === null || !payment.ready || !fresh || code.busy || settledTyped !== typed
       ? null
       : {
           kind,
           quantity: price.quantity,
           rest: {
-            method_id: payment.method.id,
+            method_id: method.id,
             ...(code.applied === null ? {} : { discount_code: code.applied.code }),
             // A typed count of devices is charged prorated as a whole, which only the shop works out: no amount is held to.
             ...(price.exact || quote !== null ? { expected_amount: total } : {}),
@@ -241,7 +245,7 @@ function Extras({ service, offer, fresh, refresh }: ExtrasProps) {
       {price !== null && total !== undefined && (
         <>
           <DiscountCodeField state={{ ...code, error: code.error ?? ordering.problem('discount_code'), apply: changing(code.apply), remove: changing(code.remove) }} />
-          <PaymentMethods choice={{ ...payment, choose: changing(payment.choose) }} error={ordering.problem('method_id')} />
+          {!free && <PaymentMethods choice={{ ...payment, choose: changing(payment.choose) }} error={ordering.problem('method_id')} />}
           <PriceSummary
             lines={[{ label: `${words.tab} اضافه (${words.words(price.quantity)})`, amount: quote?.base ?? price.before }, ...discountLines(quote?.discounts ?? price.discounts)]}
             total={total}
@@ -253,7 +257,7 @@ function Extras({ service, offer, fresh, refresh }: ExtrasProps) {
       )}
 
       <MainAction
-        text={total === undefined ? null : `پرداخت ${formatMoney(total)}`}
+        text={total === undefined ? null : free ? 'دریافت رایگان' : `پرداخت ${formatMoney(total)}`}
         enabled={request !== null && !ordering.held}
         busy={ordering.busy}
         shine

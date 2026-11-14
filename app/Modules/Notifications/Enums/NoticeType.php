@@ -154,6 +154,9 @@ enum NoticeType: string
     /** They won the shop's nightly draw among its buyers, and were given its prize. */
     case LotteryWon = 'lottery_won';
 
+    /** Support wrote to them by hand, from the panel, the website's admin side or the report group's card. */
+    case SupportMessage = 'support_message';
+
     /** An email's subject line for the notice, also the heading over its text. */
     public function subject(): string
     {
@@ -206,6 +209,7 @@ enum NoticeType: string
             self::LoyaltyTierUp => 'سطح وفاداری شما بالاتر رفت',
             self::CashbackEarned => 'کش‌بک به کیف پول شما اضافه شد',
             self::LotteryWon => 'شما برنده قرعه‌کشی شبانه شدید',
+            self::SupportMessage => 'پیامی از طرف پشتیبانی',
         };
     }
 }

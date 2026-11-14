@@ -28,8 +28,10 @@ enum BotText: string
 
     // gates: the phone number, the required channels
     case PhonePrompt = 'phone_prompt';
+    case PhoneNeeded = 'phone_needed';
     case PhoneButton = 'phone_button';
     case PhoneNotYours = 'phone_not_yours';
+    case PhoneNotIranian = 'phone_not_iranian';
     case PhoneVerified = 'phone_verified';
     case PhoneNotNeeded = 'phone_not_needed';
     case JoinPrompt = 'join_prompt';
@@ -106,8 +108,10 @@ enum BotText: string
     case CardCopyNumber = 'card_copy_number';
     case CardCopyAmount = 'card_copy_amount';
     case CardToSupport = 'card_to_support';
+    case CardToSupportAuto = 'card_to_support_auto';
     case CardToSupportButton = 'card_to_support_button';
     case PayInstructionsSuffix = 'pay_instructions_suffix';
+    case PayInstructionsAuto = 'pay_instructions_auto';
     case PayOnline = 'pay_online';
     case PayOnlineDeadline = 'pay_online_deadline';
     case PayOnlineFee = 'pay_online_fee';
@@ -125,6 +129,7 @@ enum BotText: string
     case PayOnlineUnreachable = 'pay_online_unreachable';
     case ReceiptInReview = 'receipt_in_review';
     case ReceiptWaiting = 'receipt_waiting';
+    case ReceiptWaitingAuto = 'receipt_waiting_auto';
     case ReceiptNotImage = 'receipt_not_image';
     case ReceiptReceived = 'receipt_received';
     case ReceiptReceivedTimed = 'receipt_received_timed';
@@ -439,6 +444,7 @@ enum BotText: string
     case TicketAnswered = 'ticket_answered';
     case TicketAnswerPicture = 'ticket_answer_picture';
     case TicketClosed = 'ticket_closed';
+    case SupportMessage = 'support_message';
 
     // gift codes («🎁 کد هدیه»)
     case GiftCodeAsk = 'gift_code_ask';

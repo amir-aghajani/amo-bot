@@ -14,7 +14,7 @@ parameters every panel operation takes:
 | Parameter | In | Type | Required | What it is |
 |---|---|---|---|---|
 | `panel` | path | string: `admin`, `agent` | yes | Which panel: the owner's (`admin`) or an agent's (`agent`). The operation is the same screen in both |
-| `X-Shop` | header | integer, at least 1 | no | The shop the request works in, by its bot's id (`ShopRef.id`; 1 is the main bot). The owner's panel sends the shop its tab shows, taken from the tab's address (`/admin/s/7/…`; `/admin/…` is the main bot), so the session remembers no shop and two tabs can work in two shops. Without it, the request works in the main shop. A value that is not a bot id is a 422 on `shop`; a bot that does not exist is a 404 on `shop` (never the main shop instead), for a sign-in too once its credentials are right. A sign-in returns the session in the shop named. Sections that cover the whole installation ignore it: servers work across every bot's services, and the agency and the panel settings always work in the main shop. An agent's panel sends none, since their shop is their bot; naming another bot is a 403 on `shop`. |
+| `X-Shop` | header | integer, at least 1 | no | The shop the request works in, by its bot's id (`ShopRef.id`; 1 is the main bot). The owner's panel sends the shop its tab shows, taken from the tab's address (`/admin/s/7/…`; `/admin/…` is the main bot), so the session remembers no shop and two tabs can work in two shops. Without it, the request works in the main shop. A value that is not a bot id is a 422 on `shop`; a bot that does not exist is a 404 on `shop` (never the main shop instead), for a sign-in too once its credentials are right. A sign-in returns the session in the shop named. Sections that cover the whole installation ignore it: servers work across every bot's services, and the agency, the panel settings and the imports from another bot always work in the main shop. An agent's panel sends none, since their shop is their bot; naming another bot is a 403 on `shop`. |
 
 Every operation may also return the common error shape. Objects are closed ([API schemas](API-Schemas.md)).
 
@@ -60,6 +60,8 @@ Screens both panels have: `{panel}` is `admin` in the owner's panel and `agent` 
 | [`POST /api/{panel}/users/{id}/wallet`](#post-apipanelusersidwallet) | Credit or debit a customer's wallet |
 | [`POST /api/{panel}/users/{id}/orders`](#post-apipanelusersidorders) | Make an order for a customer by hand («افزودن سفارش»), paid and delivered at once |
 | [`PUT /api/{panel}/users/{id}/groups`](#put-apipanelusersidgroups) | Set a customer's groups |
+| [`PUT /api/{panel}/users/{id}/phone-exempt`](#put-apipanelusersidphone-exempt) | Excuse a customer from the shop's phone rule, or hold them to it again |
+| [`POST /api/{panel}/users/{id}/message`](#post-apipanelusersidmessage) | Send a customer a message from support («ارسال پیام») |
 | [`POST /api/{panel}/users/{id}/two-factor/disable`](#post-apipanelusersidtwo-factordisable) | Turn off a customer's two-factor sign-in on the website |
 | [`POST /api/{panel}/users/{id}/sessions/end`](#post-apipanelusersidsessionsend) | Sign a customer out of the website on every device |
 | [`GET /api/{panel}/customer-groups`](#get-apipanelcustomer-groups) | All customer groups, in their order, with each group's member count |
@@ -102,6 +104,10 @@ Screens both panels have: `{panel}` is `admin` in the owner's panel and `agent` 
 | [`POST /api/{panel}/reviews/{id}/approve`](#post-apipanelreviewsidapprove) | Approve a pending or rejected review |
 | [`POST /api/{panel}/reviews/{id}/reject`](#post-apipanelreviewsidreject) | Reject a pending or approved review |
 | [`DELETE /api/{panel}/reviews/{id}`](#delete-apipanelreviewsid) | Delete a review, whatever its status |
+| [`GET /api/{panel}/deposits`](#get-apipaneldeposits) | The bank SMS a phone app forwarded to the shop («تایید خودکار واریز»), newest first, each with what came of it |
+| [`GET /api/{panel}/deposits/settings`](#get-apipaneldepositssettings) | «تایید خودکار واریز» |
+| [`PUT /api/{panel}/deposits/settings`](#put-apipaneldepositssettings) | Listen to the bank SMS, or stop |
+| [`POST /api/{panel}/deposits/settings/key`](#post-apipaneldepositssettingskey) | A new key for the webhook |
 | [`GET /api/{panel}/payment-methods`](#get-apipanelpayment-methods) | All payment methods, in checkout order |
 | [`POST /api/{panel}/payment-methods`](#post-apipanelpayment-methods) | Add a payment method |
 | [`GET /api/{panel}/payment-methods/drivers`](#get-apipanelpayment-methodsdrivers) | The gateway drivers a payment method can use, each with its form |
@@ -1002,6 +1008,56 @@ The customer's groups: exactly the ones listed. An empty list removes them from 
 | Status | What it is | Body |
 |---|---|---|
 | `200` | Changed | [UserResponse](API-Schemas.md#userresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### PUT /api/{panel}/users/{id}/phone-exempt
+
+Excuse a customer from the shop's phone rule, or hold them to it again. Excused, they are never asked for their phone number, wherever the shop asks it (`phone_required`). On the website's admin API, an admin's account (their own included) or an agent's can only be changed from a panel (403). Logged with who did it.
+
+- **On the website:** the website's admins can also use it, as [`PUT /users/{id}/phone-exempt`](Store-Admin-API-Reference.md#put-usersidphone-exempt).
+
+**Parameters**
+
+| Name | In | Type | Required | What it is |
+|---|---|---|---|---|
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
+
+**Body**, as JSON:
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `phone_exempt` | boolean | yes |  |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | Changed | [UserResponse](API-Schemas.md#userresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### POST /api/{panel}/users/{id}/message
+
+Send a customer a message from support («ارسال پیام»). The shop's bot sends it to their Telegram chat (an agent's customer hears from the agent's bot), under its text «پیام پشتیبانی به مشتری» (📩 پیام از طرف پشتیبانی) unless the bot settings' `support_header` is off; a customer with no Telegram, or who blocked the bot, gets it by email when they have one and the shop's email works. It is kept on their website either way. Plain text, at most 3,500 characters as Telegram counts them, an emoji two (422 on `text`, as for an empty one). On the website's admin API, an admin's account (their own included) or an agent's is written to only from a panel (403). Answers what came of it; logged with who wrote it.
+
+- **On the website:** the website's admins can also use it, as [`POST /users/{id}/message`](Store-Admin-API-Reference.md#post-usersidmessage).
+
+**Parameters**
+
+| Name | In | Type | Required | What it is |
+|---|---|---|---|---|
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
+
+**Body**, as JSON:
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `text` | string | yes | Plain text, line breaks kept; 1 to 3,500 characters once trimmed, counted as Telegram counts them — an emoji is two (blank: 422). |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | Sent, or tried | [UserMessageResponse](API-Schemas.md#usermessageresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
 ### POST /api/{panel}/users/{id}/two-factor/disable
@@ -1967,6 +2023,68 @@ Delete a review, whatever its status. A 403 for an admin's own review.
 | `204` | [NoContent](API-Schemas.md#response-nocontent) | none |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
+### GET /api/{panel}/deposits
+
+The bank SMS a phone app forwarded to the shop («تایید خودکار واریز»), newest first, each with what came of it: the card payment it approved, or why none. By status, or searched by sum (digits, in Toman or Rial) or by the SMS's words.
+
+- **On the website:** the website's admins can also use it, as [`GET /deposits`](Store-Admin-API-Reference.md#get-deposits).
+
+**Parameters**
+
+| Name | In | Type | Required | What it is |
+|---|---|---|---|---|
+| `status` | query | [DepositStatus](API-Schemas.md#depositstatus) | no | One status. Empty for all |
+| `search` | query | string | no | The search text ("#12" finds by number) |
+| `page` | query | integer, at least 1 | no | The page, from 1 (`PageMeta.per_page` rows a page); a page past the last answers the last |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | OK | [DepositsResponse](API-Schemas.md#depositsresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### GET /api/{panel}/deposits/settings
+
+«تایید خودکار واریز»: whether the shop listens to its bank SMS, where each phone app posts them and the key it sends (`X-API-Key`), when the last came, and how many of the week approved nothing.
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | OK | [DepositSettingsResponse](#depositsettingsresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### PUT /api/{panel}/deposits/settings
+
+Listen to the bank SMS, or stop. Listening, every new card-to-card payment asks a sum no other open one asks (1 to 999 Toman above its order), and a deposit of that sum approves it; the key is made the first time.
+
+**Body**, as JSON:
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `enabled` | boolean | yes |  |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | Saved | [DepositSettingsResponse](#depositsettingsresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### POST /api/{panel}/deposits/settings/key
+
+A new key for the webhook: the old one stops working at once, and the phone app must be given the new one.
+
+**Body:** none.
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | Made | [DepositSettingsResponse](#depositsettingsresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
 ### GET /api/{panel}/payment-methods
 
 All payment methods, in checkout order: every one but «خارج از فروشگاه», the built-in row support records money taken outside the shop with (`POST /users/{id}/orders`), which this screen neither lists nor finds.
@@ -1998,7 +2116,7 @@ One of:
 | `min_amount` | [AmountInput](API-Schemas.md#amountinput) or null | no | The least amount to pay it is offered for: whole Toman, blank or null for no least. Left out on an update: unchanged. |
 | `max_amount` | [AmountInput](API-Schemas.md#amountinput) or null | no | The most amount to pay it is offered for (not less than `min_amount`): whole Toman, blank or null for no most. Left out on an update: unchanged. |
 | `instructions` | string | no | Shown to the customer with the card; blank for none. |
-| `auto_approve_after` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | Minutes a receipt sent in the bot may wait for review before it is approved automatically; blank or 0 for manual approval only. |
+| `auto_approve_after` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | Minutes a receipt sent in the bot (or uploaded by a Telegram account: any mini app customer, or a website customer signed in with Telegram) may wait for review before it is approved automatically; blank or 0 for manual approval only. |
 | `cards` | list of [PaymentCardInput](#paymentcardinput) | yes | Every card of the method, 1 to 20, in their order, each once: a card left out is deleted — one with payments cannot be (switch it off) —, and no number comes twice. Every refusal is under `cards`, each naming its card by its place («کارت ۲: …»). |
 
 **`CubePayMethodCreateRequest`** — A new CubePay method: its driver and its form (CubePayMethodRequest), with the label, the token and `fee_fixed` required.
@@ -2156,7 +2274,7 @@ One of:
 | `min_amount` | [AmountInput](API-Schemas.md#amountinput) or null | no | The least amount to pay it is offered for: whole Toman, blank or null for no least. Left out on an update: unchanged. |
 | `max_amount` | [AmountInput](API-Schemas.md#amountinput) or null | no | The most amount to pay it is offered for (not less than `min_amount`): whole Toman, blank or null for no most. Left out on an update: unchanged. |
 | `instructions` | string | no | Shown to the customer with the card; blank for none. |
-| `auto_approve_after` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | Minutes a receipt sent in the bot may wait for review before it is approved automatically; blank or 0 for manual approval only. |
+| `auto_approve_after` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | Minutes a receipt sent in the bot (or uploaded by a Telegram account: any mini app customer, or a website customer signed in with Telegram) may wait for review before it is approved automatically; blank or 0 for manual approval only. |
 | `cards` | list of [PaymentCardInput](#paymentcardinput) | yes | Every card of the method, 1 to 20, in their order, each once: a card left out is deleted — one with payments cannot be (switch it off) —, and no number comes twice. Every refusal is under `cards`, each naming its card by its place («کارت ۲: …»). |
 - [WalletMethodRequest](#walletmethodrequest)
 
@@ -2328,7 +2446,14 @@ One of:
 |---|---|---|---|
 | `enabled` | boolean | yes |  |
 | `phone_required` | boolean | yes |  |
+| `phone_scope` | string: `everywhere`, `moments` | yes |  |
+| `phone_on_purchase` | boolean | yes |  |
+| `phone_on_renewal` | boolean | yes |  |
+| `phone_on_test` | boolean | yes |  |
+| `phone_on_card` | boolean | yes |  |
+| `phone_iran_only` | boolean | yes |  |
 | `support_contact` | string | no | At most 190 characters. |
+| `support_header` | boolean | yes |  |
 
 **`BotChannelsSettingsRequest`**
 
@@ -2549,6 +2674,12 @@ One of:
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `hold_minutes` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | 0 to 1440 minutes. |
+
+**`BotAgentPerksSettingsRequest`**
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `agents_without_perks` | boolean | yes |  |
 
 **Answers**
 
@@ -4138,6 +4269,15 @@ Operations only the owner's panel has.
 | [`POST /api/admin/settings/config/sms/test`](#post-apiadminsettingsconfigsmstest) | Send a test code by SMS with the saved SMS settings, through the approved pattern a sign-in code goes by |
 | [`GET /api/admin/settings/config/sms/credit`](#get-apiadminsettingsconfigsmscredit) | The SMS account's credit by the saved settings, asked of its provider (which also checks the key) |
 | [`PUT /api/admin/settings/config/{group}`](#put-apiadminsettingsconfiggroup) | Save one group of the config.php settings |
+| [`GET /api/admin/imports`](#get-apiadminimports) | «انتقال از ربات دیگر», the owner's |
+| [`POST /api/admin/imports`](#post-apiadminimports) | Start an import from the other bot's backup file |
+| [`POST /api/admin/imports/database`](#post-apiadminimportsdatabase) | Start an import from the other bot's MySQL database, read once over this connection and only read |
+| [`GET /api/admin/imports/{id}`](#get-apiadminimportsid) | An import as it stands |
+| [`DELETE /api/admin/imports/{id}`](#delete-apiadminimportsid) | An import under way (`reading`, `review`, `importing`) is cancelled |
+| [`POST /api/admin/imports/{id}/continue`](#post-apiadminimportsidcontinue) | One step of reading (`reading`) or writing (`importing`), about 15 seconds |
+| [`PUT /api/admin/imports/{id}/choices`](#put-apiadminimportsidchoices) | Save the owner's choices in the review |
+| [`POST /api/admin/imports/{id}/start`](#post-apiadminimportsidstart) | From the review to writing (`importing`) with the choices saved |
+| [`GET /api/admin/imports/{id}/problems`](#get-apiadminimportsidproblems) | What the import could not bring and why, a row each, 50 a page |
 
 ### POST /api/admin/auth/login
 
@@ -4460,6 +4600,33 @@ One of:
 | `button_style` | string: ``, `primary`, `success`, `danger` | no | The colour of its button among a plan's locations in the bot: blue, green or red. Blank or left out: the client's default. |
 | `button_row` | string: `1`, `2`, `3` | no | How many location buttons share its row in the bot. Left out: a row of its own. |
 
+**`ServerMarzbanRequest`** — A server on a Marzban panel (0.8 and later): an admin's username and password, the one way in — Marzban's API has no keys. The server form's fields without the token's.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `driver` | string: `marzban` | yes |  |
+| `name` | string | yes | The location's name, as customers see it in the bot; at most 100 characters. Never a premium emoji's tag: one is chosen in `emoji_id`. |
+| `emoji_id` | string | no | The premium emoji the bot draws for the name's leading emoji (a custom emoji id, digits): on its location button as the icon, in its texts in the emoji's place. The name must start with an emoji while one is set. Blank or left out: none. |
+| `base_url` | string | yes | The panel's address, including its path: http(s), without credentials, query or fragment, and not one of the panel's own pages (Marzban's /dashboard, /api or /docs). |
+| `auth_mode` | string: `password` | yes | How to sign in: an admin's username and password, the one way Marzban's API takes. |
+| `username` | string | no | For `password`: a panel admin's username. |
+| `password` | string | no | For `password`. Left out or blank: the stored password stays. |
+| `clear_password` | boolean | no | True empties the stored password. |
+| `verify_tls` | boolean | yes | Whether to verify the panel's TLS certificate; off for a self-signed one. |
+| `timeout` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Request timeout in seconds, 5 to 120. |
+| `subscription_url` | string | no | A base address to use before the token in subscription links instead of the panel's own: a full address without credentials, query or fragment. Blank: the panel's. |
+| `proxy_enabled` | boolean | yes | Every request to the panel goes through a SOCKS5 proxy (the panel's name looked up by the proxy), for a panel the shop's host cannot reach directly. Off: straight to the panel, and the proxy's fields are emptied. |
+| `proxy_host` | string | no | With `proxy_enabled`: the proxy's host name or IP address, without a scheme or a port (an IPv6 address may be in brackets); at most 255 characters. |
+| `proxy_port` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | With `proxy_enabled`: the proxy's port, 1 to 65535. |
+| `proxy_username` | string | no | With `proxy_enabled`: the proxy's username, at most 255 characters; blank for a proxy without a login. |
+| `proxy_password` | string | no | With `proxy_enabled`: the proxy's password, only with a username. Left out or blank: the stored password stays while the proxy's host and port stay (after a change it must be typed again). |
+| `clear_proxy_password` | boolean | no | True empties the stored proxy password. |
+| `capacity` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | How many active services it takes. Blank for no limit; 0 for full. |
+| `notes` | string | no | The owner's notes, at most 1000 characters. |
+| `is_active` | boolean | yes | Off: no new service is placed on it. |
+| `button_style` | string: ``, `primary`, `success`, `danger` | no | The colour of its button among a plan's locations in the bot: blue, green or red. Blank or left out: the client's default. |
+| `button_row` | string: `1`, `2`, `3` | no | How many location buttons share its row in the bot. Left out: a row of its own. |
+
 **Answers**
 
 | Status | What it is | Body |
@@ -4551,6 +4718,34 @@ One of:
 | `auth_mode` | string: `token` | yes | How to sign in: HMPanel's API key, the one way its API takes. |
 | `api_token` | string | no | For `token`: the panel's API token (PasarGuard's whole `pg_key_…` key, HMPanel's whole `hmp_…` key). Left out or blank: the stored token stays. |
 | `clear_api_token` | boolean | no | True empties the stored token. |
+| `verify_tls` | boolean | yes | Whether to verify the panel's TLS certificate; off for a self-signed one. |
+| `timeout` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Request timeout in seconds, 5 to 120. |
+| `subscription_url` | string | no | A base address to use before the token in subscription links instead of the panel's own: a full address without credentials, query or fragment. Blank: the panel's. |
+| `proxy_enabled` | boolean | yes | Every request to the panel goes through a SOCKS5 proxy (the panel's name looked up by the proxy), for a panel the shop's host cannot reach directly. Off: straight to the panel, and the proxy's fields are emptied. |
+| `proxy_host` | string | no | With `proxy_enabled`: the proxy's host name or IP address, without a scheme or a port (an IPv6 address may be in brackets); at most 255 characters. |
+| `proxy_port` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | With `proxy_enabled`: the proxy's port, 1 to 65535. |
+| `proxy_username` | string | no | With `proxy_enabled`: the proxy's username, at most 255 characters; blank for a proxy without a login. |
+| `proxy_password` | string | no | With `proxy_enabled`: the proxy's password, only with a username. Left out or blank: the stored password stays while the proxy's host and port stay (after a change it must be typed again). |
+| `clear_proxy_password` | boolean | no | True empties the stored proxy password. |
+| `capacity` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | How many active services it takes. Blank for no limit; 0 for full. |
+| `notes` | string | no | The owner's notes, at most 1000 characters. |
+| `is_active` | boolean | yes | Off: no new service is placed on it. |
+| `button_style` | string: ``, `primary`, `success`, `danger` | no | The colour of its button among a plan's locations in the bot: blue, green or red. Blank or left out: the client's default. |
+| `button_row` | string: `1`, `2`, `3` | no | How many location buttons share its row in the bot. Left out: a row of its own. |
+
+**`ServerMarzbanTestRequest`** — A Marzban server to test.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `id` | integer | no | The saved server this form belongs to. |
+| `driver` | string: `marzban` | yes |  |
+| `name` | string | yes | The location's name, as customers see it in the bot; at most 100 characters. Never a premium emoji's tag: one is chosen in `emoji_id`. |
+| `emoji_id` | string | no | The premium emoji the bot draws for the name's leading emoji (a custom emoji id, digits): on its location button as the icon, in its texts in the emoji's place. The name must start with an emoji while one is set. Blank or left out: none. |
+| `base_url` | string | yes | The panel's address, including its path: http(s), without credentials, query or fragment, and not one of the panel's own pages (Marzban's /dashboard, /api or /docs). |
+| `auth_mode` | string: `password` | yes | How to sign in: an admin's username and password, the one way Marzban's API takes. |
+| `username` | string | no | For `password`: a panel admin's username. |
+| `password` | string | no | For `password`. Left out or blank: the stored password stays. |
+| `clear_password` | boolean | no | True empties the stored password. |
 | `verify_tls` | boolean | yes | Whether to verify the panel's TLS certificate; off for a self-signed one. |
 | `timeout` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Request timeout in seconds, 5 to 120. |
 | `subscription_url` | string | no | A base address to use before the token in subscription links instead of the panel's own: a full address without credentials, query or fragment. Blank: the panel's. |
@@ -4677,6 +4872,33 @@ One of:
 | `auth_mode` | string: `token` | yes | How to sign in: HMPanel's API key, the one way its API takes. |
 | `api_token` | string | no | For `token`: the panel's API token (PasarGuard's whole `pg_key_…` key, HMPanel's whole `hmp_…` key). Left out or blank: the stored token stays. |
 | `clear_api_token` | boolean | no | True empties the stored token. |
+| `verify_tls` | boolean | yes | Whether to verify the panel's TLS certificate; off for a self-signed one. |
+| `timeout` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Request timeout in seconds, 5 to 120. |
+| `subscription_url` | string | no | A base address to use before the token in subscription links instead of the panel's own: a full address without credentials, query or fragment. Blank: the panel's. |
+| `proxy_enabled` | boolean | yes | Every request to the panel goes through a SOCKS5 proxy (the panel's name looked up by the proxy), for a panel the shop's host cannot reach directly. Off: straight to the panel, and the proxy's fields are emptied. |
+| `proxy_host` | string | no | With `proxy_enabled`: the proxy's host name or IP address, without a scheme or a port (an IPv6 address may be in brackets); at most 255 characters. |
+| `proxy_port` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | With `proxy_enabled`: the proxy's port, 1 to 65535. |
+| `proxy_username` | string | no | With `proxy_enabled`: the proxy's username, at most 255 characters; blank for a proxy without a login. |
+| `proxy_password` | string | no | With `proxy_enabled`: the proxy's password, only with a username. Left out or blank: the stored password stays while the proxy's host and port stay (after a change it must be typed again). |
+| `clear_proxy_password` | boolean | no | True empties the stored proxy password. |
+| `capacity` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | How many active services it takes. Blank for no limit; 0 for full. |
+| `notes` | string | no | The owner's notes, at most 1000 characters. |
+| `is_active` | boolean | yes | Off: no new service is placed on it. |
+| `button_style` | string: ``, `primary`, `success`, `danger` | no | The colour of its button among a plan's locations in the bot: blue, green or red. Blank or left out: the client's default. |
+| `button_row` | string: `1`, `2`, `3` | no | How many location buttons share its row in the bot. Left out: a row of its own. |
+
+**`ServerMarzbanRequest`** — A server on a Marzban panel (0.8 and later): an admin's username and password, the one way in — Marzban's API has no keys. The server form's fields without the token's.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `driver` | string: `marzban` | yes |  |
+| `name` | string | yes | The location's name, as customers see it in the bot; at most 100 characters. Never a premium emoji's tag: one is chosen in `emoji_id`. |
+| `emoji_id` | string | no | The premium emoji the bot draws for the name's leading emoji (a custom emoji id, digits): on its location button as the icon, in its texts in the emoji's place. The name must start with an emoji while one is set. Blank or left out: none. |
+| `base_url` | string | yes | The panel's address, including its path: http(s), without credentials, query or fragment, and not one of the panel's own pages (Marzban's /dashboard, /api or /docs). |
+| `auth_mode` | string: `password` | yes | How to sign in: an admin's username and password, the one way Marzban's API takes. |
+| `username` | string | no | For `password`: a panel admin's username. |
+| `password` | string | no | For `password`. Left out or blank: the stored password stays. |
+| `clear_password` | boolean | no | True empties the stored password. |
 | `verify_tls` | boolean | yes | Whether to verify the panel's TLS certificate; off for a self-signed one. |
 | `timeout` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Request timeout in seconds, 5 to 120. |
 | `subscription_url` | string | no | A base address to use before the token in subscription links instead of the panel's own: a full address without credentials, query or fragment. Blank: the panel's. |
@@ -5263,6 +5485,7 @@ Every task's fields, saved whole (a missing one is refused), each by its Schedul
 | `prune_tickets_minutes` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Minutes between two runs of `prune_tickets`, 1 to 10080; 60 by default. |
 | `nightly_draw_minutes` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Minutes between two runs of `nightly_draw`, 1 to 10080; 10 by default. |
 | `send_backups_minutes` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Minutes between two runs of `send_backups`, 1 to 10080; 1440 by default. |
+| `prune_imports_minutes` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Minutes between two runs of `prune_imports`, 1 to 10080; 1440 by default. |
 | `check_releases_minutes` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Minutes between two runs of `check_releases`, 1 to 10080; 1440 by default. |
 | `send_reports_minutes` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Minutes between two runs of `send_reports`, 1 to 10080; 1 by default. |
 | `expire_orders_hours` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Hours an unpaid order nobody touched waits before it is dropped (one whose money may be with support never is). 1 to 720; 48 by default. |
@@ -5965,6 +6188,176 @@ One of:
 | `200` | Saved | [ConfigSettingsResponse](#configsettingsresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
+### GET /api/admin/imports
+
+«انتقال از ربات دیگر», the owner's: the bots an import reads (`migrators`), the import under way (one at a time), and the latest ten that ended, newest first. What an import brings goes into the main shop, whatever shop the request names; nothing is ever written to the other bot's database, and nothing changes on the VPN panels.
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | OK | [ImportsResponse](#importsresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### POST /api/admin/imports
+
+Start an import from the other bot's backup file: its own backup (Faoxima's `backup.zip`, as its report channel gets it), a phpMyAdmin or mysqldump export (`.sql`), or either gzipped (`.gz`) or zipped (`.zip`) — told apart by its bytes, not its name. The file is kept and the import starts reading it (phase `reading`); the page then calls `POST /imports/{id}/continue` until it is read. A 422 says why one is refused: under `migrator` a bot not in the list; under `file` none, one past the host's upload limit, or no database backup; under `import` another import under way.
+
+**Body**, as a form (`multipart/form-data`):
+
+The other bot's backup file, as a browser form uploads it, and the bot it is of.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `migrator` | string | yes | A migrator's key (`ImportsResponse.migrators`). |
+| `file` | file | yes |  |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `201` | Started | [ImportResponse](#importresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### POST /api/admin/imports/database
+
+Start an import from the other bot's MySQL database, read once over this connection and only read. The connection is tried at once and kept encrypted until the database is read; a 422 under the field at fault says why it is refused (a field missing or malformed — every one at once —, `host` out of reach or the host without pdo_mysql, `username` and `password` refused, `database` unknown or not this user's), never repeating the password. Nothing is kept of a refused one. `migrator` and `import` are refused as for a backup file.
+
+**Body**, as JSON:
+
+A connection to the other bot's MySQL database, and the bot it is of.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `migrator` | string | yes | A migrator's key (`ImportsResponse.migrators`). |
+| `host` | string | yes | The database server's name or IP alone (`localhost`). |
+| `port` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | 1 to 65535; MySQL's own 3306 when left out or blank. |
+| `database` | string | yes |  |
+| `username` | string | yes |  |
+| `password` | string | no | As typed (not trimmed); blank for none. Kept encrypted until the database is read, and never sent back. |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `201` | Started | [ImportResponse](#importresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### GET /api/admin/imports/{id}
+
+An import as it stands.
+
+**Parameters**
+
+| Name | In | Type | Required | What it is |
+|---|---|---|---|---|
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | OK | [ImportResponse](#importresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### DELETE /api/admin/imports/{id}
+
+An import under way (`reading`, `review`, `importing`) is cancelled: what it already wrote stays, and its uploaded file and the staged copy of the other bot's data are deleted. An ended one's record is deleted with its report; what it brought stays, and a later import still knows it.
+
+**Parameters**
+
+| Name | In | Type | Required | What it is |
+|---|---|---|---|---|
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `204` | [NoContent](API-Schemas.md#response-nocontent) | none |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### POST /api/admin/imports/{id}/continue
+
+One step of reading (`reading`) or writing (`importing`), about 15 seconds; the page calls it until the phase changes. Another step already on the import (another tab, `import:run`) leaves it as it stands and says so (`stepped` false): the page waits a moment before asking again. Data that is not the chosen bot's, or a backup file that cannot be read to its end, fails the import (`error` says why).
+
+**Parameters**
+
+| Name | In | Type | Required | What it is |
+|---|---|---|---|---|
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
+
+**Body:** none.
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | The import as the step left it | [ImportStepResponse](#importstepresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### PUT /api/admin/imports/{id}/choices
+
+Save the owner's choices in the review: where each panel's services go and what to bring. A 422 under `choices.…` says what is refused (a panel with services left without a choice, a server of another connector, adding a panel that cannot be added, a switch that is not a boolean); under `import`, an import not in review.
+
+**Parameters**
+
+| Name | In | Type | Required | What it is |
+|---|---|---|---|---|
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
+
+**Body**, as JSON:
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `choices` | [ImportChoicesInput](#importchoicesinput) | yes |  |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | Saved | [ImportResponse](#importresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### POST /api/admin/imports/{id}/start
+
+From the review to writing (`importing`) with the choices saved; the page then calls continue. A 422 under `import` when it is not in review.
+
+**Parameters**
+
+| Name | In | Type | Required | What it is |
+|---|---|---|---|---|
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
+
+**Body:** none.
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | Started | [ImportResponse](#importresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### GET /api/admin/imports/{id}/problems
+
+What the import could not bring and why, a row each, 50 a page. A reason that is only counted (ImportProblemReason) has no rows: its count is in `ImportState.problems`.
+
+**Parameters**
+
+| Name | In | Type | Required | What it is |
+|---|---|---|---|---|
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
+| `reason` | query | [ImportProblemReason](#importproblemreason) | no | Only the problems of this reason. Left out, every reason (the server reads an empty value as left out) |
+| `kind` | query | string | no | Only the problems of this kind of thing (`ImportProblem.kind`: `customers`, `services` …). Left out or empty, every kind |
+| `page` | query | integer, at least 1 | no | The page, from 1, 50 rows a page; a page past the last answers an empty list |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | OK | [ImportProblemsResponse](#importproblemsresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
 ## An agent's panel
 
 Operations only an agent's panel has.
@@ -6638,10 +7031,18 @@ How a bot runs. The main bot's mode applies to the whole installation: every bot
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `hold_minutes` | integer | yes | «کدهای تخفیف»: how many minutes an order made with a discount code may stay unpaid. After that, if untouched and no receipt is with support, it is cancelled and the code's use is freed. 0: as long as any unpaid order (two days by default). |
+| `agents_without_perks` | boolean | yes | «همکارها فقط با قیمت همکاری»: whoever pays agent prices (an agent, or in a «همکار» group) goes without the customers' perks, whatever they buy — no sale, loyalty tier, discount code, first-purchase price, cashback, lucky wheel or nightly draw; a plan's agent price where it has one, the regular price elsewhere (a plan without one, extras, a built service); their own discount stays. |
 | `enabled` | boolean | yes |  |
 | `phone_required` | boolean | yes |  |
+| `phone_scope` | string: `everywhere`, `moments` | yes | While `phone_required`: `everywhere` asks a customer's number before the bot serves them anything at all; `moments` only at the moments switched on (`phone_on_*`). |
+| `phone_on_purchase` | boolean | yes | With `phone_scope` `moments`: asked before a service is bought. |
+| `phone_on_renewal` | boolean | yes | With `phone_scope` `moments`: asked before a service is renewed or given extra traffic, time or devices. |
+| `phone_on_test` | boolean | yes | With `phone_scope` `moments`: asked before a free test is taken. |
+| `phone_on_card` | boolean | yes | With `phone_scope` `moments`: asked before a card-to-card payment, whatever it pays for. |
+| `phone_iran_only` | boolean | yes | While `phone_required`: only Iranian numbers (+98) count. Another country's is refused when shared (the bot text «فقط شماره ایران»), and a customer whose number on file is one is asked again; excuse one from the number to let them through. |
 | `join_required` | boolean | yes |  |
 | `support_contact` | string | yes | The Telegram id or link the bot's «پشتیبانی» screen shows; may be empty. |
+| `support_header` | boolean | yes | Whether a message support writes to a customer («ارسال پیام») comes under the bot text «پیام پشتیبانی به مشتری» (📩 پیام از طرف پشتیبانی); off, the words alone. |
 | `topup_min` | integer | yes | The smallest top-up, in Toman. |
 | `topup_presets` | list of integer | yes | The amounts offered as buttons, ascending. |
 | `topup_random_count` | integer | yes | How many buttons of amounts drawn at random the top-up screen offers beside the presets, 0 to 8; 0: none. |
@@ -6753,7 +7154,7 @@ How a bot runs. The main bot's mode applies to the whole installation: every bot
 
 ### BotSettingsGroup
 
-String: `general`, `channels`, `wallet`, `wallet_transfers`, `payments`, `renewal`, `auto_renew`, `extras`, `reminders`, `expired_services`, `test_accounts`, `service_claims`, `service_transfers`, `client_names`, `custom_services`, `referral`, `reports`, `qr`, `gift_codes`, `wheel`, `cashback`, `lottery`, `discounts`.
+String: `general`, `channels`, `wallet`, `wallet_transfers`, `payments`, `renewal`, `auto_renew`, `extras`, `reminders`, `expired_services`, `test_accounts`, `service_claims`, `service_transfers`, `client_names`, `custom_services`, `referral`, `reports`, `qr`, `gift_codes`, `wheel`, `cashback`, `lottery`, `discounts`, `agent_perks`.
 
 ### BotSettingsResponse
 
@@ -7021,6 +7422,20 @@ The database settings in config.php: the driver DB_CONNECTION names, the drivers
 | `drivers` | list of [DriverDescription](#driverdescription) | yes | The installable drivers, plus the one the shop runs on |
 | `values` | [DriverValues](#drivervalues) | yes |  |
 
+### DepositSettingsResponse
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `enabled` | boolean | yes |  |
+| `key` | string or null | yes | The key the app sends as `X-API-Key`; null while the shop does not listen. |
+| `sources` | list of object | yes | The phone apps the shop takes, each with the address its owner pastes in it. |
+| `sources[].key` | string | yes |  |
+| `sources[].label` | string | yes |  |
+| `sources[].webhook_url` | string | yes |  |
+| `last_received_at` | string (date-time) or null | yes | When the last SMS came (not a test). |
+| `last_test_at` | string (date-time) or null | yes | When the app's last test came. |
+| `waiting` | integer | yes | SMS of the last seven days that approved nothing (unmatched or ambiguous): support to look at. |
+
 ### DiscountCodeResponse
 
 | Field | Type | Required | What it is |
@@ -7084,7 +7499,7 @@ A driver (a database, a mail transport, a panel connector, a payment gateway, a 
 | `description` | string | yes |  |
 | `notes` | list of string | yes | Short notes under the description, such as required versions and caveats. |
 | `fields` | list of [FieldDescription](#fielddescription) | yes |  |
-| `traits` | map of string or number or boolean or list of string or number or boolean or null | yes | Extra facts specific to the driver's family. A database driver: `installable` (the installer offers it). A mail driver: `sender` (which address it can send from, as text). A payment gateway: `kind` (`instant`, settling at once like the wallet; `manual`, a card transfer whose receipt a person approves; or `online`, paid on the gateway's own page and confirmed by the gateway) and `builtin` (part of every shop; never added or deleted). A panel connector: `mark` (the two letters on its card), `vendor`, `docs_url` (its project's address), `inbounds` (services are sold on inbounds the owner picks; without it a server is sold whole) and `link_rotation` («تغییر لینک»). A captcha driver has none. |
+| `traits` | map of string or number or boolean or list of string or number or boolean or null | yes | Extra facts specific to the driver's family. A database driver: `installable` (the installer offers it). A mail driver: `sender` (which address it can send from, as text). A payment gateway: `kind` (`instant`, settling at once like the wallet; `manual`, a card transfer whose receipt a person approves; or `online`, paid on the gateway's own page and confirmed by the gateway) and `builtin` (part of every shop; never added or deleted). A panel connector: `mark` (the two letters on its card), `vendor`, `docs_url` (its project's address), `inbounds` (services are sold on inbounds the owner picks; without it a server is sold whole) and `link_rotation` («تغییر لینک»). A migrator (another bot an import reads): `mark` and `vendor` (its project's address). A captcha driver has none. |
 
 ### DriverValues
 
@@ -7209,6 +7624,271 @@ How many services a grant would reach, from the stored data: running ones, and o
 | `version` | string | yes |  |
 | `installed` | boolean | yes |  |
 | `database` | string: `ok`, `unavailable` | yes | Never the reason; that is in the log. |
+
+### ImportChoices
+
+What an import brings and where each panel's services go, as the owner chose in the review. A customer, a balance or anything else an earlier import brought is recognised and not brought twice.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `panels` | map of [ImportPanelChoice](#importpanelchoice) | yes | Each panel with services, by its `ImportSurveyPanel.key`. |
+| `balances` | boolean | yes | Customers' wallet balances, debts too, are credited (once, however often it runs). |
+| `banned` | boolean | yes | Customers banned there are banned here. |
+| `phones` | boolean | yes | Customers' mobile numbers come. |
+| `referrals` | boolean | yes | Who brought whom. |
+| `discounts` | boolean | yes | Customers' personal discount percent. |
+| `groups` | boolean | yes | Customers join the survey's groups (its agents', paying agent prices). |
+| `admins` | boolean | yes | The other bot's admins become admins of this shop. |
+| `resellers` | boolean | yes | The customers and services of the other bot's reseller bots come too, as the main shop's. |
+| `services` | boolean | yes | Live services come, as they stand on their panels: link, usage and end. |
+| `tests` | boolean | yes | Free test accounts come too (with `services`). |
+| `plans` | boolean | yes | The plans and their categories come. |
+| `plans_on` | boolean | yes | The plans come switched on, sold at once; otherwise off, for the owner to check first. |
+| `discount_codes` | boolean | yes | Discount codes still usable come. |
+| `gift_codes` | boolean | yes | Gift codes still usable come, as wallet gift codes (one use each). |
+| `channels` | boolean | yes | The required channels come; the bot must be an admin of each. |
+| `cards` | boolean | yes | The bank cards come, to the shop's card-to-card method. |
+
+### ImportChoicesInput
+
+The owner's choices as the review saves them: a switch left out takes its default (`ImportState.proposed`'s), and every panel with services needs its choice.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `panels` | map of [ImportPanelChoice](#importpanelchoice) | no | Each panel with services, by its `ImportSurveyPanel.key`. |
+| `balances` | boolean | no | Customers' wallet balances, debts too, are credited (once, however often it runs). |
+| `banned` | boolean | no | Customers banned there are banned here. |
+| `phones` | boolean | no | Customers' mobile numbers come. |
+| `referrals` | boolean | no | Who brought whom. |
+| `discounts` | boolean | no | Customers' personal discount percent. |
+| `groups` | boolean | no | Customers join the survey's groups (its agents', paying agent prices). |
+| `admins` | boolean | no | The other bot's admins become admins of this shop. |
+| `resellers` | boolean | no | The customers and services of the other bot's reseller bots come too, as the main shop's. |
+| `services` | boolean | no | Live services come, as they stand on their panels: link, usage and end. |
+| `tests` | boolean | no | Free test accounts come too (with `services`). |
+| `plans` | boolean | no | The plans and their categories come. |
+| `plans_on` | boolean | no | The plans come switched on, sold at once; otherwise off, for the owner to check first. |
+| `discount_codes` | boolean | no | Discount codes still usable come. |
+| `gift_codes` | boolean | no | Gift codes still usable come, as wallet gift codes (one use each). |
+| `channels` | boolean | no | The required channels come; the bot must be an admin of each. |
+| `cards` | boolean | no | The bank cards come, to the shop's card-to-card method. |
+
+### ImportCount
+
+What an import did with one kind: rows it created, rows it matched to what the shop already had (`linked`), and things it did not bring (`skipped`: by the owner's choice, or a problem).
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `created` | integer | yes |  |
+| `linked` | integer | yes |  |
+| `skipped` | integer | yes |  |
+
+### ImportLeftBehind
+
+Something the other bot has that the import does not bring, and how much.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `what` | string | yes | In the owner's words («تاریخچه پرداخت‌ها»). |
+| `count` | integer | yes |  |
+
+### ImportPanelChoice
+
+Where a panel's services go: `server`, one of the shop's servers with the panel's connector (`server_id`); `add`, the panel added as a new server (an `addable` one alone; refused or out of reach, its services stay behind); `skip`, its services stay behind — the one choice for a panel no connector speaks to.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `action` | string: `server`, `add`, `skip` | yes |  |
+| `server_id` | integer or null | yes | The server, for `server`; null otherwise. |
+
+### ImportPhase
+
+Where an import stands: `reading` the other bot's data into a staged copy, a step a request; `review`, waiting for the owner's choices; `importing`, writing it into the shop, a step a request; then `done`, `failed` (`error` says why) or `cancelled`. One import at a time is in any of the first three. The staged copy and the uploaded file are deleted once it ends.
+
+String: `reading`, `review`, `importing`, `done`, `failed`, `cancelled`.
+
+### ImportProblem
+
+Something an import could not bring, and why.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `kind` | string | yes | The kind of thing, as `ImportState.counts` names it (`customers`, `services`, `plans`, `servers`, `discount_codes` …). |
+| `source_key` | string | yes | The other bot's key for it. |
+| `reason` | [ImportProblemReason](#importproblemreason) | yes |  |
+| `label` | string | yes | The reason in the owner's words. |
+| `detail` | string or null | yes | What finds it (a customer's Telegram id, a client's name and panel …) or the panel's own words; null for nothing more. |
+| `created_at` | string (date-time) or null | yes |  |
+
+### ImportProblemReason
+
+Why an import did not bring something. Only counted, with no row of its own (the owner's own choice, or nothing to act on): `reseller` (a customer or service of the other bot's reseller bots, not chosen), `panel_skipped` (its panel was left behind, or could not be added), `not_chosen`, `used_up`, `expired`, `ended`, `removed` (an earlier import brought it and the owner deleted it from the shop since: never brought back). Each of the others is a row naming the thing: `unreadable`, `not_telegram` (no valid Telegram id), `no_customer` (a service whose customer did not come), `not_on_panel` (its client is not on the panel), `panel_unreachable` (the panel did not answer: running an import again later picks it up), `no_link` (the panel gives it no subscription link), `kept_already` (the same client is another customer's service in the shop), `server_not_added`, `plan_no_server`, `agents_only_plan`, `code_taken`, `scope_lost`, `multi_use_gift`, `channel_refused`, `card_invalid`, `one_customer` (a gift code the other bot kept for one customer), `refused` (the shop's own check of it refused it: its words in `detail`), `failed` (writing it failed unexpectedly: the app's log has it).
+
+String: `reseller`, `panel_skipped`, `not_chosen`, `used_up`, `expired`, `ended`, `removed`, `unreadable`, `not_telegram`, `no_customer`, `not_on_panel`, `panel_unreachable`, `no_link`, `kept_already`, `server_not_added`, `plan_no_server`, `agents_only_plan`, `code_taken`, `scope_lost`, `multi_use_gift`, `channel_refused`, `card_invalid`, `one_customer`, `refused`, `failed`.
+
+### ImportProblemsResponse
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `problems` | list of [ImportProblem](#importproblem) | yes |  |
+| `total` | integer | yes | The rows, on every page. |
+| `page` | integer | yes |  |
+| `per_page` | integer | yes |  |
+
+### ImportProblemsSummary
+
+What an import could not bring, by reason — the counted ones with the rest.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `total` | integer | yes |  |
+| `by_reason` | list of [ImportReasonCount](#importreasoncount) | yes |  |
+
+### ImportProgress
+
+How far the current phase is. Reading: no stage, `done` the bytes of the backup file read or the rows of the database staged, `total` the file's size or the rows counted at the start. Importing: the stage it writes, with its records written and their number. `total` is null while it is not known.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `stage` | [ImportStage](#importstage) or null | yes |  |
+| `stage_label` | string or null | yes | The stage in the owner's words («مشتری‌ها»). |
+| `done` | integer | yes |  |
+| `total` | integer or null | yes |  |
+
+### ImportReasonCount
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `reason` | [ImportProblemReason](#importproblemreason) | yes |  |
+| `label` | string | yes | The reason in the owner's words. |
+| `count` | integer | yes |  |
+
+### ImportResponse
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `import` | [ImportState](#importstate) | yes |  |
+
+### ImportStage
+
+The stages an import writes in, in this order: the servers its panels are added as, the customer groups, the customers (with their balances), who brought whom, the plans, the services, the discount codes, the gift codes, the required channels and the bank cards.
+
+String: `servers`, `groups`, `customers`, `referrals`, `plans`, `services`, `discount_codes`, `gift_codes`, `channels`, `cards`.
+
+### ImportState
+
+An import from another bot, as the owner's page shows it in every phase.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `id` | integer | yes | As used in `/imports/{id}`. |
+| `migrator` | string | yes | The bot it reads (`DriverDescription.key` of `ImportsResponse.migrators`). |
+| `migrator_label` | string | yes |  |
+| `source` | string: `backup`, `database` | yes | How the data arrived: an uploaded backup file, or a connection to the bot's database. |
+| `file_name` | string or null | yes | The backup file's name as uploaded; null for a database. |
+| `phase` | [ImportPhase](#importphase) | yes |  |
+| `progress` | [ImportProgress](#importprogress) | yes |  |
+| `version` | string or null | yes | The other bot's version, when its data tells. |
+| `survey` | [ImportSurvey](#importsurvey) or null | yes | What the data holds, once read; null before. |
+| `choices` | [ImportChoices](#importchoices) or null | yes | The owner's choices, once saved; null before. |
+| `proposed` | [ImportChoices](#importchoices) or null | yes | What the review starts from while no choices are saved: each panel to a server of the same connector on the same address, else added when it can be, else left behind; every switch on but `admins`, `resellers`, `plans_on` and `channels`. Null otherwise. |
+| `counts` | map of [ImportCount](#importcount) or null | yes | What it did, by kind (customers, balances, groups, servers, plans, categories, services, discount_codes, gift_codes, channels, cards), once it writes; null before. |
+| `problems` | [ImportProblemsSummary](#importproblemssummary) | yes |  |
+| `error` | string or null | yes | Why it failed, in the owner's words; null otherwise. |
+| `reviewer` | string or null | yes | Who started it. |
+| `started_at` | string (date-time) or null | yes | When it started writing. |
+| `finished_at` | string (date-time) or null | yes |  |
+| `created_at` | string (date-time) or null | yes |  |
+| `updated_at` | string (date-time) or null | yes |  |
+
+### ImportStepResponse
+
+The import after a step, and whether the step ran.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `import` | [ImportState](#importstate) | yes |  |
+| `stepped` | boolean | yes | False when another step was already on the import (another tab, `import:run`): nothing was done, and asking again at once would only find it busy. True for a step that ran, and for an import not reading or writing, which a step leaves as it is. |
+
+### ImportSurvey
+
+What the other bot's data holds, for the owner to review before anything is written.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `version` | string or null | yes | The other bot's version, when its data tells. |
+| `counts` | [ImportSurveyCounts](#importsurveycounts) | yes |  |
+| `balance_total` | string | yes | The customers' balances together, Toman (debts taken off). |
+| `panels` | list of [ImportSurveyPanel](#importsurveypanel) | yes |  |
+| `groups` | list of [ImportSurveyGroup](#importsurveygroup) | yes |  |
+| `admins` | list of [ImportSurveyAdmin](#importsurveyadmin) | yes |  |
+| `left` | list of [ImportLeftBehind](#importleftbehind) | yes | What the import leaves behind: payment history, tickets, the bot's settings and texts … |
+| `warnings` | list of string | yes | Worth reading before starting, in the owner's words. |
+
+### ImportSurveyAdmin
+
+An admin of the other bot, whom the import may make an admin of this shop too (`ImportChoices.admins`).
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `key` | string | yes | The other bot's key for them as a customer. |
+| `telegram_id` | integer | yes |  |
+| `username` | string or null | yes | Telegram handle without "@". |
+| `role` | string or null | yes | Their role there, in its words (`administrator`, `support`). |
+
+### ImportSurveyCounts
+
+How much of each kind the other bot's data holds: its customers, those with a balance (`balances`), its live services and test accounts, plans, discount and gift codes, required channels, bank cards, and the customers of its reseller bots (`resellers`).
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `customers` | integer | yes |  |
+| `balances` | integer | yes |  |
+| `services` | integer | yes |  |
+| `tests` | integer | yes |  |
+| `plans` | integer | yes |  |
+| `discount_codes` | integer | yes |  |
+| `gift_codes` | integer | yes |  |
+| `channels` | integer | yes |  |
+| `cards` | integer | yes |  |
+| `resellers` | integer | yes |  |
+
+### ImportSurveyGroup
+
+A customer group the other bot's customers would join (its agents', say): the shop's group of that name, or a new one.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `name` | string | yes |  |
+| `agent_pricing` | boolean | yes | A new group pays plans' agent prices («همکار»). |
+| `customers` | integer | yes |  |
+
+### ImportSurveyPanel
+
+A VPN panel the other bot sold on. Its services are found on the server it maps to by their client names, and adopted as they stand: nothing on the panel changes. Its connection (with its secrets) never leaves the server.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `key` | string | yes | What the other bot's services name it by: its key in `ImportChoices.panels`. |
+| `name` | string | yes |  |
+| `type` | string | yes | The other bot's word for its kind (`marzban`, `x-ui_single` …), as it is. |
+| `url` | string or null | yes | The panel's address. |
+| `driver` | string or null | yes | The panel connector of this shop that speaks to it (`DriverDescription.key` of `GET /servers/drivers`); null when none does. |
+| `unsupported` | string or null | yes | Why no connector does, in the owner's words, when `driver` is null. |
+| `addable` | boolean | yes | It can be added as a new server of the shop (the choice `add`): a connector speaks to it and the other bot kept its connection. |
+| `services` | integer | yes | Its services the import would bring. |
+| `suggested_server_id` | integer or null | yes | A server of the shop with the same connector on the same address (scheme, host and port), which the proposed choices map it to; null for none. |
+
+### ImportsResponse
+
+The owner's «انتقال از ربات دیگر» page.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `migrators` | list of [DriverDescription](#driverdescription) | yes | The bots an import reads, each with its `mark` and `vendor` (traits). |
+| `current` | [ImportState](#importstate) or null | yes | The import under way; null for none. |
+| `history` | list of [ImportState](#importstate) | yes | The latest ten that ended, newest first. |
+| `upload_max_bytes` | integer | yes | The largest backup file this host takes in one upload (PHP's smaller limit); 0 when it does not say. |
 
 ### InboundsResponse
 
@@ -7406,7 +8086,7 @@ A card-to-card method's settings (`ManualMethodRow.config`): the manual driver's
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `instructions` | string | yes |  |
-| `auto_approve_after` | integer | yes | Minutes a receipt sent in the bot may wait for review before it is approved automatically; 0 for manual approval only. |
+| `auto_approve_after` | integer | yes | Minutes a receipt sent in the bot (or uploaded by a Telegram account: any mini app customer, or a website customer signed in with Telegram) may wait for review before it is approved automatically; 0 for manual approval only. |
 
 ### ManualMethodRow
 

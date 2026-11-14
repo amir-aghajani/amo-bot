@@ -284,7 +284,8 @@ final class ProvisioningService
      * Keep a client the shop did not make as the customer's service — one they claimed by its link (ServiceClaims): its
      * row as the panel answered (`$client`, asked at `$observedAt`) through values(), marked claimed, the customer's as
      * any new owner's (newOwner()), its IP limit the panel's, and no plan unless `$carried` brings one (a stale record of
-     * the customer's: its plan and «تمدید خودکار»).
+     * the customer's: its plan and «تمدید خودکار»; an import of another bot's service: its plan, with `claimed_at` null —
+     * one sold from that plan, no claim).
      * - Ended by time or traffic, it comes ended, to renew — whether or not the panel switched it off (3x-ui switches a
      *   client off by itself once it is used up) —, and its removal (ServiceCleanup) counts from the claim, not from an
      *   end long past.
@@ -294,7 +295,7 @@ final class ProvisioningService
      * `$claimed` runs in the transaction that writes the row; a client the shop keeps already fails on the row's unique key.
      *
      * @param \Closure(Subscription): void $claimed
-     * @param array{plan_id?: int|null, auto_renew?: bool, is_test?: bool, label?: string|null} $carried
+     * @param array{plan_id?: int|null, auto_renew?: bool, is_test?: bool, label?: string|null, claimed_at?: null} $carried
      * @throws UniqueConstraintViolationException when the shop keeps the client already
      */
     public function adopt(User $user, Server $server, ClientInfo $client, Carbon $observedAt, \Closure $claimed, array $carried = []): Subscription

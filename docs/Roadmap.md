@@ -88,6 +88,9 @@ Rough order of work. Items marked ✅ exist in the code today; `[ ]` are open.
   shop —, delivered at once
 - ✅ Agents: servers and plans hidden from an agent's shop, an end date and a monthly minimum purchase of traffic, warned
   of ahead, then the shop's selling suspended — never its bot —; the owner's «توقف فروش» and «ادامه فروش» too
+- ✅ «انتقال از ربات دیگر»: another bot's customers, wallets, services (as they stand on their panels), plans, codes,
+  required channels and cards brought into the main shop from its backup or its database, reviewed first, never twice —
+  Faoxima's first, each other bot a migrator driver
 - [ ] Activity log
 
 ## Scheduled tasks
@@ -95,7 +98,8 @@ Rough order of work. Items marked ✅ exist in the code today; `[ ]` are open.
 - ✅ «زمان‌بندی کارها»: how often each task runs, and the times a few of them decide by (an unpaid order's hours, the online gateways' asking, how long notices, tickets' pictures and the report groups' messages are kept), the owner's for the whole installation — the old fixed values the defaults
 
 ## More connectors and gateways
-- [ ] Panels: Marzban, Hiddify, WireGuard-based panels
+- ✅ Marzban (0.8 and later), its token kept across requests
+- [ ] Panels: Hiddify, Rebecca, Remnawave, WireGuard-based panels
 - ✅ Zarinpal (Iran's bank cards), an online gateway
 - ✅ AtlasPay (card-to-card it confirms from the bank's text, paid in its Telegram mini app), an online gateway
 - ✅ AbanGateway (card-to-card to the merchant's own cards, confirmed from the bank's text), an online gateway

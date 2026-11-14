@@ -33,11 +33,12 @@ const OWNERS_ONLY = [
   '/settings/login',
   '/settings/update',
   '/settings/schedule',
+  '/settings/import',
   '/settings/advanced',
 ]
 
 /** The main shop's own: an agent's shop — in either panel — has none of them. */
-const MAIN_SHOPS_ONLY = ['/custom-services', '/bot-settings/service-claims']
+const MAIN_SHOPS_ONLY = ['/custom-services', '/bot-settings/service-claims', '/settings/import']
 
 const under = (path: string, places: string[]) => places.some((place) => path === place || path.startsWith(`${place}/`) || path.startsWith(`${place}#`))
 

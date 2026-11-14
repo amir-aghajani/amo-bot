@@ -6,6 +6,7 @@ import { Dash, ListView, RowTitleButton } from '@/components/list-view'
 import { Page, useReadFailure } from '@/components/page'
 import { PageHeader } from '@/components/page-header'
 import { AddMethodModal } from '@/components/payments/add-method-modal'
+import { DepositSettings } from '@/components/payments/deposits/deposit-settings-card'
 import { gatewayIcon, hasNote, MethodNote } from '@/components/payments/gateways'
 import { MethodForm } from '@/components/payments/gateways/method-form'
 import { kindLabel } from '@/components/payments/kinds'
@@ -24,7 +25,14 @@ import { paymentDriversQuery, paymentMethodsQuery } from '@/lib/queries'
 import { useRows } from '@/lib/use-rows'
 import { cn } from '@/lib/utils'
 
-/** «روش‌های پرداخت»: the ways to pay in checkout order — the built-in wallet plus the methods the admin adds. */
+/** What the page's header says of it — the settings search's words for the page too (scripts/settings-index.mjs). */
+const DESCRIPTION =
+  'راه‌هایی که مشتری با آن‌ها پرداخت می‌کند؛ هر روش برای مبلغ‌های میان کمترین و بیشترین مبلغش پیشنهاد می‌شود، یک روش کارت به کارت چند کارت دارد، و ترتیب همین لیست ترتیب دکمه‌ها هنگام پرداخت است.'
+
+/**
+ * «روش‌های پرداخت»: the ways to pay in checkout order — the built-in wallet plus the methods the admin adds —, then the
+ * card payments a bank SMS approves («تایید خودکار واریز»).
+ */
 export function PaymentMethodsPage() {
   const [adding, setAdding] = useState(false)
   // A method is added through the driver picker; the editor only ever opens on one that exists.
@@ -47,7 +55,7 @@ export function PaymentMethodsPage() {
         title="روش‌های پرداخت"
         // Counted once the list was read — never a zero it does not know.
         count={list.isPending || list.error ? undefined : methods.length}
-        description="راه‌هایی که مشتری با آن‌ها پرداخت می‌کند؛ هر روش برای مبلغ‌های میان کمترین و بیشترین مبلغش پیشنهاد می‌شود، یک روش کارت به کارت چند کارت دارد، و ترتیب همین لیست ترتیب دکمه‌ها هنگام پرداخت است."
+        description={DESCRIPTION}
         actions={
           <Button icon={Plus} onClick={() => setAdding(true)}>
             افزودن روش پرداخت
@@ -129,6 +137,8 @@ export function PaymentMethodsPage() {
       </ListView>
 
       <p className="text-footnote text-muted-foreground">کیف پول همیشه هست و حذف نمی‌شود؛ فقط نامش، کمترین و بیشترین مبلغش و روشن و خاموش بودنش عوض می‌شود.</p>
+
+      <DepositSettings />
 
       <AddMethodModal
         open={adding}

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Rewards\Services;
 
+use App\Modules\Discounts\Services\DiscountSettings;
 use App\Modules\Notifications\Services\CustomerNotifier;
 use App\Modules\Orders\Models\Order;
 use App\Modules\Payments\Models\Payment;
@@ -28,8 +29,9 @@ use Psr\Log\LoggerInterface;
  * The day's row is inserted first (unique per shop and day), so two runs never draw twice. Entries are orders bought for
  * themselves at a price and paid since the draw before it (window()): one draw's window ends where the next one's begins,
  * so a late run, or the hour moved earlier or later, enters no order twice and skips none. Bot admins, banned customers
- * and (optionally) agents never enter. Winners are drawn by weight, each customer once; one who cannot be given the prize
- * is passed over, and a plan no server can deliver ends the draw.
+ * and (optionally) agents never enter — nor, while they go without the customers' perks (Perks), any who pays agent
+ * prices. Winners are drawn by weight, each customer once; one who cannot be given the prize is passed over, and a plan
+ * no server can deliver ends the draw.
  */
 final class Lottery
 {
@@ -50,6 +52,7 @@ final class Lottery
 
     public function __construct(
         private readonly LotterySettings $settings,
+        private readonly DiscountSettings $discounts,
         private readonly Rewards $rewards,
         private readonly CustomerNotifier $notifier,
         private readonly ShopReports $reports,
@@ -85,10 +88,13 @@ final class Lottery
     public function entries(Carbon $since, Carbon $until, ?User $only = null): array
     {
         $paid = Payment::query()->select('order_id')->whereNotNull('paid_at')->where('paid_at', '>=', $since)->where('paid_at', '<', $until);
+        $withheld = $this->discounts->agentsWithoutPerks();
         $users = User::query()->select('id')
             ->where('role', '!=', UserRole::Admin->value)
             ->where('status', '!=', UserStatus::Banned->value)
-            ->when($this->settings->excludesAgents(), static fn(Builder $query) => $query->whereNull('agency_level_id'));
+            ->when($this->settings->excludesAgents() || $withheld, static fn(Builder $query) => $query->whereNull('agency_level_id'))
+            // Perks::withheld() for many at once: nobody in a «همکار» group either.
+            ->when($withheld, static fn(Builder $query) => $query->whereDoesntHave('groups', static fn(Builder $group) => $group->where('agent_pricing', true)));
 
         $orders = Order::spending()
             ->when($only !== null, static fn(Builder $query) => $query->where('user_id', $only?->id))

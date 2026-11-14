@@ -5,6 +5,7 @@ import { Link } from 'react-router'
 import { keys } from '@/apps/app/lib/query'
 import { useAccount, useShop } from '@/apps/app/lib/session'
 import { store } from '@/apps/app/lib/store'
+import { perksReach } from '@/apps/app/screens/home/parts/programs'
 import { BalanceCard } from '@/apps/app/screens/wallet/parts/balance-card'
 import { GiftCodeSheet } from '@/apps/app/screens/wallet/parts/gift-code'
 import { LedgerLine } from '@/apps/app/screens/wallet/parts/ledger'
@@ -19,7 +20,7 @@ import { formatMoney } from '@/lib/format'
 /*
  * «کیف پول», a tab of its own: the balance on its card, what the customer does with it — a top-up, a transfer to another
  * customer and a gift code while the shop offers them, the history —, the latest lines of its ledger, and the way to
- * the customer club while loyalty or cashback runs.
+ * the customer club while loyalty or cashback runs and the perks reach the customer (`GET /me` `perks`).
  */
 
 /** How many of the ledger's latest lines the wallet shows. */
@@ -68,6 +69,7 @@ export default function WalletScreen() {
   const recent = useQuery({ queryKey: [...keys.transactions, 'recent'], queryFn: () => store.get<StoreWalletTransactionsResponse>('/wallet/transactions') })
 
   const programs = shop?.shop.programs
+  const club = perksReach(account) && (programs?.loyalty === true || programs?.cashback === true)
   const balance = wallet.data?.balance ?? account?.customer.balance
   const holder = account === undefined ? null : [account.customer.first_name, account.customer.last_name].filter(Boolean).join(' ') || null
   const tier = programs?.loyalty ? (account?.loyalty.tier ?? null) : null
@@ -97,7 +99,7 @@ export default function WalletScreen() {
         ))}
       </nav>
 
-      {(programs?.loyalty || programs?.cashback) && (
+      {club && (
         <Link to="/club" onClick={() => tap()} className="card press flex items-center gap-3 p-4">
           <IconTile icon={tier !== null ? Crown : Sparkles} size="lg" />
           <span className="flex min-w-0 flex-1 flex-col gap-0.5">

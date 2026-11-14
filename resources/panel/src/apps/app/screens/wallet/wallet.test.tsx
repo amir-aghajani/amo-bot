@@ -77,6 +77,16 @@ describe('the wallet', () => {
     expect(screen.getByText('۲۰۰٬۰۰۰ تومان خرید دیگر تا سطح طلایی')).toBeTruthy()
   })
 
+  it('leads a customer the perks do not reach to no club', async () => {
+    server().on('GET', `${API}/wallet`, json(walletRow()))
+    server().on('GET', `${API}/wallet/transactions`, json({ transactions: [], meta: { page: 1, per_page: 25, total: 0, last_page: 1 } } satisfies StoreWalletTransactionsResponse))
+    render(app.screen(<WalletScreen />, { at: '/wallet', account: app.account({ perks: false }) }))
+
+    expect(await screen.findByText('هنوز تراکنشی در کیف پول شما ثبت نشده است.')).toBeTruthy()
+    expect(screen.queryByText('باشگاه مشتریان')).toBeNull()
+    expect(screen.queryByRole('link', { name: /کش‌بک/ })).toBeNull()
+  })
+
   it('redeems a gift code: the shop says what it gave, and the balance is read again', async () => {
     open()
     server().on(

@@ -91,8 +91,8 @@ describe('the sidebar’s column', () => {
     }
   })
 
-  it('holds the backups and the panel’s look among every panel’s own settings, and the owner’s email, login, AmoBot’s update and the schedule among the owner’s', () => {
-    expect(panelSettingsOf(ADMIN_NAV)).toEqual(['telegram', 'database', 'app', 'mail', 'sms', 'login', 'appearance', 'update', 'schedule', 'backups', 'advanced'])
+  it('holds the backups and the panel’s look among every panel’s own settings, and the owner’s email, login, AmoBot’s update, the schedule and the import from another bot among the owner’s', () => {
+    expect(panelSettingsOf(ADMIN_NAV)).toEqual(['telegram', 'database', 'app', 'mail', 'sms', 'login', 'appearance', 'update', 'schedule', 'backups', 'import', 'advanced'])
     expect(panelSettingsOf(AGENT_NAV)).toEqual(['backups', 'appearance'])
   })
 })

@@ -131,6 +131,12 @@ act for each other —, so the role is for people the owner trusts. The shop's c
   raw body with the method's webhook secret (kept encrypted), compared in constant time. A webhook no method signs is
   refused and changes nothing; one signed for another sum than the payment's is held for support. The webhook's address
   answers `404` for a gateway that takes no webhook.
+- The bank SMS a phone app forwards («تایید خودکار واریز») are taken only with the shop's own key in `X-API-Key`: one
+  per shop, 32 random bytes, kept encrypted under `APP_KEY`, compared in constant time (`hash_equals`) and made anew
+  from the panel on request — the old one stops working at once. A wrong key, or a shop that is none, answers `401`;
+  only the right key hears that a shop is not listening (`403`).
+  An SMS approves a card payment only when exactly one of the shop's open card payments asks its sum; the same SMS
+  sent again is answered by what came of it the first time.
 
 ### Telegram, uploads and outgoing calls
 

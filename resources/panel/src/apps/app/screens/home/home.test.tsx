@@ -28,11 +28,12 @@ function open({
   all = active.length,
   sales = [SALE],
   unread = 0,
-}: { shop?: StoreResponse; active?: StoreSubscription[]; all?: number; sales?: StoreSale[]; unread?: number } = {}) {
+  perks = true,
+}: { shop?: StoreResponse; active?: StoreSubscription[]; all?: number; sales?: StoreSale[]; unread?: number; perks?: boolean } = {}) {
   server()
     .on('GET', `${API}/subscriptions`, (request) => json(request.query.get('status') === 'active' ? page(active) : page([], all)))
     .on('GET', `${API}/sales`, json({ sales } satisfies StoreSalesResponse))
-  render(app.screen(<HomeScreen />, { shop, account: app.account({ unread_notifications: unread }) }))
+  render(app.screen(<HomeScreen />, { shop, account: app.account({ unread_notifications: unread, perks }) }))
 }
 
 describe('the home screen', () => {
@@ -104,6 +105,22 @@ describe('the home screen', () => {
         .getAllByRole('link')
         .map((link) => link.getAttribute('href')),
     ).toEqual(['/buy', '/services', '/wallet', '/support', '/tutorial'])
+  })
+
+  it('leaves the wheel, the draw and the club out for a customer the perks do not reach', async () => {
+    // Invitations off: the club has nothing left for them. GET /sales lists no sale for them.
+    open({ shop: app.shop({ referral: { enabled: false, rate: 10, first_only: false } }), sales: [], perks: false })
+
+    const shortcuts = screen.getByRole('navigation', { name: 'دسترسی سریع' })
+    await until(() => expect(within(shortcuts).getByRole('link', { name: 'نظرات' })).toBeTruthy())
+    expect(
+      within(shortcuts)
+        .getAllByRole('link')
+        .map((link) => link.getAttribute('href')),
+    ).toEqual(['/buy', '/services', '/wallet', '/test', '/support', '/tutorial', '/reviews'])
+    await until(() => expect(server().sent('GET', `${API}/sales`)).toHaveLength(1))
+    expect(screen.queryByRole('region', { name: 'بنرها' })).toBeNull()
+    expect(screen.queryByText('گردونه شانس')).toBeNull()
   })
 
   it('with no service at all, leads to buying the first', async () => {

@@ -53,8 +53,8 @@ colleagues) — and the servers it can be bought on. «افزودن پلن» ope
   a six-hour plan); at most 3650 days — 87600 hours —; `0` never ends. The term is kept in hours, so «۱ روز» and
   «۲۴ ساعت» are the same term: a plan of whole days opens in days, any other in hours. A purchase or a renewal that
   would end its service after 17 January 2038 («۲۸ دی ۱۴۱۶») is refused ([Services](Services.md#watch-out-for)).
-- «تعداد کاربر» — how many devices may connect at the same time, 0 to 1000; `0` no limit. PasarGuard panels have no
-  such limit, so it is not applied on a PasarGuard server. It is where a service starts, and where every renewal on the
+- «تعداد کاربر» — how many devices may connect at the same time, 0 to 1000; `0` no limit. PasarGuard and Marzban panels
+  have no such limit, so it is not applied on their servers. It is where a service starts, and where every renewal on the
   plan brings it back: extra devices («کاربر اضافه») raise the service's limit for the period they are bought for only
   ([below](#devices-and-renewals)).
 
@@ -91,7 +91,8 @@ price.
   refunded counts as having bought — delivered, or failed and waiting for support's retry; a free plan too. An order
   never paid, cancelled unpaid or refunded does not, and neither does a wallet top-up or a service given free (a prize, a
   reward). So a customer whose only purchase was refunded is a newcomer again. Each shop counts its own customers: a
-  customer of the main bot is a newcomer in an agent's bot.
+  customer of the main bot is a newcomer in an agent's bot. A customer an import found had bought in the bot the shop
+  came from is no newcomer ([Importing from another bot](Importing.md#customers)).
 - **In the bot** — such a customer is shown the plan at its first-purchase price, with a line under its details,
   «🎁 این قیمت ویژه اولین خرید شماست؛ قیمت عادی این پلن … است.» — a bot text you may reword, or empty to drop it
   ([Bot texts and keyboards](Bot-Texts-And-Keyboards.md)) —, and the checkout charges it.

@@ -6,6 +6,7 @@ namespace App\Modules\Telegram\Reports;
 
 use App\Modules\Telegram\Api\BotApi;
 use App\Modules\Telegram\Api\TelegramApiException;
+use App\Modules\Telegram\Models\ReportMessage;
 use App\Modules\Telegram\Update\Update;
 use App\Modules\Users\Models\User;
 use Psr\Log\LoggerInterface;
@@ -75,20 +76,50 @@ final class GroupButtons
     }
 
     /**
-     * Put these buttons under the pressed message; null takes them off.
+     * Put these buttons under the pressed message; null takes them off. Its «⚙️ مدیریت کاربر» stays under them
+     * (UserManagement::kept()): a receipt decided, a ticket closed, the customer is still there to manage.
      *
      * @param list<list<array<string, mixed>>>|null $rows
      */
     public function buttons(Update $update, ?array $rows): void
     {
-        $this->set((int) $update->chatId(), (int) $update->messageId(), $rows);
+        $this->set((int) $update->chatId(), (int) $update->messageId(), [...$rows ?? [], ...UserManagement::kept(self::rowsOf($update))]);
     }
 
-    /** Nothing is left to decide here: the pressed message loses its buttons and a popup says why. */
+    /** Nothing is left to decide here: the pressed message loses its buttons (but «⚙️ مدیریت کاربر»); a popup says why. */
     public function dismiss(Update $update, string $why): void
     {
         $this->buttons($update, null);
         $this->answer($update, $why, alert: true);
+    }
+
+    /**
+     * The customer is gone: the pressed message loses the «⚙️ مدیریت کاربر» pressed, its other buttons stay — in
+     * Telegram and in its report's record, which a follow-up clearing its buttons keeps from (ReportSender); a popup
+     * says why.
+     */
+    public function forget(Update $update, string $why): void
+    {
+        $chatId = (int) $update->chatId();
+        $messageId = (int) $update->messageId();
+        $data = (string) $update->callbackData();
+        $this->set($chatId, $messageId, UserManagement::without(self::rowsOf($update), $data));
+        foreach (ReportMessage::query()->where('chat_id', $chatId)->where('message_id', $messageId)->whereNotNull('keyboard')->get() as $report) {
+            $report->forceFill(['keyboard' => UserManagement::without($report->keyboard ?? [], $data) ?: null])->save();
+        }
+        $this->answer($update, $why, alert: true);
+    }
+
+    /**
+     * The buttons under the pressed message, as Telegram sent them with the press.
+     *
+     * @return list<list<array<string, mixed>>>
+     */
+    private static function rowsOf(Update $update): array
+    {
+        $rows = $update->message()['reply_markup']['inline_keyboard'] ?? [];
+
+        return is_array($rows) ? array_values(array_filter($rows, is_array(...))) : [];
     }
 
     /**

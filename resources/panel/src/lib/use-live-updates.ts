@@ -72,8 +72,19 @@ const AREA_QUERIES: Record<Area, readonly QueryKey[]> = {
     queryKeys.loyaltyTiers,
     queryKeys.tests,
   ],
-  // The payments, the orders they pay, each method's count, the dashboard's revenue, the sidebar's receipts to review.
-  payments: [queryKeys.payments, queryKeys.everyPayment, queryKeys.orders, queryKeys.everyOrder, queryKeys.paymentMethods, queryKeys.dashboards, queryKeys.queues],
+  // The payments, the orders they pay, each method's count, the dashboard's revenue, the sidebar's receipts to review —
+  // and the bank SMS that approve card payments, with when the last came.
+  payments: [
+    queryKeys.payments,
+    queryKeys.everyPayment,
+    queryKeys.orders,
+    queryKeys.everyOrder,
+    queryKeys.paymentMethods,
+    queryKeys.dashboards,
+    queryKeys.queues,
+    queryKeys.deposits,
+    queryKeys.depositSettings,
+  ],
   // The services, the orders that sold them, the counts of a customer, an agent's bot, a plan and a server — a server's
   // room, so whether it can sell or give a test —, whom a grant would reach, the dashboard, where each test stands.
   subscriptions: [

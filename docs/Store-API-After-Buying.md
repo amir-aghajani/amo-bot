@@ -452,10 +452,12 @@ the next one is theirs), the day's tests given out, tests for newcomers alone.
 
 First, as the bot asks before it gives anything for free, the account must have a Telegram account (the bot's quotas
 count people by it: `این بخش برای حساب‌هایی است که به تلگرام وصل‌اند؛ …`), its own phone number while the shop asks
-one (`shop.phone_required`: `اول در ربات فروشگاه شماره موبایل خود را تایید کنید و بعد دوباره امتحان کنید.`) and the
-shop's required channels joined, as Telegram says now (`اول در «…» عضو شوید و بعد دوباره امتحان کنید.`). The shop's
-admins pass. Short of any, `GET` answers it as `refusal` with no offers, and `POST` as a `422` on `status` in
-the same words.
+one before everything or before a free test (`shop.phone_required`, or `shop.phone_moments` has `test`:
+`اول در ربات فروشگاه شماره موبایل خود را تایید کنید و بعد دوباره امتحان کنید.`) — an Iranian one while the shop takes
+those alone (`shop.phone_iran_only`; another country's on file: `این فروشگاه فقط شماره‌های ایران (‎+98) را می‌پذیرد؛ …`)
+— and the shop's required channels joined, as Telegram says now (`اول در «…» عضو شوید و بعد دوباره امتحان کنید.`).
+The shop's admins pass, and a customer support excused from the number (`GET /me`'s `phone_exempt`) is not asked it.
+Short of any, `GET` answers it as `refusal` with no offers, and `POST` as a `422` on `status` in the same words.
 
 `POST /test-account` `{ "server_id": 1 }` takes one there: `201` with `{ "subscription": … }`, the service as
 [services](#services) shows it, `is_test` true, made at once and counted against the quota. Nothing is sent in
@@ -518,7 +520,8 @@ the customer now, and gives its prize at once.
 - `balance` is the wallet after it. Nothing is sent in Telegram: show `words`.
 
 Refused before anything is spent, a `422` on `status` in the bot's words — `GET /wheel` too for the second and the
-third: what the bot asks before a free spin, as it does before a free test ([test accounts](#test-accounts)); the wheel
+third: what the bot asks before a free spin, as it does before a free test ([test accounts](#test-accounts)) — the
+number only while the shop asks it before everything (`shop.phone_required`); the wheel
 switched off; for buyers only, and they have bought nothing; too soon (and from when they may spin); no slice that can
 reach them now; the wallet short of the cost (what a spin costs, and how much is missing).
 

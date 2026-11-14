@@ -6,6 +6,7 @@ namespace App\Modules\Telegram\Keyboard;
 
 use App\Modules\Agency\Services\AgencySettings;
 use App\Modules\Bots\CurrentBot;
+use App\Modules\Discounts\Services\Perks;
 use App\Modules\Referrals\Services\ReferralSettings;
 use App\Modules\Rewards\Services\GiftCodeSettings;
 use App\Modules\Rewards\Services\WheelSettings;
@@ -69,6 +70,7 @@ final class MainMenu
         private readonly AgencySettings $agency,
         private readonly GiftCodeSettings $giftCodes,
         private readonly WheelSettings $wheel,
+        private readonly Perks $perks,
         private readonly TestAccountSettings $tests,
         private readonly MiniAppAddress $miniApp,
         private readonly Buttons $buttons,
@@ -191,8 +193,9 @@ final class MainMenu
 
     /**
      * The menu's `reply_markup` for a customer, without the buttons of programs switched off (an agent keeps
-     * «نمایندگی»: it is their account) — nor «📱 اپلیکیشن فروشگاه» while the shop's mini app gives no address (it is off,
-     * or the shop is not on https). They stay on the admin's layout and come back with their program. A layout of
+     * «نمایندگی»: it is their account; the wheel is off for one without the customers' perks, Perks) — nor «📱 اپلیکیشن
+     * فروشگاه» while the shop's mini app gives no address (it is off, or the shop is not on https). They stay on the
+     * admin's layout and come back with their program. A layout of
      * nothing but such buttons, all off, gives the built-in menu in its form — never an empty keyboard, which Telegram
      * refuses —, as KeyboardLayouts::get() does for one with nothing left in this shop.
      *
@@ -205,7 +208,7 @@ final class MainMenu
             'affiliates' => !$this->referrals->enabled(),
             'agency' => !$this->agency->enabled() && !$user->isAgent(),
             'gift' => !$this->giftCodes->enabled(),
-            'wheel' => !$this->wheel->enabled(),
+            'wheel' => !$this->wheel->enabled() || $this->perks->withheld($user),
             'test' => !$this->tests->enabled(),
             'app' => $app === null,
         ]));

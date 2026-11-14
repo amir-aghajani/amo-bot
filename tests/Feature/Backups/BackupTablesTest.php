@@ -48,6 +48,28 @@ final class BackupTablesTest extends DatabaseTestCase
         }
     }
 
+    /**
+     * A shop's restore empties what is only true now of that shop, by its `bot_id`; what is of no shop — an import's staged
+     * copy, its import the owner's — only the whole installation's restore empties, and it names no shop's rows.
+     */
+    public function testWhatIsOnlyTrueNowIsAShopsByItsBotOrNoShopsAtAll(): void
+    {
+        $db = $this->service(Connection::class);
+        $builder = $db->getSchemaBuilder();
+        $shops = [...BackupTables::SHOP, ...array_keys(BackupTables::CHILDREN)];
+
+        self::assertSame([], array_values(array_diff(BackupTables::OWNERS_TRANSIENT, BackupTables::TRANSIENT)));
+        foreach (array_diff(BackupTables::TRANSIENT, BackupTables::KEPT_ON_RESTORE) as $table) {
+            $owners = in_array($table, BackupTables::OWNERS_TRANSIENT, true);
+            self::assertSame(!$owners, $builder->hasColumn($table, 'bot_id'), $owners ? "{$table} is no shop's" : "{$table}: a shop's restore empties it by its bot_id (or it is OWNERS_TRANSIENT)");
+        }
+        foreach (BackupTables::OWNERS_TRANSIENT as $table) {
+            foreach ($builder->getForeignKeys($table) as $key) {
+                self::assertNotContains(substr($key['foreign_table'], strlen($db->getTablePrefix())), $shops, "{$table} names no shop's rows");
+            }
+        }
+    }
+
     public function testWhatTheRestoreKeepsOfTheOwnersNamesColumnsThatAre(): void
     {
         $builder = $this->service(Connection::class)->getSchemaBuilder();

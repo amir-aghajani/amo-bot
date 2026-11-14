@@ -406,7 +406,7 @@ connection, as a renewal's do (its screen says so). What is not offered:
 - neither, for a service switched off by support, nor for one that ended on both counts — that is a renewal's;
 - traffic, for an unlimited service; time, for one that never ends;
 - devices, for a service of unlimited devices, one whose time or traffic ran out, or one on a server whose panel has no
-  device limit (PasarGuard).
+  device limit (PasarGuard, Marzban).
 
 A service whose traffic or time ran out is not in «🛍️ سرویس‌های من», which lists the running ones: the menu's
 «♻️ تمدید سرویس» list reaches it, and its renewal's checkout offers the extra it may take beside the renewal. In an

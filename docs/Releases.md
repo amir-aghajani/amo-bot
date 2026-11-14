@@ -13,6 +13,188 @@ While a version is being made its changes collect under **Unreleased**; releasin
 
 Nothing yet.
 
+## Version 0.9.0
+
+### Added
+
+- **«انتقال از ربات دیگر»** («تنظیمات پنل», the owner's, in the main shop) — a shop moving from another Telegram bot
+  that sells VPN services brings it over: its customers with their wallet balances, agent levels, mobile numbers, bans,
+  own discounts and referrers, their services — still on the same VPN panels, taken as they stand: the same link,
+  traffic used and end —, its plans with their agent prices, its discount and gift codes, required channels and bank
+  cards ([Importing from another bot](Importing.md)). **Faoxima** is the first bot it reads.
+  - **From its backup, or its database**: Faoxima's own `backup.zip` — the one it sends its report channel every few
+    hours —, an export of its database (phpMyAdmin, `mysqldump`) as a `.sql`, zipped or gzipped, or a read-only
+    connection to its MySQL database. It is read once into a copy inside the shop, so the old bot may be gone already;
+    the file and the connection are deleted once it is read. **Stop the old bot before the backup you import for good**:
+    what changes there after it — a code redeemed, a purchase, a balance — does not come, and the screen says so.
+  - **Reviewed before anything is written**: what was found; each of the old bot's panels mapped to one of your servers
+    of the same kind (the one at its address suggested), added as a new server from the old bot's own connection —
+    with its capacity, and switched off when the old bot had closed it to sales —, or left behind; a switch for each
+    kind of thing to bring; what stays behind — payment history, tickets, resellers' bots, the panels' own prices, the
+    bot's settings — and the warnings worth reading first: card payments still waiting for approval, agencies with an
+    end date ahead, services that found no plan, a 3X-UI panel reached by its old login, cards shown to some customers
+    only, and more.
+  - **Quiet, and read-only toward the outside**: nothing changes on the VPN panels or in the old bot, no report goes to
+    the group, no referral gift is given and no customer is told. A balance comes as one wallet line, «موجودی منتقل‌شده
+    از Faoxima» (a debt as a debt); Faoxima's agents join two groups paying agent prices; plans come switched off unless
+    you choose otherwise, and a plan without a server stays off; every bank card comes switched off, for you to check;
+    gift codes keep one use, as the shop's do.
+  - **No newcomers twice**: a customer who bought in the old bot is no newcomer here — no first-purchase price, no
+    first-purchase-only code, no test kept for newcomers, no referral start gift for a first purchase. Imported
+    referrals count their start gift as decided, and a referral who bought there counts toward no milestone here.
+  - **Once, however often**: an import may be run again — on the day you switch, from the stopped bot's last backup —
+    and brings only what is new: what came is brought once, never again — what you edited or deleted since stays as you
+    left it (a deleted customer's services counted as removed), and a balance is credited once. A customer who merged
+    two accounts on the website since is found in the account that stayed. An agent brought while «گروه‌ها» was off
+    joins their group when it runs again with it on — once: one you take out stays out. The services of a panel that
+    did not answer, asked again for three steps, come with the next run — and what stays behind today can come with a
+    later version, from the old bot's last backup: keep that file.
+  - **Excused numbers too**: customers Faoxima's admin excused from giving a number come excused from the phone rule,
+    with «شماره موبایل‌ها» on.
+  - **Step by step in the panel, no console**: the reading and the writing go on while the page is open, and resume
+    where they stopped when you come back. Its report counts what came of each kind — new, found in the shop already,
+    left out — and lists what did not come and why. The old bot's copy and its panels' passwords are deleted as an
+    import ends; one left open a week is cancelled by a new daily task of «زمان‌بندی کارها», «پاک‌سازی انتقال‌ها», which
+    also deletes the files of an import a restore took away.
+- **Marzban, a fourth VPN panel** («Marzban» in «افزودن سرور», version 0.8 and later) — an admin's username and password,
+  the one way in (Marzban has no API keys), traded for a token the shop keeps across requests until shortly before it
+  ends, so Marzban's notices of each sign-in to its Telegram admins come seldom — never, with the shop's IP in its
+  `LOGIN_NOTIFY_WHITE_LIST`. Give it a sudo admin: another sees only its own users, and its server is read a service at
+  a time. The inbounds of its Xray config are sold, by their tags; a term from the first connection is its *on hold*;
+  a change keeps the user's next plan, and a traffic reset keeps a switched-off service off and a waiting one waiting;
+  «تغییر لینک» revokes the link; it has no IP limit, so no device count and no «کاربر اضافه» on it
+  ([Servers](Servers.md#the-connectors)). Rebecca, its fork, is not supported.
+- **«⚙️ مدیریت کاربر» under every report about a customer** in the report group — a purchase, a renewal, a top-up, a
+  receipt, a test, a service claimed, handed on or deleted, a failed delivery, a held payment, a ticket, a review, an
+  agency request, an agent's selling suspended or opened again, a referral alert — not only a newcomer's: their card,
+  the one `/manage` opens, right under it. A transfer between two customers has a button for each, and a customer gone
+  since takes only their own off. It stays when the report's other buttons go — a receipt decided, a ticket closed
+  ([The report group](Telegram-Group.md#a-customers-card)).
+- **«همکارها فقط با قیمت همکاری بخرند»** («کدهای تخفیف» › «تنظیمات», each shop its own, off by default) — switched on,
+  whoever pays agent prices (an agent, a «همکار» group's customer) gets none of the customers' perks, whatever they buy:
+  no sale, loyalty tier, discount code or first-purchase price, no cashback, no lucky wheel, no nightly draw. A plan's
+  agent price is what they pay for it; where none applies (a plan without one, extra traffic, time or devices, a service
+  they build) they pay the regular price. The bot and the mini app show them none of it (no tier on the wallet screen,
+  no wheel button, no sale banner, no «🏷 کد تخفیف دارم» at the checkout). A customer's own discount, which you gave
+  that one person, stays ([Discounts](Discounts.md#agents-and-colleagues)).
+- **The phone number, asked only where it matters** — «تایید شماره موبایل» gains «کجا پرسیده شود»: **«کل ربات»** (as
+  before: nothing works until the number is in) or **«فقط موقع این کارها»** — the bot works as usual and asks for the
+  number only before the moments ticked: a purchase, a renewal (and extra traffic, time or devices), a free test, a
+  payment by the shop's own card-to-card method (an online gateway asks no number). The mini app asks at the same
+  moments ([Bot settings](Bot-Settings.md)). And **«فقط شماره‌های ایران (‎+98)»**, switched on, refuses another
+  country's number; a customer verified earlier with one is asked again, and their page in the panel says so.
+- **Customers excused from the phone number** — «معاف از ارسال شماره موبایل» on a customer's page (card «شماره موبایل»),
+  «📱 معاف از شماره» on the report group's card, and the website's admin side: an excused customer is never asked for
+  their number, anywhere — nor are the bot's admins, and the mini app offers them no «ثبت شماره تلفن»
+  ([Customers](Customers.md#excused-from-the-phone-number)).
+- **Card-to-card confirmed by the bank's SMS («تایید خودکار واریز»)** — with ForApp, a free Android app that forwards the
+  bank's deposit SMS from your phone, a card payment is approved by itself in seconds: each card payment asks a sum of
+  its own (a few Toman, at most 999, above the price), the customer transfers it exactly, needs send no receipt, and is
+  delivered the moment the SMS comes — in the bot, on the website and in the mini app. A sum a customer may still
+  transfer — a refused payment's on an open order, or one refused, dropped or approved by hand in the last three days —
+  is never given to another payment, and a late transfer of a refused payment's sum approves that payment. A sum no
+  payment asks, or two do, or an SMS ForApp did not take for a bank's deposit, approves nothing and is said in the
+  report group («واریز بدون پرداخت», with why); every SMS is listed under «پرداخت‌ها» › «واریزهای پیامکی» and kept 90
+  days. A card payment whose method's «بیشترین مبلغ» leaves no room above the price asks for its receipt as usual.
+  Switched on, and ForApp connected, on «روش‌های پرداخت»
+  ([Payment methods](Payment-Methods.md#confirmed-by-the-banks-sms)).
+- **«ارسال پیام» — writing to a customer through the bot** — from their page in the panel, their card in the report
+  group («✉️ ارسال پیام») or the website's admin side, without opening their chat with your own account: the shop's
+  bot sends it — under «📩 پیام از طرف پشتیبانی:», which «عنوان پیام پشتیبانی» in the bot settings switches off —, by
+  email to one without Telegram or who blocked the bot, and it stays on their website. You are told what came of it. A
+  message holds 3,500 characters as Telegram counts them (an emoji is two), cut to fit one message under a long
+  reworded heading. The website's admin side never writes to an admin's account, its own included, or an agent's: those
+  are written to from a panel ([Customers](Customers.md#writing-to-a-customer)).
+
+### Fixed
+
+- **PasarGuard: a service with a fixed end that once waited for its first connection** went back on hold when switched
+  off and on — PasarGuard 5 does that to any switched-off user still carrying a duration, which its API cannot clear —,
+  and then started its old term over its end at its next connection. It now comes back active, as it should; so does an
+  unlimited service the shop updates with its term ([Servers](Servers.md#the-connectors)).
+- **A card receipt sent from the mini app was never approved by itself**, whatever the method's «تایید خودکار (دقیقه)»:
+  it was taken as a website upload, and those always waited for support — their account might be an email made a minute
+  ago. The mini app's customers are Telegram accounts, as the bot's are: their receipts now approve by themselves like
+  the bot's — and so do those of website customers who signed in with Telegram. One only an email or a mobile number
+  vouches for still waits for support ([Payment methods](Payment-Methods.md#approving-receipts-by-themselves)).
+- **A backup taken while the shop writes** — a purchase, an import — could hold half of a write. It now reads every
+  table at one moment of the database ([Backups](Backups.md)).
+- **The address hints of PasarGuard and HMPanel** in «افزودن سرور» showed `/dashboard` (and HMPanel's `/api`) the wrong
+  way round in the right-to-left panel, as `dashboard/`.
+
+### Upgrading
+
+- **The database gains five tables** — four for the imports: `imports`, `import_rows` (an import's copy of the other
+  bot's data, deleted as it ends), `import_links` (what imports brought, so nothing comes twice) and `import_problems`
+  (their reports); and `deposits`, the bank SMS «تایید خودکار واریز» was sent (kept 90 days) — and two columns of
+  `users`: `bought_elsewhere_at` (a customer an import learned had bought in the old bot) and `phone_exempt` (a customer
+  excused from the phone number). The panel's update runs this upgrade by itself (after an upgrade by hand, «ادامه
+  به‌روزرسانی» does). Since it changes the database, going back to 0.8.1 afterwards takes your backup
+  ([Upgrading](Upgrading.md)).
+- **Backups**: the whole installation's holds the imports' reports, and the main shop's rows what they brought — never an
+  import's copy of the other bot's data ([Backups](Backups.md#what-a-backup-holds)).
+- Another bot to import from is a driver of a new family, the migrators (`Imports\Contracts\Migrator`, registered in
+  `import.migrators`): a folder, its registration and its tests ([Drivers](Drivers.md#a-migrator)). A phone app that
+  forwards the bank's SMS is a `Payments\Deposits\Contracts\DepositSource` beside the drivers, listed in
+  `Payments\Deposits\DepositSources` — ForApp the first ([Drivers](Drivers.md)).
+- Tools of your own that write through the panels' API: the owner's `GET` and `POST /imports` (multipart `migrator` and
+  `file`), `POST /imports/database`, `GET` and `DELETE /imports/{id}`, `POST /imports/{id}/continue` (with `stepped`,
+  false when another step held the import), `PUT /imports/{id}/choices`, `POST /imports/{id}/start` and
+  `GET /imports/{id}/problems` (optional `reason` and `kind`, 50 a page) are new (`ImportsResponse` with
+  `upload_max_bytes`, `ImportResponse`, `ImportStepResponse`, `ImportState`, `ImportChoicesRequest`,
+  `ImportProblemsResponse`), in the main shop only; a server's request and its test take `driver: marzban`
+  (`ServerMarzbanRequest`: `auth_mode: password` alone, `username` and `password`); `ScheduleRequest` gains
+  `prune_imports_minutes`. **`PUT /bot/settings/general` now requires** `phone_scope` (`everywhere` or `moments`),
+  `phone_on_purchase`, `phone_on_renewal`, `phone_on_test`, `phone_on_card`, `phone_iran_only` and `support_header`
+  beside `enabled` and `phone_required`: a tool of 0.8 that sends those two alone gets a `422` — read
+  `GET /bot/settings` and send the group back whole. The bot's settings
+  (`BotSettingsData`) answer them, and `agents_without_perks`, saved by a new group, `agent_perks`
+  (`PUT /bot/settings/agent_perks`, `BotAgentPerksSettingsRequest`). `UserRow` gains `phone_exempt`;
+  `PUT /users/{id}/phone-exempt` (`UserPhoneExemptRequest`) and `POST /users/{id}/message` (`UserMessageRequest`:
+  `text`, at most 3,500 characters as Telegram counts them; answered with its `delivery`) are new, and so is
+  `GET /deposits` (the bank SMS and what came of each: `DepositsResponse`, `DepositRow`, `DepositStatus`; by `status`,
+  searched by sum or words) — the three on the website's admin API too —, with `GET` and `PUT /deposits/settings`
+  (`DepositSettingsRequest`, `DepositSettingsResponse`: the switch, the key and each phone app's `webhook_url`) and
+  `POST /deposits/settings/key` (a new key; the old one stops working at once). A payment method's
+  `auto_approve_after` covers a receipt uploaded by a Telegram account too. A phone app posts the bank's SMS to
+  `POST /webhooks/deposits/{source}/{bot}` (`forapp`), with the shop's key in `X-API-Key`: a wrong key, or a shop that
+  is none, is a `401`; a shop not listening a `403`, said only to the right key.
+
+### For website developers
+
+- **Breaking for a tool of 0.8 that saves the bot's general settings**: `PUT /api/{panel}/bot/settings/general` requires
+  `phone_scope`, `phone_on_purchase`, `phone_on_renewal`, `phone_on_test`, `phone_on_card`, `phone_iran_only` and
+  `support_header` too; `enabled` and `phone_required` alone are a `422`.
+- **`shop.phone_required` means less**: `GET /`'s `shop.phone_required` is `true` only while the bot asks every
+  customer's number before anything at all («کل ربات»). Where it asks only at some moments («فقط موقع این کارها») it is
+  `false`, and the new `shop.phone_moments` lists them — `purchase`, `renewal`, `test`, `card` (`PhoneMoment`) —, empty
+  while the number is asked before everything or not at all: a site that read `phone_required` as "the shop wants
+  numbers" reads both now. Through the mini app an order that is one of the moments is a `422` on `status` from a
+  customer without their number; through either key `POST /test-account` is, at `test`, and `GET /test-account`'s
+  `refusal` says so ([Store API: the shop](Store-API-Shop.md#what-the-site-asks-first)).
+- **`GET /`** gains `shop.phone_iran_only` (only Iranian numbers count: a customer with another country's on file is
+  asked again, and a free test's refusal says so) and `shop.card_auto_confirmed` (card transfers confirmed by the bank's
+  SMS).
+- **`phone_exempt`** on `GET /me`'s customer (`StoreCustomer`): the phone rule never asks this customer — support
+  excused them, or they are the bot's admin.
+- **`perks`** on `GET /me`: `false` for a customer the customers' perks do not reach (agent prices while
+  «همکارها فقط با قیمت همکاری بخرند» is on) — hide the code field, the wheel, the draw and cashback; a discount code
+  is a `422` for them, and `GET /sales`, sent with their token, lists no sale
+  ([Store API: the account](Store-API-Account.md#the-account)).
+- **A card transfer confirmed by the bank's SMS**: a checkout's `transfer` gains `auto_confirmed`. While it is `true`,
+  `transfer.amount` is the order's plus 1 to 999 Toman, a sum no other open card payment of the shop asks: show it as
+  the exact sum to transfer, say no receipt is needed, and read `GET /orders/{id}` every few seconds until the order is
+  delivered; the receipt's upload stays open for a transfer not confirmed. It is `false` — the receipt asked as usual —
+  for a payment whose method's highest amount leaves no room above the price
+  ([Store API: buying](Store-API-Buying.md#confirmed-by-the-banks-sms)).
+- **A new notice type, `support_message`** (`StoreNoticeType`): a message support wrote to the customer by hand
+  («ارسال پیام»), its `subject` `null` ([Store API: notifications](Store-API-Notifications.md#notice-types)).
+- **The admin API**: `PUT /admin/users/{id}/phone-exempt` excuses a customer from the phone number and
+  `POST /admin/users/{id}/message` writes to them through the shop's bot (`text`; answered with its `delivery`) — never
+  an admin's account, the admin's own included, or an agent's (a `403`) —, `GET /admin/deposits` lists the bank SMS
+  with what came of each, and `UserRow` gains `phone_exempt`
+  ([Store API: the shop's admins](Store-API-Admins.md#what-it-is)).
+
 ## Version 0.8.1
 
 ### Fixed
@@ -154,7 +336,7 @@ Nothing yet.
   on one panel's inbounds; its term from the first connection, IP limit and link are those of the 3X-UI beneath, the
   link HMPanel's own (`/s/…`) or «آدرس اشتراک». No «تغییر لینک» and no CPU, RAM or disk on it. A key answers 60 calls
   a minute unless made with more: past that the server waits a few minutes, and says why
-  ([Servers](Servers.md#the-three-connectors)).
+  ([Servers](Servers.md#the-connectors)).
 - **SMS, for a website's sign-in by phone number** («تنظیمات پنل › پیامک», the owner's) — the shop's one-time codes go
   out by SMS through **IPPanel** (ippanel.com), the first SMS provider: its access key, one of the account's lines, and
   a pattern approved in IPPanel's panel whose one variable is the code — the words are the pattern's, the shop sends the

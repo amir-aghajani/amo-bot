@@ -11,6 +11,8 @@ use App\Modules\Subscriptions\Exceptions\TestAccountRefusedException;
 use App\Modules\Subscriptions\Services\TestAccounts;
 use App\Modules\Telegram\Api\TelegramApiException;
 use App\Modules\Telegram\Context;
+use App\Modules\Telegram\Gates\PhoneAsk;
+use App\Modules\Telegram\Gates\PhoneMoment;
 use App\Modules\Telegram\Handler;
 use App\Modules\Telegram\Keyboard\Buttons;
 use App\Modules\Telegram\Keyboard\InlineKeyboard;
@@ -56,6 +58,7 @@ final class TestAccountHandler implements Handler
         private readonly ServiceCard $card,
         private readonly BotTexts $texts,
         private readonly LoggerInterface $logger,
+        private readonly PhoneAsk $phone,
     ) {}
 
     public function handle(Context $ctx): void
@@ -113,10 +116,15 @@ final class TestAccountHandler implements Handler
      * `test:{server}`: the test made there and sent as its card in place of the screen, with a button to its own screen.
      * A refusal — the quota, or a server that gives no test now (an old screen's, a forged one) — redraws the screen
      * as home() judges it now. A panel's failure is logged, and nothing of the quota is spent; a test made that
-     * Telegram would not take still counts, and the customer gets a word with the same button.
+     * Telegram would not take still counts, and the customer gets a word with the same button. A customer the shop asks
+     * their number before a test is asked it instead (PhoneAsk::before()), and nothing is made.
      */
     private function take(Context $ctx, int $serverId): void
     {
+        if ($this->phone->before($ctx, PhoneMoment::Test)) {
+            return;
+        }
+
         try {
             $subscription = $this->tests->issue($ctx->user, $serverId);
         } catch (TestAccountRefusedException) {

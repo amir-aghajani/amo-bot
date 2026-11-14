@@ -24,6 +24,7 @@ Every successful sign-in answers the same shape:
     "has_password": false,
     "two_factor": false,
     "phone": "+989123456789",
+    "phone_exempt": false,
     "balance": "380000.00",
     "created_at": "2026-03-01T08:30:00+00:00"
   }

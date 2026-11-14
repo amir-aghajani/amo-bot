@@ -8,6 +8,7 @@ use App\Core\Database\Ledger;
 use App\Core\Database\Transitions;
 use App\Modules\Bots\CurrentBot;
 use App\Modules\Discounts\Services\Loyalty;
+use App\Modules\Discounts\Services\Perks;
 use App\Modules\Notifications\Services\CustomerNotifier;
 use App\Modules\Orders\Enums\OrderStatus;
 use App\Modules\Orders\Models\Order;
@@ -22,7 +23,8 @@ use Illuminate\Database\UniqueConstraintViolationException;
  * Cashback («کش‌بک»): part of what a delivered order paid comes back to the customer's wallet. While the switch is on, an
  * order bought for themselves earns the highest percent of the enabled rules it matches plus their loyalty tier's
  * percent (100 at most), rounded down to whole Toman. Earned once per order (`cashbacks.order_id` is unique) under the
- * order's row lock, which a refund takes too; a refund takes it back (takeBack()) by giving that much less.
+ * order's row lock, which a refund takes too; a refund takes it back (takeBack()) by giving that much less. One who goes
+ * without the customers' perks (Perks) earns none.
  */
 final class Cashback
 {
@@ -32,6 +34,7 @@ final class Cashback
     public function __construct(
         private readonly CashbackSettings $settings,
         private readonly Loyalty $loyalty,
+        private readonly Perks $perks,
         private readonly WalletService $wallet,
         private readonly CustomerNotifier $notifier,
         private readonly ConnectionInterface $db,
@@ -49,6 +52,9 @@ final class Cashback
             }
 
             $order->loadMissing(['payments', 'user']);
+            if ($this->perks->withheld($order->user)) {
+                return 0;
+            }
             $method = $order->paidBy()?->payment_method_id;
             $groups = $order->user->groups()->pluck('customer_groups.id')->all();
             $rule = 0;
@@ -60,7 +66,7 @@ final class Cashback
                 }
             }
 
-            return min(100, $rule + ($this->loyalty->tierOf($order->user)->cashback_percent ?? 0));
+            return min(100, $rule + ($this->loyalty->tierOf($order->user, $this->loyalty->tiers())->cashback_percent ?? 0));
         });
     }
 

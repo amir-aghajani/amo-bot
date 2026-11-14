@@ -18,10 +18,10 @@ GET {base}/admin/payments?status=awaiting_review      the panels' GET /api/{pane
 | Area | What the shop's admins do there |
 |---|---|
 | The dashboard, the queues, the change feed | `GET /admin/dashboard` (its `attention` counts what waits on support — the queues, the online payments held for support in `held_payments`, the servers whose panel failed — and then what waits on customers; its `agency_standing` always null: an agent's terms with the main shop are the agent's own), `/admin/queues`, `/admin/changes` (poll it to follow the shop live: it counts the website's own shop alone, and what every shop shares) |
-| Payments | the list — its `held` tab (`?status=held`: the online payments held for support and still waiting, counted in `meta.held` whatever the filters) among the statuses — and a payment, its receipt; approve, reject, cancel, remind, retry, ask an online payment's gateway (`POST /admin/payments/{id}/check`) — refund with the `refunds` grant, reject receipts in bulk with `payments` |
+| Payments | the list — its `held` tab (`?status=held`: the online payments held for support and still waiting, counted in `meta.held` whatever the filters) among the statuses — and a payment, its receipt; approve, reject, cancel, remind, retry, ask an online payment's gateway (`POST /admin/payments/{id}/check`) — refund with the `refunds` grant, reject receipts in bulk with `payments`; the bank SMS «تایید خودکار واریز» was sent, each with the card payment it approved or why none (`GET /admin/deposits`) |
 | Orders | the list and an order; retry a delivery, cancel an unpaid order |
 | Services | the list and a service; read it from its panel, switch it off or on, move it — days and traffic with `extend`, delete or hand to another customer with `delete` |
-| Customers | the list (by role too) and a customer's page, their wallet's ledger, their groups (adding them to a «همکار» group with `catalog`), a ban — never an admin's or an agent's account ([refusals](#refusals)); the wallet changed with `wallet`; an order made for them by hand with `manual_orders`; two-factor sign-in turned off and every device signed out with `account_security` |
+| Customers | the list (by role too) and a customer's page, their wallet's ledger, their groups (adding them to a «همکار» group with `catalog`), a ban, excusing them from the phone number (`PUT /admin/users/{id}/phone-exempt`), a message written to them through the shop's bot (`POST /admin/users/{id}/message`, «ارسال پیام») — never an admin's or an agent's account ([refusals](#refusals)); the wallet changed with `wallet`; an order made for them by hand with `manual_orders`; two-factor sign-in turned off and every device signed out with `account_security` |
 | Customer groups | the list — add, rename, reorder, delete, and switch «همکار» on or off with `catalog`; never on for a group an admin is in |
 | Support tickets | the list and a ticket — each message by support with the admin who wrote it ([what the shop keeps](#what-the-shop-keeps-of-it)); answer (a picture too), close, open again |
 | Reviews | the list; approve, reject, delete ([reviews](Reviews.md)) |
@@ -29,9 +29,9 @@ GET {base}/admin/payments?status=awaiting_review      the panels' GET /api/{pane
 | Referrals | the figures and the four lists (referrers, invitees, commissions, alerts); an alert cleared |
 | Broadcasts | the runs; pause, resume, cancel, unpin (composing one stays the bot's `/broadcast`) |
 
-Everything else is the panels' alone, and a `404` here: the shop's configuration — its payment methods, the bot's
-settings, texts and keyboards, the report group, the website itself, **who its admins are**, a customer's own
-discount, the discounts and rewards (discount codes, sales, gift codes, the wheel, loyalty, cashback, the draw), the
+Everything else is the panels' alone, and a `404` here: the shop's configuration — its payment methods and
+«تایید خودکار واریز»'s switch and key (`/deposits/settings`), the bot's settings, texts and keyboards, the report
+group, the website itself, **who its admins are**, a customer's own discount, the discounts and rewards (discount codes, sales, gift codes, the wheel, loyalty, cashback, the draw), the
 test accounts — and the owner's sections (the servers, the agency, the installation's settings).
 
 The answers are the panels' very shapes: the same JSON, read the same way, the customers as the panels name them.
@@ -152,10 +152,10 @@ And past the door, what no admin decides, whatever the row's state allows — a 
 | `نظر خودتان را نمی‌توانید تایید، رد یا حذف کنید؛ این کار با مدیر دیگری است.` | Their own review, approved, rejected or deleted |
 | `هشدار زیرمجموعه‌گیری خودتان را نمی‌توانید رفع کنید؛ این کار با مدیر دیگری است.` | A referral alert on themselves, cleared |
 | `برای خودتان نمی‌توانید سفارش ثبت کنید؛ این کار با مدیر دیگری است.` | An order made by hand for their own account |
-| `حساب مدیران فروشگاه فقط از پنل تغییر می‌کند.` | An admin's account — a ban, its groups, two-factor sign-in, the devices —, theirs or another admin's |
+| `حساب مدیران فروشگاه فقط از پنل تغییر می‌کند.` | An admin's account — a ban, its groups, its excuse from the phone number, a message to it, two-factor sign-in, the devices —, theirs or another admin's |
 | `گروه «همکاران» حساب یکی از مدیران فروشگاه را دارد؛ «همکار» کردن آن فقط از پنل ممکن است.` | «همکار» switched on for a group an admin is in (the message names the group): a «همکار» group's members pay the agents' prices |
 | `فروشگاه گذاشتن مشتری در گروه «همکار» را به مدیران وب‌سایت نسپرده است.` | A customer added to a «همکار» group while the website does not grant `catalog` (granted, a sign-in older than 15 minutes is the `403` of a recent sign-in instead) |
-| `حساب نماینده‌ها فقط از پنل تغییر می‌کند.` | An agent's account, the same way (a ban, its groups, two-factor sign-in, the devices): the owner's partners are the panel's |
+| `حساب نماینده‌ها فقط از پنل تغییر می‌کند.` | An agent's account, the same way (a ban, its groups, its excuse from the phone number, a message to it, two-factor sign-in, the devices): the owner's partners are the panel's |
 | `از وب‌سایت فقط پرداختی تایید می‌شود که رسیدش رسیده و در انتظار بررسی است.` | Approving a payment without a receipt in review |
 
 Nor does an admin hand a customer's service to themselves: a `422` on `telegram_id` (`سرویس را به حساب خودتان نمی‌توانید

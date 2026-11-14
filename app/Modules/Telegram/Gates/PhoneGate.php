@@ -4,56 +4,62 @@ declare(strict_types=1);
 
 namespace App\Modules\Telegram\Gates;
 
-use App\Modules\Telegram\BotSettings;
 use App\Modules\Telegram\Context;
-use App\Modules\Telegram\Keyboard\ReplyKeyboard;
 use App\Modules\Telegram\Texts\BotText;
 use App\Modules\Telegram\Texts\BotTexts;
 
 /**
- * Phone verification: a customer without a verified number is asked for it (Telegram's "request_contact" button)
- * whatever they send. Only their own card counts. Once verified they are never asked again. The card then goes on
- * through the next gates to the `contact` route (ContactHandler: the menu) — a gate never opens the menu itself. A card
- * that comes unasked — the gate off, a number on file, a bot admin; the mini app's «share my number» — passes as it
- * is: nothing the shop did not ask for is stored.
+ * Phone verification, as the shop's phone rule has it (PhoneRequirement): a customer it asks before everything is asked
+ * for their number (Telegram's "request_contact" button) whatever they send. One it asks only at the moments the shop
+ * chose is held back by nothing here — each moment asks for itself (PhoneAsk::before()) —, but their own card is taken
+ * all the same, sent by such an ask's button or the mini app's «share my number». Only their own card counts: someone
+ * else's gets PhoneNotYours and the button again — and, while the shop takes Iranian numbers alone, another country's
+ * gets PhoneNotIranian, kept nowhere (as does a customer whose number on file is one). A number the rule takes is never
+ * asked again. The card then goes on through the next gates to the `contact` route (ContactHandler: the menu) — a gate
+ * never opens the menu itself. A card that comes unasked — the rule off, a number on file it takes, a bot admin, a
+ * customer support excused — passes as it is: nothing the shop did not ask for is stored.
  */
 final class PhoneGate implements Gate
 {
     public function __construct(
-        private readonly BotSettings $settings,
+        private readonly PhoneRequirement $phone,
+        private readonly PhoneAsk $ask,
         private readonly BotTexts $texts,
     ) {}
 
     public function pass(Context $ctx): bool
     {
-        if (!$this->settings->phoneRequired() || $ctx->user->hasVerifiedPhone() || $ctx->isAdmin()) {
+        if (!$this->phone->applies($ctx->user)) {
             return true;
         }
 
         $contact = $ctx->update->contact();
         if ($contact === null) {
-            $this->prompt($ctx, BotText::PhonePrompt);
+            if (!$this->phone->asks($ctx->user)) {
+                return true;
+            }
+            // One on file the rule does not take (another country's, while Iranian numbers alone count) is said so.
+            $this->ask->ask($ctx, $this->phone->foreign($ctx->user) ? BotText::PhoneNotIranian : BotText::PhonePrompt);
 
             return false;
         }
 
         if (!$ctx->update->isOwnContact()) {
-            $this->prompt($ctx, BotText::PhoneNotYours);
+            $this->ask->ask($ctx, BotText::PhoneNotYours);
+
+            return false;
+        }
+        $number = (string) ($contact['phone_number'] ?? '');
+        if (!$this->phone->accepts($number)) {
+            // Another country's, while the shop takes Iranian numbers alone: not kept; the button again, for another.
+            $this->ask->ask($ctx, BotText::PhoneNotIranian);
 
             return false;
         }
 
-        $ctx->user->verifyPhone((string) ($contact['phone_number'] ?? ''));
+        $ctx->user->verifyPhone($number);
         $ctx->reply($this->texts->get(BotText::PhoneVerified));
 
         return true;
-    }
-
-    /** The ask, with the one-button keyboard that answers it (replacing the menu until the number is in). */
-    private function prompt(Context $ctx, BotText $text): void
-    {
-        $markup = ReplyKeyboard::make()->row(ReplyKeyboard::contactButton($this->texts->get(BotText::PhoneButton), 'primary'))->build();
-        $ctx->reply($this->texts->get($text), ['reply_markup' => $markup]);
-        $ctx->session->markReplyKeyboard(true);
     }
 }

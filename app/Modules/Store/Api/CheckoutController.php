@@ -9,6 +9,7 @@ use App\Core\Exceptions\ValidationException;
 use App\Core\Http\ApiController;
 use App\Modules\Accounts\Http\Customer;
 use App\Modules\Catalog\Exceptions\NoServerAvailableException;
+use App\Modules\Orders\Enums\OrderType;
 use App\Modules\Orders\Exceptions\RenewalUnderWayException;
 use App\Modules\Orders\Exceptions\RequestKeyReusedException;
 use App\Modules\Payments\DTO\CheckoutResult;
@@ -68,7 +69,7 @@ final class CheckoutController extends ApiController
      */
     public function purchase(Request $request, Response $response): Response
     {
-        $key = $this->ordering($request);
+        $key = $this->ordering($request, OrderType::Purchase);
 
         return $this->answer($request, $response, $this->checkout->purchase(Customer::of($request)->user, $this->input($request), $key));
     }
@@ -114,7 +115,7 @@ final class CheckoutController extends ApiController
      */
     public function renew(Request $request, Response $response, array $args): Response
     {
-        $key = $this->ordering($request);
+        $key = $this->ordering($request, OrderType::Renewal);
         $subscription = $this->own($request, $args);
 
         return $this->answer($request, $response, $this->checkout->renew(Customer::of($request)->user, $subscription, $this->input($request), $key));
@@ -198,7 +199,7 @@ final class CheckoutController extends ApiController
      */
     public function topUp(Request $request, Response $response): Response
     {
-        $key = $this->ordering($request);
+        $key = $this->ordering($request, OrderType::WalletTopUp);
 
         return $this->answer($request, $response, $this->checkout->topUp(Customer::of($request)->user, $this->input($request), $key));
     }
@@ -244,23 +245,24 @@ final class CheckoutController extends ApiController
      */
     private function extra(Request $request, Response $response, array $args, ExtraKind $kind): Response
     {
-        $key = $this->ordering($request);
+        $key = $this->ordering($request, $kind->orderType());
         $subscription = $this->own($request, $args);
 
         return $this->answer($request, $response, $this->checkout->extra(Customer::of($request)->user, $subscription, $kind, $this->input($request), $key));
     }
 
     /**
-     * An ordering request begun: its Idempotency-Key, read before anything else — then, through the mini app, what the
-     * bot's gates ask of a customer before an order (CustomerGates::holdBack()).
+     * An ordering request for an order of `$type` begun: its Idempotency-Key, read before anything else — then, through
+     * the mini app, what the bot's gates ask of a customer before that order paid that way
+     * (CustomerGates::holdBackOrder()).
      *
      * @throws RequestKeyReusedException 422 on `idempotency_key`
      * @throws ValidationException 422 on `status`
      */
-    private function ordering(Request $request): string
+    private function ordering(Request $request, OrderType $type): string
     {
         $key = IdempotencyKey::of($request);
-        $this->gates->holdBack(StoreMiddleware::door($request), Customer::of($request)->user);
+        $this->gates->holdBackOrder(StoreMiddleware::door($request), Customer::of($request)->user, $type, $this->input($request));
 
         return $key;
     }

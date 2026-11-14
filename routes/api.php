@@ -30,8 +30,10 @@ use App\Modules\Admin\Api\CustomEmojisController;
 use App\Modules\Admin\Api\CustomerDiscountController;
 use App\Modules\Admin\Api\CustomerGroupsController;
 use App\Modules\Admin\Api\DashboardController;
+use App\Modules\Admin\Api\DepositsController;
 use App\Modules\Admin\Api\DiscountCodesController;
 use App\Modules\Admin\Api\GiftCodesController;
+use App\Modules\Admin\Api\ImportsController;
 use App\Modules\Admin\Api\KeyboardsController;
 use App\Modules\Admin\Api\LotteryController;
 use App\Modules\Admin\Api\LoyaltyTiersController;
@@ -156,6 +158,8 @@ return static function (App $app): void {
         $shop->post('/users/{id:[0-9]+}/wallet', [UsersController::class, 'adjustWallet'])->setArgument(StaffGrant::ARGUMENT, StaffGrant::Wallet->value);
         $shop->post('/users/{id:[0-9]+}/orders', [OrdersController::class, 'store'])->setArgument(StaffGrant::ARGUMENT, StaffGrant::ManualOrders->value);
         $shop->put('/users/{id:[0-9]+}/groups', [UsersController::class, 'groups']);
+        $shop->put('/users/{id:[0-9]+}/phone-exempt', [UsersController::class, 'phoneExempt']);
+        $shop->post('/users/{id:[0-9]+}/message', [UsersController::class, 'message']);
         $shop->post('/users/{id:[0-9]+}/two-factor/disable', [UsersController::class, 'disableTwoFactor'])->setArgument(StaffGrant::ARGUMENT, StaffGrant::AccountSecurity->value);
         $shop->post('/users/{id:[0-9]+}/sessions/end', [UsersController::class, 'endSessions'])->setArgument(StaffGrant::ARGUMENT, StaffGrant::AccountSecurity->value);
 
@@ -215,6 +219,8 @@ return static function (App $app): void {
         $shop->get('/referrals/commissions', [ReferralsController::class, 'commissions']);
         $shop->get('/referrals/alerts', [ReferralsController::class, 'alerts']);
         $shop->post('/referrals/alerts/{id:[0-9]+}/clear', [ReferralsController::class, 'clearAlert']);
+
+        $shop->get('/deposits', [DepositsController::class, 'index']);
     };
 
     // The shop's configuration (payment methods, the bot's settings, texts and keyboards, the report group, the website,
@@ -226,6 +232,9 @@ return static function (App $app): void {
         $shop->put('/users/{id:[0-9]+}/role', [UsersController::class, 'role']);
         $shop->put('/users/{id:[0-9]+}/discount', [CustomerDiscountController::class, 'update']);
 
+        $shop->get('/deposits/settings', [DepositsController::class, 'show']);
+        $shop->put('/deposits/settings', [DepositsController::class, 'update']);
+        $shop->post('/deposits/settings/key', [DepositsController::class, 'rotate']);
         $shop->get('/payment-methods', [PaymentMethodsController::class, 'index']);
         $shop->get('/payment-methods/drivers', [PaymentMethodsController::class, 'drivers']);
         $shop->post('/payment-methods', [PaymentMethodsController::class, 'store']);
@@ -389,7 +398,8 @@ return static function (App $app): void {
                 $owner->post('/mass-grants/{id:[0-9]+}/cancel', [MassGrantsController::class, 'cancel']);
             })->add('shop.everywhere');
 
-            // …and the agency and the panel's settings, in the main bot's shop (the agents are its customers).
+            // …and the agency, the panel's settings and the imports from another bot, in the main bot's shop (the agents are
+            // its customers; what an import brings is its).
             $panel->group('', function (RouteCollectorProxy $owner): void {
                 $owner->get('/agency', [AgencyController::class, 'summary']);
                 $owner->get('/agency/settings', [AgencySettingsController::class, 'show']);
@@ -422,6 +432,16 @@ return static function (App $app): void {
                 $owner->post('/settings/config/sms/test', [ConfigSettingsController::class, 'testSms']);
                 $owner->get('/settings/config/sms/credit', [ConfigSettingsController::class, 'smsCredit']);
                 $owner->put('/settings/config/{group:app|database|telegram|mail|sms|advanced}', [ConfigSettingsController::class, 'update']);
+
+                $owner->get('/imports', [ImportsController::class, 'index']);
+                $owner->post('/imports', [ImportsController::class, 'store']);
+                $owner->post('/imports/database', [ImportsController::class, 'database']);
+                $owner->get('/imports/{id:[0-9]+}', [ImportsController::class, 'show']);
+                $owner->delete('/imports/{id:[0-9]+}', [ImportsController::class, 'destroy']);
+                $owner->post('/imports/{id:[0-9]+}/continue', [ImportsController::class, 'step']);
+                $owner->put('/imports/{id:[0-9]+}/choices', [ImportsController::class, 'choose']);
+                $owner->post('/imports/{id:[0-9]+}/start', [ImportsController::class, 'start']);
+                $owner->get('/imports/{id:[0-9]+}/problems', [ImportsController::class, 'problems']);
             })->add('shop.main');
         })->add('panel.admin');
     })->add(SessionMiddleware::class)->add(JsonCsrfMiddleware::class)->add(InstalledMiddleware::class);
@@ -453,7 +473,7 @@ return static function (App $app): void {
         $store->get('/plans', [CatalogController::class, 'plans'])->add(OptionalCustomerMiddleware::class);
         $store->get('/plans/{id:[0-9]+}', [CatalogController::class, 'plan'])->add(OptionalCustomerMiddleware::class);
         $store->get('/status', [CatalogController::class, 'status']);
-        $store->get('/sales', [CatalogController::class, 'sales']);
+        $store->get('/sales', [CatalogController::class, 'sales'])->add(OptionalCustomerMiddleware::class);
         $store->get('/tutorial', [StoreController::class, 'tutorial']);
         $store->get('/custom-services', [CustomServicesController::class, 'show']);
         $store->get('/reviews', [StoreReviewsController::class, 'index']);

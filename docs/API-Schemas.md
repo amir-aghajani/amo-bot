@@ -363,6 +363,39 @@ What happened to a notice the bot sent a customer: `told` (delivered in Telegram
 
 String: `told`, `emailed`, `turned_away`, `unreachable`, `refused`, `no_telegram`.
 
+### DepositRow
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `id` | integer | yes |  |
+| `source` | string | yes | The phone app: `forapp`. |
+| `status` | [DepositStatus](#depositstatus) | yes |  |
+| `amount_rial` | integer or null | yes | The sum the SMS said, in Rial; null when none was read. |
+| `amount` | string or null | yes | The same in Toman, as the shop prices. |
+| `bank` | string or null | yes |  |
+| `sender` | string or null | yes |  |
+| `body` | string or null | yes | The SMS as it came. |
+| `note` | string or null | yes | Why it approved nothing. |
+| `payment` | object or null | yes | The card payment it approved. |
+| `payment.id` | integer | yes |  |
+| `payment.order_id` | integer | yes |  |
+| `payment.customer` | [UserRef](#userref) | yes |  |
+| `received_at` | string (date-time) or null | yes | When the phone got it. |
+| `created_at` | string (date-time) or null | yes |  |
+
+### DepositStatus
+
+What came of a forwarded bank SMS: `received` (being looked at), `matched` (it approved a card payment), `unmatched` (no open card payment asks its sum, or ForApp did not recognise it as a bank's deposit), `ambiguous` (more than one does; none approved), `ignored` (a withdrawal, no sum read in Rial, or older than three days), `test` (the app's test).
+
+String: `received`, `matched`, `unmatched`, `ambiguous`, `ignored`, `test`.
+
+### DepositsResponse
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `deposits` | list of [DepositRow](#depositrow) | yes |  |
+| `meta` | [PageMeta](#pagemeta) | yes |  |
+
 ### DiscountLine
 
 One discount applied to a price, labelled for the customer («فروش ویژه نوروز ۲۰٪», «تخفیف اختصاصی شما ۱۰٪», «سطح طلایی ۵٪», «کد NOWRUZ»).
@@ -1428,6 +1461,12 @@ One customer, as their page shows them. Their services, orders and payments come
 | `account` | [CustomerAccount](#customeraccount) | yes |  |
 | `loyalty` | [LoyaltyStanding](#loyaltystanding) | yes |  |
 
+### UserMessageResponse
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `delivery` | [Delivery](#delivery) | yes |  |
+
 ### UserRef
 
 A reference to a customer, as every screen shows one: their id, the three Telegram identifiers kept separate (a customer who signed up on the website has only a name), and their email.
@@ -1464,6 +1503,7 @@ A customer, as a row of the users table. (The panel login is not a customer.)
 | `telegram_id` | integer or null | yes | Their Telegram user id; null for a customer who signed up on the website (the bot cannot message them). |
 | `email` | string or null | yes | Their verified email, in lower case; null when they have none. |
 | `phone` | string or null | yes | In E.164 form, once shared with the bot. |
+| `phone_exempt` | boolean | yes | Excused from the shop's phone rule: never asked for their phone number. |
 | `status` | [UserStatus](#userstatus) | yes |  |
 | `role` | [UserRole](#userrole) | yes |  |
 | `balance` | string | yes |  |

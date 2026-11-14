@@ -51,6 +51,9 @@ use Illuminate\Support\Carbon;
  * @property int|null $agency_level_id An agent's level; null for everyone else
  * @property string $credit_limit How far below zero an agent's wallet may go
  * @property int $discount_percent Their own discount («تخفیف اختصاصی»), a percent off what they buy; 0 none
+ * @property Carbon|null $bought_elsewhere_at When an import learned they had bought in the bot the shop came from: no
+ *                                            newcomer here (boughtElsewhere()); null: none known
+ * @property bool $phone_exempt Excused from the shop's phone rule by support (Telegram\Gates\PhoneRequirement)
  * @property string|null $referral_code The customer's own invite code (ReferralService::codeFor())
  * @property int|null $referred_by The customer whose link brought this one — set on their first update, never changed
  * @property Carbon|null $last_seen_at
@@ -108,6 +111,8 @@ class User extends Model
         'agency_level_id' => 'integer',
         'credit_limit' => 'decimal:2',
         'discount_percent' => 'integer',
+        'bought_elsewhere_at' => 'datetime',
+        'phone_exempt' => 'boolean',
         'last_seen_at' => 'datetime',
     ];
 
@@ -116,6 +121,7 @@ class User extends Model
         'role' => UserRole::Customer->value,
         'credit_limit' => '0.00',
         'discount_percent' => 0,
+        'phone_exempt' => false,
     ];
 
     public function isAdmin(): bool
@@ -129,7 +135,7 @@ class User extends Model
         return $this->agency_level_id !== null;
     }
 
-    /** Whether plans' agent prices are theirs: an agent, or in a «همکار» group (asked only while a plan has one). */
+    /** Whether plans' agent prices are theirs: an agent, or in a «همکار» group. */
     public function paysAgentPrices(): bool
     {
         return $this->isAgent() || $this->groups()->where('agent_pricing', true)->exists();
@@ -147,6 +153,15 @@ class User extends Model
         return Money::add($this->balance(), $this->credit());
     }
 
+    /**
+     * Whether they bought in the bot the shop came from (an import said so): no newcomer, whatever they bought here — no
+     * first-purchase price or code, no newcomers' test, no referral start gift.
+     */
+    public function boughtElsewhere(): bool
+    {
+        return $this->bought_elsewhere_at !== null;
+    }
+
     public function isBanned(): bool
     {
         return $this->status === UserStatus::Banned;
@@ -158,7 +173,10 @@ class User extends Model
         return $this->totp_enabled_at !== null && $this->totp_secret !== null;
     }
 
-    /** A phone is only ever stored from the customer's own contact card (verifyPhone()): one on the row is verified. */
+    /**
+     * Whether a number is on the row: every way one gets there takes it as verified — the customer's own contact card
+     * (verifyPhone()), a website sign-in code by SMS, or the bot an import brought them from.
+     */
     public function hasVerifiedPhone(): bool
     {
         return $this->phone !== null;

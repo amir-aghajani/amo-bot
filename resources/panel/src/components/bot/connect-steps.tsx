@@ -86,7 +86,8 @@ export function ConnectSteps({ group, creating, onCreate }: { group: ReportGroup
   )
 }
 
-function Step({ n, children }: { n: number; children: ReactNode }) {
+/** One numbered step of a list of them (`<ol>`), its number in a small circle. */
+export function Step({ n, children }: { n: number; children: ReactNode }) {
   return (
     <li className="flex gap-3">
       <span className="grid size-5 shrink-0 place-items-center rounded-full bg-fill-hover text-caption font-medium text-muted-foreground" aria-hidden>

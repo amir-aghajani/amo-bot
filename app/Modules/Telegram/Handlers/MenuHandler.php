@@ -376,13 +376,13 @@ final class MenuHandler implements Handler
     }
 
     /**
-     * The customer's loyalty tier and what is left to the next one (or to the first); nothing in a shop without tiers.
-     * The tiers are read first so a shop without any never asks what the customer spent (Loyalty::standing() always
-     * does, which would cost every wallet screen a query).
+     * The customer's loyalty tier and what is left to the next one (or to the first); nothing in a shop without tiers,
+     * nor for one without the customers' perks (Loyalty::tiersFor()). The tiers are read first so a shop without any
+     * never asks what the customer spent (Loyalty::standing() always does, which would cost every wallet screen a query).
      */
     private function loyaltyLine(Context $ctx): Html|string
     {
-        $tiers = $this->loyalty->tiers();
+        $tiers = $this->loyalty->tiersFor($ctx->user);
         if ($tiers === []) {
             return '';
         }

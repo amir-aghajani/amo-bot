@@ -20,6 +20,7 @@ use App\Modules\Accounts\Services\PhoneSignIn;
 use App\Modules\Accounts\Services\Reauthentication;
 use App\Modules\Auth\Exceptions\SignInRefusedException;
 use App\Modules\Discounts\Services\Loyalty;
+use App\Modules\Discounts\Services\Perks;
 use App\Modules\Store\Http\StoreMiddleware;
 use App\Modules\Store\Presenters\StaffPresenter;
 use App\Modules\Store\Services\CustomerNotifications;
@@ -42,9 +43,13 @@ final class MeController extends ApiController
         private readonly PhoneSignIn $phone,
         private readonly CustomerNotifications $notifications,
         private readonly Loyalty $loyalty,
+        private readonly Perks $perks,
     ) {}
 
-    /** GET /me — the account, its unread notices, what the admin API lets them do (`staff`), their loyalty tier and this session. */
+    /**
+     * GET /me — the account, its unread notices, what the admin API lets them do (`staff`), whether the customers' perks
+     * reach them, their loyalty tier and this session.
+     */
     public function show(Request $request, Response $response): Response
     {
         return $this->account($request, $response);
@@ -158,9 +163,10 @@ final class MeController extends ApiController
     }
 
     /**
-     * What GET /me and PATCH /me answer: the account, its unread notices, what the admin API lets them do (`staff`), their
-     * loyalty tier, and this session — how it signed in, whether it keeps a fingerprint secret, and until when it counts
-     * as recently signed in (null: prove a way in again before what asks it).
+     * What GET /me and PATCH /me answer: the account, its unread notices, what the admin API lets them do (`staff`),
+     * whether the customers' perks reach them (Perks), their loyalty tier, and this session — how it signed in, whether
+     * it keeps a fingerprint secret, and until when it counts as recently signed in (null: prove a way in again before
+     * what asks it).
      */
     private function account(Request $request, Response $response): Response
     {
@@ -171,6 +177,7 @@ final class MeController extends ApiController
             'customer' => AccountPresenter::present($customer->user),
             'unread_notifications' => $this->notifications->unread($customer->user),
             'staff' => StaffPresenter::present(StoreMiddleware::door($request), $customer),
+            'perks' => !$this->perks->withheld($customer->user),
             'loyalty' => $this->loyalty->standing($customer->user),
             'session' => [
                 'method' => ($session->method ?? SignInMethod::Password)->value,

@@ -33,7 +33,7 @@ final class StoreApiTest extends HttpTestCase
         $website = $this->website();
 
         self::assertSame([
-            'shop' => ['name' => 'آب‌سردکن', 'bot' => ['username' => 'amo_shop_bot', 'url' => 'https://t.me/amo_shop_bot'], 'taking_orders' => true, 'phone_required' => false, 'service_claims' => false, 'service_transfers' => false, 'custom_services' => false, 'name_modes' => ['sequential'], 'programs' => self::NO_PROGRAMS],
+            'shop' => ['name' => 'آب‌سردکن', 'bot' => ['username' => 'amo_shop_bot', 'url' => 'https://t.me/amo_shop_bot'], 'taking_orders' => true, 'phone_required' => false, 'phone_moments' => [], 'phone_iran_only' => false, 'card_auto_confirmed' => false, 'service_claims' => false, 'service_transfers' => false, 'custom_services' => false, 'name_modes' => ['sequential'], 'programs' => self::NO_PROGRAMS],
             'support' => ['url' => 'https://t.me/amo_support'],
             'sign_in' => ['telegram' => ['client_id' => self::WEBSITE_CLIENT_ID, 'redirect' => false], 'google' => null, 'email' => false, 'phone' => false, 'mini_app' => false],
             'captcha' => null,
@@ -48,6 +48,15 @@ final class StoreApiTest extends HttpTestCase
 
         $this->botSettings('general', ['enabled' => true, 'phone_required' => true, 'support_contact' => '@amo_support']);
         self::assertTrue($this->decode($this->get($this->storeApi($website)))['shop']['phone_required'], 'the bot asks for the phone number first');
+        self::assertSame([], $this->decode($this->get($this->storeApi($website)))['shop']['phone_moments'], 'before everything: no moments of its own');
+
+        // Asked only at the moments chosen: not before everything, and those moments named, in their order.
+        $this->botSettings('general', ['enabled' => true, 'phone_required' => true, 'phone_scope' => 'moments', 'phone_on_purchase' => false, 'phone_on_renewal' => true, 'phone_on_test' => false, 'phone_on_card' => true, 'support_contact' => '@amo_support']);
+        self::assertSame(['phone_required' => false, 'phone_moments' => ['renewal', 'card']], array_intersect_key($this->decode($this->get($this->storeApi($website)))['shop'], array_flip(['phone_required', 'phone_moments'])));
+
+        // The rule off asks nothing, whatever its moments say.
+        $this->botSettings('general', ['enabled' => true, 'phone_required' => false, 'phone_scope' => 'moments', 'phone_on_purchase' => true, 'phone_on_renewal' => true, 'phone_on_test' => true, 'phone_on_card' => true, 'support_contact' => '@amo_support']);
+        self::assertSame(['phone_required' => false, 'phone_moments' => []], array_intersect_key($this->decode($this->get($this->storeApi($website)))['shop'], array_flip(['phone_required', 'phone_moments'])));
 
         $this->botSettings('general', ['enabled' => false, 'phone_required' => false, 'support_contact' => '@amo_support']);
         self::assertFalse($this->decode($this->get($this->storeApi($website)))['shop']['taking_orders'], 'the bot switched off: no orders taken');
@@ -85,7 +94,7 @@ final class StoreApiTest extends HttpTestCase
 
         $shop = $this->decode($this->get($this->storeApi($website)));
 
-        self::assertSame(['name' => 'فروشگاه نماینده', 'bot' => ['username' => 'agent_shop_bot', 'url' => 'https://t.me/agent_shop_bot'], 'taking_orders' => true, 'phone_required' => false, 'service_claims' => false, 'service_transfers' => false, 'custom_services' => false, 'name_modes' => ['sequential'], 'programs' => self::NO_PROGRAMS], $shop['shop']);
+        self::assertSame(['name' => 'فروشگاه نماینده', 'bot' => ['username' => 'agent_shop_bot', 'url' => 'https://t.me/agent_shop_bot'], 'taking_orders' => true, 'phone_required' => false, 'phone_moments' => [], 'phone_iran_only' => false, 'card_auto_confirmed' => false, 'service_claims' => false, 'service_transfers' => false, 'custom_services' => false, 'name_modes' => ['sequential'], 'programs' => self::NO_PROGRAMS], $shop['shop']);
         self::assertNull($shop['support'], 'no contact set in their shop');
     }
 

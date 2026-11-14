@@ -16,8 +16,10 @@ use App\Modules\Discounts\DTO\DiscountLine;
 use App\Modules\Orders\Enums\OrderPricing;
 use App\Modules\Orders\Enums\OrderType;
 use App\Modules\Orders\Models\Order;
+use App\Modules\Payments\Deposits\Services\Deposits;
 use App\Modules\Payments\Drivers\Manual\ManualGateway;
 use App\Modules\Payments\GatewayRegistry;
+use App\Modules\Payments\Models\Deposit;
 use App\Modules\Payments\Models\Payment;
 use App\Modules\Payments\Services\OnlinePayments;
 use App\Modules\Providers\Models\Server;
@@ -60,7 +62,8 @@ use Psr\Log\LoggerInterface;
  * or resumed, failed deliveries, online payments held for support, panels down and up, servers' services moved, ticket
  * conversations and reviews. Each goes to the group of the bot it happened in (servers and the agency to the main
  * bot's), only while a group is connected and the admin wants the topic. Who of support did something is named as
- * anyone but the owner reads it (bySupport()). Nothing here talks to Telegram.
+ * anyone but the owner reads it (bySupport()). Every report about a customer carries «⚙️ مدیریت کاربر», their card
+ * (managing()). Nothing here talks to Telegram.
  *
  * A report is written in a savepoint of the caller's transaction, so it stands or falls with what it reports. Words
  * that cannot be composed are logged and dropped; a database error goes up to the caller. The wording is fixed here (the
@@ -121,8 +124,7 @@ final class ShopReports
                 $lines[] = '👥 معرف: ' . self::customer($referrer);
             }
 
-            // «⚙️ مدیریت کاربر»: their card, to manage them right here (UserManagement).
-            return ['text' => implode("\n", $lines), 'keyboard' => UserManagement::buttons($user->id)];
+            return ['text' => implode("\n", $lines), 'keyboard' => self::managing($user)];
         });
     }
 
@@ -134,7 +136,7 @@ final class ShopReports
             '👥 معرف: ' . self::customer($alert->referrer),
             '🔎 ' . $alert->reason->words(Persian::number($alert->count), Persian::number($minutes)),
             'تا این هشدار در صفحه «زیرمجموعه‌گیری» پنل رفع نشود، هدیه شروع و جایزه دعوت به این معرف داده نمی‌شود؛ پورسانت‌ها مثل قبل است.',
-        ])]);
+        ]), 'keyboard' => self::managing($alert->referrer)]);
     }
 
     /** A customer asked to become an agent: what they wrote, with the bot admins' «تایید» / «رد» buttons (AgencyReview). */
@@ -150,7 +152,7 @@ final class ShopReports
 
             return [
                 'text' => implode("\n", $lines),
-                'keyboard' => AgencyReview::buttons($request->id),
+                'keyboard' => self::managing($request->user, AgencyReview::buttons($request->id)),
                 'ref' => self::AGENCY_REF . $request->id,
             ];
         });
@@ -181,13 +183,13 @@ final class ShopReports
             ...self::agentLines($bot),
             sprintf('📌 %s؛ %s.', $reason->words(), $reason->remedy()),
             'ربات، پنل و سرویس‌های فعلی مشتری‌هایش کار می‌کنند.',
-        ])]);
+        ]), 'keyboard' => self::managing($bot->agent)]);
     }
 
     /** An agent's bot sells again. */
     public function agencyResumed(Bot $bot): void
     {
-        $this->report(Bot::MAIN, Topic::Agency, static fn(): array => ['text' => implode("\n", ['✅ <b>فروش نماینده دوباره باز شد</b>', ...self::agentLines($bot)])]);
+        $this->report(Bot::MAIN, Topic::Agency, static fn(): array => ['text' => implode("\n", ['✅ <b>فروش نماینده دوباره باز شد</b>', ...self::agentLines($bot)]), 'keyboard' => self::managing($bot->agent)]);
     }
 
     /** @return list<string> An agent's lines in an agency report: the agent as the group reads a customer, and their bot. */
@@ -223,11 +225,11 @@ final class ShopReports
                 },
                 ...self::note(self::CUSTOMER_NOTE, $payment->receipt_note),
             ];
-            // Only a receipt sent in the bot is approved on a timer; a website upload always waits for support.
+            // Approved on a timer only when sent in the bot or by a Telegram account (Payment::selfApproving()).
             $window = $this->gateways->isManual($method) ? ManualGateway::reviewWindow($method) : 0;
             $lines[] = match (true) {
                 $window === 0 => '⏳ در انتظار بررسی در پنل مدیریت',
-                $payment->receipt_file_id === null => '⏳ در انتظار بررسی؛ رسیدی که از وب‌سایت می‌رسد خودکار تایید نمی‌شود.',
+                !$payment->selfApproving() => '⏳ در انتظار بررسی؛ حساب این مشتری به تلگرام وصل نیست، پس رسیدش خودکار تایید نمی‌شود.',
                 default => sprintf('⏳ در انتظار بررسی؛ اگر تا %s بررسی نشود، خودکار تایید می‌شود.', Persian::minutes($window)),
             };
 
@@ -236,7 +238,7 @@ final class ShopReports
                 'copy_chat_id' => $payment->receipt_message_id !== null ? $customer->telegram_id : null,
                 'copy_message_id' => $payment->receipt_message_id,
                 'photo_path' => $payment->receipt_path !== null ? CustomerPictures::reference(PictureFolder::Receipts, $payment->receipt_path) : null,
-                'keyboard' => ReceiptReview::buttons($payment->id),
+                'keyboard' => self::managing($customer, ReceiptReview::buttons($payment->id)),
                 'ref' => self::RECEIPT_REF . $payment->id,
             ];
         });
@@ -254,7 +256,7 @@ final class ShopReports
             sprintf('💰 %s · %s', Money::format($payment->amount), self::name($payment->method->label)),
             sprintf("سفارش \u{200E}#%d پیش از رسیدن این پرداخت بسته شده بود؛ مبلغ به کیف پول مشتری رفت.", $payment->order_id),
             '👛 موجودی: ' . Money::format($payment->order->user->balance()),
-        ])]);
+        ]), 'keyboard' => self::managing($payment->order->user)]);
     }
 
     /**
@@ -277,15 +279,65 @@ final class ShopReports
             ...($by === null ? [] : [$this->bySupport($by, 'استعلام توسط پشتیبانی')]),
             // Its order, still open, waits for support (Payments\Services\Checkout, PaymentService::expire()).
             ...(OnlinePayments::awaitsSupport($payment) ? ['تا پشتیبانی آن را در پنل درگاه بررسی نکند، سفارشش پرداخت دیگری نمی‌گیرد و خودکار لغو نمی‌شود؛ در صفحه «پرداخت‌ها» پنل می‌شود آن را لغو کرد.'] : []),
-        ])]);
+        ]), 'keyboard' => self::managing($payment->order->user)]);
     }
 
     /** The receipt was accepted — by the admin, or by the timer when nobody looked inside the method's window. */
     public function receiptApproved(Payment $payment): void
     {
-        $this->verdict($payment, $payment->wasAutoApproved()
-            ? sprintf("✅ رسید پرداخت \u{200E}#%d خودکار تایید شد؛ در مهلت بررسی کسی آن را تایید یا رد نکرد.", $payment->id)
-            : sprintf("✅ رسید پرداخت \u{200E}#%d تایید شد.", $payment->id));
+        $this->verdict($payment, match (true) {
+            $payment->reviewer === Deposits::REVIEWER => sprintf("✅ رسید پرداخت \u{200E}#%d با پیامک واریز بانک خودکار تایید شد.", $payment->id),
+            $payment->wasAutoApproved() => sprintf("✅ رسید پرداخت \u{200E}#%d خودکار تایید شد؛ در مهلت بررسی کسی آن را تایید یا رد نکرد.", $payment->id),
+            default => sprintf("✅ رسید پرداخت \u{200E}#%d تایید شد.", $payment->id),
+        });
+    }
+
+    /**
+     * A bank SMS forwarded to the shop (Payments\Deposits) whose sum no open card payment asks: the money is in, nothing
+     * was approved — support matches it to a receipt, or to the customer who asks.
+     */
+    public function depositUnmatched(Deposit $deposit): void
+    {
+        $this->report(CurrentBot::id(), Topic::Receipts, static fn(): array => ['text' => implode("\n", [
+            '💰 <b>واریز بدون پرداخت</b> · ' . self::depositSum($deposit),
+            ...self::depositLines($deposit),
+            '❔ ' . self::field((string) $deposit->note) . ' اگر مشتری رسیدش را فرستاد یا پیگیری کرد، دستی بررسی کنید؛ این واریز در صفحه «واریزها» پنل هم هست.',
+        ])]);
+    }
+
+    /**
+     * A bank SMS whose sum more than one open card payment asks: none approved, the payments named, for support to decide.
+     *
+     * @param list<int> $paymentIds
+     */
+    public function depositAmbiguous(Deposit $deposit, array $paymentIds): void
+    {
+        $this->report(CurrentBot::id(), Topic::Receipts, static fn(): array => ['text' => implode("\n", [
+            '⚠️ <b>واریز با چند پرداخت هم‌مبلغ</b> · ' . self::depositSum($deposit),
+            ...self::depositLines($deposit),
+            '❔ پرداخت‌های ' . implode('، ', array_map(static fn(int $id): string => "\u{200E}#{$id}", $paymentIds)) . ' همین مبلغ را می‌خواهند؛ هیچ‌کدام خودکار تایید نشد. رسیدها را ببینید و درست را دستی تایید کنید.',
+        ])]);
+    }
+
+    /** A deposit's sum, in Toman as the shop's prices are, and in Rial as the bank wrote it. */
+    private static function depositSum(Deposit $deposit): string
+    {
+        $toman = $deposit->toman();
+
+        return $toman === null ? 'مبلغ خوانده نشد' : Money::format($toman) . ' (' . Persian::number((int) $deposit->amount_rial) . ' ریال)';
+    }
+
+    /**
+     * What a deposit's report says of the SMS: the bank, when it came, and its words cut short.
+     *
+     * @return list<string>
+     */
+    private static function depositLines(Deposit $deposit): array
+    {
+        return [
+            '🏦 ' . self::name($deposit->bank ?? $deposit->sender ?? '—') . ($deposit->received_at === null ? '' : ' · 🕒 ' . Persian::date($deposit->received_at, withTime: true)),
+            '📩 ' . self::field((string) $deposit->body),
+        ];
     }
 
     /** The receipt was rejected, with support's reason. */
@@ -319,13 +371,14 @@ final class ShopReports
      */
     public function orderDelivered(Order $order): void
     {
+        $manage = static fn(): array => ['keyboard' => self::managing($order->user)];
         match ($order->type) {
-            OrderType::Purchase => $this->report($order->shop(), Topic::Purchases, fn(): array => ['text' => $this->purchaseText($order)]),
-            OrderType::Renewal => $this->report($order->shop(), Topic::Renewals, static fn(): array => ['text' => self::renewalText($order)]),
-            OrderType::ExtraTraffic, OrderType::ExtraTime, OrderType::ExtraDevices => $this->report($order->shop(), Topic::Renewals, static fn(): array => ['text' => self::extraText($order)]),
-            OrderType::WalletTopUp => $this->report($order->shop(), Topic::Wallet, static fn(): array => ['text' => self::topUpText($order)]),
+            OrderType::Purchase => $this->report($order->shop(), Topic::Purchases, fn(): array => ['text' => $this->purchaseText($order)] + $manage()),
+            OrderType::Renewal => $this->report($order->shop(), Topic::Renewals, static fn(): array => ['text' => self::renewalText($order)] + $manage()),
+            OrderType::ExtraTraffic, OrderType::ExtraTime, OrderType::ExtraDevices => $this->report($order->shop(), Topic::Renewals, static fn(): array => ['text' => self::extraText($order)] + $manage()),
+            OrderType::WalletTopUp => $this->report($order->shop(), Topic::Wallet, static fn(): array => ['text' => self::topUpText($order)] + $manage()),
             // An agent bought traffic for their bot: the main bot's group, under the agency.
-            OrderType::Traffic => $this->report(Bot::MAIN, Topic::Agency, static fn(): array => ['text' => self::trafficText($order)]),
+            OrderType::Traffic => $this->report(Bot::MAIN, Topic::Agency, static fn(): array => ['text' => self::trafficText($order)] + $manage()),
         };
 
         $this->report($order->shop(), Topic::Errors, static fn(): ?array => ReportMessage::query()->where('ref', self::DELIVERY_REF . $order->id)->exists() ? [
@@ -345,7 +398,7 @@ final class ShopReports
             sprintf("🔗 <b>سرویس با لینک به حساب مشتری اضافه شد</b> · اشتراک \u{200E}#%d", $subscription->id),
             '👤 ' . self::customer($subscription->user),
             ...self::heldService($subscription),
-        ])]);
+        ]), 'keyboard' => self::managing($subscription->user)]);
     }
 
     /**
@@ -360,7 +413,7 @@ final class ShopReports
             '👤 به: ' . self::customer($subscription->user),
             ...self::heldService($subscription),
             $by->isCustomer() ? '✋ به درخواست خود مشتری' : $this->bySupport($by->reviewer),
-        ])]);
+        ]), 'keyboard' => self::managingBoth($from, '⚙️ مدیریت مالک قبلی', $subscription->user, '⚙️ مدیریت مالک جدید')]);
     }
 
     /**
@@ -375,7 +428,7 @@ final class ShopReports
             '👤 به: ' . self::customer($transfer->recipient),
             '💳 مبلغ: ' . Money::format($transfer->amount),
             sprintf('👛 موجودی فرستنده: %s · گیرنده: %s', Money::format($transfer->sender->balance()), Money::format($transfer->recipient->balance())),
-        ])]);
+        ]), 'keyboard' => self::managingBoth($transfer->sender, '⚙️ مدیریت فرستنده', $transfer->recipient, '⚙️ مدیریت گیرنده')]);
     }
 
     /**
@@ -391,7 +444,7 @@ final class ShopReports
             ...self::heldService($subscription),
             '📦 حجم: ' . Messages::traffic($subscription->traffic_limit_bytes) . ' · 📅 پایان: ' . Messages::expiry($subscription->expires_at, $subscription->duration_hours),
             '🔢 تست‌های این مشتری تا حالا: ' . Persian::number(TestAccount::query()->where('user_id', $subscription->user_id)->whereNotNull('issued_at')->count()),
-        ])]);
+        ]), 'keyboard' => self::managing($subscription->user)]);
     }
 
     /**
@@ -412,7 +465,7 @@ final class ShopReports
             $this->bySupport($by->reviewer),
             ...self::note(self::SUPPORT_NOTE, $note),
             ...($leftOnPanel ? ['⚠️ کلاینتش روی پنل سرور ماند؛ آن را از خود پنل حذف کنید.'] : []),
-        ])]);
+        ]), 'keyboard' => self::managing($subscription->user)]);
     }
 
     /**
@@ -502,7 +555,7 @@ final class ShopReports
 
             return [
                 'text' => implode("\n", $lines),
-                'keyboard' => DeliveryRetry::buttons($order->id),
+                'keyboard' => self::managing($order->user, DeliveryRetry::buttons($order->id)),
                 'ref' => self::DELIVERY_REF . $order->id,
                 'reply_ref' => self::DELIVERY_REF . $order->id,
                 'clears_buttons' => true,
@@ -533,7 +586,7 @@ final class ShopReports
             }
             $lines[] = '📨 ' . $message->channel->source();
 
-            return self::ticketReport($ticket, $message, $lines, self::TICKET_REPLY) + ['keyboard' => TicketClose::buttons($ticket->id)];
+            return self::ticketReport($ticket, $message, $lines, self::TICKET_REPLY) + ['keyboard' => self::managing($ticket->user, TicketClose::buttons($ticket->id))];
         });
     }
 
@@ -551,7 +604,7 @@ final class ShopReports
                 $lines[] = '🔓 تیکت دوباره باز شد.';
             }
 
-            return self::ticketReport($ticket, $message, $lines, '') + ['keyboard' => TicketClose::buttons($ticket->id), 'reply_ref' => self::TICKET_REF . $ticket->id, 'clears_buttons' => true];
+            return self::ticketReport($ticket, $message, $lines, '') + ['keyboard' => self::managing($ticket->user, TicketClose::buttons($ticket->id)), 'reply_ref' => self::TICKET_REF . $ticket->id, 'clears_buttons' => true];
         }, fold: true);
     }
 
@@ -593,7 +646,7 @@ final class ShopReports
             $head = implode("\n", $lines) . "\n\n";
             $room = Limits::MESSAGE - self::ROOM - TelegramHtml::visibleLength($head . self::REVIEW_PENDING);
 
-            return ['text' => $head . htmlspecialchars(Limits::fit($review->body, $room)) . self::REVIEW_PENDING];
+            return ['text' => $head . htmlspecialchars(Limits::fit($review->body, $room)) . self::REVIEW_PENDING, 'keyboard' => self::managing($review->user)];
         });
     }
 
@@ -710,7 +763,8 @@ final class ShopReports
             'ticket_id' => $ticket->id,
             'reply_ref' => self::TICKET_REF . $ticket->id,
             'clears_buttons' => true,
-        ] + ($closable ? ['keyboard' => TicketClose::buttons($ticket->id)] : []));
+            'keyboard' => self::managing($ticket->user, $closable ? TicketClose::buttons($ticket->id) : []),
+        ]);
     }
 
     /**
@@ -765,6 +819,9 @@ final class ShopReports
             }
             if ($attributes === null) {
                 return;
+            }
+            if (($attributes['keyboard'] ?? null) === []) {
+                $attributes['keyboard'] = null;
             }
 
             $this->db->transaction(static function () use ($topic, $attributes, $fold): void {
@@ -973,7 +1030,8 @@ final class ShopReports
     {
         $method = $payment?->method->label;
 
-        return '💳 مبلغ: ' . Money::format($payment->amount ?? $order->amount) . ($method !== null ? ' · ' . self::name($method) : '');
+        return '💳 مبلغ: ' . Money::format($payment->amount ?? $order->amount) . ($method !== null ? ' · ' . self::name($method) : '')
+            . ($payment?->reviewer === Deposits::REVIEWER ? ' · ✅ تایید با پیامک بانک' : '');
     }
 
     /** @return list<string> The line saying what the payment earned the customer's referrer, when it earned anything. */
@@ -997,6 +1055,40 @@ final class ShopReports
             OrderType::WalletTopUp => sprintf("💰 شارژ کیف پول · سفارش \u{200E}#%d", $order->id),
             OrderType::Traffic => sprintf("💾 خرید حجم نمایندگی (%s) · سفارش \u{200E}#%d", Messages::bytes((int) $order->traffic_bytes), $order->id),
         };
+    }
+
+    /**
+     * A report's buttons — `$rows`, then «⚙️ مدیریت کاربر» for the customer it is about (UserManagement): their card, to
+     * manage them right there. Only for a customer of the group's shop: another shop's is nobody there.
+     *
+     * @param list<list<array<string, mixed>>> $rows
+     * @return list<list<array<string, mixed>>>
+     */
+    private static function managing(?User $user, array $rows = []): array
+    {
+        return $user !== null && self::ours($user) ? [...$rows, ...UserManagement::buttons($user->id)] : $rows;
+    }
+
+    /**
+     * A report about two customers (a transfer): a button for each, labelled whose — the first read first, on a Persian
+     * reader's right —, either alone when only it is of the group's shop.
+     *
+     * @return list<list<array<string, mixed>>>
+     */
+    private static function managingBoth(User $first, string $firstLabel, User $second, string $secondLabel): array
+    {
+        $buttons = [
+            ...(self::ours($second) ? [UserManagement::button($second->id, $secondLabel)] : []),
+            ...(self::ours($first) ? [UserManagement::button($first->id, $firstLabel)] : []),
+        ];
+
+        return $buttons === [] ? [] : [$buttons];
+    }
+
+    /** A customer of the shop whose group the report goes to. */
+    private static function ours(User $user): bool
+    {
+        return (int) $user->bot_id === CurrentBot::id();
     }
 
     /**

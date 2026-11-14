@@ -6,14 +6,15 @@ import { EmptyState } from '@/components/empty-state'
 import { ListTotal } from '@/components/list-total'
 import { ListView, PhoneFacts, RowTitleButton, SortableHead, type SortedList } from '@/components/list-view'
 import { PaidFor } from '@/components/orders/order-subject'
-import { Page } from '@/components/page'
-import { PageHeader } from '@/components/page-header'
 import { PageTabs, tabPanel } from '@/components/page-tabs'
+import { DepositsList, DepositsOff } from '@/components/payments/deposits/deposits-list'
 import { DismissReceiptsModal, type DismissScope } from '@/components/payments/dismiss-receipts'
 import { PaymentStatusCell } from '@/components/payments/payment-status-cell'
 import { ReviewModal } from '@/components/payments/review-modal'
 import { SearchBox } from '@/components/search-box'
+import { SectionedPage } from '@/components/sectioned-page'
 import { SelectionBar } from '@/components/selection-bar'
+import { PAYMENT_SECTIONS } from '@/components/shell/nav'
 import { statusTabs } from '@/components/status-badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -42,11 +43,41 @@ const SORTS: PaymentSort[] = ['created', 'amount']
 /** Only a receipt waiting for review is ticked to be dismissed. */
 const waiting = (payment: PaymentRow) => payment.status === 'awaiting_review'
 
+type Section = (typeof PAYMENT_SECTIONS)[number]['value']
+
+const HEADERS: Record<Section, { title: string; description: string }> = {
+  payments: {
+    title: 'پرداخت‌ها',
+    description:
+      'هر پرداختی که مشتری‌ها شروع کرده‌اند. رسیدهای کارت به کارت این‌جا بررسی می‌شوند؛ تایید یعنی تحویل سرویس یا شارژ کیف پول. پرداخت آنلاین را خود درگاه تایید می‌کند و از جزئیاتش می‌شود از درگاه استعلام کرد. برای رد کردن چند رسید در انتظار با هم، انتخابشان کنید.',
+  },
+  deposits: {
+    title: 'واریزهای پیامکی',
+    description:
+      'پیامک‌های واریز بانک که فوراپ از گوشی فروشگاه فرستاده، تازه‌ترین اول: پرداخت کارت به کارتی که هر کدام تایید کرد، یا این‌که چرا پرداختی را تایید نکرد. واریز بدون پرداخت یا با چند پرداخت هم‌مبلغ را پشتیبانی بررسی می‌کند.',
+  },
+}
+
+/**
+ * «پرداخت‌ها» (both panels), in two sections: every payment with the receipts to review, and the bank SMS the phone app
+ * forwarded («تایید خودکار واریز») — saying so while that is off.
+ */
+export function PaymentsPage() {
+  return (
+    <SectionedPage sections={PAYMENT_SECTIONS} header={(current) => HEADERS[current.value]} above={(current) => current.value === 'deposits' && <DepositsOff />}>
+      {{
+        payments: <PaymentsList />,
+        deposits: <DepositsList />,
+      }}
+    </SectionedPage>
+  )
+}
+
 /**
  * Every payment, with the receipt review queue up front: open one to see the receipt and accept or refuse it — or tick
  * the receipts waiting for review (or take all of them) to dismiss them at once (DismissReceiptsModal).
  */
-export function PaymentsPage() {
+function PaymentsList() {
   const tabs = useId()
   // The dashboard and the sidebar link here with ?status=awaiting_review, the dashboard with ?status=held too; an order to
   // one of its payments with ?search=#id; a customer's page with ?user=.
@@ -78,13 +109,9 @@ export function PaymentsPage() {
     else selection.set([payment], false)
   }
 
+  // A column as the page's own (its gaps, the selection bar centred under the list), inside the section.
   return (
-    <Page>
-      <PageHeader
-        title="پرداخت‌ها"
-        description="هر پرداختی که مشتری‌ها شروع کرده‌اند. رسیدهای کارت به کارت این‌جا بررسی می‌شوند؛ تایید یعنی تحویل سرویس یا شارژ کیف پول. پرداخت آنلاین را خود درگاه تایید می‌کند و از جزئیاتش می‌شود از درگاه استعلام کرد. برای رد کردن چند رسید در انتظار با هم، انتخابشان کنید."
-      />
-
+    <div className="flex flex-col gap-6">
       <PageTabs
         id={tabs}
         value={list.filter}
@@ -165,7 +192,7 @@ export function PaymentsPage() {
           selection.clear()
         }}
       />
-    </Page>
+    </div>
   )
 }
 

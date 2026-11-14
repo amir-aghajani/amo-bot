@@ -61,6 +61,32 @@ final class UsersController extends ApiController
     }
 
     /**
+     * POST /users/{id}/message — {text}: a message from support, sent to the customer; what came of it
+     *
+     * @param array<string, string> $args
+     * @throws ActorRefusedException 403 from the website, an admin's account or an agent's
+     */
+    public function message(Request $request, Response $response, array $args): Response
+    {
+        $delivery = $this->actions->message($this->load(User::class, $args), Principal::of($request)->actor(), $this->input($request));
+
+        return $this->json($response, ['delivery' => $delivery->value]);
+    }
+
+    /**
+     * PUT /users/{id}/phone-exempt — {phone_exempt}: excused from the shop's phone rule, or held to it again
+     *
+     * @param array<string, string> $args
+     * @throws ActorRefusedException 403 from the website, an admin's account or an agent's
+     */
+    public function phoneExempt(Request $request, Response $response, array $args): Response
+    {
+        $user = $this->actions->setPhoneExempt($this->load(User::class, $args), Principal::of($request)->actor(), $this->input($request));
+
+        return $this->json($response, ['user' => $this->users->presentWithCounts($user)]);
+    }
+
+    /**
      * PUT /users/{id}/role — {role}: the bot's admin, or a customer again
      *
      * @param array<string, string> $args

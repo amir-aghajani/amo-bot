@@ -21,11 +21,13 @@ token ([tokens and sessions](Store-API-Sign-In.md#tokens-and-sessions)).
     "has_password": true,
     "two_factor": true,
     "phone": null,
+    "phone_exempt": false,
     "balance": "150000.00",
     "created_at": "2026-10-01T14:05:09+00:00"
   },
   "unread_notifications": 3,
   "staff": null,
+  "perks": true,
   "loyalty": {
     "tier": { "id": 2, "name": "نقره‌ای", "discount_percent": 3, "cashback_percent": 1 },
     "spent": "750000.00",
@@ -45,16 +47,18 @@ token ([tokens and sessions](Store-API-Sign-In.md#tokens-and-sessions)).
 | `has_password` | their email and a password sign them in |
 | `two_factor` | the password sign-in asks a second step ([two-factor sign-in](#two-factor-sign-in)) |
 | `phone` | their verified mobile in E.164 — as they shared it with the bot, or proved by a texted code on the website; while the website signs in by SMS it is a way in ([ways in](#ways-in-adding-and-removing)); `null` without one |
+| `phone_exempt` | the shop's phone rule never asks them for their number (`GET /`'s `shop.phone_required`, `shop.phone_moments`), through either key: support excused them, or they are the bot's admin — ask them nothing, whatever the shop asks |
 | `balance` | the wallet in Toman; below zero an agent's debt |
 | `created_at` | since when they are the shop's customer |
 | `unread_notifications` | the count for the site's bell ([notifications](Store-API-Notifications.md)) |
 | `staff` | what the shop's admin API lets them do — their grants, whether this session is signed in strongly enough, until when it works the admin API and until when it counts as recent —; `null` for a customer who is no admin of the shop, while the website lets no admin in, through the mini app, which has no admin API, and for a session the mini app signed in, which the admin API refuses on the website too ([the shop's admins](Store-API-Admins.md#signing-in)) |
+| `perks` | whether the customers' perks reach them: `false` while «همکارها فقط با قیمت همکاری بخرند» is on and they pay agent prices (an agent, or in a «همکار» group) — whatever they buy, no sale (`GET /sales` with their token lists none), loyalty tier, discount code, first-purchase price, cashback, lucky wheel or nightly draw; a plan's agent price where it has one, the regular price elsewhere; their own discount stays. Hide the code field, the wheel, the draw and cashback while it is `false` ([Discounts](Discounts.md#agents-and-colleagues)) |
 | `loyalty` | their loyalty tier — `tier` (its name, the discount it gives at their checkouts and the extra cashback it adds) or `null` below the first —, what they `spent` (purchases, renewals and extras paid and not given back, Toman), and the `next` tier with what is still `missing` to reach it, `null` at the top; a shop with no tier has both `null` ([loyalty tiers](Loyalty-Cashback-And-Draws.md#loyalty-tiers)) |
 | `session` | this session: `method`, how it was signed in or the stronger way proven on it since (`telegram`, `mini_app`, `google`, `phone`, `password`, `password_2fa` — or `preview`, a panel's look at the mini app as this customer: read only, through the mini app's key alone, for 30 minutes, [a panel's preview](Store-API-Sign-In.md#a-panels-preview)); `biometric`, whether the mini app keeps a fingerprint secret for it ([fingerprint or face](#fingerprint-or-face)); and `recent_until`, until when it counts as recently signed in — `null` once that has passed: prove a way in again before what asks it ([a recent sign-in](#a-recent-sign-in)) |
 
 `PATCH /me` answers as `GET /me` does. `PUT /me/password`, `POST /me/2fa/disable`, a way in added or removed (the `200`s
 of `/me/identities/*`) and `POST /me/merge` answer `{ "customer": … }` alone — the same `customer` object, without
-the count, `staff`, `loyalty` or `session`. The rest answer what they make: a secret to set up, recovery codes, how long a code
+the count, `staff`, `perks`, `loyalty` or `session`. The rest answer what they make: a secret to set up, recovery codes, how long a code
 or a proof lasts, a merge offer.
 
 ## A recent sign-in
@@ -331,9 +335,9 @@ email goes with its password and two-factor sign-in, and the address is emailed 
 Telegram leaves the services with this account, and the bot will know that Telegram account as a new customer from its
 next message — say so before the customer confirms. Through the mini app's key it is refused, a `422` on `kind`
 (`حساب تلگرام از داخل مینی‌اپ جدا نمی‌شود؛ …`): the app and the bot know the customer by that account — the website
-removes it. Removing the number in a shop whose bot asks every customer's number (`shop.phone_required`) has the bot
-ask it again. There is no "change email" nor "change number": remove it (another way in must remain) and add the new
-one.
+removes it. Removing the number in a shop whose bot asks customers' numbers (`shop.phone_required`, or at the moments of
+`shop.phone_moments`) has the bot ask it again — unless the customer is excused (`phone_exempt`). There is no "change
+email" nor "change number": remove it (another way in must remain) and add the new one.
 
 ## The merge offer
 

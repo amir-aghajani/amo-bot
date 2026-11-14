@@ -56,6 +56,15 @@ final class Actor
     }
 
     /**
+     * The shop itself on what a machine told it, under the machine's name for the decision to keep (a card payment a bank
+     * SMS approved: Payments\Deposits\Services\Deposits::REVIEWER).
+     */
+    public static function machine(string $reviewer): self
+    {
+        return new self(ActorKind::System, $reviewer, null);
+    }
+
+    /**
      * The name a person's decision keeps, for what only a person decides (a receipt refused, a refund).
      *
      * @throws \LogicException for the shop itself

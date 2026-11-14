@@ -480,10 +480,10 @@ final class PaymentService
     /**
      * The order's open card payment with that method (touched, so its expiry restarts) or a new one, under a lock on the
      * order: two taps make one payment. A new one is shown a card picked for it — none while the shop takes card payments
-     * in support's private chat (PaymentCards::toSupport()) —, and a top-up's asks a few Toman more at random
-     * (PaymentCards::amountFor()). An open one keeps what it was shown; one shown no card gets a card once the shop shows
-     * cards again (as one made before cards does), at the sum it asks — or, when another open payment to that card asks
-     * the same sum, a fresh one.
+     * in support's private chat (PaymentCards::toSupport()) —, and a top-up's (while the shop listens to its bank SMS, any
+     * order's) asks a few Toman more at random (PaymentCards::amountFor()). An open one keeps what it was shown; one shown
+     * no card gets a card once the shop shows cards again (as one made before cards does), at the sum it asks — or, when
+     * another payment asks the same sum, a fresh one.
      *
      * @throws MethodUnavailableException no card of the method has room for the amount today
      */
@@ -506,7 +506,7 @@ final class PaymentService
             }
             $card = $this->cards->pick($method, $order->type, $order->amount) ?? throw MethodUnavailableException::noCard($method);
             if ($open !== null) {
-                $open->forceFill(['card_id' => $card->id, 'amount' => $this->cards->amountFor($method, $card, $order->type, $order->amount, keeping: $open->amount)])->save();
+                $open->forceFill(['card_id' => $card->id, 'amount' => $this->cards->amountFor($method, $card, $order->type, $order->amount, keeping: $open)])->save();
 
                 return $open;
             }

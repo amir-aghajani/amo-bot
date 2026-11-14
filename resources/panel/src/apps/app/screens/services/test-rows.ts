@@ -1,3 +1,4 @@
+import { storeTransfer } from '@/apps/app/test/rows'
 import type { StoreCheckoutResponse, StoreOrder } from '@/lib/api-types'
 
 /* What the services' screens' tests are answered with besides the shared rows (apps/app/test/rows): an order's checkout. */
@@ -28,7 +29,7 @@ export function checkout(type: StoreOrder['type'], amount: string): StoreCheckou
         devices: null,
         payments: [],
       },
-      transfer: { payment_id: 70, amount, amount_rial: `${Number(amount) * 10}`, card: '6037997700001119', holder: 'علی رضایی', bank: 'ملت', instructions: null, contact: null },
+      transfer: storeTransfer({ payment_id: 70, amount, amount_rial: `${Number(amount) * 10}` }),
       link: null,
       subscription: null,
     },

@@ -103,7 +103,7 @@ export const AGENT_ROUTES: RouteObject[] = [
                   { path: 'users/groups', element: <UsersPage /> },
                   { path: 'users/:id', element: <AgentCustomerPage /> },
                   { path: 'orders', element: <OrdersPage /> },
-                  { path: 'payments', element: <PaymentsPage /> },
+                  { path: 'payments/:section?', element: <PaymentsPage /> },
                   { path: 'subscriptions', element: <AgentSubscriptionsPage /> },
                   { path: 'referrals/:section?', element: <ReferralsPage /> },
                   { path: 'discounts/:section?', element: <DiscountCodesPage /> },

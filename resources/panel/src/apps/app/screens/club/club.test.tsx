@@ -9,8 +9,8 @@ vi.mock('@/apps/app/config', () => import('@/apps/app/test/config'))
 
 /*
  * «باشگاه مشتریان» (screens/club/club): each part only while the shop runs it — the loyalty tier with its perks and the
- * way to the next, the cashback note, and the ways in to the wheel, the nightly draw and the referral program; the
- * account that could not be read said so, to read again.
+ * way to the next, the cashback note, and the ways in to the wheel, the nightly draw and the referral program — only the
+ * last for a customer the perks do not reach; the account that could not be read said so, to read again.
  */
 
 const SILVER = app.account({
@@ -52,6 +52,22 @@ describe('the customer club', () => {
 
   it('says so when the shop runs none of them', () => {
     render(app.screen(<ClubScreen />, { at: '/club', shop: shopWith({ loyalty: false, cashback: false, wheel: false, lottery: false }, false) }))
+
+    expect(screen.getByText('باشگاه مشتریان فعلا برنامه‌ای ندارد')).toBeTruthy()
+  })
+
+  it('shows a customer the perks do not reach the referral program alone', () => {
+    render(app.screen(<ClubScreen />, { at: '/club', account: app.account({ perks: false }) }))
+
+    expect(screen.queryByRole('region', { name: 'سطح وفاداری' })).toBeNull()
+    expect(screen.queryByText('کش‌بک')).toBeNull()
+    expect(screen.queryByRole('link', { name: /گردونه شانس/ })).toBeNull()
+    expect(screen.queryByRole('link', { name: /قرعه‌کشی شبانه/ })).toBeNull()
+    expect(screen.getByRole('link', { name: /دعوت دوستان/ })).toBeTruthy()
+  })
+
+  it('says the club has nothing for a customer the perks do not reach while invitations are off', () => {
+    render(app.screen(<ClubScreen />, { at: '/club', shop: shopWith({}, false), account: app.account({ perks: false }) }))
 
     expect(screen.getByText('باشگاه مشتریان فعلا برنامه‌ای ندارد')).toBeTruthy()
   })

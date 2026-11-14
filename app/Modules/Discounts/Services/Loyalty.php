@@ -15,10 +15,13 @@ use Illuminate\Database\Eloquent\Builder;
 /**
  * Loyalty tiers («سطح وفاداری»): what a customer spent in the shop (Order::spending()) puts them on the highest tier
  * whose threshold they reached. A tier gives a discount (one of the automatic discounts) and extra cashback (read by
- * Rewards\Services\Cashback). A shop with no tier has no loyalty program — there is no separate switch.
+ * Rewards\Services\Cashback). A shop with no tier has no loyalty program — there is no separate switch. One who goes
+ * without the customers' perks (Perks) stands on no tier, as in a shop without them.
  */
 final class Loyalty
 {
+    public function __construct(private readonly Perks $perks) {}
+
     /** What the customer spent in the shop, in Toman. */
     public function spent(User $user): string
     {
@@ -35,13 +38,29 @@ final class Loyalty
         return LoyaltyTier::query()->orderBy('min_spent')->orderBy('id')->get()->all();
     }
 
-    /** The customer's tier now; null for none, no tier at all, or a visitor who has not signed in. */
-    public function tierOf(?User $user): ?LoyaltyTier
+    /**
+     * The tiers `$user` can stand on: the shop's, or none for one without the perks (Perks).
+     *
+     * @return list<LoyaltyTier>
+     */
+    public function tiersFor(User $user): array
+    {
+        return $this->perks->withheld($user) ? [] : $this->tiers();
+    }
+
+    /**
+     * The customer's tier now; null for none, no tier at all, a visitor, or one without the perks (Perks). `$tiers`: the
+     * shop's tiers, from a caller that already asked Perks about them (tiersFor() when left out). What they spent is
+     * read only when there are tiers.
+     *
+     * @param list<LoyaltyTier>|null $tiers The lowest threshold first
+     */
+    public function tierOf(?User $user, ?array $tiers = null): ?LoyaltyTier
     {
         if ($user === null) {
             return null;
         }
-        $tiers = $this->tiers();
+        $tiers ??= $this->tiersFor($user);
 
         return $tiers === [] ? null : self::tierFor($this->spent($user), $tiers);
     }
@@ -54,7 +73,7 @@ final class Loyalty
      */
     public function standing(User $user): array
     {
-        $tiers = $this->tiers();
+        $tiers = $this->tiersFor($user);
         $spent = $this->spent($user);
         $tier = self::tierFor($spent, $tiers);
         $next = self::nextFor($spent, $tiers);
@@ -88,7 +107,7 @@ final class Loyalty
         if ($fulfilled === null || !$order->type->forThemselves() || !Money::isPositive($order->amount)) {
             return null;
         }
-        $tiers = $this->tiers();
+        $tiers = $this->tiersFor($order->user);
         if ($tiers === []) {
             return null;
         }

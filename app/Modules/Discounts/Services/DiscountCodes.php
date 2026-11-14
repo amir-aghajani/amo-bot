@@ -303,7 +303,7 @@ final class DiscountCodes
             !$code->takesServer($target->serverId) => self::WRONG_SERVER,
             !Money::isPositive($amount) => self::NOTHING_TO_TAKE,
             $code->min_amount !== null && Money::compare($amount, $code->min_amount) < 0 => sprintf(self::TOO_LITTLE, Money::format($code->min_amount)),
-            $code->first_purchase_only && Order::boughtBy($user->id)->exists() => self::FIRST_ONLY,
+            $code->first_purchase_only && ($user->boughtElsewhere() || Order::boughtBy($user->id)->exists()) => self::FIRST_ONLY,
             default => null,
         };
         if ($refusal !== null) {

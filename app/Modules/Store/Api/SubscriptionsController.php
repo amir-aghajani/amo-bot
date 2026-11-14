@@ -60,7 +60,8 @@ final class SubscriptionsController extends ApiController
 
     /**
      * POST /subscriptions/claim — {link}: «افزودن سرویس با لینک», the service its link is for added to the customer's
-     * account; a 201 with it. Through the mini app, once the bot's gates let them (CustomerGates::holdBack()).
+     * account; a 201 with it. Through the mini app, once the bot's gates let them (CustomerGates::holdBack(); no moment
+     * of the phone rule's, so their number only while the shop asks it before everything).
      *
      * @throws ValidationException 422 on `link`: too long; on `status`: the bot's gates hold them back
      * @throws ServiceClaimRefusedException 422 / 409 / 502 on `link`

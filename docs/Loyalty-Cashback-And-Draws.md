@@ -110,7 +110,9 @@ at most that long after its hour.
   back, at a price. Each draw's time ends a minute before it is made, so an order paid at that moment enters the next
   one, and moving «ساعت قرعه‌کشی» never enters an order twice or leaves one out. The time reaches back 48 hours at most
   (after nights without a draw); a shop's first draw takes the 24 hours before it. The bot's admins and banned
-  customers never take part; agents only while the settings let them.
+  customers never take part; agents only while the settings let them — and neither agents nor a «همکار» group's
+  customers while «همکارها فقط با قیمت همکاری بخرند» is on, which also leaves them without a loyalty tier, cashback and
+  the wheel ([Discounts](Discounts.md#agents-and-colleagues)).
 - **The winners** are drawn by their entries. Each is given the prize («جایزه قرعه‌کشی شبانه» on a wallet's line) and
   told («برنده قرعه‌کشی شبانه»).
 - **A winner who cannot be given it** — no running service takes the traffic or the days (nor one the days would end

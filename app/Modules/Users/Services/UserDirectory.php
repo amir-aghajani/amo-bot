@@ -134,6 +134,8 @@ final class UserDirectory
     {
         return self::presentRef($user) + [
             'phone' => $user->phone,
+            // Excused from the shop's phone rule: never asked for their number.
+            'phone_exempt' => $user->phone_exempt,
             'status' => $user->status->value,
             'role' => $user->role->value,
             'balance' => $user->balance(),

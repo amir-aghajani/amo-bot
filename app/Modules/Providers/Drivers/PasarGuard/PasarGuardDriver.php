@@ -61,7 +61,7 @@ final class PasarGuardDriver implements PanelDriver
             notes: [
                 'نسخه 3.1 و بالاتر پشتیبانی می‌شود.',
                 'کلید API را از بخش API Keys پنل بسازید (پیشنهادی، از نسخه 5.1)؛ یا با نام کاربری و رمز یک ادمین وصل شوید.',
-                'آدرس پنل همان آدرس داشبورد بدون /dashboard است، مثل https://panel.example.com:8000',
+                "آدرس پنل همان آدرس داشبورد بدون \u{2068}/dashboard\u{2069} است، مثل https://panel.example.com:8000",
                 'PasarGuard محدودیت IP ندارد؛ تعداد کاربر پلن روی این سرور اعمال نمی‌شود و کاربر اضافه فروخته نمی‌شود.',
             ],
             traits: [self::MARK => 'PG', self::VENDOR => 'PasarGuard', self::DOCS => 'https://github.com/PasarGuard/panel'] + $this->capabilities()->traits(),

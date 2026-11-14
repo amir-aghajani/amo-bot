@@ -22,7 +22,8 @@ use App\Support\Persian;
  * (Rewards\Services\LuckyWheel): the wheel as the customer finds it, and a spin — where it landed, for the screen's
  * animation, and what came of it in the bot's words. The screen shows the prize, so nothing is sent in Telegram (a plan's
  * service is among their services once delivered). A spin refused before anything was spent is a 422 on `status` — and
- * so is one the bot would hold back first (CustomerGates: a Telegram account, their number, the shop's channels).
+ * so is one the bot would hold back first (CustomerGates: a Telegram account, their number while the shop asks it
+ * before everything — a spin is none of the moments it may ask it at instead —, the shop's channels).
  */
 final class CustomerWheel
 {

@@ -9,7 +9,8 @@ import type { StoreResponse } from '@/lib/api-types'
 
 /*
  * The home screen's shortcuts: a grid of the app's places, each an icon in a square tinted its own colour and its name
- * under it — the free test account, the customer club and the reviews only while the shop runs them.
+ * under it — the free test account, the customer club and the reviews only while the shop runs them (the club only while
+ * it has something for the customer: `perks`, clubOpen()).
  */
 
 interface Shortcut {
@@ -30,13 +31,13 @@ function Tile({ to, label, icon, tint }: Shortcut) {
   )
 }
 
-export function Shortcuts({ shop }: { shop: StoreResponse }) {
+export function Shortcuts({ shop, perks }: { shop: StoreResponse; perks: boolean }) {
   const shortcuts: Shortcut[] = [
     { to: '/buy', label: 'خرید سرویس', icon: ShoppingBag, tint: ACCENT_FILL },
     { to: '/services', label: 'سرویس‌های من', icon: Wifi, tint: '#5856d6' },
     { to: '/wallet', label: 'کیف پول', icon: Wallet, tint: '#30b350' },
     ...(shop.shop.programs.test_accounts ? [{ to: '/test', label: 'اکانت تست', icon: FlaskConical, tint: '#ff9500' }] : []),
-    ...(clubOpen(shop) ? [{ to: '/club', label: 'باشگاه مشتریان', icon: Crown, tint: '#ff2d55' }] : []),
+    ...(clubOpen(shop, perks) ? [{ to: '/club', label: 'باشگاه مشتریان', icon: Crown, tint: '#ff2d55' }] : []),
     { to: '/support', label: 'پشتیبانی', icon: Headset, tint: '#1fa5e0' },
     { to: '/tutorial', label: 'آموزش', icon: BookOpen, tint: '#af52de' },
     ...(reviewsOpen(shop) ? [{ to: '/reviews', label: 'نظرات', icon: MessageSquareQuote, tint: '#e6a100' }] : []),

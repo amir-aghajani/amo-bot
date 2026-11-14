@@ -387,19 +387,23 @@ Subscriptions، Support…)، هرگز در خود هندلر: ربات فقط �
 
 ### کارت کاربر
 
-صفحه کاربر پنل، داخل گروه: <code dir="ltr">Reports\UserManagement</code> روی کارت است — «⚙️ مدیریت کاربر» زیر گزارش یک
-تازه‌وارد یک کارت زیر آن می‌گذارد، و <code dir="ltr">/manage &lt;who&gt;</code> (`COMMAND`) هر جای گروه با یک کارت جواب
+صفحه کاربر پنل، داخل گروه: <code dir="ltr">Reports\UserManagement</code> روی کارت است — «⚙️ مدیریت کاربر» زیر هر
+گزارشی که درباره یک کاربر است (<code dir="ltr">ShopReports::managing()</code>، فقط برای کاربر فروشگاه همان گروه) یک کارت زیر
+آن می‌گذارد، و وقتی دکمه‌های دیگر گزارش می‌روند می‌ماند (<code dir="ltr">GroupButtons::buttons()</code> و `clears_buttons`
+فرستنده ردیف‌هایی را که <code dir="ltr">UserManagement::kept()</code> پیدا می‌کند نگه می‌دارند؛ کاربری که دیگر نیست فقط
+دکمه خودش را برمی‌دارد، هم در تلگرام و هم در ردیف ثبت‌شده گزارش، <code dir="ltr">GroupButtons::forget()</code>) — و <code dir="ltr">/manage &lt;who&gt;</code> (`COMMAND`) هر جای گروه با یک کارت جواب
 می‌دهد، که <code dir="ltr">&lt;who&gt;</code> شناسه تلگرام، یک @username یا شماره کاربر در فروشگاه (<code dir="ltr">#12</code>) است. روی کارت
 می‌گوید او کیست و بخش‌ها را باز می‌کند، هر کدام هندلری با پیشوند callback خودش زیر `Reports\Customers` که کارت را همان‌جا
 بازنویسی می‌کند، با «⬅️ بازگشت» به روی کارت: `CustomerServices` (همگام‌سازی، زمان و حجم، غیرفعال و فعال کردن و حذف یک
 سرویس)، `CustomerWallet` (افزایش یا کاهش با توضیح)، `CustomerOrder` (سرویسی که دستی ساخته می‌شود، مثل «افزودن سفارش»
 پنل: `ManualOrders`، و دکمه تایید یک nonce به‌عنوان کلید سفارش دارد)، `CustomerDiscount`، `CustomerHistory` (سفارش‌ها،
-پرداخت‌ها، تیکت‌ها، زیرمجموعه‌ها — فقط خواندنی) و `CustomerAccount` (ورود به وب‌سایت: خاموش کردن ورود دومرحله‌ای، خروج از
-همه دستگاه‌ها)؛ گروه‌ها، نقش و مسدودی مال خود روی کارت‌اند.
+پرداخت‌ها، تیکت‌ها، زیرمجموعه‌ها — فقط خواندنی)، `CustomerAccount` (ورود به وب‌سایت: خاموش کردن ورود دومرحله‌ای، خروج از
+همه دستگاه‌ها) و `CustomerMessage` (پیامی از طرف پشتیبانی، مثل «ارسال پیام» پنل، روی کارت هر کسی جز خود مدیر)؛ گروه‌ها،
+معافیت از شماره، نقش و مسدودی مال خود روی کارت‌اند.
 
 - **آنچه همه بخش‌ها با هم دارند** <code dir="ltr">Customers\CustomerCards</code> است: <code dir="ltr">press()</code> هر فشار دکمه را یک بار برای همه می‌سنجد — در گروه گزارش‌های وصل فروشگاه، از طرف یکی از مدیران رباتش (<code dir="ltr">GroupButtons::admin()</code>، هرگز داده دکمه)، درباره کاربری از همین فروشگاه — و یک `CardPress` به بخش می‌دهد؛ <code dir="ltr">header()</code>، <code dir="ltr">back()</code>، <code dir="ltr">show()</code> و <code dir="ltr">refused()</code> ظاهر کارت‌اند؛ <code dir="ltr">mayChange()</code> و <code dir="ltr">lockOf()</code> قاعده خود گروه گزارش‌ها: هرگز حساب خود مدیر یا یک نماینده (که مال پنل است)، که کارت فقط آن را می‌خواند.
 - **چیزهای تایپی** — یک مبلغ، یک درصد، یک قیمت — یک سوال‌اند: <code dir="ltr">ask()</code> آن را به‌شکل ForceReply زیر کارت می‌گذارد و به‌شکل یک ردیف `report_messages` ثبت می‌کند که `ref` آن بخش، نوع، مدیر، کارت و آرگومان‌هایش را نام می‌برد. `ReportGroupUpdates` پاسخ به آن را از راه <code dir="ltr">reply()</code> — از روی شناسه پیامی که به آن جواب می‌دهد، و فقط وقتی یکی از مدیران ربات نوشته باشد — به‌شکل یک `CardReply` به همان بخش برمی‌گرداند (<code dir="ltr">AnswersPrompts::answer()</code>)، که آن را با <code dir="ltr">done()</code> (کارت بازنویسی‌شده، سوال پاک‌شده) یا <code dir="ltr">retry()</code> (یک پیام زیر پاسخ، سوال سر جایش) تمام می‌کند.
-- **هر تغییر** از راه همان سرویسی انجام می‌شود که پنل به کار می‌برد، به نام همان مدیر (<code dir="ltr">Actor::groupAdmin()</code>) و با قاعده‌های آن — `UserActions` (کیف پول، نقش، مسدودی، گروه‌ها، ورود)، `SubscriptionActions`، <code dir="ltr">PersonalDiscounts::set()</code>، `ManualOrders` — و هر رد یک popup است. هرگز مسدود کردن یک مدیر، گذاشتنش در گروه «همکار»، یا تغییر تخفیف یا ورود به سایتش.
+- **هر تغییر** از راه همان سرویسی انجام می‌شود که پنل به کار می‌برد، به نام همان مدیر (<code dir="ltr">Actor::groupAdmin()</code>) و با قاعده‌های آن — `UserActions` (کیف پول، نقش، مسدودی، معافیت از شماره، گروه‌ها، ورود، پیام)، `SubscriptionActions`، <code dir="ltr">PersonalDiscounts::set()</code>، `ManualOrders` — و هر رد یک popup است. هرگز مسدود کردن یک مدیر، گذاشتنش در گروه «همکار»، یا تغییر تخفیف یا ورود به سایتش.
 
 ## ارسال همگانی
 

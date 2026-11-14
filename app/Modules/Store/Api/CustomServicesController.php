@@ -10,6 +10,7 @@ use App\Core\Http\ApiController;
 use App\Modules\Accounts\Http\Customer;
 use App\Modules\Catalog\Services\CustomServices;
 use App\Modules\Discounts\Exceptions\DiscountCodeRefusedException;
+use App\Modules\Orders\Enums\OrderType;
 use App\Modules\Orders\Exceptions\RequestKeyReusedException;
 use App\Modules\Store\Exceptions\CheckoutRefusedException;
 use App\Modules\Store\Http\IdempotencyKey;
@@ -23,8 +24,8 @@ use Psr\Http\Message\ServerRequestInterface as Request;
 /**
  * «سرویس دلخواه» on the website (Catalog\Services\CustomServices): what may be built — anyone may read it —, and for a
  * signed-in customer its price and its checkout (Store\Services\CustomerCheckout), the ordering request with its
- * Idempotency-Key, read before anything else — and through the mini app held to the bot's gates
- * (Store\Services\CustomerGates::holdBack()).
+ * Idempotency-Key, read before anything else — and through the mini app held to the bot's gates, as a purchase
+ * (Store\Services\CustomerGates::holdBackOrder()).
  */
 final class CustomServicesController extends ApiController
 {
@@ -64,7 +65,7 @@ final class CustomServicesController extends ApiController
     {
         $key = IdempotencyKey::of($request);
         $customer = Customer::of($request)->user;
-        $this->gates->holdBack(StoreMiddleware::door($request), $customer);
+        $this->gates->holdBackOrder(StoreMiddleware::door($request), $customer, OrderType::Purchase, $this->input($request));
 
         return $this->json($response, ['checkout' => $this->checkout->answer($customer, $this->checkout->buildService($customer, $this->input($request), $key))]);
     }

@@ -5,7 +5,8 @@ import { paymentRow } from '@/test/rows'
 
 /*
  * A payment's status in a list's cell (components/payments/payment-status-cell), the payments screen's and a customer's
- * card's: its badge, whether it went to the wallet or is held for support — and, on the payments screen, who decided it.
+ * card's: its badge, whether it went to the wallet or is held for support — and, on the payments screen, who decided it
+ * (a bank SMS among them).
  */
 
 const text = (node: HTMLElement) => node.textContent?.replace(/\s+/g, ' ').trim()
@@ -23,6 +24,12 @@ describe('a payment’s status cell', () => {
 
     const automatic = render(<PaymentStatusCell payment={paymentRow({ status: 'paid', auto_approved: true, reviewer: 'root' })} decided />)
     expect(text(automatic.container)).toBe('پرداخت‌شده تایید خودکار')
+  })
+
+  it('says a card payment a bank SMS named was approved so, not «توسط» it', () => {
+    const { container } = render(<PaymentStatusCell payment={paymentRow({ status: 'paid', reviewer: 'پیامک بانک' })} decided />)
+
+    expect(text(container)).toBe('پرداخت‌شده تایید با پیامک بانک')
   })
 
   it('names one of the shop’s admins by their name where the server read it', () => {

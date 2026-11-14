@@ -16,6 +16,7 @@ use App\Modules\Telegram\Reports\Customers\CustomerAccount;
 use App\Modules\Telegram\Reports\Customers\CustomerCards;
 use App\Modules\Telegram\Reports\Customers\CustomerDiscount;
 use App\Modules\Telegram\Reports\Customers\CustomerHistory;
+use App\Modules\Telegram\Reports\Customers\CustomerMessage;
 use App\Modules\Telegram\Reports\Customers\CustomerOrder;
 use App\Modules\Telegram\Reports\Customers\CustomerServices;
 use App\Modules\Telegram\Reports\Customers\CustomerWallet;
@@ -33,16 +34,19 @@ use App\Support\Persian;
 
 /**
  * A customer's card in the report group, for its bot admins to manage them right there — its front: «⚙️ مدیریت کاربر»
- * under a newcomer's report posts one under it, and `/manage <who>` anywhere in the group — a Telegram id, an @username
- * or the customer's number in the shop («#12») — answers with one.
+ * under every report about a customer (ShopReports: a newcomer, a purchase, a receipt, a ticket…) posts one under it,
+ * and `/manage <who>` anywhere in the group — a Telegram id, an @username or the customer's number in the shop («#12»)
+ * — answers with one. The button stays when the report's other buttons go (GroupButtons, kept()).
  *
  * The front says who they are: their phone, since when and when last seen, their wallet, services and paid orders,
  * their own discount, role, standing, groups and referrer. Its buttons open the card's sections, each rewriting the
  * card in place with «⬅️ بازگشت» back here — «🛍 سرویس‌ها» (CustomerServices), «👛 کیف پول» (CustomerWallet), «➕ سرویس
  * دستی» (CustomerOrder), «🏷 تخفیف» (CustomerDiscount), «🧾 سوابق» (CustomerHistory), «🔐 ورود به سایت»
- * (CustomerAccount) — and do the rest here: «👥 گروه‌ها» (a switch per group, naming the state it asks for: pressed
- * twice, or by two admins at once, it stands), «🎖 مدیر ربات شود» / «🎖 برداشتن نقش مدیر» and «⛔️ مسدود شود» / «✅ رفع
- * مسدودی» (each asked again first), «🔄 تازه‌سازی».
+ * (CustomerAccount) —, «✉️ ارسال پیام» asks for a message support sends them (CustomerMessage; on every card but the
+ * admin's own), and the rest is done here: «👥 گروه‌ها» (a switch per group, naming the state it asks for: pressed
+ * twice, or by two admins at once, it stands), «📱 معاف از شماره» / «📱 لغو معافیت شماره» (the phone rule's excuse,
+ * naming the state it asks for too; no admin's card has it), «🎖 مدیر ربات شود» / «🎖 برداشتن نقش مدیر» and «⛔️ مسدود
+ * شود» / «✅ رفع مسدودی» (each asked again first), «🔄 تازه‌سازی».
  *
  * What every section shares — the checks, the look, the questions — is CustomerCards'. Decisions go through UserActions
  * under the presser's name (Actor::groupAdmin()), by its rules for the report group: never the admin's own account nor
@@ -61,8 +65,8 @@ final class UserManagement implements GroupHandler
     /** The front again, as the account now stands: «🔄 تازه‌سازی» and every section's «⬅️ بازگشت». */
     public const OPEN = 'o';
 
-    /** A new card, under the report the button is under. */
-    private const NEW = 'n';
+    /** A new card, under the report the button is under: «⚙️ مدیریت کاربر». */
+    public const NEW = 'n';
     /** The role's change asked; then made, to the role its button names (a stale card never flips it the other way). */
     private const ROLE = 'r';
     private const ROLE_SET = 'rs';
@@ -72,6 +76,8 @@ final class UserManagement implements GroupHandler
     /** The groups' switches; one group switched for the customer, to the state its button names: `:<group>:<1 in|0 out>`. */
     private const GROUPS = 'g';
     private const GROUP_SWITCH = 'gs';
+    /** The phone rule's excuse given or ended, to the state its button names: `:<1 excused|0 held to it>`. */
+    private const PHONE_SET = 'ps';
 
     /** The most groups the card offers a switch for: a keyboard holds 100 buttons. */
     private const GROUPS_MOST = 40;
@@ -93,6 +99,8 @@ final class UserManagement implements GroupHandler
     private const UNBANNED = '✅ مسدودی برداشته شد.';
     private const JOINED = '✅ به «%s» اضافه شد.';
     private const LEFT = '▫️ از «%s» برداشته شد.';
+    private const PHONE_EXCUSED = '📱 دیگر برای شماره موبایل نگه داشته نمی‌شود.';
+    private const PHONE_HELD = '📱 مثل بقیه برای شماره موبایل نگه داشته می‌شود.';
 
     /** A name the words show. */
     private const NAME_MAX = 64;
@@ -107,13 +115,56 @@ final class UserManagement implements GroupHandler
     ) {}
 
     /**
-     * The one button under a newcomer's report.
+     * The row under a report about one customer: «⚙️ مدیریت کاربر».
      *
      * @return list<list<array<string, mixed>>>
      */
     public static function buttons(int $userId): array
     {
-        return InlineKeyboard::make()->row(InlineKeyboard::callback('⚙️ مدیریت کاربر', CallbackData::build(self::PREFIX, self::NEW, $userId)))->build()['inline_keyboard'];
+        return InlineKeyboard::make()->row(self::button($userId))->build()['inline_keyboard'];
+    }
+
+    /**
+     * The button that posts `$userId`'s card under the report it is under; `$label` names whose, under a report about two
+     * («⚙️ مدیریت فرستنده»).
+     *
+     * @return array<string, mixed>
+     */
+    public static function button(int $userId, string $label = '⚙️ مدیریت کاربر'): array
+    {
+        return InlineKeyboard::callback($label, CallbackData::build(self::PREFIX, self::NEW, $userId));
+    }
+
+    /**
+     * The rows of `$rows` made of «⚙️ مدیریت کاربر» buttons only: what stays under a report when its other buttons go (a
+     * receipt decided, a ticket closed) — the customer is still there to manage.
+     *
+     * @param list<list<array<string, mixed>>> $rows
+     * @return list<list<array<string, mixed>>>
+     */
+    public static function kept(array $rows): array
+    {
+        return array_values(array_filter($rows, static fn(array $row): bool => $row !== [] && count(array_filter($row, self::isNew(...))) === count($row)));
+    }
+
+    /**
+     * `$rows` without the button pressing `$data` (a gone customer's «⚙️ مدیریت کاربر»), a row it leaves empty dropped:
+     * a report's buttons once that customer is gone — another's beside it (a transfer's) stays.
+     *
+     * @param list<list<array<string, mixed>>> $rows
+     * @return list<list<array<string, mixed>>>
+     */
+    public static function without(array $rows, string $data): array
+    {
+        $rows = array_map(static fn(array $row): array => array_values(array_filter($row, static fn(array $button): bool => ($button['callback_data'] ?? null) !== $data)), $rows);
+
+        return array_values(array_filter($rows, static fn(array $row): bool => $row !== []));
+    }
+
+    /** @param array<string, mixed> $button */
+    private static function isNew(array $button): bool
+    {
+        return is_string($button['callback_data'] ?? null) && preg_match('/^um:n:\d{1,18}$/', $button['callback_data']) === 1;
     }
 
     public function handle(Update $update): void
@@ -135,7 +186,7 @@ final class UserManagement implements GroupHandler
         $standing = ($user->isBanned() ? '⛔️ مسدود' : 'فعال') . ($user->bot_blocked ? ' · ربات را بلاک کرده' : '');
         $lines = [
             CustomerCards::header($user),
-            '📱 موبایل: ' . ($user->phone === null ? 'ثبت نشده' : "\u{200E}" . htmlspecialchars($user->phone)),
+            '📱 موبایل: ' . ($user->phone === null ? 'ثبت نشده' : "\u{200E}" . htmlspecialchars($user->phone)) . ($user->phone_exempt ? ' · بدون نیاز به شماره' : ''),
             '📅 عضویت: ' . Persian::date($user->created_at) . ' · آخرین بازدید: ' . ($user->last_seen_at === null ? '—' : Persian::date($user->last_seen_at)),
             '👛 موجودی: ' . Messages::balance($user->balance()),
             sprintf(
@@ -169,9 +220,12 @@ final class UserManagement implements GroupHandler
         $id = $user->id;
         $open = static fn(string $label, string $prefix): array => CustomerCards::button($label, CustomerCards::data($prefix, 'o', $id));
         $refresh = CustomerCards::button('🔄 تازه‌سازی', CustomerCards::data(self::PREFIX, self::OPEN, $id));
+        // «✉️ ارسال پیام» on every card but the admin's own: a message changes nothing of the account (CustomerMessage).
+        $message = $user->id === $admin->id ? [] : [CustomerMessage::button($id)];
         if (CustomerCards::lockOf($user, $admin) !== null) {
             return InlineKeyboard::make()
                 ->grid([$open('🛍 سرویس‌ها', CustomerServices::PREFIX), $open('👛 کیف پول', CustomerWallet::PREFIX), $open('🧾 سوابق', CustomerHistory::PREFIX), $open('🔐 ورود به سایت', CustomerAccount::PREFIX)], 2)
+                ->row(...$message)
                 ->row($refresh)
                 ->build()['inline_keyboard'];
         }
@@ -183,6 +237,12 @@ final class UserManagement implements GroupHandler
             $user->isBanned() => [CustomerCards::button('✅ رفع مسدودی', CustomerCards::data(self::PREFIX, self::BAN, $id), 'success')],
             $user->isAdmin() => [],
             default => [CustomerCards::button('⛔️ مسدود شود', CustomerCards::data(self::PREFIX, self::BAN, $id), 'danger')],
+        };
+        // The phone rule's excuse, naming the state it asks for; none for an admin, whom the rule never asks.
+        $phone = match (true) {
+            $user->isAdmin() => [],
+            $user->phone_exempt => [CustomerCards::button('📱 لغو معافیت شماره', CustomerCards::data(self::PREFIX, self::PHONE_SET, $id, 0))],
+            default => [CustomerCards::button('📱 معاف از شماره', CustomerCards::data(self::PREFIX, self::PHONE_SET, $id, 1))],
         };
 
         return InlineKeyboard::make()
@@ -196,6 +256,7 @@ final class UserManagement implements GroupHandler
                 $role,
                 $open('🔐 ورود به سایت', CustomerAccount::PREFIX),
             ], 2)
+            ->row(...$message, ...$phone)
             ->row($refresh, ...$ban)
             ->build()['inline_keyboard'];
     }
@@ -239,6 +300,7 @@ final class UserManagement implements GroupHandler
         $shaped = match ($press->action) {
             self::NEW, self::OPEN, self::ROLE, self::BAN, self::GROUPS => $press->args === [],
             self::ROLE_SET, self::BAN_SET => count($press->args) === 1,
+            self::PHONE_SET => count($press->args) === 1 && in_array($press->args[0], ['0', '1'], true),
             self::GROUP_SWITCH => count($press->args) === 2 && $press->int(0) !== null && in_array($press->args[1], ['0', '1'], true),
             default => false,
         };
@@ -261,6 +323,7 @@ final class UserManagement implements GroupHandler
                 self::BAN => $this->ask($press, self::BAN_SET, $press->user->isBanned() ? UserStatus::Active->value : UserStatus::Banned->value),
                 self::ROLE_SET => $this->setRole($press, $press->args[0]),
                 self::BAN_SET => $this->setStatus($press, $press->args[0]),
+                self::PHONE_SET => $this->setPhoneExempt($press, $press->args[0] === '1'),
                 self::GROUPS => $this->showGroups($press),
                 self::GROUP_SWITCH => $this->switchGroup($press, (int) $press->int(0), $press->args[1] === '1'),
                 default => $this->show($press),
@@ -313,6 +376,13 @@ final class UserManagement implements GroupHandler
     {
         $this->actions->setRole($press->user, Actor::groupAdmin($press->admin), ['role' => $role]);
         $this->show($press, $press->user->isAdmin() ? self::MADE_ADMIN : self::MADE_CUSTOMER);
+    }
+
+    /** @throws DomainRuleException */
+    private function setPhoneExempt(CardPress $press, bool $exempt): void
+    {
+        $this->actions->setPhoneExempt($press->user, Actor::groupAdmin($press->admin), ['phone_exempt' => $exempt]);
+        $this->show($press, $press->user->phone_exempt ? self::PHONE_EXCUSED : self::PHONE_HELD);
     }
 
     /** @throws DomainRuleException */

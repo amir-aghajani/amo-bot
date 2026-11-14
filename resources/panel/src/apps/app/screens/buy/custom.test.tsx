@@ -75,6 +75,8 @@ describe('the custom builder', () => {
       .on('POST', `${API}/custom-services/quote`, (request) => json(quote(request.body as StoreCustomQuoteRequest)))
       .on('GET', `${API}/payment-methods`, json({ methods: [CARD] }))
       .on('POST', `${API}/custom-services/orders`, json({ checkout: storeCheckout() }))
+      // The order made: the account is read again.
+      .on('GET', `${API}/me`, json(app.account()))
     render(
       app.screen(
         <Routes>

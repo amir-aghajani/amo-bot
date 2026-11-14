@@ -99,6 +99,12 @@ describe('searching a panel’s index', () => {
     expect(first('بکاپ', AGENT)).toBe('section:/settings/backups')
   })
 
+  it('finds the import from another bot by the ways owners write it — the owner’s in the main shop alone', () => {
+    for (const query of ['ایمپورت', 'انتقال از ربات', 'ربات قبلی', 'میرزا', 'faoxima', 'migrate']) expect(first(query), query).toBe('section:/settings/import')
+    expect(entryOf(AGENT, 'section:/settings/import')).toBeUndefined()
+    expect(entryOf(buildIndex(navOfShop(ADMIN_NAV, false)), 'section:/settings/import')).toBeUndefined()
+  })
+
   it('finds the wallet typed on an English keyboard («;dt» is «کیف»)', () => {
     expect(first(';dt')).toBe('section:/bot-settings/wallet')
     expect(first(';dt m,g')).toBe('section:/bot-settings/wallet')

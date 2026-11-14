@@ -26,17 +26,19 @@ function Where() {
 }
 
 /** Plan 3's checkout, the ways to pay offered and the wallet read; its payment screen a stand-in that says its address. */
-function open() {
+function open(shop = app.shop(), account = app.account()) {
   server()
     .on('GET', `${API}/payment-methods`, json({ methods: [WALLET, CARD, GATEWAY] }))
     .on('GET', `${API}/wallet`, json(walletRow()))
+    // An order made: the account is read again.
+    .on('GET', `${API}/me`, json(account))
   render(
     app.screen(
       <Routes>
         <Route path="buy/plans/:id" element={<PlanScreen />} />
         <Route path="pay/:orderId" element={<Where />} />
       </Routes>,
-      { at: '/buy/plans/3', route: '*' },
+      { at: '/buy/plans/3', route: '*', shop, account },
     ),
   )
 }
@@ -77,6 +79,35 @@ describe('a plan’s checkout', () => {
     expect(orders()[0]?.headers['idempotency-key']).toMatch(UUID)
     // The payment screen finds the card the checkout answered.
     expect(rememberedCheckout(52)?.transfer?.card).toBe('6037997700001119')
+  })
+
+  it('names a card transfer as asking a receipt while the shop does not listen to the bank’s SMS', async () => {
+    server().on('GET', `${API}/plans/3`, json({ plan: storePlan() }))
+    open()
+    expect(await screen.findByText('واریز کارت به کارت و ارسال رسید')).toBeTruthy()
+  })
+
+  it('names a card transfer the bank’s SMS confirms as needing no receipt', async () => {
+    const base = app.shop()
+    server().on('GET', `${API}/plans/3`, json({ plan: storePlan() }))
+    open({ ...base, shop: { ...base.shop, card_auto_confirmed: true } })
+
+    expect(await screen.findByText('واریز کارت به کارت با تایید خودکار')).toBeTruthy()
+    expect(screen.queryByText('واریز کارت به کارت و ارسال رسید')).toBeNull()
+  })
+
+  it('takes a free plan with one button, naming no card transfer while another way is offered', async () => {
+    server()
+      .on('GET', `${API}/plans/3`, json({ plan: storePlan({ price: '0.00', offer_price: '0.00' }) }))
+      .on('POST', `${API}/orders`, json({ checkout: storeCheckout({ outcome: 'settled' }) }))
+    open()
+    // The card first: a card-to-card payment of nothing would be the bot's phone rule's `card` moment.
+    server().on('GET', `${API}/payment-methods`, json({ methods: [CARD, GATEWAY] }))
+
+    fireEvent.click(await payButton('دریافت رایگان'))
+
+    await until(() => expect(orders()).toHaveLength(1))
+    expect(orders()[0]?.body).toEqual({ plan_id: 3, server_id: 1, method_id: GATEWAY.id, expected_amount: '0.00' } satisfies StoreOrderRequest)
   })
 
   it('asks the customer to confirm a price changed since, and sends it with a new key', async () => {
@@ -140,5 +171,14 @@ describe('a plan’s checkout', () => {
     await until(() => expect(orders()).toHaveLength(1))
     expect(orders()[0]?.body).toEqual({ plan_id: 3, server_id: 1, method_id: 1, discount_code: 'nowruz', expected_amount: '108000.00' } satisfies StoreOrderRequest)
     expect(server().sent('GET', `${API}/payment-methods`).at(-1)?.query.get('amount')).toBe('108000')
+  })
+
+  it('offers no discount code to a customer the perks do not reach, whom every code is refused', async () => {
+    server().on('GET', `${API}/plans/3`, json({ plan: storePlan() }))
+    open(app.shop(), app.account({ perks: false }))
+
+    await payButton('پرداخت ۱۲۰٬۰۰۰ تومان')
+    expect(screen.queryByRole('button', { name: 'کد تخفیف دارید؟' })).toBeNull()
+    expect(screen.queryByRole('textbox', { name: 'کد تخفیف' })).toBeNull()
   })
 })

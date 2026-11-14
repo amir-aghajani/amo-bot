@@ -124,6 +124,74 @@ final class UpgradesTest extends TestCase
         self::assertSame($fresh, self::shape($installed));
     }
 
+    /**
+     * 0.9.0's run that stopped right after making the imports' tables, their columns alone — MySQL adds each index and key
+     * on its own — gets them all when run again: what an import brought kept once a thing (the unique index of
+     * `import_links`), and its staged rows and problems going with it (their keys to `imports`).
+     */
+    public function testTheImportsTablesMadeWithoutTheirIndexesAndKeysGetThemWhenRunAgain(): void
+    {
+        $installed = self::firstRelease();
+        (new Upgrades($installed))->run(self::ROOT . '/database/upgrades', Installation::FIRST_RELEASE, '0.8.1', static function (): void {});
+        $schema = $installed->getSchemaBuilder();
+        $schema->create('imports', static function (Blueprint $table): void {
+            $table->bigIncrements('id');
+            $table->foreignId('bot_id')->default(1);
+            $table->string('migrator', 32);
+            $table->string('source', 16);
+            $table->string('phase', 16);
+            $table->string('file_name', 191)->nullable();
+            $table->json('reading')->nullable();
+            $table->text('connection')->nullable();
+            $table->json('schema')->nullable();
+            $table->string('version', 32)->nullable();
+            $table->json('survey')->nullable();
+            $table->text('panels')->nullable();
+            $table->json('choices')->nullable();
+            $table->string('stage', 24)->nullable();
+            $table->unsignedBigInteger('cursor')->default(0);
+            $table->json('counts')->nullable();
+            $table->text('error')->nullable();
+            $table->string('reviewer', 64)->nullable();
+            $table->timestamp('started_at')->nullable();
+            $table->timestamp('finished_at')->nullable();
+            $table->timestamps();
+        });
+        $schema->create('import_rows', static function (Blueprint $table): void {
+            $table->bigIncrements('id');
+            $table->foreignId('import_id');
+            $table->string('table_name', 64);
+            $table->longText('data');
+        });
+        $schema->create('import_links', static function (Blueprint $table): void {
+            $table->bigIncrements('id');
+            $table->foreignId('bot_id')->default(1);
+            $table->string('migrator', 32);
+            $table->string('kind', 24);
+            $table->string('source_key', 191);
+            $table->unsignedBigInteger('target_id')->nullable();
+            $table->foreignId('import_id')->nullable();
+            $table->timestamp('created_at')->nullable();
+        });
+        $schema->create('import_problems', static function (Blueprint $table): void {
+            $table->bigIncrements('id');
+            $table->foreignId('import_id');
+            $table->string('kind', 24);
+            $table->string('source_key', 191);
+            $table->string('reason', 32);
+            $table->string('detail', 500)->nullable();
+            $table->timestamp('created_at')->nullable();
+        });
+
+        (new Upgrades($installed))->run(self::ROOT . '/database/upgrades', '0.8.1', Application::VERSION, static function (): void {});
+
+        $fresh = self::shape(self::freshInstall());
+        foreach (['imports', 'import_rows', 'import_links', 'import_problems'] as $table) {
+            self::assertSame($fresh[$table], self::shape($installed)[$table], $table);
+        }
+        self::assertSame($fresh, self::shape($installed));
+    }
+
     public function testATermKeptInDaysIsKeptInHours(): void
     {
         $installed = self::firstRelease();

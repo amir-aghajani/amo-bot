@@ -4,8 +4,8 @@
 
 AmoBot is an open-source shop for selling VPN subscriptions. Customers buy, pay for and manage their services in a
 Telegram bot; the owner runs the shop from a web panel; and AmoBot makes each service on the owner's own VPN panels
-(3X-UI, PasarGuard or HMPanel). It is a PHP application built for ordinary shared hosting: you upload a release zip and
-set it up in the browser, with no shell.
+(3X-UI, PasarGuard, HMPanel or Marzban). It is a PHP application built for ordinary shared hosting: you upload a
+release zip and set it up in the browser, with no shell.
 
 Everything a customer, an agent or a shop owner sees is Persian and right to left, by design: prices in Toman, dates in
 the Jalali calendar. The code is English; the documentation is English and Persian.
@@ -31,8 +31,8 @@ the Jalali calendar. The code is English; the documentation is English and Persi
 
 ## Who it is for
 
-- **Shop owners** who sell VPN services through Telegram, run their own 3X-UI, PasarGuard or HMPanel servers, and want
-  the shop on an ordinary shared host.
+- **Shop owners** who sell VPN services through Telegram, run their own 3X-UI, PasarGuard, HMPanel or Marzban servers,
+  and want the shop on an ordinary shared host — those moving from another bot too.
 - **Agents** — a shop's resellers. The owner approves them, and each gets a bot, a shop and a panel of their own on the
   same installation: they install nothing.
 - **Website developers** who build a shop's own website on the Store API.
@@ -66,8 +66,10 @@ address: every shop has its own, each agent's too, and the panel shows it as a c
 ### Payments
 
 - **The wallet**, and **card-to-card** with a receipt: several cards per method, each with a daily cap; buttons that
-  copy the card number and the sum; receipts approved in the panel or from the report group — or, for a receipt sent
-  in the bot, by itself after a review window you set.
+  copy the card number and the sum; receipts approved in the panel or from the report group — or by themselves after a
+  review window you set, for a receipt sent in the bot or by a customer whose account is linked to Telegram. With
+  «تایید خودکار واریز» and ForApp, a phone app that forwards your bank's deposit SMS, a card payment is approved the
+  moment its exact sum comes in, with no receipt at all.
 - **Online gateways**, which confirm a payment by themselves — no receipt to review:
 
   | Gateway | How the customer pays |
@@ -99,6 +101,10 @@ address: every shop has its own, each agent's too, and the panel shows it as a c
 - **Backups and restore**: the shop downloaded as one signed file and put back from one — the whole installation in the
   owner's panel, an agent's own shop in theirs —, and a daily backup sent to the report group.
 - **«زمان‌بندی کارها»**: how often each scheduled task runs, and the times they decide by.
+- **Moving from another bot** («انتقال از ربات دیگر»): its customers, wallet balances and services — still on the same
+  VPN panels, the same links —, its plans, codes, channels and cards brought into the shop from its backup or its
+  database, reviewed before anything is written, with nothing changed on the panels and nobody told; Faoxima first
+  ([Importing from another bot](docs/Importing.md)).
 - **A report group**: sales, receipts with approve and reject buttons, failed deliveries, free tests, deleted services,
   agency requests, support tickets and the daily backup, each in its topic of a Telegram group, acted on from there —
   and a customer's card (`/manage`) to manage their services, wallet and account from the group.
@@ -130,10 +136,11 @@ its daily work there too, once the owner lets them in. Every operation is descri
 
 ### VPN panels and drivers
 
-- **3X-UI** (v3 and later, MHSanaei's), **PasarGuard** (3.1 and later) and **HMPanel** (2.5 and later, through its API
-  key: the inbounds of the 3X-UI panels beneath it).
-- Each VPN panel, payment gateway, database, mail service and captcha is a driver: a new one is a class and its
-  registration ([Drivers](docs/Drivers.md)). Other panels — Marzban, Hiddify — are on the [Roadmap](docs/Roadmap.md).
+- **3X-UI** (v3 and later, MHSanaei's), **PasarGuard** (3.1 and later), **HMPanel** (2.5 and later, through its API
+  key: the inbounds of the 3X-UI panels beneath it) and **Marzban** (0.8 and later).
+- Each VPN panel, payment gateway, database, mail service, captcha and bot to import from is a driver: a new one is a
+  class and its registration ([Drivers](docs/Drivers.md)). Other panels — Hiddify among them — are on the
+  [Roadmap](docs/Roadmap.md).
 
 ### Built for shared hosting
 

@@ -66,6 +66,7 @@ const TASKS: [key: string, title: string, minutes: number][] = [
   ['prune_tickets', 'پاک‌سازی تیکت‌ها', 60],
   ['nightly_draw', 'قرعه‌کشی شبانه', 10],
   ['send_backups', 'ارسال پشتیبان به گروه', 1440],
+  ['prune_imports', 'پاک‌سازی انتقال‌ها', 1440],
   ['check_releases', 'بررسی نسخه تازه', 1440],
   ['send_reports', 'ارسال گزارش‌ها', 1],
 ]
@@ -188,8 +189,8 @@ describe('the schedule', () => {
 
     // Every input on the page has an id of its own.
     const ids = screen.getAllByRole('textbox').map((box) => box.id)
-    expect(ids).toHaveLength(29)
-    expect(new Set(ids).size).toBe(29)
+    expect(ids).toHaveLength(30)
+    expect(new Set(ids).size).toBe(30)
   })
 
   it('warns while Cron never ran, pointing to where it is set up', async () => {
@@ -213,7 +214,7 @@ describe('saving the schedule', () => {
 
     await until(() => expect(toast.success).toHaveBeenCalledWith('زمان‌بندی ذخیره شد'))
     expect(server().sent('PUT', URL)[0]?.body).toEqual(requestOf(saved))
-    expect(Object.keys(server().sent('PUT', URL)[0]?.body as object)).toHaveLength(29)
+    expect(Object.keys(server().sent('PUT', URL)[0]?.body as object)).toHaveLength(30)
     await until(() => expect(input('همگام‌سازی سرویس‌ها').value).toBe('20'))
     expect(input('کنار گذاشتن سفارش‌های رهاشده', 'مهلت سفارش پرداخت‌نشده').value).toBe('72')
     expect(screen.queryByText('تغییرات ذخیره نشده')).toBeNull()

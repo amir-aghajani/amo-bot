@@ -55,7 +55,8 @@ final class PanelShopTest extends HttpTestCase
         $inTheAgents = ['X-Requested-With' => 'XMLHttpRequest', NamedShop::HEADER => (string) $this->bot->id];
 
         $created = $this->send('POST', '/api/admin/customer-groups', ['name' => 'VIP'], $inTheAgents);
-        $switched = $this->send('PUT', '/api/admin/bot/settings/general', ['enabled' => false, 'phone_required' => false], $inTheAgents);
+        $general = ['enabled' => false, 'phone_required' => false, 'phone_scope' => 'everywhere', 'phone_on_purchase' => true, 'phone_on_renewal' => true, 'phone_on_test' => true, 'phone_on_card' => true, 'phone_iran_only' => false, 'support_header' => true];
+        $switched = $this->send('PUT', '/api/admin/bot/settings/general', $general, $inTheAgents);
 
         self::assertSame([201, 200], [$created->getStatusCode(), $switched->getStatusCode()]);
         $group = CustomerGroup::query()->withoutGlobalScope(CurrentBot::SCOPE)->findOrFail($this->decode($created)['group']['id']);

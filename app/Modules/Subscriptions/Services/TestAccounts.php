@@ -134,7 +134,8 @@ final class TestAccounts
         if ($user->isAdmin()) {
             return;
         }
-        if ($this->settings->newcomersOnly() && Order::paidPurchases()->where('user_id', $user->id)->exists()) {
+        // A paid service had here, or one bought in the bot the shop came from (an import said so).
+        if ($this->settings->newcomersOnly() && ($user->boughtElsewhere() || Order::paidPurchases()->where('user_id', $user->id)->exists())) {
             throw TestAccountRefusedException::because(TestRefusal::NewcomersOnly);
         }
 

@@ -128,6 +128,7 @@ final class StoreCheckoutTest extends HttpTestCase
             'bank' => null,
             'instructions' => 'شماره پیگیری را نگه دارید.',
             'contact' => null,
+            'auto_confirmed' => false,
         ], $checkout['transfer']);
         self::assertSame(['pending', null], [$checkout['order']['status'], $checkout['subscription']]);
         self::assertSame([PaymentStatus::Pending, $this->card->id], [$payment->status, $payment->payment_method_id]);
