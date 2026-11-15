@@ -11,23 +11,32 @@ use App\Modules\Providers\DTO\ClientSpec;
 use App\Modules\Providers\DTO\Expiry;
 use App\Modules\Providers\DTO\InboundInfo;
 use App\Modules\Providers\DTO\PanelStatus;
+use App\Modules\Providers\Enums\AuthenticationFailure;
 use App\Modules\Providers\Enums\CoreState;
+use App\Modules\Providers\Exceptions\AuthenticationException;
 use App\Modules\Providers\Exceptions\NotFoundException;
+use App\Modules\Providers\Exceptions\PanelApiException;
 use App\Modules\Providers\Exceptions\ProviderException;
 use App\Modules\Providers\Exceptions\UnsupportedOperationException;
 use App\Modules\Providers\Support\PanelConnection;
 use App\Modules\Providers\Support\Raw;
+use App\Modules\Providers\Support\SubscriptionPath;
 
 /**
  * ProviderInterface for PasarGuard panels (3.1 and later), on PasarGuardClient — the client of one server's panel,
  * built by PasarGuardDriver::connect().
  *
- * A client is a PasarGuard user, addressed by username (the contract's `name`) through /api/user/by-username (the bare
- * /api/user/{x} turns id-based in v6). The shop's "inbounds" are PasarGuard's groups: a user reaches inbounds only
- * through its groups (`group_ids`), so a group's id is the inbound key and a plan entry sells groups. A term from the
- * first connection is PasarGuard's "on hold" (`on_hold_expire_duration`); a deadline is its `expire`. PasarGuard has no
- * per-client IP limit (its HWID device limit is another rule), so ClientSpec::$ipLimit is not sent. A username is 3 to
- * 128 letters, digits and `_ - . @`, never two of those side by side (PasarGuardDriver::capabilities()).
+ * A client is a PasarGuard user, addressed by username (the contract's `name`) through /api/user/by-username (5.6
+ * marks every route by username for removal in 6.0; /api/user/by-id is the one that stays). The shop's "inbounds" are
+ * PasarGuard's groups: a user reaches inbounds only through its groups (`group_ids`), so a group's id is the inbound key
+ * and a plan entry sells groups. A term from the first connection is PasarGuard's "on hold" (`on_hold_expire_duration`);
+ * a deadline is its `expire`. PasarGuard has no per-client IP limit (its HWID device limit counts only the devices that
+ * fetch the subscription link with a device id), so ClientSpec::$ipLimit is not sent. A username is 3 to 128 letters,
+ * digits and `_ - . @`, never two of those side by side (PasarGuardDriver::capabilities()).
+ *
+ * An admin may see only the users it made: before 5.0 a non-sudo admin, refused the rest (HTTP 403, with what to do:
+ * PasarGuardApiException::refused()); from 5.0 an admin whose role reads only its own users ("own" scope, the built-in
+ * operator), told "User not found" for the rest — the panel hides them, so such a user reads as gone.
  *
  * The subscription link is the user's `subscription_url`, made absolute against the panel's address when it is a path.
  * PasarGuard signs a fresh token into every answer, each valid until the link is revoked, so the link a sync brings is
@@ -59,6 +68,18 @@ final class PasarGuardProvider implements ProviderInterface
     /** The proxy settings that are credentials: a protocol's id or password. */
     private const CREDENTIALS = ['id', 'password', 'auth'];
 
+    /** How PasarGuard's roles begin the 403 for an action the admin may not take: "Permission denied: groups.read". */
+    private const DENIED = 'Permission denied';
+
+    /** The longest note PasarGuard keeps (it refuses a longer one). */
+    private const NOTE_MAX = 500;
+
+    /**
+     * A user's auto-delete days that keep the panel from ever deleting it: its clean-up of ended users (the panel's
+     * cleanup setting, USERS_AUTODELETE_DAYS before 5.6) skips a user whose own days are negative.
+     */
+    private const NEVER_AUTODELETE = -1;
+
     public function __construct(
         private readonly PasarGuardClient $client,
         private readonly PanelConnection $connection,
@@ -89,16 +110,36 @@ final class PasarGuardProvider implements ProviderInterface
         );
     }
 
-    /** Every group the admin may use, as an inbound: its name as the title, its inbound tags as the tag; no protocol or port. */
+    /**
+     * Every group the admin may use, as an inbound: its name as the title, its inbound tags as the tag; no protocol or
+     * port. An admin whose role may see only the groups' simple list — the built-in operator role (5.0 and later) has
+     * "View simple list" of groups, not "View" — gets that list: each group's id and name, nothing about its inbounds,
+     * users or switch, so each reads as on.
+     */
     public function listInbounds(): array
     {
+        try {
+            $groups = Raw::objectsOf($this->client->get('/api/groups')['groups'] ?? null);
+        } catch (PanelApiException|AuthenticationException $e) {
+            if (!self::denied($e)) {
+                throw $e;
+            }
+
+            return array_map(static fn(array $group): InboundInfo => new InboundInfo(
+                key: (string) Raw::int($group, 'id'),
+                tag: '',
+                remark: Raw::string($group, 'name'),
+                enabled: true,
+            ), Raw::objectsOf($this->client->get('/api/groups/simple')['groups'] ?? null));
+        }
+
         return array_map(static fn(array $group): InboundInfo => new InboundInfo(
             key: (string) Raw::int($group, 'id'),
             tag: implode(', ', Raw::stringsOf($group['inbound_tags'] ?? null)),
             remark: Raw::string($group, 'name'),
             enabled: !Raw::bool($group, 'is_disabled'),
             clientCount: Raw::int($group, 'total_users'),
-        ), Raw::objectsOf($this->client->get('/api/groups')['groups'] ?? null));
+        ), $groups);
     }
 
     /** PasarGuard has no switch for its subscription server: every user it answers about carries a link. */
@@ -118,6 +159,9 @@ final class PasarGuardProvider implements ProviderInterface
             'group_ids' => array_values(array_unique(array_map(intval(...), $inboundKeys))),
             'data_limit' => $spec->totalBytes,
             'data_limit_reset_strategy' => 'no_reset',
+            // Never removed by the panel's own clean-up of ended users: the shop removes an ended service itself, after
+            // its renewal window — a user's days are set only as it is made (an update does not touch them).
+            'auto_delete_in_days' => self::NEVER_AUTODELETE,
         ] + self::term($spec->expiry) + self::note($spec));
         if (!$spec->enabled) {
             $user = $this->switchedOff($spec->name);
@@ -152,14 +196,17 @@ final class PasarGuardProvider implements ProviderInterface
     }
 
     /**
-     * One PUT: the panel keeps the user's groups, credentials and link, and its own reset strategy. A term not waiting
-     * for the first connection that the panel put on hold all the same is put active (activated()).
+     * One PUT: the panel keeps the user's groups, credentials and link. The traffic is the term's alone — no reset on a
+     * schedule the panel kept (an adopted user's): the quota is once a term (`no_reset` is allowed even to a role that
+     * may not pick a reset strategy). A term not waiting for the first connection that the panel put on hold all the same
+     * is put active (activated()).
      */
     public function updateClient(ClientSpec $spec): ClientInfo
     {
         $path = self::USERS . rawurlencode($spec->name);
         $user = $this->client->put($path, [
             'data_limit' => $spec->totalBytes,
+            'data_limit_reset_strategy' => 'no_reset',
         ] + self::term($spec->expiry, $spec->enabled) + self::note($spec));
         if ($spec->enabled && $spec->expiry->pendingSeconds() === null) {
             $user = $this->activated($path, $user);
@@ -169,11 +216,11 @@ final class PasarGuardProvider implements ProviderInterface
     }
 
     /**
-     * The user a PUT of `active` answered, active. PasarGuard (5.x) reads a switched-off user switched back on as on hold
-     * whenever it keeps a duration — and its API cannot clear one (its validator reads 0 as "no change"), so a duration
-     * stays on a user whose waiting term was replaced by a deadline or by none. Put on hold so, the user would start that
-     * old term at its next connection, over its deadline or its unlimited time: one the shop knows is not waiting is put
-     * active from there, which the panel takes as asked.
+     * The user a PUT of `active` answered, active. PasarGuard (5.1 and later) reads a switched-off user switched back on
+     * as on hold whenever it keeps a duration — and its API cannot clear one (its validator reads 0 as "no change" and
+     * refuses a negative one), so a duration stays on a user whose waiting term was replaced by a deadline or by none. Put
+     * on hold so, the user would start that old term at its next connection, over its deadline or its unlimited time: one
+     * the shop knows is not waiting is put active from there, which the panel takes as asked.
      *
      * @param array<string, mixed> $user
      * @return array<string, mixed>
@@ -192,8 +239,9 @@ final class PasarGuardProvider implements ProviderInterface
 
     /**
      * Switching off is one PUT. Switching on reads the user first: one whose term never started goes back on hold with
-     * it, sent explicitly — a panel before 5.0 would otherwise make it active with no end at all —; any other goes back
-     * active, even beside a leftover duration (activated()).
+     * it, sent explicitly — a panel before 5.1 would otherwise make it active with no end at all —; any other goes back
+     * active, even beside a leftover duration (activated()). From 5.1 the panel itself finds one switched back on
+     * expired or limited when it is; before, its next review of users does (every 30 seconds by default).
      */
     public function setClientEnabled(string $name, bool $enabled): void
     {
@@ -219,6 +267,10 @@ final class PasarGuardProvider implements ProviderInterface
         $this->activated($path, $this->client->put($path, ['status' => 'active']));
     }
 
+    /**
+     * One DELETE. PasarGuard reads the user before it deletes it, and takes it off its nodes after, in the background: a
+     * user no admin owns is deleted like any other, with no failure after the delete is done (Marzban 0.8.2–0.8.4's 500).
+     */
     public function deleteClient(string $name): void
     {
         $this->client->delete(self::USERS . rawurlencode($name));
@@ -233,12 +285,15 @@ final class PasarGuardProvider implements ProviderInterface
             return null;
         }
 
-        $seen = self::moment($user['online_at'] ?? null);
+        $seen = Raw::moment($user['online_at'] ?? null);
 
         return $this->clientOf($user, online: $presence ? $seen !== null && $seen->getTimestamp() >= now()->getTimestamp() - self::ONLINE_WINDOW_SECONDS : null);
     }
 
-    /** Every user (users()), a client each. */
+    /**
+     * Every user (users()), a client each — every user the admin may see: one that sees only its own lists those, and the
+     * sync asks for each service the list leaves out (another admin's then refused before 5.0, "not found" from 5.0).
+     */
     public function listClients(): array
     {
         $clients = [];
@@ -261,10 +316,12 @@ final class PasarGuardProvider implements ProviderInterface
     {
         $tokens = array_slice(array_values(array_filter($link->tokens, static fn(string $token): bool => strlen($token) >= self::TOKEN_MIN && preg_match(self::TOKEN, $token) === 1)), 0, self::TOKENS_MAX);
         $path = $tokens === [] ? null : $this->subscriptionPath();
-        foreach ($path === null ? [] : $tokens as $token) {
-            $name = Raw::string($this->client->anonymous($path . '/' . $token . '/info') ?? [], 'username');
-            if ($name !== '') {
-                return $this->findClient($name);
+        if ($path !== null) {
+            foreach ($tokens as $token) {
+                $name = $this->owner($path, $token);
+                if ($name !== '') {
+                    return $this->findClient($name);
+                }
             }
         }
 
@@ -279,9 +336,23 @@ final class PasarGuardProvider implements ProviderInterface
         return null;
     }
 
+    /**
+     * One POST. Before 5.1 PasarGuard's reset makes every user but an expired or switched-off one active
+     * (crud.reset_user_data_usage) — an on-hold one too, with no end —; the shop resets only to send the term right after
+     * (ProvisioningService::applyTerms()), whose updateClient() puts a waiting term back on hold. It drops the user's
+     * next plan, as PasarGuard means it to.
+     */
     public function resetClientTraffic(string $name): void
     {
         $this->client->post(self::USERS . rawurlencode($name) . '/reset');
+    }
+
+    /** Whether a failure is the panel's "Permission denied": a key's (AuthenticationException) or an admin's refusal. */
+    private static function denied(ProviderException $e): bool
+    {
+        return $e instanceof AuthenticationException
+            ? $e->failure === AuthenticationFailure::Scope
+            : $e instanceof PanelApiException && $e->httpStatus === 403 && str_starts_with($e->panelMessage, self::DENIED);
     }
 
     /**
@@ -314,16 +385,22 @@ final class PasarGuardProvider implements ProviderInterface
     }
 
     /**
-     * The path the panel serves subscription links under ("/sub"), read off one user's link: the folder its token is in —
-     * that alone, since a prefix the owner put in front of the links (a proxy's path) is not the panel's. Null with no
-     * user to read.
+     * The path the panel serves subscription links under (its XRAY_SUBSCRIPTION_PATH or SUBSCRIPTION_PATH, "/sub" by
+     * default; the panel's subscription URL prefix, an admin's subdomain or a proxy's path in front of the links is not),
+     * read off one user's link (SubscriptionPath::find()). Null with no user to read, or none answering.
      */
     private function subscriptionPath(): ?string
     {
-        $users = Raw::objectsOf($this->client->get('/api/users', ['offset' => 0, 'limit' => 1, 'load_sub' => 'true'])['users'] ?? null);
-        $parts = array_values(array_filter(explode('/', (string) parse_url($users === [] ? '' : Raw::string($users[0], 'subscription_url'), PHP_URL_PATH)), static fn(string $part): bool => $part !== ''));
+        $user = Raw::objectsOf($this->client->get('/api/users', ['offset' => 0, 'limit' => 1, 'load_sub' => 'true'])['users'] ?? null)[0] ?? [];
+        $name = Raw::string($user, 'username');
 
-        return count($parts) < 2 ? null : '/' . $parts[count($parts) - 2];
+        return SubscriptionPath::find(Raw::string($user, 'subscription_url'), fn(string $path, string $token): bool => $this->owner($path, $token) === $name);
+    }
+
+    /** The username the panel's subscription route under `$path` answers `$token` with; empty for none. */
+    private function owner(string $path, string $token): string
+    {
+        return Raw::string($this->client->anonymous($path . '/' . $token . '/info') ?? [], 'username');
     }
 
     /**
@@ -368,8 +445,8 @@ final class PasarGuardProvider implements ProviderInterface
     }
 
     /**
-     * The comment (which carries the Telegram id) as the user's note — PasarGuard users have no Telegram field; nothing
-     * to say leaves the panel's note alone.
+     * The comment (which carries the Telegram id) as the user's note, cut to what PasarGuard keeps — its users have no
+     * Telegram field; nothing to say leaves the panel's note alone.
      *
      * @return array{note?: string}
      */
@@ -377,7 +454,7 @@ final class PasarGuardProvider implements ProviderInterface
     {
         $note = $spec->comment ?? ($spec->telegramId !== null ? (string) $spec->telegramId : null);
 
-        return $note !== null ? ['note' => $note] : [];
+        return $note !== null ? ['note' => mb_substr($note, 0, self::NOTE_MAX)] : [];
     }
 
     /**
@@ -400,9 +477,9 @@ final class PasarGuardProvider implements ProviderInterface
                 $deadline !== null => Expiry::at($deadline),
                 default => Expiry::never(),
             },
-            subscriptionUrl: $this->linkOf(Raw::string($user, 'subscription_url')),
+            subscriptionUrl: $this->connection->subscriptionLink(Raw::string($user, 'subscription_url')),
             online: $online,
-            lastOnlineAt: self::moment($user['online_at'] ?? null),
+            lastOnlineAt: Raw::moment($user['online_at'] ?? null),
         );
     }
 
@@ -425,7 +502,7 @@ final class PasarGuardProvider implements ProviderInterface
     }
 
     /**
-     * The user's deadline: a moment as PasarGuard writes it (moment()), or unix seconds as the panel takes it; 0, null or
+     * The user's deadline: a moment as PasarGuard writes it (ISO 8601), or unix seconds as the panel takes it; 0, null or
      * nothing is none — `expire: 0`, what the shop sends for "none", reads back as none too.
      *
      * @param array<string, mixed> $user
@@ -433,40 +510,7 @@ final class PasarGuardProvider implements ProviderInterface
     private static function deadline(array $user): ?\DateTimeImmutable
     {
         $expire = $user['expire'] ?? null;
-        if (is_numeric($expire)) {
-            return (int) $expire > 0 ? new \DateTimeImmutable('@' . (int) $expire) : null;
-        }
 
-        return self::moment($expire);
-    }
-
-    /**
-     * The link the customer gets: the panel's, made absolute against the panel's address when it is a path, or the
-     * server's own prefix in front of its token when one is set.
-     */
-    private function linkOf(string $url): ?string
-    {
-        if ($url === '') {
-            return null;
-        }
-        if ($this->connection->subscriptionUrl !== null) {
-            return $this->connection->subscriptionUrl . '/' . basename((string) parse_url($url, PHP_URL_PATH));
-        }
-
-        return str_starts_with($url, '/') ? $this->connection->baseUrl . $url : $url;
-    }
-
-    /** A moment PasarGuard wrote (ISO 8601, UTC when it names no zone), or null. */
-    private static function moment(mixed $value): ?\DateTimeImmutable
-    {
-        if (!is_string($value) || $value === '') {
-            return null;
-        }
-
-        try {
-            return (new \DateTimeImmutable($value, new \DateTimeZone('UTC')))->setTimezone(new \DateTimeZone('UTC'));
-        } catch (\Exception) {
-            return null;
-        }
+        return is_numeric($expire) ? Raw::seconds((int) $expire) : Raw::moment($expire);
     }
 }

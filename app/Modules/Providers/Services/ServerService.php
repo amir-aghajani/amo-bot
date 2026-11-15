@@ -61,6 +61,9 @@ final class ServerService
     /** A saved server's form for another connector than its own. */
     private const DRIVER_FIXED = 'کانکتور سرور عوض نمی‌شود؛ برای پنلی از نوع دیگر، سرور تازه‌ای اضافه کنید.';
 
+    /** A second inbound for sale on a panel whose client lives in one only (Rebecca's services). */
+    public const ONE_INBOUND = 'پنل این سرور هر کاربر را فقط در یک سرویس می‌سازد؛ برای فروش این سرویس، اول علامت «فروش» سرویس دیگر این سرور را بردارید.';
+
     /** The longest words of an inbound the shop's copy keeps (server_inbounds), as the panel's admin typed them. */
     private const INBOUND_WORDS = ['tag' => 128, 'remark' => 255];
 
@@ -214,7 +217,9 @@ final class ServerService
     }
 
     /**
-     * Opt an inbound in or out for sale; only one the panel has enabled may be opted in.
+     * Opt an inbound in or out for sale; only one the panel has enabled may be opted in — and, on a panel whose client
+     * lives in one inbound only (Capabilities::$oneInbound: Rebecca's services), only while no other of the server's is:
+     * a sale from two would fail at delivery, after the customer paid.
      *
      * @throws ValidationException
      */
@@ -222,6 +227,9 @@ final class ServerService
     {
         if ($selectable && !$inbound->enabled) {
             throw new ValidationException(['is_selectable' => ['اینباند غیرفعال است.']], 'این اینباند در پنل غیرفعال است و نمی‌تواند برای فروش انتخاب شود.');
+        }
+        if ($selectable && !$inbound->is_selectable && $this->sellsAnother($inbound)) {
+            throw ValidationException::on('is_selectable', self::ONE_INBOUND);
         }
 
         $inbound->forceFill(['is_selectable' => $selectable])->save();
@@ -480,6 +488,15 @@ final class ServerService
             ->where('enabled', true)
             ->whereNotIn('remote_key', array_map(static fn(array $inbound): string => $inbound['remote_key'], $inbounds))
             ->update(['enabled' => false, 'synced_at' => $now]);
+    }
+
+    /** Whether another inbound of its server is for sale, on a panel whose client lives in one (Capabilities::$oneInbound). */
+    private function sellsAnother(ServerInbound $inbound): bool
+    {
+        $driver = (string) Server::query()->whereKey($inbound->server_id)->value('driver');
+
+        return ($this->providers->find($driver)?->capabilities()->oneInbound ?? false)
+            && ServerInbound::query()->where('server_id', $inbound->server_id)->whereKeyNot($inbound->id)->where('is_selectable', true)->exists();
     }
 
     /**

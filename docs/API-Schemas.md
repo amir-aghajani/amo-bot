@@ -368,14 +368,14 @@ String: `told`, `emailed`, `turned_away`, `unreachable`, `refused`, `no_telegram
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `id` | integer | yes |  |
-| `source` | string | yes | The phone app: `forapp`. |
+| `source` | string | yes | Where it came from: `forapp` (the phone app), `rikhtam`. |
 | `status` | [DepositStatus](#depositstatus) | yes |  |
 | `amount_rial` | integer or null | yes | The sum the SMS said, in Rial; null when none was read. |
 | `amount` | string or null | yes | The same in Toman, as the shop prices. |
 | `bank` | string or null | yes |  |
 | `sender` | string or null | yes |  |
-| `body` | string or null | yes | The SMS as it came. |
-| `note` | string or null | yes | Why it approved nothing. |
+| `body` | string or null | yes | The SMS as it came; for Rikhtam, which sends no SMS, a line made of what it sent (the sum, the account's last digits, the time). |
+| `note` | string or null | yes | Why it approved nothing — or how it approved its payment when not by its sum alone. |
 | `payment` | object or null | yes | The card payment it approved. |
 | `payment.id` | integer | yes |  |
 | `payment.order_id` | integer | yes |  |
@@ -385,7 +385,7 @@ String: `told`, `emailed`, `turned_away`, `unreachable`, `refused`, `no_telegram
 
 ### DepositStatus
 
-What came of a forwarded bank SMS: `received` (being looked at), `matched` (it approved a card payment), `unmatched` (no open card payment asks its sum, or ForApp did not recognise it as a bank's deposit), `ambiguous` (more than one does; none approved), `ignored` (a withdrawal, no sum read in Rial, or older than three days), `test` (the app's test).
+What came of a bank deposit (a forwarded SMS, or Rikhtam's word): `received` (being looked at), `matched` (it approved a card payment — by its sum, or attached to it by hand at Rikhtam), `unmatched` (no open card payment asks its sum, its source could not vouch it was a bank's deposit — ForApp did not recognise the SMS —, or an attach by hand was refused: `note` says why), `ambiguous` (more than one does; none approved), `ignored` (a withdrawal, no sum read in Rial, or older than three days), `test` (the app's test).
 
 String: `received`, `matched`, `unmatched`, `ambiguous`, `ignored`, `test`.
 
@@ -623,7 +623,7 @@ String or null.
 | `id` | integer | yes |  |
 | `status` | [PaymentStatus](#paymentstatus) | yes |  |
 | `amount` | string | yes |  |
-| `gateway` | string | yes | Driver key ("manual", "wallet", "cubepay", "zarinpal", "atlaspay", "abangateway", "plisio", "aqayepardakht", "variza", or "outside": money support took outside the shop for an order it made). |
+| `gateway` | string | yes | Driver key ("manual", "wallet", "cubepay", "zarinpal", "atlaspay", "abangateway", "plisio", "aqayepardakht", "variza", "bluepal", "rialit", "rikhtam", or "outside": money support took outside the shop for an order it made). |
 | `method` | string | yes | The payment method's label. A method with payments is never deleted. |
 | `paid_at` | string (date-time) or null | yes |  |
 | `to_wallet` | boolean | yes | Paid on its online gateway after the order had closed: its money went to the customer's wallet, and it paid nothing of the order (`PaymentRow.to_wallet`). |
@@ -740,6 +740,21 @@ A paged list's position: its page, the rows a page holds (25), how many rows the
 |---|---|---|---|
 | `payment` | [PaymentRow](#paymentrow) | yes |  |
 
+### PaymentRikhtamAttachResponse
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `payment` | [PaymentRow](#paymentrow) | yes |  |
+| `message` | string | yes | Rikhtam's word on it, to show — or the shop's, when Rikhtam's answer was lost or a refusal though the deposit did approve the payment. |
+| `fee` | string or null | yes | Rikhtam's fee for it, in Toman; null when it gave none. |
+
+### PaymentRikhtamResponse
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `connected` | boolean | yes | The shop's Rikhtam is connected; false: the list is empty, nothing asked. |
+| `deposits` | list of [RikhtamDeposit](#rikhtamdeposit) | yes |  |
+
 ### PaymentRow
 
 A payment, as a row of the payments screen.
@@ -749,12 +764,12 @@ A payment, as a row of the payments screen.
 | `id` | integer | yes |  |
 | `status` | [PaymentStatus](#paymentstatus) | yes |  |
 | `amount` | string | yes |  |
-| `gateway` | string | yes | Driver key ("manual", "wallet", "cubepay", "zarinpal", "atlaspay", "abangateway", "plisio", "aqayepardakht", "variza", or "outside": money support took outside the shop for an order it made). |
+| `gateway` | string | yes | Driver key ("manual", "wallet", "cubepay", "zarinpal", "atlaspay", "abangateway", "plisio", "aqayepardakht", "variza", "bluepal", "rialit", "rikhtam", or "outside": money support took outside the shop for an order it made). |
 | `gateway_label` | string or null | yes | The driver's name («کارت به کارت», «کیف پول», «CubePay»); null when the driver is no longer installed. |
 | `kind` | [GatewayKind](#gatewaykind) or null | yes | How the driver settles; null when the driver is no longer installed. |
 | `method` | string | yes | The payment method's label ("کارت به کارت (ملت)"). A method with payments is never deleted. |
-| `summary` | string or null | yes | What the customer was told to pay to: a card transfer's card, the one of its method's cards it was shown («6037 •••• •••• 1119 · holder · bank») — or «کارت در پیوی پشتیبانی داده شد» for one shown none, taken in support's private chat (`BotSettingsData.card_to_support`); for any other, its method's one line as it reads now (`PaymentMethodRow.summary`: a fee passed on to customers, a test mode, Plisio's dollar rate and coins, Variza's card); null when its method has none (the wallet, an online method with none of these). |
-| `reference` | string or null | yes | The gateway's own id for the payment: the wallet's ledger line, or an online gateway's — CubePay: a card payment's authority, from when it was opened (a crypto one's, if any, once paid); Zarinpal: its authority, then its reference once paid; AtlasPay: its tracking code; AbanGateway: its invoice's id; Plisio: its invoice's id (once paid, the paid invoice's, when the customer switched coins); AqayePardakht: its transaction's id; Variza: its payment link's slug. Null when it has none (a card transfer, an online payment its gateway would not open). |
+| `summary` | string or null | yes | What the customer was told to pay to: a card transfer's card, the one of its method's cards it was shown («6037 •••• •••• 1119 · holder · bank») — or «کارت در پیوی پشتیبانی داده شد» for one shown none, taken in support's private chat (`BotSettingsData.card_to_support`); for any other, its method's one line as it reads now (`PaymentMethodRow.summary`: a fee passed on to customers, a test mode, Plisio's dollar rate and coins, Variza's card, Rikhtam's coin); null when its method has none (the wallet, an online method with none of these). |
+| `reference` | string or null | yes | The gateway's own id for the payment: the wallet's ledger line, or an online gateway's — CubePay: a card payment's authority, from when it was opened (a crypto one's, if any, once paid); Zarinpal: its authority, then its reference once paid; AtlasPay: its tracking code; AbanGateway: its invoice's id; Plisio: its invoice's id (once paid, the paid invoice's, when the customer switched coins); AqayePardakht: its transaction's id; Variza: its payment link's slug; Bluepal: its track id; Rialit: its payment's token; Rikhtam: its crypto invoice's id. Null when it has none (a card transfer, an online payment its gateway would not open). |
 | `description` | string or null | yes | The note on its latest decision: why it failed or was cancelled (the admin's reason or note, the gateway's refusal, an online gateway's page closed unpaid — «مهلت پرداخت در درگاه تمام شد» —, the order paid another way or left unpaid, or its service handed to another customer: «سرویس این سفارش به حساب دیگری منتقل شد»), a refund's note (also in `refund_note`), or on a payment `to_wallet` that its money went to the wallet. |
 | `user` | [UserRef](#userref) | yes |  |
 | `order` | object | yes |  |
@@ -793,6 +808,7 @@ A payment, as a row of the payments screen.
 | `actions.retry` | boolean | yes |  |
 | `actions.refund` | boolean | yes |  |
 | `actions.check` | boolean | yes | Ask its online gateway what came of it (`POST …/check`): an online payment opened on its gateway and not paid — pending, its page closed, or cancelled. |
+| `actions.rikhtam` | boolean | yes | Attach a deposit Rikhtam holds to it (`GET`/`POST …/rikhtam`): a payment that may be approved, in a shop whose Rikhtam is connected. Refused as an approval is (on the website, a receipt in review first). |
 
 ### PaymentSort
 
@@ -1231,6 +1247,18 @@ String: `pending`, `approved`, `rejected`.
 | `meta.last_page` | integer | yes |  |
 | `meta.pending` | integer | yes | Reviews waiting for support, regardless of the filters. |
 
+### RikhtamDeposit
+
+A deposit Rikhtam holds that no invoice took.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `uid` | string | yes | Rikhtam's id for it: what `POST …/rikhtam` attaches. |
+| `amount` | string | yes | Its sum, in Toman. |
+| `received_at` | string (date-time) or null | yes |  |
+| `account` | string or null | yes | The last four digits of the account it came into; null when Rikhtam gave none. |
+| `covers` | boolean | yes | Whether it covers the payment's order's own price — the only kind that pays it when attached (one short of it is refused). |
+
 ### SellingSuspension
 
 Why an agent's selling is suspended: `expired` — their agency's end passed (extending it lifts it); `minimum` — a month ended below their monthly minimum (this month's purchases reaching it lift it); `manual` — the owner suspended it (only the owner resumes it).
@@ -1361,9 +1389,9 @@ String: `customer`, `support`.
 
 ### TicketChannel
 
-Where a ticket message was written. The customer writes on the website (`web`) or in the bot (`bot`); support in a panel (`panel`), the website's admin API (`staff`) or the report group (`group`).
+Where a ticket message was written. The customer writes on the website (`web`) or in the bot (`bot`); support in a panel (`panel`), the website's admin API (`staff`), the report group (`group`) or the bot's own management, from its private chat (`manage`).
 
-String: `web`, `bot`, `panel`, `staff`, `group`.
+String: `web`, `bot`, `panel`, `staff`, `group`, `manage`.
 
 ### TicketDetail
 

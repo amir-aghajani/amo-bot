@@ -8,10 +8,12 @@
 ## A message to many customers
 
 A broadcast is **composed in the bot**, by one of its admins ([the bot's admins](Customers.md#the-bots-admins)): it is
-their own Telegram message that goes out, with its media and formatting. The panel follows the runs and controls them.
+their own Telegram message that goes out, with its media and formatting — or by you or the agent, from your own Telegram
+account. The panel follows the runs and controls them, and so does the bot's management
+([Managing the shop from the bot](Bot-Management.md#the-bot)).
 
-1. Send `/broadcast` to the bot, then the message — text, a photo, a video, any message; a channel's post forwarded to
-   the bot is forwarded on.
+1. Send `/broadcast` to the bot — or press «➕ پیام همگانی تازه» in «⚙️ مدیریت › 🤖 ربات › 📣 ارسال همگانی» —, then the
+   message: text, a photo, a video, any message; a channel's post forwarded to the bot is forwarded on.
 2. The bot answers with a **draft card**: what the message is, how it goes, to whom and how many, pinned or not, its
    buttons. Its buttons change them:
    - **«↪️ روش»** — «کپی» (from the bot, your link buttons under it) or «فوروارد» (with "Forwarded from" its first sender;

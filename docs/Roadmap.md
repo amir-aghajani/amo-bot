@@ -47,7 +47,8 @@ Rough order of work. Items marked ✅ exist in the code today; `[ ]` are open.
 - ✅ Card-to-card payments: buttons that copy the card and the amount, the card's message protected from forwarding and
   saving, one receipt waiting at a time, a card drawn at random among the method's cards with room today, support's
   private chat in place of a card; top-up buttons of random amounts, and a sum of its own for every card top-up
-- ✅ Online payments (CubePay, Zarinpal, AtlasPay, AbanGateway, Plisio, AqayePardakht, Variza): the gateway's page — or its card in the bot —, «🔄 بررسی پرداخت», delivered as soon as the gateway says it was paid, a payment that does not fit held for support
+- ✅ Card payments confirmed by the bank's deposit SMS, with no receipt («تایید خودکار واریز»): a sum of its own for every card payment, the SMS brought by ForApp or by Rikhtam, a deposit attached to its payment by hand
+- ✅ Online payments (CubePay, Zarinpal, AtlasPay, AbanGateway, Plisio, AqayePardakht, Variza, Bluepal, Rialit, Rikhtam's crypto): the gateway's page — or its card in the bot —, «🔄 بررسی پرداخت», delivered as soon as the gateway says it was paid, a payment that does not fit held for support
 - [ ] Subscription link endpoint `/sub/{uuid}` of our own (today the panel's native subscription URL is handed out)
 
 ## The shop's website
@@ -90,7 +91,11 @@ Rough order of work. Items marked ✅ exist in the code today; `[ ]` are open.
   of ahead, then the shop's selling suspended — never its bot —; the owner's «توقف فروش» and «ادامه فروش» too
 - ✅ «انتقال از ربات دیگر»: another bot's customers, wallets, services (as they stand on their panels), plans, codes,
   required channels and cards brought into the main shop from its backup or its database, reviewed first, never twice —
-  Faoxima's first, each other bot a migrator driver
+  Faoxima's and MirzaBot's first, each other bot a migrator driver
+- ✅ The shop managed from its bot («⚙️ مدیریت», `/admin`): every section of the panel as the bot's own menus in the
+  private chat, no web page, every read and write through the panel's own API; the owner from a Telegram account linked
+  by a one-time link, in any shop, an agent in their own bot, the shop's admins with the daily work and «مدیران ربات»'s
+  own grants
 - [ ] Activity log
 
 ## Scheduled tasks
@@ -99,13 +104,19 @@ Rough order of work. Items marked ✅ exist in the code today; `[ ]` are open.
 
 ## More connectors and gateways
 - ✅ Marzban (0.8 and later), its token kept across requests
-- [ ] Panels: Hiddify, Rebecca, Remnawave, WireGuard-based panels
+- ✅ Rebecca (1.0 and later), by an admin's API key, its services sold as inbounds
+- ✅ Remnawave (2.1 and later), by an API token through its HTTPS proxy (an auth portal's key too), its internal squads
+  sold as inbounds
+- [ ] Panels: Hiddify, WireGuard-based panels
 - ✅ Zarinpal (Iran's bank cards), an online gateway
 - ✅ AtlasPay (card-to-card it confirms from the bank's text, paid in its Telegram mini app), an online gateway
 - ✅ AbanGateway (card-to-card to the merchant's own cards, confirmed from the bank's text), an online gateway
 - ✅ Plisio (crypto: the customer's coin of choice, the order priced in dollars at the owner's rate), an online gateway
 - ✅ AqayePardakht (Iran's bank cards through Shaparak), an online gateway
 - ✅ Variza (card-to-card it confirms from the bank's text, its word a signed webhook), an online gateway
+- ✅ Bluepal (Iran's bank cards, through the bank's page), an online gateway
+- ✅ Rialit (paid on its page, its fee on the customer if the owner wishes, its unsigned webhook only a reason to ask), an online gateway
+- ✅ Rikhtam: crypto (Gram, Tether on TON or TRON, TRX) straight to the owner's wallet, an online gateway; and its bank deposits for «تایید خودکار واریز»
 - [ ] Gateways: crypto of its own (NowPayments / direct TRX-USDT), IDPay-style IRR gateways, Telegram Stars — each an online gateway's driver now
 - [ ] Databases: PostgreSQL (a driver; the schema tooling's sequences after a rebuild, a case-insensitive search)
 

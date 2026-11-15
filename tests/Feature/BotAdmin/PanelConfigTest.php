@@ -1,0 +1,201 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Tests\Feature\BotAdmin;
+
+use App\Core\Config\ConfigFile;
+use App\Core\Database\Drivers\ProbeFailedException;
+use App\Core\Database\Drivers\ProbeResult;
+use App\Modules\Telegram\Admin\Ui\Nav;
+use App\Modules\Users\Models\User;
+use Tests\BotTestCase;
+use Tests\Fakes\ProbedDriver;
+
+/**
+ * «🧰 تنظیمات پنل» › config.php's groups in the bot (Telegram\Admin\Sections\Panel\Config): each a draft the chat keeps
+ * until «💾 ذخیره» puts the group whole (PUT /settings/config/{group}) — a long choice found by typing, a secret typed
+ * and never shown back, the token checked with Telegram, a driver picked with its form, each refusal under its field —,
+ * and each group's «تست»: the database connection, an email, an SMS. The owner's, in the main shop alone.
+ */
+final class PanelConfigTest extends BotTestCase
+{
+    private const OWNER = 7001;
+
+    private const TOKEN = '123456789:AAF' . 'yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy';
+
+    private ConfigFile $file;
+
+    private ProbedDriver $mysql;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->config(['telegram.username' => 'amo_shop_bot']);
+        $this->file = $this->configFile([
+            'APP_NAME' => 'AmoBot',
+            'APP_URL' => 'http://localhost',
+            'APP_KEY' => 'base64:x',
+            'DB_CONNECTION' => 'mysql',
+            'DB_HOST' => '127.0.0.1',
+            'DB_PORT' => '3306',
+            'DB_DATABASE' => 'amobot',
+            'DB_USERNAME' => 'root',
+            'DB_PASSWORD' => 'old pass',
+            'TELEGRAM_BOT_TOKEN' => '',
+            'LOG_LEVEL' => 'info',
+        ]);
+        $this->mysql = $this->probedDatabase('mysql');
+        $this->probedDatabase('sqlite', installable: true);
+        $this->owner();
+    }
+
+    public function testTheMenuSaysTheFileAndAGroupIsADraftUntilSaved(): void
+    {
+        $this->tapAs(Nav::to('hc'));
+        $this->tapAs(Nav::to('pp'));
+        self::assertStringContainsString('config.php', $this->said()[0]);
+        self::assertStringContainsString('قابل ویرایش', $this->said()[0]);
+        self::assertStringContainsString('ظاهر', $this->said()[0], 'the panel\'s look: said to be the browser\'s');
+        foreach (['ppt', 'ppd', 'ppa', 'ppm', 'ppn', 'ppl', 'ppu', 'ppj', 'ppb', 'ppi', 'ppv', 'ppw'] as $section) {
+            self::assertContains(Nav::to($section), $this->callbacks(0), $section);
+        }
+
+        $this->tapAs(Nav::to('ppa', 'e', 0));
+        $this->send($this->message('فروشگاه تازه', chat: self::OWNER));
+        self::assertStringContainsString('تغییرها هنوز ذخیره نشده‌اند', $this->said()[0]);
+        self::assertSame('AmoBot', $this->file->get('APP_NAME'), 'a draft: nothing written yet');
+
+        $this->tapAs(Nav::to('ppa', 'e', 2));
+        self::assertStringContainsString('چند حرف از نامش', $this->said()[0], 'a long list searched by typing');
+        $this->send($this->message('tehran', chat: self::OWNER));
+        self::assertStringContainsString('ایران', $this->said()[0], 'found, and shown by its name');
+
+        $this->tapAs(Nav::to('ppa', 'save'));
+        self::assertSame(['فروشگاه تازه', 'Asia/Tehran'], [$this->file->get('APP_NAME'), $this->file->get('APP_TIMEZONE')], 'the group put whole');
+        self::assertStringContainsString('ذخیره شد', (string) $this->popup());
+        self::assertStringNotContainsString('ذخیره نشده', $this->said()[1] ?? $this->said()[0]);
+    }
+
+    public function testTheTokenIsCheckedWithTelegramAndNeverShownBack(): void
+    {
+        $this->tapAs(Nav::to('ppt', 'e', 0));
+        $this->send($this->message(self::TOKEN, chat: self::OWNER));
+        self::assertStringNotContainsString(self::TOKEN, implode("\n", $this->said()), 'never shown back');
+        self::assertStringContainsString('تازه نوشته شده', $this->said()[0]);
+        self::assertContains('deleteMessage', $this->calls(), 'the typed token taken out of the chat');
+
+        $this->telegram()->reply(['id' => 123456789, 'is_bot' => true, 'first_name' => 'فروشگاه', 'username' => 'new_shop_bot']);
+        $this->tapAs(Nav::to('ppt', 'test'));
+        self::assertStringContainsString('new_shop_bot', implode("\n", $this->said()), 'whose it is, and its @username filled in');
+
+        $this->tapAs(Nav::to('ppt', 'save'));
+        self::assertSame([self::TOKEN, 'new_shop_bot'], [$this->file->get('TELEGRAM_BOT_TOKEN'), $this->file->get('TELEGRAM_BOT_USERNAME')]);
+        self::assertStringNotContainsString(self::TOKEN, implode("\n", $this->said()));
+    }
+
+    public function testADriverIsPickedWithItsFormAndEachRefusalIsSaidUnderItsField(): void
+    {
+        $mail = $this->mail();
+        $this->tapAs(Nav::to('ppm', 'd'));
+        $smtp = $this->buttonFor('SMTP');
+        $this->tapAs($smtp);
+        self::assertStringContainsString('سرور SMTP', $this->said()[0], 'its described form');
+
+        $this->tapAs(Nav::to('ppm', 'save'));
+        self::assertStringContainsString('ذخیره نشد', (string) $this->popup());
+        self::assertStringContainsString('⚠️', $this->said()[1] ?? $this->said()[0], 'each refusal under its field');
+        self::assertNotSame('smtp', $this->file->get('MAIL_TRANSPORT'));
+
+        $this->tapAs(Nav::to('ppm', 'e', 0));
+        $this->send($this->message('mail.example.com', chat: self::OWNER));
+        $this->tapAs(Nav::to('ppm', 'e', 5));
+        $this->send($this->message('no-reply@example.com', chat: self::OWNER));
+        $this->tapAs(Nav::to('ppm', 'save'));
+        self::assertSame(['smtp', 'mail.example.com', 'no-reply@example.com'], [$this->file->get('MAIL_TRANSPORT'), $this->file->get('MAIL_HOST'), $this->file->get('MAIL_FROM_ADDRESS')]);
+
+        $this->tapAs(Nav::to('ppm', 'mt'));
+        $this->send($this->message('owner@example.com', chat: self::OWNER));
+        self::assertCount(1, $mail->sent(), 'a test email, by the settings saved');
+        self::assertStringContainsString('ایمیل تست فرستاده شد', implode("\n", $this->said()));
+    }
+
+    public function testTheDatabaseIsTestedAndAnSmsTestShowsItsCode(): void
+    {
+        $this->mysql->answers[] = new ProbeResult('MySQL 8.0.36', 3);
+        $this->tapAs(Nav::to('ppd', 'test'));
+        self::assertStringContainsString('MySQL 8.0.36', implode("\n", $this->said()));
+
+        $this->mysql->answers[] = new ProbeFailedException('اتصال به سرور رد شد.');
+        $this->tapAs(Nav::to('ppd', 'test'));
+        self::assertStringContainsString('اتصال به سرور رد شد', implode("\n", $this->said()), 'why it would not connect, on the card');
+        self::assertSame('127.0.0.1', $this->file->get('DB_HOST'), 'a test writes nothing');
+
+        $sms = $this->sms();
+        $this->tapAs(Nav::to('ppn', 'st'));
+        $this->send($this->message('۰۹۱۲۱۲۳۴۵۶۷', chat: self::OWNER));
+        $code = $sms->lastCodeTo('+989121234567');
+        self::assertNotNull($code, 'sent by the settings saved');
+        self::assertStringContainsString($code, implode("\n", $this->said()), 'the code shown, to match the SMS against');
+
+        $this->tapAs(Nav::to('ppn', 'credit'));
+        self::assertStringContainsString('اعتبار حساب', implode("\n", $this->said()), 'the account\'s credit asked of its provider — or why not');
+    }
+
+    public function testTheWholeCronAddressIsShownOnATapAndGoneWithTheNext(): void
+    {
+        $this->file->setMany(['CRON_TOKEN' => 'cron-token-0123456789abcdef']);
+
+        $this->tapAs(Nav::to('ppv'));
+        self::assertStringNotContainsString('cron-token-0123456789abcdef', $this->said()[0], 'masked, as the panel shows it');
+        self::assertContains(Nav::to('ppv', 'cron'), $this->callbacks(0));
+
+        $this->tapAs(Nav::to('ppv', 'cron'));
+        self::assertStringContainsString('cron-token-0123456789abcdef', $this->said()[0], 'the whole address, asked for');
+        self::assertStringContainsString('curl -fsS', $this->said()[0], 'and the cPanel line');
+
+        $this->tapAs(Nav::to('ppv'));
+        self::assertStringNotContainsString('cron-token-0123456789abcdef', $this->said()[0], 'kept nowhere');
+    }
+
+    public function testAnAgentHasNoneOfTheFileButTheirBackups(): void
+    {
+        $bot = $this->agentBot();
+        $this->sendTo($bot, $this->tap(Nav::to('pp'), chat: self::AGENT_TELEGRAM_ID));
+        self::assertContains(Nav::to('ppb'), $this->callbacks(0));
+        self::assertNotContains(Nav::to('ppa'), $this->callbacks(0));
+        self::assertNotContains(Nav::to('ppu'), $this->callbacks(0));
+
+        $this->sendTo($bot, $this->tap(Nav::to('ppa', 'save'), chat: self::AGENT_TELEGRAM_ID));
+        self::assertStringContainsString('مدیریت فروشگاه', $this->said()[0], 'a screen it may not open is the home');
+    }
+
+    /** The data of the first button whose label holds `$label`, among the window's. */
+    private function buttonFor(string $label): string
+    {
+        foreach (array_keys($this->calls()) as $call) {
+            foreach (array_merge(...$this->inlineKeyboard($call)) as $button) {
+                if (str_contains((string) ($button['text'] ?? ''), $label) && is_string($button['callback_data'] ?? null)) {
+                    return $button['callback_data'];
+                }
+            }
+        }
+
+        self::fail("No button holds «{$label}».");
+    }
+
+    private function tapAs(string $data): void
+    {
+        $this->send($this->tap($data, chat: self::OWNER));
+    }
+
+    /** The account 7001 linked as the owner. */
+    private function owner(): User
+    {
+        $owner = User::query()->where('telegram_id', self::OWNER)->first() ?? $this->customer(['telegram_id' => self::OWNER, 'first_name' => 'Amir']);
+        $this->linkOwner(self::OWNER);
+
+        return $owner;
+    }
+}

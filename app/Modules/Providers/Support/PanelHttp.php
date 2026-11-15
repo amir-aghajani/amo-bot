@@ -45,6 +45,23 @@ final class PanelHttp
     }
 
     /**
+     * GET one of the panel's public subscription routes — `$path` under its address, without the API's credentials, as
+     * a client app asks it with a link's token. Its JSON object, or null for any other answer: a token it did not sign or
+     * revoked, a page, an error. Such an answer is no failure of the panel's API, and the path — which holds a customer's
+     * token — goes into no message.
+     *
+     * @return array<string, mixed>|null
+     * @throws ConnectionException when nothing answered
+     */
+    public function anonymous(PanelConnection $connection, string $path): ?array
+    {
+        $response = $this->send($connection, 'GET', $path, ['headers' => ['Accept' => 'application/json']]);
+        $body = $response->getStatusCode() === 200 ? json_decode((string) $response->getBody(), true) : null;
+
+        return is_array($body) && $body !== [] && !array_is_list($body) ? $body : null;
+    }
+
+    /**
      * Guzzle options with `$headers` added; a header the options set already gives way to these.
      *
      * @param array<string, mixed> $options

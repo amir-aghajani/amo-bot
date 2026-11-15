@@ -45,6 +45,7 @@ const SECTIONS = {
   '/bot-settings/referral': ['components/bot/settings/referral-section.tsx#ReferralSection'],
   '/bot-settings/reports': ['components/bot/settings/reports-section.tsx#ReportsSection'],
   '/bot-settings/qr': ['components/bot/settings/qr-section.tsx#QrSection'],
+  '/bot-settings/bot-admins': ['components/bot/settings/bot-admins-section.tsx#BotAdminsSection'],
   // «تنظیمات وب‌سایت» (pages/website-settings).
   '/website-settings/connection': ['components/website/connection-section.tsx#ConnectionSection'],
   '/website-settings/telegram': ['components/website/telegram-login-section.tsx#TelegramLoginSection'],
@@ -62,7 +63,7 @@ const SECTIONS = {
   '/settings/app': ['apps/admin/settings/app-section.tsx#AppSection'],
   '/settings/mail': ['apps/admin/settings/mail-section.tsx#MailSection', 'apps/admin/settings/mail-section.tsx#MailTestCard'],
   '/settings/sms': ['apps/admin/settings/sms-section.tsx#SmsSection', 'apps/admin/settings/sms-section.tsx#SmsTestCard'],
-  '/settings/login': ['apps/admin/settings/login-section.tsx#LoginSection'],
+  '/settings/login': ['apps/admin/settings/login-section.tsx#LoginSection', 'apps/admin/settings/owner-telegram-card.tsx#OwnerTelegramCard'],
   '/settings/appearance': ['components/appearance-card.tsx#AppearanceCard'],
   '/settings/update': ['apps/admin/settings/update-section.tsx#UpdateSection'],
   '/settings/schedule': ['apps/admin/settings/schedule-section.tsx#ScheduleSection'],

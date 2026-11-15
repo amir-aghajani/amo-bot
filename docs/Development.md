@@ -122,13 +122,15 @@ app/
     Catalog        plans, their categories, which servers can sell them
     Discounts      discount codes, timed sales, loyalty tiers, a customer's own discount
     Imports        another bot's shop brought into the main shop: its backup or database read, reviewed, written;
-                   the migrators (Faoxima)
+                   the migrators (Faoxima, MirzaBot)
     Installer      the web installer's API (/api/install)
     Notifications  what the shop tells a customer: kept for their website, sent to Telegram or by email
     Orders         the order's lifecycle
     Payments       gateways (wallet, card-to-card, CubePay, Zarinpal, AtlasPay, AbanGateway, Plisio, AqayePardakht,
-                   Variza, and "outside": money support took for an order it made), the checkout, the settlement
-    Providers      the VPN panels: the contract, 3X-UI, PasarGuard, HMPanel and Marzban, servers and inbounds
+                   Variza, Bluepal, Rialit, Rikhtam's crypto, and "outside": money support took for an order it made),
+                   the bank deposits that approve card payments (ForApp, Rikhtam), the checkout, the settlement
+    Providers      the VPN panels: the contract, 3X-UI, PasarGuard, HMPanel, Marzban, Rebecca and Remnawave, servers and
+                   inbounds
     Referrals      invite links and commissions
     Reviews        customers' reviews of the shop: written on its website, decided by support
     Rewards        cashback, gift codes, the lucky wheel, the nightly draw

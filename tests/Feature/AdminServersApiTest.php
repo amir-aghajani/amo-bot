@@ -40,7 +40,7 @@ final class AdminServersApiTest extends HttpTestCase
     {
         $data = $this->decode($this->get('/api/admin/servers/drivers'));
 
-        self::assertSame(['3x-ui', 'pasarguard', 'hmpanel', 'marzban'], array_column($data['drivers'], 'key'), 'in the order they are registered');
+        self::assertSame(['3x-ui', 'pasarguard', 'hmpanel', 'marzban', 'rebecca', 'remnawave'], array_column($data['drivers'], 'key'), 'in the order they are registered');
         $driver = $data['drivers'][0];
         self::assertSame(['key' => '3x-ui', 'label' => '3X-UI'], ['key' => $driver['key'], 'label' => $driver['label']]);
         self::assertSame(['mark' => '3X', 'vendor' => 'MHSanaei', 'docs_url' => 'https://github.com/MHSanaei/3x-ui', 'inbounds' => true, 'link_rotation' => true], $driver['traits'], 'what the picker draws it by, and what its panels can do');

@@ -10,6 +10,7 @@ use App\Modules\Catalog\Models\Plan;
 use App\Modules\Payments\Models\PaymentMethod;
 use App\Modules\Providers\Models\Server;
 use App\Modules\Subscriptions\Models\Subscription;
+use App\Modules\Telegram\Admin\OwnerLinks;
 use App\Modules\Telegram\Handlers\PurchaseHandler;
 use App\Modules\Telegram\Models\ReportMessage;
 use App\Modules\Telegram\Texts\BotText;
@@ -68,6 +69,15 @@ abstract class BotTestCase extends DatabaseTestCase
         $this->bot()->dispatch($update);
     }
 
+    /** `$telegramId` becomes the owner in the main bot, as opening the panel's one-time link (OwnerLinks) makes it. */
+    protected function linkOwner(int $telegramId): void
+    {
+        $links = $this->service(OwnerLinks::class);
+        $link = $links->link();
+        self::assertNotNull($link);
+        $links->redeem(substr($link['url'], (int) strpos($link['url'], '=') + 1), $telegramId);
+    }
+
     /** The customer does something in an agent's bot: the update served in its shop, as bot:poll or its webhook would. */
     protected function sendTo(Bot $bot, Update $update): void
     {
@@ -117,6 +127,38 @@ abstract class BotTestCase extends DatabaseTestCase
     protected function callbacks(int $call): array
     {
         return array_values(array_filter(array_column(array_merge(...$this->inlineKeyboard($call)), 'callback_data')));
+    }
+
+    /** @return list<string> The labels of the n-th call's inline buttons, row after row. */
+    protected function buttonLabels(int $call): array
+    {
+        return array_values(array_column(array_merge(...$this->inlineKeyboard($call)), 'text'));
+    }
+
+    /** The last call since the last send() that carried inline buttons (a popup's answer comes before it); 0 for none. */
+    protected function buttonsCall(): int
+    {
+        $last = 0;
+        foreach (array_keys($this->calls()) as $index) {
+            if ($this->inlineKeyboard($index) !== []) {
+                $last = $index;
+            }
+        }
+
+        return $last;
+    }
+
+    /** The last call since the last send() that drew a message or a picture (a management screen's window); 0 for none. */
+    protected function windowCall(): int
+    {
+        $index = 0;
+        foreach ($this->calls() as $i => $method) {
+            if (in_array($method, ['sendMessage', 'editMessageText', 'sendPhoto', 'editMessageMedia'], true)) {
+                $index = $i;
+            }
+        }
+
+        return $index;
     }
 
     /** @return list<list<string>> The labels of the reply keyboard the n-th call showed, row by row as Telegram lays them out. */

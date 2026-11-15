@@ -78,6 +78,8 @@ Screens both panels have: `{panel}` is `admin` in the owner's panel and `agent` 
 | [`GET /api/{panel}/payments/{id}`](#get-apipanelpaymentsid) | One payment, as the list shows it |
 | [`GET /api/{panel}/payments/{id}/receipt`](#get-apipanelpaymentsidreceipt) | The payment's receipt picture |
 | [`POST /api/{panel}/payments/{id}/approve`](#post-apipanelpaymentsidapprove) | Approve a payment and deliver what it paid for |
+| [`GET /api/{panel}/payments/{id}/rikhtam`](#get-apipanelpaymentsidrikhtam) | The deposits of the last 20 days no invoice took at Rikhtam (at most 40), to attach one to this card payment |
+| [`POST /api/{panel}/payments/{id}/rikhtam`](#post-apipanelpaymentsidrikhtam) | Attach one of those deposits to this payment |
 | [`POST /api/{panel}/payments/{id}/reject`](#post-apipanelpaymentsidreject) | Reject a receipt |
 | [`POST /api/{panel}/payments/{id}/cancel`](#post-apipanelpaymentsidcancel) | Cancel an unpaid payment and its open order |
 | [`POST /api/{panel}/payments/{id}/remind`](#post-apipanelpaymentsidremind) | Remind the customer to pay |
@@ -108,6 +110,9 @@ Screens both panels have: `{panel}` is `admin` in the owner's panel and `agent` 
 | [`GET /api/{panel}/deposits/settings`](#get-apipaneldepositssettings) | «تایید خودکار واریز» |
 | [`PUT /api/{panel}/deposits/settings`](#put-apipaneldepositssettings) | Listen to the bank SMS, or stop |
 | [`POST /api/{panel}/deposits/settings/key`](#post-apipaneldepositssettingskey) | A new key for the webhook |
+| [`PUT /api/{panel}/deposits/settings/rikhtam`](#put-apipaneldepositssettingsrikhtam) | Connect Rikhtam (rikhtam.com, «ریختم») by its gateway's «کلید امنیتی» |
+| [`DELETE /api/{panel}/deposits/settings/rikhtam`](#delete-apipaneldepositssettingsrikhtam) | Forget the Rikhtam key and what its registration said |
+| [`POST /api/{panel}/deposits/settings/rikhtam/hook`](#post-apipaneldepositssettingsrikhtamhook) | Register the shop's address with its Rikhtam gateway again (after the site moved) |
 | [`GET /api/{panel}/payment-methods`](#get-apipanelpayment-methods) | All payment methods, in checkout order |
 | [`POST /api/{panel}/payment-methods`](#post-apipanelpayment-methods) | Add a payment method |
 | [`GET /api/{panel}/payment-methods/drivers`](#get-apipanelpayment-methodsdrivers) | The gateway drivers a payment method can use, each with its form |
@@ -115,6 +120,8 @@ Screens both panels have: `{panel}` is `admin` in the owner's panel and `agent` 
 | [`PUT /api/{panel}/payment-methods/{id}`](#put-apipanelpayment-methodsid) | Update a payment method |
 | [`PATCH /api/{panel}/payment-methods/{id}`](#patch-apipanelpayment-methodsid) | Switch a payment method on or off |
 | [`DELETE /api/{panel}/payment-methods/{id}`](#delete-apipanelpayment-methodsid) | Delete a payment method |
+| [`GET /api/{panel}/payment-methods/{id}/webhook`](#get-apipanelpayment-methodsidwebhook) | Where the method's gateway sends its webhooks now, asked at the gateway and nothing changed |
+| [`POST /api/{panel}/payment-methods/{id}/webhook`](#post-apipanelpayment-methodsidwebhook) | Register the shop's webhook address with the method's gateway |
 | [`GET /api/{panel}/bot/settings`](#get-apipanelbotsettings) | The bot's settings, every group, and the QR card's background |
 | [`PUT /api/{panel}/bot/settings/{group}`](#put-apipanelbotsettingsgroup) | Save one group of the bot's settings, whole |
 | [`GET /api/{panel}/bot/qr-background`](#get-apipanelbotqr-background) | The background picture QR cards are drawn on |
@@ -508,13 +515,13 @@ A bulk change of several plans' prices: raise or lower the named prices by a per
 
 ### POST /api/{panel}/plans/prices
 
-Raise or lower several plans' prices at once. All or nothing: if any plan cannot take the change (a price below zero, or a first-purchase or agent price no longer below the price), nothing changes and a 422 on `plan_ids` names each such plan.
+Raise or lower several plans' prices at once. All or nothing: if any plan cannot take the change (a price below zero, or a first-purchase or agent price no longer below the price) or, with `previewed`, its prices moved since the preview, nothing changes and a 422 on `plan_ids` names each such plan.
 
 - **On the website:** the website's admins can also use it, as [`POST /plans/prices`](Store-Admin-API-Reference.md#post-plansprices), when the website grants `catalog` ([grants](Store-Admin-API-Reference.md#grants)) and the sign-in is at most 15 minutes old.
 
 **Body**, as JSON:
 
-A bulk change of several plans' prices: raise or lower the named prices by a percent or a number of Toman, rounding each new price to the nearest step. A plan without one of the named prices still has none afterwards.
+A bulk change of several plans' prices as it is made: the change previewed (PlanPricesRequest) and, to make exactly the change the preview showed, each plan's prices as the preview showed them.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -524,6 +531,9 @@ A bulk change of several plans' prices: raise or lower the named prices by a per
 | `value` | [AmountInput](API-Schemas.md#amountinput) | yes | The percent (decimals allowed) or whole Toman; above zero. |
 | `round_to` | integer: `1`, `100`, `1000`, `10000` | yes | Each new price is rounded to the nearest multiple of this; 1 means whole Toman. |
 | `prices` | list of string: `price`, `first_purchase_price`, `agent_price` | yes | Which prices change: the price, the first-purchase price, the agent price. |
+| `previewed` | list of object, at most 1000 | no | Each plan's prices as the preview showed them: its `changes`' `id` and `before`. Sent, the change is the one previewed or none: a plan whose prices moved since (another change meanwhile, or this one sent again) is refused with a 422 on `plan_ids` naming it. Left out, the change is applied to the prices as they are. |
+| `previewed[].id` | integer | yes |  |
+| `previewed[].before` | [PlanPrices](API-Schemas.md#planprices) | yes |  |
 
 **Answers**
 
@@ -1409,6 +1419,50 @@ Approve a payment and deliver what it paid for. With a receipt in review, or by 
 | `200` | Approved | [PaymentResponse](API-Schemas.md#paymentresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
+### GET /api/{panel}/payments/{id}/rikhtam
+
+The deposits of the last 20 days no invoice took at Rikhtam (at most 40), to attach one to this card payment: the closest to its sum first. Offered (`actions.rikhtam`) for a payment that may be approved in a shop whose Rikhtam is connected; not connected, `connected` is false and the list empty.
+
+- **On the website:** the website's admins can also use it, as [`GET /payments/{id}/rikhtam`](Store-Admin-API-Reference.md#get-paymentsidrikhtam), when the sign-in is at most 15 minutes old.
+
+**Parameters**
+
+| Name | In | Type | Required | What it is |
+|---|---|---|---|---|
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | OK | [PaymentRikhtamResponse](API-Schemas.md#paymentrikhtamresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### POST /api/{panel}/payments/{id}/rikhtam
+
+Attach one of those deposits to this payment: Rikhtam sends it to the shop again, named for the payment, and it approves the payment when it covers its order's price — delivered, and the customer told, as by a bank SMS. The answer is the payment as it stands after, with Rikhtam's word (`message`) and its fee.
+
+- **On the website:** the website's admins can also use it, as [`POST /payments/{id}/rikhtam`](Store-Admin-API-Reference.md#post-paymentsidrikhtam), when the sign-in is at most 15 minutes old.
+
+**Parameters**
+
+| Name | In | Type | Required | What it is |
+|---|---|---|---|---|
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
+
+**Body**, as JSON:
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `uid` | string | yes | The deposit to attach, from `GET …/rikhtam`. |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | Attached | [PaymentRikhtamAttachResponse](API-Schemas.md#paymentrikhtamattachresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
 ### POST /api/{panel}/payments/{id}/reject
 
 Reject a receipt.
@@ -2085,6 +2139,47 @@ A new key for the webhook: the old one stops working at once, and the phone app 
 | `200` | Made | [DepositSettingsResponse](#depositsettingsresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
+### PUT /api/{panel}/deposits/settings/rikhtam
+
+Connect Rikhtam (rikhtam.com, «ریختم») by its gateway's «کلید امنیتی»: the shop registers its own address (`rikhtam.callback_url`) with that gateway, then keeps the key (encrypted) and switches «تایید خودکار واریز» on. Rikhtam then sends each deposit of the gateway's bank account to the shop, and one whose sum a single open card-to-card payment asks approves it.
+
+**Body**, as JSON:
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `secret` | string | yes | The Rikhtam gateway's «کلید امنیتی», from Rikhtam's panel. |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | Connected | [DepositSettingsResponse](#depositsettingsresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### DELETE /api/{panel}/deposits/settings/rikhtam
+
+Forget the Rikhtam key and what its registration said: a deposit or crypto word signed with it alone is refused from then on (a Rikhtam crypto method keeps its own key).
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | Forgotten | [DepositSettingsResponse](#depositsettingsresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### POST /api/{panel}/deposits/settings/rikhtam/hook
+
+Register the shop's address with its Rikhtam gateway again (after the site moved): the refusals of `PUT …/rikhtam`, a 422 on `secret` — and one while Rikhtam is not connected.
+
+**Body:** none.
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | Registered | [DepositSettingsResponse](#depositsettingsresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
 ### GET /api/{panel}/payment-methods
 
 All payment methods, in checkout order: every one but «خارج از فروشگاه», the built-in row support records money taken outside the shop with (`POST /users/{id}/orders`), which this screen neither lists nor finds.
@@ -2098,7 +2193,7 @@ All payment methods, in checkout order: every one but «خارج از فروشگ
 
 ### POST /api/{panel}/payment-methods
 
-Add a payment method. Names a driver and fills in that driver's form.
+Add a payment method. Names a driver and fills in that driver's form. A method whose gateway takes its webhook address from the shop (Rialit) has the shop's registered there when the gateway has none (`webhook`); the save never fails for the gateway's sake.
 
 **Body**, as JSON:
 
@@ -2155,8 +2250,8 @@ One of:
 | `enabled` | boolean | no | Left out: on for a new method, unchanged for an existing one. |
 | `min_amount` | [AmountInput](API-Schemas.md#amountinput) or null | no | The least amount to pay it is offered for: whole Toman, blank or null for no least. Left out on an update: unchanged. |
 | `max_amount` | [AmountInput](API-Schemas.md#amountinput) or null | no | The most amount to pay it is offered for (not less than `min_amount`): whole Toman, blank or null for no most. Left out on an update: unchanged. |
-| `api_key` | string | no | The API key as AtlasPay gives it: 8 to 255 Latin letters, digits and signs, no spaces. Kept encrypted, never shown back. Left blank or out: the kept one stays; a new method, or one with none kept, is refused without one (a 422 on `api_key`). |
-| `clear_api_key` | boolean | no | True empties the kept key, which is refused: an AtlasPay method cannot go without one (type another instead). |
+| `api_key` | string | no | The API key as AtlasPay (or Rialit's dashboard) gives it: 8 to 255 Latin letters, digits and signs, no spaces. Kept encrypted, never shown back. Left blank or out: the kept one stays; a new method, or one with none kept, is refused without one (a 422 on `api_key`). |
+| `clear_api_key` | boolean | no | True empties the kept key, which is refused: an AtlasPay or Rialit method cannot go without one (type another instead). |
 
 **`AbanMethodCreateRequest`** — A new AbanGateway method: its driver and its form (AbanMethodRequest), with the label and the API key required.
 
@@ -2212,11 +2307,49 @@ One of:
 | `clear_webhook_secret` | boolean | no | True empties the kept secret, which is refused: a Variza method cannot go without one (type another instead). |
 | `card` | string | yes | `random` (or «تصادفی»), `variza` (or «واریزا»), or the last four digits of one of the merchant's cards at Variza — any case, Persian digits taken; kept as `random`, `variza` or the digits. |
 
+**`RikhtamMethodCreateRequest`** — A new Rikhtam crypto method: its driver and its form (RikhtamMethodRequest), with the label, the gateway's key and the coin required.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `driver` | string: `rikhtam` | yes | A driver key (`DriverDescription.key`) from `GET /payment-methods/drivers`. |
+| `label` | string | yes | The checkout button's text, such as «کارت به کارت (ملت)». Left out on an update: unchanged. |
+| `enabled` | boolean | no | Left out: on for a new method, unchanged for an existing one. |
+| `min_amount` | [AmountInput](API-Schemas.md#amountinput) or null | no | The least amount to pay it is offered for: whole Toman, blank or null for no least. Left out on an update: unchanged. |
+| `max_amount` | [AmountInput](API-Schemas.md#amountinput) or null | no | The most amount to pay it is offered for (not less than `min_amount`): whole Toman, blank or null for no most. Left out on an update: unchanged. |
+| `secret` | string | no | The gateway's «کلید امنیتی» as Rikhtam's panel shows it: 8 to 255 Latin letters, digits and signs, no spaces — the same key the shop's Rikhtam deposits are heard with. Kept encrypted, never shown back. Left blank or out: the kept one stays; a new method, or one with none kept, is refused without one (a 422 on `secret`). |
+| `clear_secret` | boolean | no | True empties the kept key, which is refused: a Rikhtam method cannot go without one (type another instead). |
+| `coin` | string: `any`, `gram`, `usdt_ton`, `usdt_trc20`, `trx` | yes | `any` for the customer to pick on Rikhtam's page; else TON's Gram (`gram`), Tether on TON (`usdt_ton`) or on TRON (`usdt_trc20`), or TRX (`trx`). Another word is a 422 on `coin`. |
+
+**`BluepalMethodCreateRequest`** — A new Bluepal method: its driver and its form (BluepalMethodRequest), with the label, the merchant id and the API key required.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `driver` | string: `bluepal` | yes | A driver key (`DriverDescription.key`) from `GET /payment-methods/drivers`. |
+| `label` | string | yes | The checkout button's text, such as «کارت به کارت (ملت)». Left out on an update: unchanged. |
+| `enabled` | boolean | no | Left out: on for a new method, unchanged for an existing one. |
+| `min_amount` | [AmountInput](API-Schemas.md#amountinput) or null | no | The least amount to pay it is offered for: whole Toman, blank or null for no least. Left out on an update: unchanged. |
+| `max_amount` | [AmountInput](API-Schemas.md#amountinput) or null | no | The most amount to pay it is offered for (not less than `min_amount`): whole Toman, blank or null for no most. Left out on an update: unchanged. |
+| `merchant_id` | string | yes | The gateway's merchant id as Bluepal's dashboard shows it: 2 to 64 Latin letters, digits, `-` and `_` (Persian digits are taken). A 422 on `merchant_id` without one, or of another shape. |
+| `api_key` | string | no | The API key as Bluepal's dashboard shows it (`sk_live_…`, or the key of the gateway's sandbox, where no money moves — a payment there still delivers its order): 8 to 255 Latin letters, digits and signs, no spaces. Kept encrypted, never shown back. Left blank or out: the kept one stays; a new method, or one with none kept, is refused without one (a 422 on `api_key`). |
+| `clear_api_key` | boolean | no | True empties the kept key, which is refused: a Bluepal method cannot go without one (type another instead). |
+
+**`RialitMethodCreateRequest`** — A new Rialit method: its driver and its form (the one AtlasPayMethodRequest describes), with the label and the API key required.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `driver` | string: `rialit` | yes | A driver key (`DriverDescription.key`) from `GET /payment-methods/drivers`. |
+| `label` | string | yes | The checkout button's text, such as «کارت به کارت (ملت)». Left out on an update: unchanged. |
+| `enabled` | boolean | no | Left out: on for a new method, unchanged for an existing one. |
+| `min_amount` | [AmountInput](API-Schemas.md#amountinput) or null | no | The least amount to pay it is offered for: whole Toman, blank or null for no least. Left out on an update: unchanged. |
+| `max_amount` | [AmountInput](API-Schemas.md#amountinput) or null | no | The most amount to pay it is offered for (not less than `min_amount`): whole Toman, blank or null for no most. Left out on an update: unchanged. |
+| `api_key` | string | no | The API key as Rialit's dashboard shows it: 8 to 255 Latin letters, digits and signs, no spaces. Kept encrypted, never shown back. Required: a new method is refused without one (a 422 on `api_key`). |
+| `clear_api_key` | boolean | no | True empties the key, which is refused: a Rialit method cannot go without one. |
+
 **Answers**
 
 | Status | What it is | Body |
 |---|---|---|
-| `201` | Added | [PaymentMethodResponse](#paymentmethodresponse) |
+| `201` | Added | [PaymentMethodSavedResponse](#paymentmethodsavedresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
 ### GET /api/{panel}/payment-methods/drivers
@@ -2251,7 +2384,7 @@ The rows of an admin-ordered list in their new order, by id: 1 to 1000. A 422 on
 
 ### PUT /api/{panel}/payment-methods/{id}
 
-Update a payment method. Sends its driver's form again: a card method's with its cards, the wallet's its label, bounds and switch. A 404 for «خارج از فروشگاه», as for no row.
+Update a payment method. Sends its driver's form again: a card method's with its cards, the wallet's its label, bounds and switch. A Rialit method has the shop's webhook address registered as at `POST /payment-methods` (`webhook`). A 404 for «خارج از فروشگاه», as for no row.
 
 **Parameters**
 
@@ -2303,7 +2436,7 @@ One of:
 | `clear_merchant_id` | boolean | no | True empties the kept code, which is refused: a Zarinpal method cannot go without one (type another instead). |
 | `sandbox` | boolean | yes | Zarinpal's test service (sandbox.zarinpal.com): any code in its shape is taken and no money moves — a payment there still delivers its order. Only for trying it out. |
 
-**`AtlasPayMethodRequest`** — An AtlasPay method's form: the label customers pick it by, its switch, the amounts it is offered for, and the merchant's API key from AtlasPay. It names `api_key` (blank keeps the kept one) or `clear_api_key`, as the panels' form does with every save: a body of the label, the switch and the bounds alone is the wallet's form.
+**`AtlasPayMethodRequest`** — An AtlasPay or Rialit method's form — the two drivers' forms are alike —: the label customers pick it by, its switch, the amounts it is offered for (Rialit takes 50,000 to 10,000,000 Toman), and the merchant's API key from AtlasPay, or from Rialit's dashboard. It names `api_key` (blank keeps the kept one) or `clear_api_key`, as the panels' form does with every save: a body of the label, the switch and the bounds alone is the wallet's form.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -2311,8 +2444,8 @@ One of:
 | `enabled` | boolean | no | Left out: on for a new method, unchanged for an existing one. |
 | `min_amount` | [AmountInput](API-Schemas.md#amountinput) or null | no | The least amount to pay it is offered for: whole Toman, blank or null for no least. Left out on an update: unchanged. |
 | `max_amount` | [AmountInput](API-Schemas.md#amountinput) or null | no | The most amount to pay it is offered for (not less than `min_amount`): whole Toman, blank or null for no most. Left out on an update: unchanged. |
-| `api_key` | string | no | The API key as AtlasPay gives it: 8 to 255 Latin letters, digits and signs, no spaces. Kept encrypted, never shown back. Left blank or out: the kept one stays; a new method, or one with none kept, is refused without one (a 422 on `api_key`). |
-| `clear_api_key` | boolean | no | True empties the kept key, which is refused: an AtlasPay method cannot go without one (type another instead). |
+| `api_key` | string | no | The API key as AtlasPay (or Rialit's dashboard) gives it: 8 to 255 Latin letters, digits and signs, no spaces. Kept encrypted, never shown back. Left blank or out: the kept one stays; a new method, or one with none kept, is refused without one (a 422 on `api_key`). |
+| `clear_api_key` | boolean | no | True empties the kept key, which is refused: an AtlasPay or Rialit method cannot go without one (type another instead). |
 
 **`AbanMethodRequest`** — An AbanGateway method's form: the label customers pick it by, its switch, the amounts it is offered for, the merchant's API key from AbanGateway's panel, and whether the card is shown in the bot and on the site. It names `api_key` (blank keeps the kept one) or `clear_api_key`, as the panels' form does with every save.
 
@@ -2364,11 +2497,35 @@ One of:
 | `clear_webhook_secret` | boolean | no | True empties the kept secret, which is refused: a Variza method cannot go without one (type another instead). |
 | `card` | string | yes | `random` (or «تصادفی»), `variza` (or «واریزا»), or the last four digits of one of the merchant's cards at Variza — any case, Persian digits taken; kept as `random`, `variza` or the digits. |
 
+**`RikhtamMethodRequest`** — A Rikhtam crypto method's form: the label customers pick it by, its switch, the amounts it is offered for, the gateway's «کلید امنیتی» from Rikhtam's panel («درگاه‌ها»), and the coin. It names `secret` (blank keeps the kept one) or `clear_secret`, as the panels' form does with every save.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `label` | string | no | The checkout button's text, such as «کارت به کارت (ملت)». Left out on an update: unchanged. |
+| `enabled` | boolean | no | Left out: on for a new method, unchanged for an existing one. |
+| `min_amount` | [AmountInput](API-Schemas.md#amountinput) or null | no | The least amount to pay it is offered for: whole Toman, blank or null for no least. Left out on an update: unchanged. |
+| `max_amount` | [AmountInput](API-Schemas.md#amountinput) or null | no | The most amount to pay it is offered for (not less than `min_amount`): whole Toman, blank or null for no most. Left out on an update: unchanged. |
+| `secret` | string | no | The gateway's «کلید امنیتی» as Rikhtam's panel shows it: 8 to 255 Latin letters, digits and signs, no spaces — the same key the shop's Rikhtam deposits are heard with. Kept encrypted, never shown back. Left blank or out: the kept one stays; a new method, or one with none kept, is refused without one (a 422 on `secret`). |
+| `clear_secret` | boolean | no | True empties the kept key, which is refused: a Rikhtam method cannot go without one (type another instead). |
+| `coin` | string: `any`, `gram`, `usdt_ton`, `usdt_trc20`, `trx` | yes | `any` for the customer to pick on Rikhtam's page; else TON's Gram (`gram`), Tether on TON (`usdt_ton`) or on TRON (`usdt_trc20`), or TRX (`trx`). Another word is a 422 on `coin`. |
+
+**`BluepalMethodRequest`** — A Bluepal method's form: the label customers pick it by, its switch, the amounts it is offered for, and the gateway's merchant id and API key from Bluepal's dashboard. It names `api_key` (blank keeps the kept one) or `clear_api_key`, as the panels' form does with every save.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `label` | string | no | The checkout button's text, such as «کارت به کارت (ملت)». Left out on an update: unchanged. |
+| `enabled` | boolean | no | Left out: on for a new method, unchanged for an existing one. |
+| `min_amount` | [AmountInput](API-Schemas.md#amountinput) or null | no | The least amount to pay it is offered for: whole Toman, blank or null for no least. Left out on an update: unchanged. |
+| `max_amount` | [AmountInput](API-Schemas.md#amountinput) or null | no | The most amount to pay it is offered for (not less than `min_amount`): whole Toman, blank or null for no most. Left out on an update: unchanged. |
+| `merchant_id` | string | yes | The gateway's merchant id as Bluepal's dashboard shows it: 2 to 64 Latin letters, digits, `-` and `_` (Persian digits are taken). A 422 on `merchant_id` without one, or of another shape. |
+| `api_key` | string | no | The API key as Bluepal's dashboard shows it (`sk_live_…`, or the key of the gateway's sandbox, where no money moves — a payment there still delivers its order): 8 to 255 Latin letters, digits and signs, no spaces. Kept encrypted, never shown back. Left blank or out: the kept one stays; a new method, or one with none kept, is refused without one (a 422 on `api_key`). |
+| `clear_api_key` | boolean | no | True empties the kept key, which is refused: a Bluepal method cannot go without one (type another instead). |
+
 **Answers**
 
 | Status | What it is | Body |
 |---|---|---|
-| `200` | Changed | [PaymentMethodResponse](#paymentmethodresponse) |
+| `200` | Changed | [PaymentMethodSavedResponse](#paymentmethodsavedresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
 ### PATCH /api/{panel}/payment-methods/{id}
@@ -2411,6 +2568,46 @@ Delete a payment method. A 409 for the wallet, which cannot be deleted, and for 
 | Status | What it is | Body |
 |---|---|---|
 | `204` | [NoContent](API-Schemas.md#response-nocontent) | none |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### GET /api/{panel}/payment-methods/{id}/webhook
+
+Where the method's gateway sends its webhooks now, asked at the gateway and nothing changed — for a gateway that takes its webhook address from the shop (`PaymentMethodRow.registers_webhook`: Rialit); a 422 on `driver` for any other. Rialit not answering is no error: `unknown`, and why.
+
+**Parameters**
+
+| Name | In | Type | Required | What it is |
+|---|---|---|---|---|
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | OK | [PaymentMethodWebhookResponse](#paymentmethodwebhookresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### POST /api/{panel}/payment-methods/{id}/webhook
+
+Register the shop's webhook address with the method's gateway: where it has none; where it has another (one account for another site too, maybe), only with `replace`; where it has the shop's, nothing. Rialit tells the account's owner of each change on Telegram and by email, and takes 20 security changes an hour. A 422 on `driver` as `GET`; what Rialit would not do is no error, but the state and why (`message`).
+
+**Parameters**
+
+| Name | In | Type | Required | What it is |
+|---|---|---|---|---|
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
+
+**Body**, as JSON:
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `replace` | boolean | no | Put the shop's address in place of another the gateway sends its webhooks to — only when the gateway's account is this shop's alone. Left out: false, another address left as it is. |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | Registered, or why not | [PaymentMethodWebhookResponse](#paymentmethodwebhookresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
 ### GET /api/{panel}/bot/settings
@@ -2680,6 +2877,20 @@ One of:
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `agents_without_perks` | boolean | yes |  |
+
+**`BotBotAdminsSettingsRequest`** — «مدیران ربات»: whether the shop's admins manage it from the bot, and a switch per grant beyond the daily work (`BotSettingsData.bot_admins_*`).
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `bot_admins_enabled` | boolean | yes |  |
+| `bot_admins_grant_catalog` | boolean | yes |  |
+| `bot_admins_grant_wallet` | boolean | yes |  |
+| `bot_admins_grant_refunds` | boolean | yes |  |
+| `bot_admins_grant_payments` | boolean | yes |  |
+| `bot_admins_grant_extend` | boolean | yes |  |
+| `bot_admins_grant_manual_orders` | boolean | yes |  |
+| `bot_admins_grant_delete` | boolean | yes |  |
+| `bot_admins_grant_account_security` | boolean | yes |  |
 
 **Answers**
 
@@ -4269,6 +4480,9 @@ Operations only the owner's panel has.
 | [`POST /api/admin/settings/config/sms/test`](#post-apiadminsettingsconfigsmstest) | Send a test code by SMS with the saved SMS settings, through the approved pattern a sign-in code goes by |
 | [`GET /api/admin/settings/config/sms/credit`](#get-apiadminsettingsconfigsmscredit) | The SMS account's credit by the saved settings, asked of its provider (which also checks the key) |
 | [`PUT /api/admin/settings/config/{group}`](#put-apiadminsettingsconfiggroup) | Save one group of the config.php settings |
+| [`GET /api/admin/settings/owner-telegram`](#get-apiadminsettingsowner-telegram) | «مدیریت از ربات» (the owner's, «تنظیمات پنل › ورود به پنل») |
+| [`POST /api/admin/settings/owner-telegram/link`](#post-apiadminsettingsowner-telegramlink) | A new one-time link (`t.me/<main bot>?start=owner-<code>`) |
+| [`DELETE /api/admin/settings/owner-telegram/{telegram_id}`](#delete-apiadminsettingsowner-telegramtelegram_id) | The account is the owner no more, and the bot admin role its link gave it goes too |
 | [`GET /api/admin/imports`](#get-apiadminimports) | «انتقال از ربات دیگر», the owner's |
 | [`POST /api/admin/imports`](#post-apiadminimports) | Start an import from the other bot's backup file |
 | [`POST /api/admin/imports/database`](#post-apiadminimportsdatabase) | Start an import from the other bot's MySQL database, read once over this connection and only read |
@@ -4314,7 +4528,7 @@ Start recovering a lost login. Writes a one-time key into the host's files, wher
 
 ### POST /api/admin/auth/recovery
 
-Set a new panel login with the recovery key. This browser is signed in with it, in the shop the request names, and every other session ends. A 422 under the field refused — a wrong or expired key on `key`, which counts as a failed sign-in —, or on `file` while the server may not write config.php; a 429 while this address must wait after failures.
+Set a new panel login with the recovery key. This browser is signed in with it, in the shop the request names, and every other session ends — and every Telegram account linked as the owner, as with `PUT /auth/credentials`. A 422 under the field refused — a wrong or expired key on `key`, which counts as a failed sign-in —, or on `file` while the server may not write config.php; a 429 while this address must wait after failures.
 
 **Body**, as JSON:
 
@@ -4336,7 +4550,7 @@ A new panel login set without the old one: the recovery key from the host's file
 
 ### PUT /api/admin/auth/credentials
 
-Change the panel's login. Every other session ends; this one stays signed in. A 422 under the field refused (a wrong current password counts as a failed sign-in), or on `file` while the server may not write config.php; a 429 while this address or the account must wait after failures.
+Change the panel's login. Every other session ends; this one stays signed in. Every Telegram account linked as the owner (`/settings/owner-telegram`) is let go too, with the bot admin role its link gave it, and an open link ends: they are linked again afterwards. A 422 under the field refused (a wrong current password counts as a failed sign-in), or on `file` while the server may not write config.php; a 429 while this address or the account must wait after failures.
 
 **Body**, as JSON:
 
@@ -4521,9 +4735,9 @@ One of:
 | `driver` | string: `3x-ui` | yes |  |
 | `name` | string | yes | The location's name, as customers see it in the bot; at most 100 characters. Never a premium emoji's tag: one is chosen in `emoji_id`. |
 | `emoji_id` | string | no | The premium emoji the bot draws for the name's leading emoji (a custom emoji id, digits): on its location button as the icon, in its texts in the emoji's place. The name must start with an emoji while one is set. Blank or left out: none. |
-| `base_url` | string | yes | The panel's address, including its path: http(s), without credentials, query or fragment, and not one of the panel's own pages (3X-UI's /panel, PasarGuard's /dashboard, HMPanel's /api or /dashboard). |
+| `base_url` | string | yes | The panel's address, including its path: http(s), without credentials, query or fragment, and not one of the panel's own pages (3X-UI's /panel, PasarGuard's /dashboard, HMPanel's /api or /dashboard, Rebecca's /dashboard, /api or /docs, Remnawave's /api, /auth or /dashboard). |
 | `auth_mode` | string: `token`, `password` | yes | How to sign in: an API token, or an admin's username and password. |
-| `api_token` | string | no | For `token`: the panel's API token (PasarGuard's whole `pg_key_…` key, HMPanel's whole `hmp_…` key). Left out or blank: the stored token stays. |
+| `api_token` | string | no | For `token`: the panel's API token (PasarGuard's whole `pg_key_…` key, HMPanel's whole `hmp_…` key, Rebecca's whole `rk_…` key, Remnawave's whole API token — a JWT, `eyJ…`, three parts joined by dots). Left out or blank: the stored token stays. |
 | `clear_api_token` | boolean | no | True empties the stored token. |
 | `verify_tls` | boolean | yes | Whether to verify the panel's TLS certificate; off for a self-signed one. |
 | `timeout` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Request timeout in seconds, 5 to 120. |
@@ -4552,9 +4766,9 @@ One of:
 | `driver` | string: `pasarguard` | yes |  |
 | `name` | string | yes | The location's name, as customers see it in the bot; at most 100 characters. Never a premium emoji's tag: one is chosen in `emoji_id`. |
 | `emoji_id` | string | no | The premium emoji the bot draws for the name's leading emoji (a custom emoji id, digits): on its location button as the icon, in its texts in the emoji's place. The name must start with an emoji while one is set. Blank or left out: none. |
-| `base_url` | string | yes | The panel's address, including its path: http(s), without credentials, query or fragment, and not one of the panel's own pages (3X-UI's /panel, PasarGuard's /dashboard, HMPanel's /api or /dashboard). |
+| `base_url` | string | yes | The panel's address, including its path: http(s), without credentials, query or fragment, and not one of the panel's own pages (3X-UI's /panel, PasarGuard's /dashboard, HMPanel's /api or /dashboard, Rebecca's /dashboard, /api or /docs, Remnawave's /api, /auth or /dashboard). |
 | `auth_mode` | string: `token`, `password` | yes | How to sign in: an API token, or an admin's username and password. |
-| `api_token` | string | no | For `token`: the panel's API token (PasarGuard's whole `pg_key_…` key, HMPanel's whole `hmp_…` key). Left out or blank: the stored token stays. |
+| `api_token` | string | no | For `token`: the panel's API token (PasarGuard's whole `pg_key_…` key, HMPanel's whole `hmp_…` key, Rebecca's whole `rk_…` key, Remnawave's whole API token — a JWT, `eyJ…`, three parts joined by dots). Left out or blank: the stored token stays. |
 | `clear_api_token` | boolean | no | True empties the stored token. |
 | `verify_tls` | boolean | yes | Whether to verify the panel's TLS certificate; off for a self-signed one. |
 | `timeout` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Request timeout in seconds, 5 to 120. |
@@ -4581,9 +4795,9 @@ One of:
 | `driver` | string: `hmpanel` | yes |  |
 | `name` | string | yes | The location's name, as customers see it in the bot; at most 100 characters. Never a premium emoji's tag: one is chosen in `emoji_id`. |
 | `emoji_id` | string | no | The premium emoji the bot draws for the name's leading emoji (a custom emoji id, digits): on its location button as the icon, in its texts in the emoji's place. The name must start with an emoji while one is set. Blank or left out: none. |
-| `base_url` | string | yes | The panel's address, including its path: http(s), without credentials, query or fragment, and not one of the panel's own pages (3X-UI's /panel, PasarGuard's /dashboard, HMPanel's /api or /dashboard). |
+| `base_url` | string | yes | The panel's address, including its path: http(s), without credentials, query or fragment, and not one of the panel's own pages (3X-UI's /panel, PasarGuard's /dashboard, HMPanel's /api or /dashboard, Rebecca's /dashboard, /api or /docs, Remnawave's /api, /auth or /dashboard). |
 | `auth_mode` | string: `token` | yes | How to sign in: HMPanel's API key, the one way its API takes. |
-| `api_token` | string | no | For `token`: the panel's API token (PasarGuard's whole `pg_key_…` key, HMPanel's whole `hmp_…` key). Left out or blank: the stored token stays. |
+| `api_token` | string | no | For `token`: the panel's API token (PasarGuard's whole `pg_key_…` key, HMPanel's whole `hmp_…` key, Rebecca's whole `rk_…` key, Remnawave's whole API token — a JWT, `eyJ…`, three parts joined by dots). Left out or blank: the stored token stays. |
 | `clear_api_token` | boolean | no | True empties the stored token. |
 | `verify_tls` | boolean | yes | Whether to verify the panel's TLS certificate; off for a self-signed one. |
 | `timeout` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Request timeout in seconds, 5 to 120. |
@@ -4627,6 +4841,60 @@ One of:
 | `button_style` | string: ``, `primary`, `success`, `danger` | no | The colour of its button among a plan's locations in the bot: blue, green or red. Blank or left out: the client's default. |
 | `button_row` | string: `1`, `2`, `3` | no | How many location buttons share its row in the bot. Left out: a row of its own. |
 
+**`ServerRebeccaRequest`** — A server on a Rebecca panel (1.0 and later): an admin's `rk_…` API key, the one way Rebecca asks bots in.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `driver` | string: `rebecca` | yes |  |
+| `name` | string | yes | The location's name, as customers see it in the bot; at most 100 characters. Never a premium emoji's tag: one is chosen in `emoji_id`. |
+| `emoji_id` | string | no | The premium emoji the bot draws for the name's leading emoji (a custom emoji id, digits): on its location button as the icon, in its texts in the emoji's place. The name must start with an emoji while one is set. Blank or left out: none. |
+| `base_url` | string | yes | The panel's address, including its path: http(s), without credentials, query or fragment, and not one of the panel's own pages (3X-UI's /panel, PasarGuard's /dashboard, HMPanel's /api or /dashboard, Rebecca's /dashboard, /api or /docs, Remnawave's /api, /auth or /dashboard). |
+| `auth_mode` | string: `token` | yes | How to sign in: an admin's Rebecca API key, the one way the shop takes. |
+| `api_token` | string | no | For `token`: the panel's API token (PasarGuard's whole `pg_key_…` key, HMPanel's whole `hmp_…` key, Rebecca's whole `rk_…` key, Remnawave's whole API token — a JWT, `eyJ…`, three parts joined by dots). Left out or blank: the stored token stays. |
+| `clear_api_token` | boolean | no | True empties the stored token. |
+| `verify_tls` | boolean | yes | Whether to verify the panel's TLS certificate; off for a self-signed one. |
+| `timeout` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Request timeout in seconds, 5 to 120. |
+| `subscription_url` | string | no | A base address to use before the token in subscription links instead of the panel's own: a full address without credentials, query or fragment. Blank: the panel's. |
+| `proxy_enabled` | boolean | yes | Every request to the panel goes through a SOCKS5 proxy (the panel's name looked up by the proxy), for a panel the shop's host cannot reach directly. Off: straight to the panel, and the proxy's fields are emptied. |
+| `proxy_host` | string | no | With `proxy_enabled`: the proxy's host name or IP address, without a scheme or a port (an IPv6 address may be in brackets); at most 255 characters. |
+| `proxy_port` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | With `proxy_enabled`: the proxy's port, 1 to 65535. |
+| `proxy_username` | string | no | With `proxy_enabled`: the proxy's username, at most 255 characters; blank for a proxy without a login. |
+| `proxy_password` | string | no | With `proxy_enabled`: the proxy's password, only with a username. Left out or blank: the stored password stays while the proxy's host and port stay (after a change it must be typed again). |
+| `clear_proxy_password` | boolean | no | True empties the stored proxy password. |
+| `capacity` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | How many active services it takes. Blank for no limit; 0 for full. |
+| `notes` | string | no | The owner's notes, at most 1000 characters. |
+| `is_active` | boolean | yes | Off: no new service is placed on it. |
+| `button_style` | string: ``, `primary`, `success`, `danger` | no | The colour of its button among a plan's locations in the bot: blue, green or red. Blank or left out: the client's default. |
+| `button_row` | string: `1`, `2`, `3` | no | How many location buttons share its row in the bot. Left out: a row of its own. |
+
+**`ServerRemnawaveRequest`** — A server on a Remnawave panel (2.1 and later): an API token made in the panel, the one way in — Remnawave refuses an admin's own sign-in for API calls —, and for a panel behind an auth portal (Caddy's, TinyAuth) the portal's key.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `driver` | string: `remnawave` | yes |  |
+| `name` | string | yes | The location's name, as customers see it in the bot; at most 100 characters. Never a premium emoji's tag: one is chosen in `emoji_id`. |
+| `emoji_id` | string | no | The premium emoji the bot draws for the name's leading emoji (a custom emoji id, digits): on its location button as the icon, in its texts in the emoji's place. The name must start with an emoji while one is set. Blank or left out: none. |
+| `base_url` | string | yes | The panel's address, including its path: http(s), without credentials, query or fragment, and not one of the panel's own pages (3X-UI's /panel, PasarGuard's /dashboard, HMPanel's /api or /dashboard, Rebecca's /dashboard, /api or /docs, Remnawave's /api, /auth or /dashboard). |
+| `auth_mode` | string: `token` | yes | How to sign in: an API token made in Remnawave, the one way its API takes. |
+| `api_token` | string | no | For `token`: the panel's API token (PasarGuard's whole `pg_key_…` key, HMPanel's whole `hmp_…` key, Rebecca's whole `rk_…` key, Remnawave's whole API token — a JWT, `eyJ…`, three parts joined by dots). Left out or blank: the stored token stays. |
+| `clear_api_token` | boolean | no | True empties the stored token. |
+| `verify_tls` | boolean | yes | Whether to verify the panel's TLS certificate; off for a self-signed one. |
+| `timeout` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Request timeout in seconds, 5 to 120. |
+| `subscription_url` | string | no | A base address to use before the token in subscription links instead of the panel's own: a full address without credentials, query or fragment. Blank: the panel's. |
+| `proxy_enabled` | boolean | yes | Every request to the panel goes through a SOCKS5 proxy (the panel's name looked up by the proxy), for a panel the shop's host cannot reach directly. Off: straight to the panel, and the proxy's fields are emptied. |
+| `proxy_host` | string | no | With `proxy_enabled`: the proxy's host name or IP address, without a scheme or a port (an IPv6 address may be in brackets); at most 255 characters. |
+| `proxy_port` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | With `proxy_enabled`: the proxy's port, 1 to 65535. |
+| `proxy_username` | string | no | With `proxy_enabled`: the proxy's username, at most 255 characters; blank for a proxy without a login. |
+| `proxy_password` | string | no | With `proxy_enabled`: the proxy's password, only with a username. Left out or blank: the stored password stays while the proxy's host and port stay (after a change it must be typed again). |
+| `clear_proxy_password` | boolean | no | True empties the stored proxy password. |
+| `capacity` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | How many active services it takes. Blank for no limit; 0 for full. |
+| `notes` | string | no | The owner's notes, at most 1000 characters. |
+| `is_active` | boolean | yes | Off: no new service is placed on it. |
+| `button_style` | string: ``, `primary`, `success`, `danger` | no | The colour of its button among a plan's locations in the bot: blue, green or red. Blank or left out: the client's default. |
+| `button_row` | string: `1`, `2`, `3` | no | How many location buttons share its row in the bot. Left out: a row of its own. |
+| `gate_key` | string | no | The gate key: for a panel behind an auth portal, the portal's key (Caddy's API key, or TinyAuth's whole `Basic …` value), sent as it is in `X-Api-Key` with every call; printable ASCII, at most 512 characters. Kept encrypted. Left out or blank: the stored key stays while the panel's address stays on the same host (after a host change it must be typed again). |
+| `clear_gate_key` | boolean | no | True empties the stored gate key: a panel without a portal. |
+
 **Answers**
 
 | Status | What it is | Body |
@@ -4652,9 +4920,9 @@ One of:
 | `driver` | string: `3x-ui` | yes |  |
 | `name` | string | yes | The location's name, as customers see it in the bot; at most 100 characters. Never a premium emoji's tag: one is chosen in `emoji_id`. |
 | `emoji_id` | string | no | The premium emoji the bot draws for the name's leading emoji (a custom emoji id, digits): on its location button as the icon, in its texts in the emoji's place. The name must start with an emoji while one is set. Blank or left out: none. |
-| `base_url` | string | yes | The panel's address, including its path: http(s), without credentials, query or fragment, and not one of the panel's own pages (3X-UI's /panel, PasarGuard's /dashboard, HMPanel's /api or /dashboard). |
+| `base_url` | string | yes | The panel's address, including its path: http(s), without credentials, query or fragment, and not one of the panel's own pages (3X-UI's /panel, PasarGuard's /dashboard, HMPanel's /api or /dashboard, Rebecca's /dashboard, /api or /docs, Remnawave's /api, /auth or /dashboard). |
 | `auth_mode` | string: `token`, `password` | yes | How to sign in: an API token, or an admin's username and password. |
-| `api_token` | string | no | For `token`: the panel's API token (PasarGuard's whole `pg_key_…` key, HMPanel's whole `hmp_…` key). Left out or blank: the stored token stays. |
+| `api_token` | string | no | For `token`: the panel's API token (PasarGuard's whole `pg_key_…` key, HMPanel's whole `hmp_…` key, Rebecca's whole `rk_…` key, Remnawave's whole API token — a JWT, `eyJ…`, three parts joined by dots). Left out or blank: the stored token stays. |
 | `clear_api_token` | boolean | no | True empties the stored token. |
 | `verify_tls` | boolean | yes | Whether to verify the panel's TLS certificate; off for a self-signed one. |
 | `timeout` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Request timeout in seconds, 5 to 120. |
@@ -4684,9 +4952,9 @@ One of:
 | `driver` | string: `pasarguard` | yes |  |
 | `name` | string | yes | The location's name, as customers see it in the bot; at most 100 characters. Never a premium emoji's tag: one is chosen in `emoji_id`. |
 | `emoji_id` | string | no | The premium emoji the bot draws for the name's leading emoji (a custom emoji id, digits): on its location button as the icon, in its texts in the emoji's place. The name must start with an emoji while one is set. Blank or left out: none. |
-| `base_url` | string | yes | The panel's address, including its path: http(s), without credentials, query or fragment, and not one of the panel's own pages (3X-UI's /panel, PasarGuard's /dashboard, HMPanel's /api or /dashboard). |
+| `base_url` | string | yes | The panel's address, including its path: http(s), without credentials, query or fragment, and not one of the panel's own pages (3X-UI's /panel, PasarGuard's /dashboard, HMPanel's /api or /dashboard, Rebecca's /dashboard, /api or /docs, Remnawave's /api, /auth or /dashboard). |
 | `auth_mode` | string: `token`, `password` | yes | How to sign in: an API token, or an admin's username and password. |
-| `api_token` | string | no | For `token`: the panel's API token (PasarGuard's whole `pg_key_…` key, HMPanel's whole `hmp_…` key). Left out or blank: the stored token stays. |
+| `api_token` | string | no | For `token`: the panel's API token (PasarGuard's whole `pg_key_…` key, HMPanel's whole `hmp_…` key, Rebecca's whole `rk_…` key, Remnawave's whole API token — a JWT, `eyJ…`, three parts joined by dots). Left out or blank: the stored token stays. |
 | `clear_api_token` | boolean | no | True empties the stored token. |
 | `verify_tls` | boolean | yes | Whether to verify the panel's TLS certificate; off for a self-signed one. |
 | `timeout` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Request timeout in seconds, 5 to 120. |
@@ -4714,9 +4982,9 @@ One of:
 | `driver` | string: `hmpanel` | yes |  |
 | `name` | string | yes | The location's name, as customers see it in the bot; at most 100 characters. Never a premium emoji's tag: one is chosen in `emoji_id`. |
 | `emoji_id` | string | no | The premium emoji the bot draws for the name's leading emoji (a custom emoji id, digits): on its location button as the icon, in its texts in the emoji's place. The name must start with an emoji while one is set. Blank or left out: none. |
-| `base_url` | string | yes | The panel's address, including its path: http(s), without credentials, query or fragment, and not one of the panel's own pages (3X-UI's /panel, PasarGuard's /dashboard, HMPanel's /api or /dashboard). |
+| `base_url` | string | yes | The panel's address, including its path: http(s), without credentials, query or fragment, and not one of the panel's own pages (3X-UI's /panel, PasarGuard's /dashboard, HMPanel's /api or /dashboard, Rebecca's /dashboard, /api or /docs, Remnawave's /api, /auth or /dashboard). |
 | `auth_mode` | string: `token` | yes | How to sign in: HMPanel's API key, the one way its API takes. |
-| `api_token` | string | no | For `token`: the panel's API token (PasarGuard's whole `pg_key_…` key, HMPanel's whole `hmp_…` key). Left out or blank: the stored token stays. |
+| `api_token` | string | no | For `token`: the panel's API token (PasarGuard's whole `pg_key_…` key, HMPanel's whole `hmp_…` key, Rebecca's whole `rk_…` key, Remnawave's whole API token — a JWT, `eyJ…`, three parts joined by dots). Left out or blank: the stored token stays. |
 | `clear_api_token` | boolean | no | True empties the stored token. |
 | `verify_tls` | boolean | yes | Whether to verify the panel's TLS certificate; off for a self-signed one. |
 | `timeout` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Request timeout in seconds, 5 to 120. |
@@ -4760,6 +5028,62 @@ One of:
 | `is_active` | boolean | yes | Off: no new service is placed on it. |
 | `button_style` | string: ``, `primary`, `success`, `danger` | no | The colour of its button among a plan's locations in the bot: blue, green or red. Blank or left out: the client's default. |
 | `button_row` | string: `1`, `2`, `3` | no | How many location buttons share its row in the bot. Left out: a row of its own. |
+
+**`ServerRebeccaTestRequest`** — A Rebecca server to test.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `id` | integer | no | The saved server this form belongs to. |
+| `driver` | string: `rebecca` | yes |  |
+| `name` | string | yes | The location's name, as customers see it in the bot; at most 100 characters. Never a premium emoji's tag: one is chosen in `emoji_id`. |
+| `emoji_id` | string | no | The premium emoji the bot draws for the name's leading emoji (a custom emoji id, digits): on its location button as the icon, in its texts in the emoji's place. The name must start with an emoji while one is set. Blank or left out: none. |
+| `base_url` | string | yes | The panel's address, including its path: http(s), without credentials, query or fragment, and not one of the panel's own pages (3X-UI's /panel, PasarGuard's /dashboard, HMPanel's /api or /dashboard, Rebecca's /dashboard, /api or /docs, Remnawave's /api, /auth or /dashboard). |
+| `auth_mode` | string: `token` | yes | How to sign in: an admin's Rebecca API key, the one way the shop takes. |
+| `api_token` | string | no | For `token`: the panel's API token (PasarGuard's whole `pg_key_…` key, HMPanel's whole `hmp_…` key, Rebecca's whole `rk_…` key, Remnawave's whole API token — a JWT, `eyJ…`, three parts joined by dots). Left out or blank: the stored token stays. |
+| `clear_api_token` | boolean | no | True empties the stored token. |
+| `verify_tls` | boolean | yes | Whether to verify the panel's TLS certificate; off for a self-signed one. |
+| `timeout` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Request timeout in seconds, 5 to 120. |
+| `subscription_url` | string | no | A base address to use before the token in subscription links instead of the panel's own: a full address without credentials, query or fragment. Blank: the panel's. |
+| `proxy_enabled` | boolean | yes | Every request to the panel goes through a SOCKS5 proxy (the panel's name looked up by the proxy), for a panel the shop's host cannot reach directly. Off: straight to the panel, and the proxy's fields are emptied. |
+| `proxy_host` | string | no | With `proxy_enabled`: the proxy's host name or IP address, without a scheme or a port (an IPv6 address may be in brackets); at most 255 characters. |
+| `proxy_port` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | With `proxy_enabled`: the proxy's port, 1 to 65535. |
+| `proxy_username` | string | no | With `proxy_enabled`: the proxy's username, at most 255 characters; blank for a proxy without a login. |
+| `proxy_password` | string | no | With `proxy_enabled`: the proxy's password, only with a username. Left out or blank: the stored password stays while the proxy's host and port stay (after a change it must be typed again). |
+| `clear_proxy_password` | boolean | no | True empties the stored proxy password. |
+| `capacity` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | How many active services it takes. Blank for no limit; 0 for full. |
+| `notes` | string | no | The owner's notes, at most 1000 characters. |
+| `is_active` | boolean | yes | Off: no new service is placed on it. |
+| `button_style` | string: ``, `primary`, `success`, `danger` | no | The colour of its button among a plan's locations in the bot: blue, green or red. Blank or left out: the client's default. |
+| `button_row` | string: `1`, `2`, `3` | no | How many location buttons share its row in the bot. Left out: a row of its own. |
+
+**`ServerRemnawaveTestRequest`** — A Remnawave server to test.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `id` | integer | no | The saved server this form belongs to. |
+| `driver` | string: `remnawave` | yes |  |
+| `name` | string | yes | The location's name, as customers see it in the bot; at most 100 characters. Never a premium emoji's tag: one is chosen in `emoji_id`. |
+| `emoji_id` | string | no | The premium emoji the bot draws for the name's leading emoji (a custom emoji id, digits): on its location button as the icon, in its texts in the emoji's place. The name must start with an emoji while one is set. Blank or left out: none. |
+| `base_url` | string | yes | The panel's address, including its path: http(s), without credentials, query or fragment, and not one of the panel's own pages (3X-UI's /panel, PasarGuard's /dashboard, HMPanel's /api or /dashboard, Rebecca's /dashboard, /api or /docs, Remnawave's /api, /auth or /dashboard). |
+| `auth_mode` | string: `token` | yes | How to sign in: an API token made in Remnawave, the one way its API takes. |
+| `api_token` | string | no | For `token`: the panel's API token (PasarGuard's whole `pg_key_…` key, HMPanel's whole `hmp_…` key, Rebecca's whole `rk_…` key, Remnawave's whole API token — a JWT, `eyJ…`, three parts joined by dots). Left out or blank: the stored token stays. |
+| `clear_api_token` | boolean | no | True empties the stored token. |
+| `verify_tls` | boolean | yes | Whether to verify the panel's TLS certificate; off for a self-signed one. |
+| `timeout` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Request timeout in seconds, 5 to 120. |
+| `subscription_url` | string | no | A base address to use before the token in subscription links instead of the panel's own: a full address without credentials, query or fragment. Blank: the panel's. |
+| `proxy_enabled` | boolean | yes | Every request to the panel goes through a SOCKS5 proxy (the panel's name looked up by the proxy), for a panel the shop's host cannot reach directly. Off: straight to the panel, and the proxy's fields are emptied. |
+| `proxy_host` | string | no | With `proxy_enabled`: the proxy's host name or IP address, without a scheme or a port (an IPv6 address may be in brackets); at most 255 characters. |
+| `proxy_port` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | With `proxy_enabled`: the proxy's port, 1 to 65535. |
+| `proxy_username` | string | no | With `proxy_enabled`: the proxy's username, at most 255 characters; blank for a proxy without a login. |
+| `proxy_password` | string | no | With `proxy_enabled`: the proxy's password, only with a username. Left out or blank: the stored password stays while the proxy's host and port stay (after a change it must be typed again). |
+| `clear_proxy_password` | boolean | no | True empties the stored proxy password. |
+| `capacity` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | How many active services it takes. Blank for no limit; 0 for full. |
+| `notes` | string | no | The owner's notes, at most 1000 characters. |
+| `is_active` | boolean | yes | Off: no new service is placed on it. |
+| `button_style` | string: ``, `primary`, `success`, `danger` | no | The colour of its button among a plan's locations in the bot: blue, green or red. Blank or left out: the client's default. |
+| `button_row` | string: `1`, `2`, `3` | no | How many location buttons share its row in the bot. Left out: a row of its own. |
+| `gate_key` | string | no | The gate key: for a panel behind an auth portal, the portal's key (Caddy's API key, or TinyAuth's whole `Basic …` value), sent as it is in `X-Api-Key` with every call; printable ASCII, at most 512 characters. Kept encrypted. Left out or blank: the stored key stays while the panel's address stays on the same host (after a host change it must be typed again). |
+| `clear_gate_key` | boolean | no | True empties the stored gate key: a panel without a portal. |
 
 **Answers**
 
@@ -4808,9 +5132,9 @@ One of:
 | `driver` | string: `3x-ui` | yes |  |
 | `name` | string | yes | The location's name, as customers see it in the bot; at most 100 characters. Never a premium emoji's tag: one is chosen in `emoji_id`. |
 | `emoji_id` | string | no | The premium emoji the bot draws for the name's leading emoji (a custom emoji id, digits): on its location button as the icon, in its texts in the emoji's place. The name must start with an emoji while one is set. Blank or left out: none. |
-| `base_url` | string | yes | The panel's address, including its path: http(s), without credentials, query or fragment, and not one of the panel's own pages (3X-UI's /panel, PasarGuard's /dashboard, HMPanel's /api or /dashboard). |
+| `base_url` | string | yes | The panel's address, including its path: http(s), without credentials, query or fragment, and not one of the panel's own pages (3X-UI's /panel, PasarGuard's /dashboard, HMPanel's /api or /dashboard, Rebecca's /dashboard, /api or /docs, Remnawave's /api, /auth or /dashboard). |
 | `auth_mode` | string: `token`, `password` | yes | How to sign in: an API token, or an admin's username and password. |
-| `api_token` | string | no | For `token`: the panel's API token (PasarGuard's whole `pg_key_…` key, HMPanel's whole `hmp_…` key). Left out or blank: the stored token stays. |
+| `api_token` | string | no | For `token`: the panel's API token (PasarGuard's whole `pg_key_…` key, HMPanel's whole `hmp_…` key, Rebecca's whole `rk_…` key, Remnawave's whole API token — a JWT, `eyJ…`, three parts joined by dots). Left out or blank: the stored token stays. |
 | `clear_api_token` | boolean | no | True empties the stored token. |
 | `verify_tls` | boolean | yes | Whether to verify the panel's TLS certificate; off for a self-signed one. |
 | `timeout` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Request timeout in seconds, 5 to 120. |
@@ -4839,9 +5163,9 @@ One of:
 | `driver` | string: `pasarguard` | yes |  |
 | `name` | string | yes | The location's name, as customers see it in the bot; at most 100 characters. Never a premium emoji's tag: one is chosen in `emoji_id`. |
 | `emoji_id` | string | no | The premium emoji the bot draws for the name's leading emoji (a custom emoji id, digits): on its location button as the icon, in its texts in the emoji's place. The name must start with an emoji while one is set. Blank or left out: none. |
-| `base_url` | string | yes | The panel's address, including its path: http(s), without credentials, query or fragment, and not one of the panel's own pages (3X-UI's /panel, PasarGuard's /dashboard, HMPanel's /api or /dashboard). |
+| `base_url` | string | yes | The panel's address, including its path: http(s), without credentials, query or fragment, and not one of the panel's own pages (3X-UI's /panel, PasarGuard's /dashboard, HMPanel's /api or /dashboard, Rebecca's /dashboard, /api or /docs, Remnawave's /api, /auth or /dashboard). |
 | `auth_mode` | string: `token`, `password` | yes | How to sign in: an API token, or an admin's username and password. |
-| `api_token` | string | no | For `token`: the panel's API token (PasarGuard's whole `pg_key_…` key, HMPanel's whole `hmp_…` key). Left out or blank: the stored token stays. |
+| `api_token` | string | no | For `token`: the panel's API token (PasarGuard's whole `pg_key_…` key, HMPanel's whole `hmp_…` key, Rebecca's whole `rk_…` key, Remnawave's whole API token — a JWT, `eyJ…`, three parts joined by dots). Left out or blank: the stored token stays. |
 | `clear_api_token` | boolean | no | True empties the stored token. |
 | `verify_tls` | boolean | yes | Whether to verify the panel's TLS certificate; off for a self-signed one. |
 | `timeout` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Request timeout in seconds, 5 to 120. |
@@ -4868,9 +5192,9 @@ One of:
 | `driver` | string: `hmpanel` | yes |  |
 | `name` | string | yes | The location's name, as customers see it in the bot; at most 100 characters. Never a premium emoji's tag: one is chosen in `emoji_id`. |
 | `emoji_id` | string | no | The premium emoji the bot draws for the name's leading emoji (a custom emoji id, digits): on its location button as the icon, in its texts in the emoji's place. The name must start with an emoji while one is set. Blank or left out: none. |
-| `base_url` | string | yes | The panel's address, including its path: http(s), without credentials, query or fragment, and not one of the panel's own pages (3X-UI's /panel, PasarGuard's /dashboard, HMPanel's /api or /dashboard). |
+| `base_url` | string | yes | The panel's address, including its path: http(s), without credentials, query or fragment, and not one of the panel's own pages (3X-UI's /panel, PasarGuard's /dashboard, HMPanel's /api or /dashboard, Rebecca's /dashboard, /api or /docs, Remnawave's /api, /auth or /dashboard). |
 | `auth_mode` | string: `token` | yes | How to sign in: HMPanel's API key, the one way its API takes. |
-| `api_token` | string | no | For `token`: the panel's API token (PasarGuard's whole `pg_key_…` key, HMPanel's whole `hmp_…` key). Left out or blank: the stored token stays. |
+| `api_token` | string | no | For `token`: the panel's API token (PasarGuard's whole `pg_key_…` key, HMPanel's whole `hmp_…` key, Rebecca's whole `rk_…` key, Remnawave's whole API token — a JWT, `eyJ…`, three parts joined by dots). Left out or blank: the stored token stays. |
 | `clear_api_token` | boolean | no | True empties the stored token. |
 | `verify_tls` | boolean | yes | Whether to verify the panel's TLS certificate; off for a self-signed one. |
 | `timeout` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Request timeout in seconds, 5 to 120. |
@@ -4913,6 +5237,60 @@ One of:
 | `is_active` | boolean | yes | Off: no new service is placed on it. |
 | `button_style` | string: ``, `primary`, `success`, `danger` | no | The colour of its button among a plan's locations in the bot: blue, green or red. Blank or left out: the client's default. |
 | `button_row` | string: `1`, `2`, `3` | no | How many location buttons share its row in the bot. Left out: a row of its own. |
+
+**`ServerRebeccaRequest`** — A server on a Rebecca panel (1.0 and later): an admin's `rk_…` API key, the one way Rebecca asks bots in.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `driver` | string: `rebecca` | yes |  |
+| `name` | string | yes | The location's name, as customers see it in the bot; at most 100 characters. Never a premium emoji's tag: one is chosen in `emoji_id`. |
+| `emoji_id` | string | no | The premium emoji the bot draws for the name's leading emoji (a custom emoji id, digits): on its location button as the icon, in its texts in the emoji's place. The name must start with an emoji while one is set. Blank or left out: none. |
+| `base_url` | string | yes | The panel's address, including its path: http(s), without credentials, query or fragment, and not one of the panel's own pages (3X-UI's /panel, PasarGuard's /dashboard, HMPanel's /api or /dashboard, Rebecca's /dashboard, /api or /docs, Remnawave's /api, /auth or /dashboard). |
+| `auth_mode` | string: `token` | yes | How to sign in: an admin's Rebecca API key, the one way the shop takes. |
+| `api_token` | string | no | For `token`: the panel's API token (PasarGuard's whole `pg_key_…` key, HMPanel's whole `hmp_…` key, Rebecca's whole `rk_…` key, Remnawave's whole API token — a JWT, `eyJ…`, three parts joined by dots). Left out or blank: the stored token stays. |
+| `clear_api_token` | boolean | no | True empties the stored token. |
+| `verify_tls` | boolean | yes | Whether to verify the panel's TLS certificate; off for a self-signed one. |
+| `timeout` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Request timeout in seconds, 5 to 120. |
+| `subscription_url` | string | no | A base address to use before the token in subscription links instead of the panel's own: a full address without credentials, query or fragment. Blank: the panel's. |
+| `proxy_enabled` | boolean | yes | Every request to the panel goes through a SOCKS5 proxy (the panel's name looked up by the proxy), for a panel the shop's host cannot reach directly. Off: straight to the panel, and the proxy's fields are emptied. |
+| `proxy_host` | string | no | With `proxy_enabled`: the proxy's host name or IP address, without a scheme or a port (an IPv6 address may be in brackets); at most 255 characters. |
+| `proxy_port` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | With `proxy_enabled`: the proxy's port, 1 to 65535. |
+| `proxy_username` | string | no | With `proxy_enabled`: the proxy's username, at most 255 characters; blank for a proxy without a login. |
+| `proxy_password` | string | no | With `proxy_enabled`: the proxy's password, only with a username. Left out or blank: the stored password stays while the proxy's host and port stay (after a change it must be typed again). |
+| `clear_proxy_password` | boolean | no | True empties the stored proxy password. |
+| `capacity` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | How many active services it takes. Blank for no limit; 0 for full. |
+| `notes` | string | no | The owner's notes, at most 1000 characters. |
+| `is_active` | boolean | yes | Off: no new service is placed on it. |
+| `button_style` | string: ``, `primary`, `success`, `danger` | no | The colour of its button among a plan's locations in the bot: blue, green or red. Blank or left out: the client's default. |
+| `button_row` | string: `1`, `2`, `3` | no | How many location buttons share its row in the bot. Left out: a row of its own. |
+
+**`ServerRemnawaveRequest`** — A server on a Remnawave panel (2.1 and later): an API token made in the panel, the one way in — Remnawave refuses an admin's own sign-in for API calls —, and for a panel behind an auth portal (Caddy's, TinyAuth) the portal's key.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `driver` | string: `remnawave` | yes |  |
+| `name` | string | yes | The location's name, as customers see it in the bot; at most 100 characters. Never a premium emoji's tag: one is chosen in `emoji_id`. |
+| `emoji_id` | string | no | The premium emoji the bot draws for the name's leading emoji (a custom emoji id, digits): on its location button as the icon, in its texts in the emoji's place. The name must start with an emoji while one is set. Blank or left out: none. |
+| `base_url` | string | yes | The panel's address, including its path: http(s), without credentials, query or fragment, and not one of the panel's own pages (3X-UI's /panel, PasarGuard's /dashboard, HMPanel's /api or /dashboard, Rebecca's /dashboard, /api or /docs, Remnawave's /api, /auth or /dashboard). |
+| `auth_mode` | string: `token` | yes | How to sign in: an API token made in Remnawave, the one way its API takes. |
+| `api_token` | string | no | For `token`: the panel's API token (PasarGuard's whole `pg_key_…` key, HMPanel's whole `hmp_…` key, Rebecca's whole `rk_…` key, Remnawave's whole API token — a JWT, `eyJ…`, three parts joined by dots). Left out or blank: the stored token stays. |
+| `clear_api_token` | boolean | no | True empties the stored token. |
+| `verify_tls` | boolean | yes | Whether to verify the panel's TLS certificate; off for a self-signed one. |
+| `timeout` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Request timeout in seconds, 5 to 120. |
+| `subscription_url` | string | no | A base address to use before the token in subscription links instead of the panel's own: a full address without credentials, query or fragment. Blank: the panel's. |
+| `proxy_enabled` | boolean | yes | Every request to the panel goes through a SOCKS5 proxy (the panel's name looked up by the proxy), for a panel the shop's host cannot reach directly. Off: straight to the panel, and the proxy's fields are emptied. |
+| `proxy_host` | string | no | With `proxy_enabled`: the proxy's host name or IP address, without a scheme or a port (an IPv6 address may be in brackets); at most 255 characters. |
+| `proxy_port` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | With `proxy_enabled`: the proxy's port, 1 to 65535. |
+| `proxy_username` | string | no | With `proxy_enabled`: the proxy's username, at most 255 characters; blank for a proxy without a login. |
+| `proxy_password` | string | no | With `proxy_enabled`: the proxy's password, only with a username. Left out or blank: the stored password stays while the proxy's host and port stay (after a change it must be typed again). |
+| `clear_proxy_password` | boolean | no | True empties the stored proxy password. |
+| `capacity` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | no | How many active services it takes. Blank for no limit; 0 for full. |
+| `notes` | string | no | The owner's notes, at most 1000 characters. |
+| `is_active` | boolean | yes | Off: no new service is placed on it. |
+| `button_style` | string: ``, `primary`, `success`, `danger` | no | The colour of its button among a plan's locations in the bot: blue, green or red. Blank or left out: the client's default. |
+| `button_row` | string: `1`, `2`, `3` | no | How many location buttons share its row in the bot. Left out: a row of its own. |
+| `gate_key` | string | no | The gate key: for a panel behind an auth portal, the portal's key (Caddy's API key, or TinyAuth's whole `Basic …` value), sent as it is in `X-Api-Key` with every call; printable ASCII, at most 512 characters. Kept encrypted. Left out or blank: the stored key stays while the panel's address stays on the same host (after a host change it must be typed again). |
+| `clear_gate_key` | boolean | no | True empties the stored gate key: a panel without a portal. |
 
 **Answers**
 
@@ -6188,6 +6566,53 @@ One of:
 | `200` | Saved | [ConfigSettingsResponse](#configsettingsresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
+### GET /api/admin/settings/owner-telegram
+
+«مدیریت از ربات» (the owner's, «تنظیمات پنل › ورود به پنل»): the Telegram accounts that are the owner in the main bot's private chat — every section of every shop from «⚙️ مدیریت» (/admin), as this login has in the panel —, oldest first, and until when the one-time link made last may be opened.
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | OK | [OwnerTelegramResponse](#ownertelegramresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### POST /api/admin/settings/owner-telegram/link
+
+A new one-time link (`t.me/<main bot>?start=owner-<code>`): the Telegram account that opens it within ten minutes becomes the owner in the main bot — and its bot admin, unless it was one already. It works once; a new link ends the last. At most five accounts are linked, a sixth letting the oldest go with the admin role its link gave it. The panel's current password comes first (`current_password`): blank or wrong is a 422 on it, and a wrong one counts as a failed sign-in (a 429 while this address or the account must wait). Then a 422 on `link` while the main bot's username is not known yet (check its token in «تنظیمات پنل › ربات تلگرام»). The bot's own screen («👑 حساب تلگرام مالک»), asked by an account linked already, sends no password. A new panel login (`PUT /auth/credentials`, or a recovery) lets every linked account go and ends an open link.
+
+**Body**, as JSON:
+
+A new owner link asked from the panel: the panel's password typed again, so a session alone makes no account the owner.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `current_password` | string | yes | The owner's current panel password, as typed. Blank or wrong is a 422 on it, and nothing is made; a wrong one counts as a failed sign-in. |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | Made | [OwnerTelegramLinkResponse](#ownertelegramlinkresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### DELETE /api/admin/settings/owner-telegram/{telegram_id}
+
+The account is the owner no more, and the bot admin role its link gave it goes too: from its next message the bot's management is closed to it. An account that was a bot admin before its link stays one — with the daily work while «مدیران ربات» lets admins in. One not linked changes nothing. Answers the accounts left.
+
+**Parameters**
+
+| Name | In | Type | Required | What it is |
+|---|---|---|---|---|
+| `telegram_id` | path | integer | yes | The account's numeric Telegram id. |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | Let go | [OwnerTelegramResponse](#ownertelegramresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
 ### GET /api/admin/imports
 
 «انتقال از ربات دیگر», the owner's: the bots an import reads (`migrators`), the import under way (one at a time), and the latest ten that ended, newest first. What an import brings goes into the main shop, whatever shop the request names; nothing is ever written to the other bot's database, and nothing changes on the VPN panels.
@@ -6201,7 +6626,7 @@ One of:
 
 ### POST /api/admin/imports
 
-Start an import from the other bot's backup file: its own backup (Faoxima's `backup.zip`, as its report channel gets it), a phpMyAdmin or mysqldump export (`.sql`), or either gzipped (`.gz`) or zipped (`.zip`) — told apart by its bytes, not its name. The file is kept and the import starts reading it (phase `reading`); the page then calls `POST /imports/{id}/continue` until it is read. A 422 says why one is refused: under `migrator` a bot not in the list; under `file` none, one past the host's upload limit, or no database backup; under `import` another import under way.
+Start an import from the other bot's backup file: its own backup (Faoxima's `backup.zip`, MirzaBot's `backup_<date>.sql`, as their report channels get them), a phpMyAdmin or mysqldump export (`.sql`), or either gzipped (`.gz`) or zipped (`.zip`) — told apart by its bytes, not its name. The file is kept and the import starts reading it (phase `reading`); the page then calls `POST /imports/{id}/continue` until it is read. A 422 says why one is refused: under `migrator` a bot not in the list; under `file` none, one past the host's upload limit, no database backup, or one in a zip behind a password; under `import` another import under way.
 
 **Body**, as a form (`multipart/form-data`):
 
@@ -6614,8 +7039,9 @@ An AbanGateway method (abangateway.ir), an online gateway: the customer transfer
 | `driver_label` | string | yes |  |
 | `kind` | [GatewayKind](API-Schemas.md#gatewaykind) | yes |  |
 | `builtin` | boolean | yes |  |
+| `registers_webhook` | boolean | yes | Whether the shop registers its webhook address with the method's gateway itself (Rialit): its state and the offer to register or replace it are `GET`/`POST /payment-methods/{id}/webhook`'s. From the driver alone, nothing asked of the gateway; false for a driver no longer installed. |
 | `label` | string | yes | The button text customers see, such as "کارت به کارت (ملت)". |
-| `summary` | string or null | yes | The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»); the test mode of Zarinpal (its sandbox), AbanGateway (a test key) or AqayePardakht (its sandbox pin) («حالت آزمایشی: پولی جابه‌جا نمی‌شود»); Plisio's dollar rate and coins («هر دلار ۹۵٬۰۰۰ تومان · USDT_TRX، TRX»), always; Variza's card («کارت مقصد: تصادفی»), always. Null when it has none: the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay always. |
+| `summary` | string or null | yes | The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»); the test mode of Zarinpal (its sandbox), AbanGateway (a test key) or AqayePardakht (its sandbox pin) («حالت آزمایشی: پولی جابه‌جا نمی‌شود»); Plisio's dollar rate and coins («هر دلار ۹۵٬۰۰۰ تومان · USDT_TRX، TRX»), always; Variza's card («کارت مقصد: تصادفی»), always; Rikhtam's coin («ارز: تتر روی شبکه TON»), always. Null when it has none: the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay and Rialit (whose fee is set in its own dashboard) always. |
 | `config` | [AbanGatewayConfig](#abangatewayconfig) | yes |  |
 | `min_amount` | string or null | yes | The least amount to pay it is offered for, in Toman; null for no least. Checkouts of less do not offer it. |
 | `max_amount` | string or null | yes | The most amount to pay it is offered for, in Toman; null for no most. |
@@ -6848,8 +7274,9 @@ An AqayePardakht method (aqayepardakht.ir), an online gateway: the customer pays
 | `driver_label` | string | yes |  |
 | `kind` | [GatewayKind](API-Schemas.md#gatewaykind) | yes |  |
 | `builtin` | boolean | yes |  |
+| `registers_webhook` | boolean | yes | Whether the shop registers its webhook address with the method's gateway itself (Rialit): its state and the offer to register or replace it are `GET`/`POST /payment-methods/{id}/webhook`'s. From the driver alone, nothing asked of the gateway; false for a driver no longer installed. |
 | `label` | string | yes | The button text customers see, such as "کارت به کارت (ملت)". |
-| `summary` | string or null | yes | The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»); the test mode of Zarinpal (its sandbox), AbanGateway (a test key) or AqayePardakht (its sandbox pin) («حالت آزمایشی: پولی جابه‌جا نمی‌شود»); Plisio's dollar rate and coins («هر دلار ۹۵٬۰۰۰ تومان · USDT_TRX، TRX»), always; Variza's card («کارت مقصد: تصادفی»), always. Null when it has none: the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay always. |
+| `summary` | string or null | yes | The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»); the test mode of Zarinpal (its sandbox), AbanGateway (a test key) or AqayePardakht (its sandbox pin) («حالت آزمایشی: پولی جابه‌جا نمی‌شود»); Plisio's dollar rate and coins («هر دلار ۹۵٬۰۰۰ تومان · USDT_TRX، TRX»), always; Variza's card («کارت مقصد: تصادفی»), always; Rikhtam's coin («ارز: تتر روی شبکه TON»), always. Null when it has none: the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay and Rialit (whose fee is set in its own dashboard) always. |
 | `config` | [AqayePardakhtGatewayConfig](#aqayepardakhtgatewayconfig) | yes |  |
 | `min_amount` | string or null | yes | The least amount to pay it is offered for, in Toman; null for no least. Checkouts of less do not offer it. |
 | `max_amount` | string or null | yes | The most amount to pay it is offered for, in Toman; null for no most. |
@@ -6879,8 +7306,9 @@ An AtlasPay method (atlaspay.space), an online gateway: the customer pays by car
 | `driver_label` | string | yes |  |
 | `kind` | [GatewayKind](API-Schemas.md#gatewaykind) | yes |  |
 | `builtin` | boolean | yes |  |
+| `registers_webhook` | boolean | yes | Whether the shop registers its webhook address with the method's gateway itself (Rialit): its state and the offer to register or replace it are `GET`/`POST /payment-methods/{id}/webhook`'s. From the driver alone, nothing asked of the gateway; false for a driver no longer installed. |
 | `label` | string | yes | The button text customers see, such as "کارت به کارت (ملت)". |
-| `summary` | string or null | yes | The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»); the test mode of Zarinpal (its sandbox), AbanGateway (a test key) or AqayePardakht (its sandbox pin) («حالت آزمایشی: پولی جابه‌جا نمی‌شود»); Plisio's dollar rate and coins («هر دلار ۹۵٬۰۰۰ تومان · USDT_TRX، TRX»), always; Variza's card («کارت مقصد: تصادفی»), always. Null when it has none: the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay always. |
+| `summary` | string or null | yes | The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»); the test mode of Zarinpal (its sandbox), AbanGateway (a test key) or AqayePardakht (its sandbox pin) («حالت آزمایشی: پولی جابه‌جا نمی‌شود»); Plisio's dollar rate and coins («هر دلار ۹۵٬۰۰۰ تومان · USDT_TRX، TRX»), always; Variza's card («کارت مقصد: تصادفی»), always; Rikhtam's coin («ارز: تتر روی شبکه TON»), always. Null when it has none: the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay and Rialit (whose fee is set in its own dashboard) always. |
 | `config` | [AtlasPayGatewayConfig](#atlaspaygatewayconfig) | yes |  |
 | `min_amount` | string or null | yes | The least amount to pay it is offered for, in Toman; null for no least. Checkouts of less do not offer it. |
 | `max_amount` | string or null | yes | The most amount to pay it is offered for, in Toman; null for no most. |
@@ -6965,6 +7393,39 @@ The shop a backup is of.
 | `auto.last_problem` | string or null | yes | What kept that one from going (Telegram's words); null when it went. |
 | `kept` | list of [BackupKept](#backupkept) | yes | Newest first. |
 | `upload_max_bytes` | integer | yes | The largest file this host takes in one upload (PHP's smaller limit); 0 when it does not say. |
+
+### BluepalGatewayConfig
+
+A Bluepal method's settings (`BluepalMethodRow.config`): the gateway's merchant id, and the merchant's API key, kept encrypted and never shown — only whether one is kept and a hint to recognise it.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `merchant_id` | string | yes | The gateway's merchant id as Bluepal's dashboard shows it. |
+| `api_key` | [SecretState](#secretstate) | yes |  |
+
+### BluepalMethodRow
+
+A Bluepal method (bluepal.ir), an online gateway: the customer pays with any bank card on the bank's page, reached from Bluepal's, and is sent back to the shop; Bluepal confirms it, with no receipt and no review.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `id` | integer | yes |  |
+| `driver` | string: `bluepal` | yes |  |
+| `driver_label` | string | yes |  |
+| `kind` | [GatewayKind](API-Schemas.md#gatewaykind) | yes |  |
+| `builtin` | boolean | yes |  |
+| `registers_webhook` | boolean | yes | Whether the shop registers its webhook address with the method's gateway itself (Rialit): its state and the offer to register or replace it are `GET`/`POST /payment-methods/{id}/webhook`'s. From the driver alone, nothing asked of the gateway; false for a driver no longer installed. |
+| `label` | string | yes | The button text customers see, such as "کارت به کارت (ملت)". |
+| `summary` | string or null | yes | The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»); the test mode of Zarinpal (its sandbox), AbanGateway (a test key) or AqayePardakht (its sandbox pin) («حالت آزمایشی: پولی جابه‌جا نمی‌شود»); Plisio's dollar rate and coins («هر دلار ۹۵٬۰۰۰ تومان · USDT_TRX، TRX»), always; Variza's card («کارت مقصد: تصادفی»), always; Rikhtam's coin («ارز: تتر روی شبکه TON»), always. Null when it has none: the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay and Rialit (whose fee is set in its own dashboard) always. |
+| `config` | [BluepalGatewayConfig](#bluepalgatewayconfig) | yes |  |
+| `min_amount` | string or null | yes | The least amount to pay it is offered for, in Toman; null for no least. Checkouts of less do not offer it. |
+| `max_amount` | string or null | yes | The most amount to pay it is offered for, in Toman; null for no most. |
+| `enabled` | boolean | yes |  |
+| `sort` | integer | yes |  |
+| `counts` | object | yes |  |
+| `counts.payments` | integer | yes | The number of payments made with it. A method with payments cannot be deleted. |
+| `created_at` | string (date-time) or null | yes |  |
+| `updated_at` | string (date-time) or null | yes |  |
 
 ### BotChannelResponse
 
@@ -7151,10 +7612,19 @@ How a bot runs. The main bot's mode applies to the whole installation: every bot
 | `lottery_plan_id` | integer or null | yes | For a plan prize: the plan whose service it gives; null while none is chosen. |
 | `lottery_entries` | string: `order`, `buyer` | yes | One entry per paid order, or one per buyer. |
 | `lottery_exclude_agents` | boolean | yes | Leave agents out of the draw (bot admins and banned customers are always left out). |
+| `bot_admins_enabled` | boolean | yes | «مدیران ربات»: the shop's admins (customers whose role is admin) manage it from its bot's private chat («⚙️ مدیریت», /admin): the daily work — payments, orders, services, customers, tickets, reviews, broadcasts, the dashboard and referrals — and what the grants below add. On by default. The owner's linked Telegram accounts (`/settings/owner-telegram`) and an agent in their own bot need none of it. |
+| `bot_admins_grant_catalog` | boolean | yes | «مدیران ربات» may also make, edit, reorder, switch and delete plans and categories, and the customer groups (a customer put in a «همکار» group too): StaffGrant `catalog`. Off by default. |
+| `bot_admins_grant_wallet` | boolean | yes | …credit or debit a customer's wallet: StaffGrant `wallet`. Off by default. |
+| `bot_admins_grant_refunds` | boolean | yes | …refund a payment: StaffGrant `refunds`. Off by default. |
+| `bot_admins_grant_payments` | boolean | yes | …reject the receipts waiting for review in bulk (one by one is always theirs): StaffGrant `payments`. Off by default. |
+| `bot_admins_grant_extend` | boolean | yes | …add days and traffic to a customer's service: StaffGrant `extend`. Off by default. |
+| `bot_admins_grant_manual_orders` | boolean | yes | …make an order for a customer by hand — free, from their wallet or paid outside the shop: StaffGrant `manual_orders`. Off by default. |
+| `bot_admins_grant_delete` | boolean | yes | …delete a customer's service for good, or hand it to another customer: StaffGrant `delete`. Off by default. |
+| `bot_admins_grant_account_security` | boolean | yes | …turn off a customer's two-factor sign-in on the website and sign them out of every device: StaffGrant `account_security`. Off by default. |
 
 ### BotSettingsGroup
 
-String: `general`, `channels`, `wallet`, `wallet_transfers`, `payments`, `renewal`, `auto_renew`, `extras`, `reminders`, `expired_services`, `test_accounts`, `service_claims`, `service_transfers`, `client_names`, `custom_services`, `referral`, `reports`, `qr`, `gift_codes`, `wheel`, `cashback`, `lottery`, `discounts`, `agent_perks`.
+String: `general`, `channels`, `wallet`, `wallet_transfers`, `payments`, `renewal`, `auto_renew`, `extras`, `reminders`, `expired_services`, `test_accounts`, `service_claims`, `service_transfers`, `client_names`, `custom_services`, `referral`, `reports`, `qr`, `gift_codes`, `wheel`, `cashback`, `lottery`, `discounts`, `agent_perks`, `bot_admins`.
 
 ### BotSettingsResponse
 
@@ -7364,8 +7834,9 @@ A CubePay method (cubevps.ir), an online gateway: the customer pays on CubePay's
 | `driver_label` | string | yes |  |
 | `kind` | [GatewayKind](API-Schemas.md#gatewaykind) | yes |  |
 | `builtin` | boolean | yes |  |
+| `registers_webhook` | boolean | yes | Whether the shop registers its webhook address with the method's gateway itself (Rialit): its state and the offer to register or replace it are `GET`/`POST /payment-methods/{id}/webhook`'s. From the driver alone, nothing asked of the gateway; false for a driver no longer installed. |
 | `label` | string | yes | The button text customers see, such as "کارت به کارت (ملت)". |
-| `summary` | string or null | yes | The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»); the test mode of Zarinpal (its sandbox), AbanGateway (a test key) or AqayePardakht (its sandbox pin) («حالت آزمایشی: پولی جابه‌جا نمی‌شود»); Plisio's dollar rate and coins («هر دلار ۹۵٬۰۰۰ تومان · USDT_TRX، TRX»), always; Variza's card («کارت مقصد: تصادفی»), always. Null when it has none: the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay always. |
+| `summary` | string or null | yes | The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»); the test mode of Zarinpal (its sandbox), AbanGateway (a test key) or AqayePardakht (its sandbox pin) («حالت آزمایشی: پولی جابه‌جا نمی‌شود»); Plisio's dollar rate and coins («هر دلار ۹۵٬۰۰۰ تومان · USDT_TRX، TRX»), always; Variza's card («کارت مقصد: تصادفی»), always; Rikhtam's coin («ارز: تتر روی شبکه TON»), always. Null when it has none: the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay and Rialit (whose fee is set in its own dashboard) always. |
 | `config` | [CubePayGatewayConfig](#cubepaygatewayconfig) | yes |  |
 | `min_amount` | string or null | yes | The least amount to pay it is offered for, in Toman; null for no least. Checkouts of less do not offer it. |
 | `max_amount` | string or null | yes | The most amount to pay it is offered for, in Toman; null for no most. |
@@ -7422,19 +7893,32 @@ The database settings in config.php: the driver DB_CONNECTION names, the drivers
 | `drivers` | list of [DriverDescription](#driverdescription) | yes | The installable drivers, plus the one the shop runs on |
 | `values` | [DriverValues](#drivervalues) | yes |  |
 
+### DepositRikhtam
+
+Rikhtam (rikhtam.com, «ریختم»): connected by its gateway's «کلید امنیتی» (`PUT …/deposits/settings/rikhtam`), which Rikhtam makes and the owner pastes; the shop registers its own address with the gateway. Its deposits are taken while «تایید خودکار واریز» is on; one its owner attaches to a payment by hand, either way.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `connected` | boolean | yes | The shop keeps a Rikhtam key. |
+| `domain` | string or null | yes | The domain the Rikhtam gateway is for, as Rikhtam said when the address was last registered; null when not connected. |
+| `project_id` | integer or null | yes | The gateway's id at Rikhtam; null when not connected. |
+| `callback_url` | string | yes | The shop's address for Rikhtam (its deposits and crypto payments): what the shop registers, or the owner puts in the gateway's «آدرس کال‌بک». |
+| `connected_at` | string (date-time) or null | yes | When the address was last registered; null when not connected. |
+
 ### DepositSettingsResponse
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `enabled` | boolean | yes |  |
 | `key` | string or null | yes | The key the app sends as `X-API-Key`; null while the shop does not listen. |
-| `sources` | list of object | yes | The phone apps the shop takes, each with the address its owner pastes in it. |
+| `sources` | list of object | yes | The phone apps the shop takes, each with the address its owner pastes in it beside the shop's key (Rikhtam is apart: `rikhtam`). |
 | `sources[].key` | string | yes |  |
 | `sources[].label` | string | yes |  |
 | `sources[].webhook_url` | string | yes |  |
-| `last_received_at` | string (date-time) or null | yes | When the last SMS came (not a test). |
-| `last_test_at` | string (date-time) or null | yes | When the app's last test came. |
+| `last_received_at` | string (date-time) or null | yes | When a phone app's last SMS came (not a test; Rikhtam's deposits not counted). |
+| `last_test_at` | string (date-time) or null | yes | When a phone app's last test came. |
 | `waiting` | integer | yes | SMS of the last seven days that approved nothing (unmatched or ambiguous): support to look at. |
+| `rikhtam` | [DepositRikhtam](#depositrikhtam) | yes |  |
 
 ### DiscountCodeResponse
 
@@ -7538,6 +8022,17 @@ One field of a driver's form, described for a generic form (`Field::describe()`)
 A field's kind, which decides how a generic form draws it: a line of text, a whole number, an amount of Toman, a short list of numbers typed as text, an on/off switch, one of a few values, a secret, an email address, a web address, a file path, a few lines of text, a bank card number (drawn in groups of four and sent as digits), or a premium emoji picked from the bot's list for the name field in its `bound_to` (sent as its id; picking one puts its plain emoji at that name's start).
 
 String: `text`, `number`, `amount`, `list`, `toggle`, `choice`, `secret`, `email`, `url`, `path`, `textarea`, `card`, `premium_emoji`.
+
+### GatewayWebhookState
+
+Where a method's gateway sends its webhooks — one address for the merchant's whole account at the gateway (Rialit) — beside the shop's own address for them (the same for every shop and method of the installation).
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `state` | string: `ours`, `none`, `elsewhere`, `unknown` | yes | `ours`: to the shop's address. `none`: nowhere (the gateway's webhooks off). `elsewhere`: to another address — another site of the merchant's, maybe —, which the shop replaces only when asked (`replace`). `unknown`: the gateway could not be asked (`message` says why: its key refused, the shop server's IP not among its allowed IPs, its account not active, too many requests, out of reach). |
+| `url` | string or null | yes | Where the gateway sends its webhooks now; null for `none` and `unknown`. |
+| `ours` | string | yes | The shop's address for the gateway's webhooks, to paste in the gateway's dashboard by hand as well. |
+| `message` | string or null | yes | For the owner, in Persian, no emoji: what was done just now («آدرس وب‌هوک فروشگاه در ریالیت ثبت شد؛ …»); why it was not — another address there, the shop's address not https or refused, 20 security changes an hour at Rialit, its key or the server's IP refused —; or why the state is unknown. Null when there is nothing to say: the address already the shop's, or none read and nothing asked. |
 
 ### GiftCodeBatch
 
@@ -8099,8 +8594,9 @@ A card-to-card method, with its cards: each payment is shown one of them at rand
 | `driver_label` | string | yes |  |
 | `kind` | [GatewayKind](API-Schemas.md#gatewaykind) | yes |  |
 | `builtin` | boolean | yes |  |
+| `registers_webhook` | boolean | yes | Whether the shop registers its webhook address with the method's gateway itself (Rialit): its state and the offer to register or replace it are `GET`/`POST /payment-methods/{id}/webhook`'s. From the driver alone, nothing asked of the gateway; false for a driver no longer installed. |
 | `label` | string | yes | The button text customers see, such as "کارت به کارت (ملت)". |
-| `summary` | string or null | yes | The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»); the test mode of Zarinpal (its sandbox), AbanGateway (a test key) or AqayePardakht (its sandbox pin) («حالت آزمایشی: پولی جابه‌جا نمی‌شود»); Plisio's dollar rate and coins («هر دلار ۹۵٬۰۰۰ تومان · USDT_TRX، TRX»), always; Variza's card («کارت مقصد: تصادفی»), always. Null when it has none: the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay always. |
+| `summary` | string or null | yes | The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»); the test mode of Zarinpal (its sandbox), AbanGateway (a test key) or AqayePardakht (its sandbox pin) («حالت آزمایشی: پولی جابه‌جا نمی‌شود»); Plisio's dollar rate and coins («هر دلار ۹۵٬۰۰۰ تومان · USDT_TRX، TRX»), always; Variza's card («کارت مقصد: تصادفی»), always; Rikhtam's coin («ارز: تتر روی شبکه TON»), always. Null when it has none: the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay and Rialit (whose fee is set in its own dashboard) always. |
 | `config` | [ManualGatewayConfig](#manualgatewayconfig) | yes |  |
 | `min_amount` | string or null | yes | The least amount to pay it is offered for, in Toman; null for no least. Checkouts of less do not offer it. |
 | `max_amount` | string or null | yes | The most amount to pay it is offered for, in Toman; null for no most. |
@@ -8236,6 +8732,33 @@ One of:
 - list of [WholeNumberInput](API-Schemas.md#wholenumberinput)
 - string
 
+### OwnerTelegramAccount
+
+A Telegram account that is the owner in the main bot, as the main bot knows it.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `telegram_id` | integer | yes |  |
+| `name` | string or null | yes | Its name in the main bot; null while it has not written to it. |
+| `username` | string or null | yes | Its @username, without the @; null for none. |
+
+### OwnerTelegramLinkResponse
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `link` | object | yes |  |
+| `link.url` | string | yes | The one-time link to open from the account that is to be the owner. Shown once: it is kept as a hash alone. |
+| `link.expires_at` | string (date-time) | yes |  |
+| `accounts` | list of [OwnerTelegramAccount](#ownertelegramaccount) | yes |  |
+| `link_open_until` | string (date-time) or null | yes |  |
+
+### OwnerTelegramResponse
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `accounts` | list of [OwnerTelegramAccount](#ownertelegramaccount) | yes | Oldest first; five at most. |
+| `link_open_until` | string (date-time) or null | yes | Until when the link made last may be opened; null with none open. |
+
 ### PanelFavoriteId
 
 A settings search entry's id: `page:/plans`, `section:/bot-settings/wallet`, `setting:/bot-settings/wallet#wallet_topup_min`.
@@ -8262,10 +8785,10 @@ String matching `^(page|section|setting):/\S*$`.
 | `core_state` | string: `running`, `stopped`, `error`, `unknown` | yes |  |
 | `core_version` | string | yes |  |
 | `core_error` | string | yes |  |
-| `cpu_percent` | number | yes |  |
+| `cpu_percent` | number or null | yes | Null when the panel reports no CPU load (Remnawave). |
 | `memory_used` | integer | yes |  |
 | `memory_total` | integer | yes |  |
-| `disk_used` | integer | yes |  |
+| `disk_used` | integer | yes | With disk_total, 0 when the panel reports no disk (Remnawave). |
 | `disk_total` | integer | yes |  |
 | `uptime_seconds` | integer | yes |  |
 | `connections` | integer | yes |  |
@@ -8327,7 +8850,25 @@ One of:
 - [PlisioMethodRow](#plisiomethodrow)
 - [AqayePardakhtMethodRow](#aqayepardakhtmethodrow)
 - [VarizaMethodRow](#varizamethodrow)
+- [BluepalMethodRow](#bluepalmethodrow)
+- [RialitMethodRow](#rialitmethodrow)
+- [RikhtamMethodRow](#rikhtammethodrow)
 - [UnregisteredMethodRow](#unregisteredmethodrow)
+
+### PaymentMethodSavedResponse
+
+A payment method as saved, and where its gateway sends its webhooks after the shop registered its own address where the gateway had none.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `method` | [PaymentMethodRow](#paymentmethodrow) | yes |  |
+| `webhook` | [GatewayWebhookState](#gatewaywebhookstate) or null | yes | For a method whose gateway takes its webhook address from the shop (`registers_webhook`: Rialit), the state after the save: the shop's address registered where the gateway had none (`ours`, with a message), another address left as it was (`elsewhere`), or why nothing could be done (`none` or `unknown`, with a message). Null for any other method. |
+
+### PaymentMethodWebhookResponse
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `webhook` | [GatewayWebhookState](#gatewaywebhookstate) | yes |  |
 
 ### PaymentMethodsResponse
 
@@ -8356,8 +8897,9 @@ A Plisio method (plisio.net), an online gateway for crypto: the customer pays a 
 | `driver_label` | string | yes |  |
 | `kind` | [GatewayKind](API-Schemas.md#gatewaykind) | yes |  |
 | `builtin` | boolean | yes |  |
+| `registers_webhook` | boolean | yes | Whether the shop registers its webhook address with the method's gateway itself (Rialit): its state and the offer to register or replace it are `GET`/`POST /payment-methods/{id}/webhook`'s. From the driver alone, nothing asked of the gateway; false for a driver no longer installed. |
 | `label` | string | yes | The button text customers see, such as "کارت به کارت (ملت)". |
-| `summary` | string or null | yes | The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»); the test mode of Zarinpal (its sandbox), AbanGateway (a test key) or AqayePardakht (its sandbox pin) («حالت آزمایشی: پولی جابه‌جا نمی‌شود»); Plisio's dollar rate and coins («هر دلار ۹۵٬۰۰۰ تومان · USDT_TRX، TRX»), always; Variza's card («کارت مقصد: تصادفی»), always. Null when it has none: the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay always. |
+| `summary` | string or null | yes | The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»); the test mode of Zarinpal (its sandbox), AbanGateway (a test key) or AqayePardakht (its sandbox pin) («حالت آزمایشی: پولی جابه‌جا نمی‌شود»); Plisio's dollar rate and coins («هر دلار ۹۵٬۰۰۰ تومان · USDT_TRX، TRX»), always; Variza's card («کارت مقصد: تصادفی»), always; Rikhtam's coin («ارز: تتر روی شبکه TON»), always. Null when it has none: the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay and Rialit (whose fee is set in its own dashboard) always. |
 | `config` | [PlisioGatewayConfig](#plisiogatewayconfig) | yes |  |
 | `min_amount` | string or null | yes | The least amount to pay it is offered for, in Toman; null for no least. Checkouts of less do not offer it. |
 | `max_amount` | string or null | yes | The most amount to pay it is offered for, in Toman; null for no most. |
@@ -8511,6 +9053,71 @@ String: `purchases`, `renewals`, `tests`, `deletions`, `wallet`, `receipts`, `us
 |---|---|---|---|
 | `id` | integer | yes |  |
 | `status` | [OrderStatus](API-Schemas.md#orderstatus) | yes |  |
+
+### RialitGatewayConfig
+
+A Rialit method's settings (`RialitMethodRow.config`): the merchant's API key, kept encrypted and never shown — only whether one is kept and a hint to recognise it. The fee the payer pays is set in Rialit's dashboard, not here.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `api_key` | [SecretState](#secretstate) | yes |  |
+
+### RialitMethodRow
+
+A Rialit method (rialit.io), an online gateway: the customer pays on Rialit's page — the order's sum and any fee its merchant passes on to the payer in Rialit's dashboard —, and Rialit confirms it, with no receipt and no review. Its webhook, to the shop's address for it, only names a payment: the shop asks Rialit about it.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `id` | integer | yes |  |
+| `driver` | string: `rialit` | yes |  |
+| `driver_label` | string | yes |  |
+| `kind` | [GatewayKind](API-Schemas.md#gatewaykind) | yes |  |
+| `builtin` | boolean | yes |  |
+| `registers_webhook` | boolean | yes | Whether the shop registers its webhook address with the method's gateway itself (Rialit): its state and the offer to register or replace it are `GET`/`POST /payment-methods/{id}/webhook`'s. From the driver alone, nothing asked of the gateway; false for a driver no longer installed. |
+| `label` | string | yes | The button text customers see, such as "کارت به کارت (ملت)". |
+| `summary` | string or null | yes | The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»); the test mode of Zarinpal (its sandbox), AbanGateway (a test key) or AqayePardakht (its sandbox pin) («حالت آزمایشی: پولی جابه‌جا نمی‌شود»); Plisio's dollar rate and coins («هر دلار ۹۵٬۰۰۰ تومان · USDT_TRX، TRX»), always; Variza's card («کارت مقصد: تصادفی»), always; Rikhtam's coin («ارز: تتر روی شبکه TON»), always. Null when it has none: the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay and Rialit (whose fee is set in its own dashboard) always. |
+| `config` | [RialitGatewayConfig](#rialitgatewayconfig) | yes |  |
+| `min_amount` | string or null | yes | The least amount to pay it is offered for, in Toman; null for no least. Checkouts of less do not offer it. |
+| `max_amount` | string or null | yes | The most amount to pay it is offered for, in Toman; null for no most. |
+| `enabled` | boolean | yes |  |
+| `sort` | integer | yes |  |
+| `counts` | object | yes |  |
+| `counts.payments` | integer | yes | The number of payments made with it. A method with payments cannot be deleted. |
+| `created_at` | string (date-time) or null | yes |  |
+| `updated_at` | string (date-time) or null | yes |  |
+
+### RikhtamGatewayConfig
+
+A Rikhtam crypto method's settings (`RikhtamMethodRow.config`): the gateway's «کلید امنیتی», kept encrypted and never shown — only whether one is kept and a hint to recognise it —, and the coin its payments are made in.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `secret` | [SecretState](#secretstate) | yes |  |
+| `coin` | string: `any`, `gram`, `usdt_ton`, `usdt_trc20`, `trx` | yes | `any` for the customer to pick on Rikhtam's page; else TON's Gram (`gram`), Tether on TON (`usdt_ton`) or on TRON (`usdt_trc20`), or TRX (`trx`). |
+
+### RikhtamMethodRow
+
+A Rikhtam crypto method (rikhtam.com), an online gateway for crypto: the customer pays on Rikhtam's page in the owner's coin, or one they pick there — TON's Gram, Tether on TON or on TRON, or TRX —, straight to the merchant's own wallet, and Rikhtam confirms it on its chain, with no receipt and no review. An order is asked of Rikhtam in Toman.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `id` | integer | yes |  |
+| `driver` | string: `rikhtam` | yes |  |
+| `driver_label` | string | yes |  |
+| `kind` | [GatewayKind](API-Schemas.md#gatewaykind) | yes |  |
+| `builtin` | boolean | yes |  |
+| `registers_webhook` | boolean | yes | Whether the shop registers its webhook address with the method's gateway itself (Rialit): its state and the offer to register or replace it are `GET`/`POST /payment-methods/{id}/webhook`'s. From the driver alone, nothing asked of the gateway; false for a driver no longer installed. |
+| `label` | string | yes | The button text customers see, such as "کارت به کارت (ملت)". |
+| `summary` | string or null | yes | The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»); the test mode of Zarinpal (its sandbox), AbanGateway (a test key) or AqayePardakht (its sandbox pin) («حالت آزمایشی: پولی جابه‌جا نمی‌شود»); Plisio's dollar rate and coins («هر دلار ۹۵٬۰۰۰ تومان · USDT_TRX، TRX»), always; Variza's card («کارت مقصد: تصادفی»), always; Rikhtam's coin («ارز: تتر روی شبکه TON»), always. Null when it has none: the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay and Rialit (whose fee is set in its own dashboard) always. |
+| `config` | [RikhtamGatewayConfig](#rikhtamgatewayconfig) | yes |  |
+| `min_amount` | string or null | yes | The least amount to pay it is offered for, in Toman; null for no least. Checkouts of less do not offer it. |
+| `max_amount` | string or null | yes | The most amount to pay it is offered for, in Toman; null for no most. |
+| `enabled` | boolean | yes |  |
+| `sort` | integer | yes |  |
+| `counts` | object | yes |  |
+| `counts.payments` | integer | yes | The number of payments made with it. A method with payments cannot be deleted. |
+| `created_at` | string (date-time) or null | yes |  |
+| `updated_at` | string (date-time) or null | yes |  |
 
 ### SaleResponse
 
@@ -9036,8 +9643,9 @@ A method whose driver is no longer installed. No checkout offers it, even when s
 | `driver_label` | string | yes |  |
 | `kind` | string: `null` or null | yes | Unknown without the driver. |
 | `builtin` | boolean | yes |  |
+| `registers_webhook` | boolean | yes | Whether the shop registers its webhook address with the method's gateway itself (Rialit): its state and the offer to register or replace it are `GET`/`POST /payment-methods/{id}/webhook`'s. From the driver alone, nothing asked of the gateway; false for a driver no longer installed. |
 | `label` | string | yes | The button text customers see, such as "کارت به کارت (ملت)". |
-| `summary` | string or null | yes | The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»); the test mode of Zarinpal (its sandbox), AbanGateway (a test key) or AqayePardakht (its sandbox pin) («حالت آزمایشی: پولی جابه‌جا نمی‌شود»); Plisio's dollar rate and coins («هر دلار ۹۵٬۰۰۰ تومان · USDT_TRX، TRX»), always; Variza's card («کارت مقصد: تصادفی»), always. Null when it has none: the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay always. |
+| `summary` | string or null | yes | The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»); the test mode of Zarinpal (its sandbox), AbanGateway (a test key) or AqayePardakht (its sandbox pin) («حالت آزمایشی: پولی جابه‌جا نمی‌شود»); Plisio's dollar rate and coins («هر دلار ۹۵٬۰۰۰ تومان · USDT_TRX، TRX»), always; Variza's card («کارت مقصد: تصادفی»), always; Rikhtam's coin («ارز: تتر روی شبکه TON»), always. Null when it has none: the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay and Rialit (whose fee is set in its own dashboard) always. |
 | `config` | object | yes | Not shown, since without the driver it is unknown which settings are secrets. |
 | `min_amount` | string or null | yes | The least amount to pay it is offered for, in Toman; null for no least. Checkouts of less do not offer it. |
 | `max_amount` | string or null | yes | The most amount to pay it is offered for, in Toman; null for no most. |
@@ -9107,8 +9715,9 @@ A Variza method (variza.ir), an online gateway: the customer transfers the exact
 | `driver_label` | string | yes |  |
 | `kind` | [GatewayKind](API-Schemas.md#gatewaykind) | yes |  |
 | `builtin` | boolean | yes |  |
+| `registers_webhook` | boolean | yes | Whether the shop registers its webhook address with the method's gateway itself (Rialit): its state and the offer to register or replace it are `GET`/`POST /payment-methods/{id}/webhook`'s. From the driver alone, nothing asked of the gateway; false for a driver no longer installed. |
 | `label` | string | yes | The button text customers see, such as "کارت به کارت (ملت)". |
-| `summary` | string or null | yes | The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»); the test mode of Zarinpal (its sandbox), AbanGateway (a test key) or AqayePardakht (its sandbox pin) («حالت آزمایشی: پولی جابه‌جا نمی‌شود»); Plisio's dollar rate and coins («هر دلار ۹۵٬۰۰۰ تومان · USDT_TRX، TRX»), always; Variza's card («کارت مقصد: تصادفی»), always. Null when it has none: the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay always. |
+| `summary` | string or null | yes | The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»); the test mode of Zarinpal (its sandbox), AbanGateway (a test key) or AqayePardakht (its sandbox pin) («حالت آزمایشی: پولی جابه‌جا نمی‌شود»); Plisio's dollar rate and coins («هر دلار ۹۵٬۰۰۰ تومان · USDT_TRX، TRX»), always; Variza's card («کارت مقصد: تصادفی»), always; Rikhtam's coin («ارز: تتر روی شبکه TON»), always. Null when it has none: the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay and Rialit (whose fee is set in its own dashboard) always. |
 | `config` | [VarizaGatewayConfig](#varizagatewayconfig) | yes |  |
 | `min_amount` | string or null | yes | The least amount to pay it is offered for, in Toman; null for no least. Checkouts of less do not offer it. |
 | `max_amount` | string or null | yes | The most amount to pay it is offered for, in Toman; null for no most. |
@@ -9141,8 +9750,9 @@ The wallet, the built-in method.
 | `driver_label` | string | yes |  |
 | `kind` | [GatewayKind](API-Schemas.md#gatewaykind) | yes |  |
 | `builtin` | boolean | yes |  |
+| `registers_webhook` | boolean | yes | Whether the shop registers its webhook address with the method's gateway itself (Rialit): its state and the offer to register or replace it are `GET`/`POST /payment-methods/{id}/webhook`'s. From the driver alone, nothing asked of the gateway; false for a driver no longer installed. |
 | `label` | string | yes | The button text customers see, such as "کارت به کارت (ملت)". |
-| `summary` | string or null | yes | The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»); the test mode of Zarinpal (its sandbox), AbanGateway (a test key) or AqayePardakht (its sandbox pin) («حالت آزمایشی: پولی جابه‌جا نمی‌شود»); Plisio's dollar rate and coins («هر دلار ۹۵٬۰۰۰ تومان · USDT_TRX، TRX»), always; Variza's card («کارت مقصد: تصادفی»), always. Null when it has none: the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay always. |
+| `summary` | string or null | yes | The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»); the test mode of Zarinpal (its sandbox), AbanGateway (a test key) or AqayePardakht (its sandbox pin) («حالت آزمایشی: پولی جابه‌جا نمی‌شود»); Plisio's dollar rate and coins («هر دلار ۹۵٬۰۰۰ تومان · USDT_TRX، TRX»), always; Variza's card («کارت مقصد: تصادفی»), always; Rikhtam's coin («ارز: تتر روی شبکه TON»), always. Null when it has none: the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay and Rialit (whose fee is set in its own dashboard) always. |
 | `config` | object | yes | Nothing to configure. |
 | `min_amount` | string or null | yes | The least amount to pay it is offered for, in Toman; null for no least. Checkouts of less do not offer it. |
 | `max_amount` | string or null | yes | The most amount to pay it is offered for, in Toman; null for no most. |
@@ -9319,8 +9929,9 @@ A Zarinpal method (zarinpal.com), an online gateway: the customer pays with any 
 | `driver_label` | string | yes |  |
 | `kind` | [GatewayKind](API-Schemas.md#gatewaykind) | yes |  |
 | `builtin` | boolean | yes |  |
+| `registers_webhook` | boolean | yes | Whether the shop registers its webhook address with the method's gateway itself (Rialit): its state and the offer to register or replace it are `GET`/`POST /payment-methods/{id}/webhook`'s. From the driver alone, nothing asked of the gateway; false for a driver no longer installed. |
 | `label` | string | yes | The button text customers see, such as "کارت به کارت (ملت)". |
-| `summary` | string or null | yes | The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»); the test mode of Zarinpal (its sandbox), AbanGateway (a test key) or AqayePardakht (its sandbox pin) («حالت آزمایشی: پولی جابه‌جا نمی‌شود»); Plisio's dollar rate and coins («هر دلار ۹۵٬۰۰۰ تومان · USDT_TRX، TRX»), always; Variza's card («کارت مقصد: تصادفی»), always. Null when it has none: the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay always. |
+| `summary` | string or null | yes | The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»); the test mode of Zarinpal (its sandbox), AbanGateway (a test key) or AqayePardakht (its sandbox pin) («حالت آزمایشی: پولی جابه‌جا نمی‌شود»); Plisio's dollar rate and coins («هر دلار ۹۵٬۰۰۰ تومان · USDT_TRX، TRX»), always; Variza's card («کارت مقصد: تصادفی»), always; Rikhtam's coin («ارز: تتر روی شبکه TON»), always. Null when it has none: the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay and Rialit (whose fee is set in its own dashboard) always. |
 | `config` | [ZarinpalGatewayConfig](#zarinpalgatewayconfig) | yes |  |
 | `min_amount` | string or null | yes | The least amount to pay it is offered for, in Toman; null for no least. Checkouts of less do not offer it. |
 | `max_amount` | string or null | yes | The most amount to pay it is offered for, in Toman; null for no most. |

@@ -9,7 +9,8 @@ import { useForm } from '@/lib/use-form'
 
 /**
  * «ورود به پنل»: the owner changes their login (kept in config.php), proving it with the current password; a blank new
- * password keeps the old one. Saving signs every other browser out; this one stays signed in.
+ * password keeps the old one. Saving signs every other browser out — this one stays signed in — and lets go of every
+ * Telegram account linked in «مدیریت از ربات» (OwnerTelegramCard), which is linked again afterwards.
  */
 export function LoginSection({ disabled }: { disabled: boolean }) {
   const session = useSession()
@@ -38,7 +39,7 @@ export function LoginSection({ disabled }: { disabled: boolean }) {
     <SectionCard
       form={{ ...form, save }}
       title="نام کاربری و رمز عبور"
-      description="با ذخیره، مرورگرها و دستگاه‌های دیگری که وارد پنل شده‌اند خارج می‌شوند؛ این مرورگر وارد می‌ماند."
+      description="با ذخیره، مرورگرها و دستگاه‌های دیگری که وارد پنل شده‌اند خارج می‌شوند؛ این مرورگر وارد می‌ماند. حساب‌های تلگرامی که در «مدیریت از ربات» وصل شده‌اند هم برداشته می‌شوند؛ بعد از آن می‌توانید دوباره وصلشان کنید."
       disabled={disabled}
     >
       <Field id="login_username" label="نام کاربری" error={error('username')} hint="حروف انگلیسی، عدد، نقطه، _، @ یا -">

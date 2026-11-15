@@ -1,7 +1,7 @@
 import { createContext, Fragment, useContext, type ReactNode } from 'react'
 import { TriangleAlert } from 'lucide-react'
 import { Callout } from '@/components/callout'
-import { Modal, useHoldOpen } from '@/components/modal'
+import { Modal, useHeld, useHoldOpen } from '@/components/modal'
 import { Button } from '@/components/ui/button'
 import { TelegramChatLink } from '@/components/user-identity'
 import type { UserRef } from '@/lib/api-types'
@@ -56,11 +56,13 @@ interface DetailFooterProps {
 
 /**
  * The foot of a detail dialog: a way to the customer in Telegram (when there is a customer, and they have a Telegram
- * account), and closing it — which, as the dialog's ✕ and Escape, waits while an operation runs (`busy`). Its buttons,
- * and what a dialog adds there, are a finger's 44px on a phone.
+ * account), and closing it — which, as the dialog's ✕ and Escape, waits while an operation runs (`busy`), or while
+ * anything else in the dialog holds it open (an operation strip's own form submitting). Its buttons, and what a dialog
+ * adds there, are a finger's 44px on a phone.
  */
 export function DetailFooter({ user, busy, onClose, children }: DetailFooterProps) {
   useHoldOpen(busy)
+  const held = useHeld()
 
   return (
     <div className="flex items-center gap-2 border-t border-border pt-4">
@@ -71,7 +73,7 @@ export function DetailFooter({ user, busy, onClose, children }: DetailFooterProp
       )}
       <div className="ms-auto flex items-center gap-2">
         {children}
-        <Button variant="ghost" size="sm" onClick={onClose} disabled={busy} className="max-md:h-11">
+        <Button variant="ghost" size="sm" onClick={onClose} disabled={busy || held} className="max-md:h-11">
           بستن
         </Button>
       </div>

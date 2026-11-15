@@ -64,10 +64,11 @@ dialog says so in its place («پرداخت خارج از فروشگاه که پ
 shows:
 
 - its gateway, under the method: «درگاه CubePay», «درگاه زرین‌پال», «درگاه اطلس‌پی», «درگاه آبان گیت وی», «درگاه
-  Plisio», «درگاه آقای پرداخت» or «درگاه واریزا»;
+  Plisio», «درگاه آقای پرداخت», «درگاه واریزا», «درگاه بلو پال», «درگاه ریالیت» or «درگاه ریختم (ارز دیجیتال)»;
 - its id there («شناسه در درگاه»): a CubePay card payment's authority, Zarinpal's authority (then its bank reference
   once paid), AtlasPay's tracking code, AbanGateway's invoice id, Plisio's invoice id (the one paid, if the customer
-  switched coins), AqayePardakht's transaction id, or Variza's link;
+  switched coins), AqayePardakht's transaction id, Variza's link, Bluepal's track id, Rialit's token, or Rikhtam's
+  invoice id;
 - while it waits, until when its page takes money («مهلت پرداخت در درگاه»);
 - when the gateway was last asked («آخرین استعلام»);
 - when it is [held for support](#a-payment-held-for-support), that it is and why.
@@ -77,6 +78,7 @@ Then what may be done with it now:
 | Operation | Offered | What it does |
 |---|---|---|
 | «تایید و تحویل» («… شارژ کیف پول», «… افزودن حجم», «… افزودن زمان», «… افزودن کاربر») | A card payment not paid yet, its order still open — with a receipt, or without one («تایید دستی و …») | **At one press.** The order is paid and delivered at once: the service made or renewed, its extra traffic, time or devices added, the wallet charged, or the agent's traffic added. The order's other attempts to pay are cancelled — but not a receipt waiting for review, which stays yours to reject. A referrer's commission is paid, and the customer gets their service or word of it |
+| «پیوست واریز ریختم» | What «تایید و تحویل» is offered for, while the shop's Rikhtam is connected ([Payment methods](Payment-Methods.md#through-rikhtam)) — the shop's admins: a receipt waiting for review | Lists the deposits Rikhtam holds that no payment took (the last 20 days, closest sum first; one short of the order's own price marked «کمتر از مبلغ سفارش», never picked); the one picked («پیوست و تایید») is attached to this payment at Rikhtam, which sends it back, and the payment is approved as by «تایید و تحویل» — when the deposit covers the order's own price. The toast gives Rikhtam's word and its fee. Asks for a recent sign-in, as an approval does |
 | «رد کردن» | A receipt waiting for review | Asks for a reason the customer reads («دلیل رد کردن»). The payment fails; the order stays open for them to pay again |
 | «لغو پرداخت» | Any payment not paid | Asks for an optional note. Cancels this payment and — unless something else paid it — its order, with every other attempt to pay it; the customer is told when the order was cancelled. **But while another payment of the order may be the money** — a receipt waiting for review, or a card payment taken in [support's private chat](Bot-Settings.md#card-to-card-payments) —, this payment is cancelled alone: the order and that payment stay for you to decide, and the customer is told nothing |
 | «یادآوری به مشتری» | A card payment waiting for its receipt, or rejected, its order open | At one press: a reminder with «ارسال رسید» and «پرداخت دوباره» (a rejected one: «پرداخت دوباره» alone; one taken in support's private chat, shown no card: the way there instead of «ارسال رسید»). Nothing changes; the toast says whether it reached them |
@@ -405,7 +407,8 @@ How often each of these runs, and the hours below, are the defaults: you set the
   ([Payment methods](Payment-Methods.md#approving-receipts-by-themselves)).
 - **Online payments asked about** — a payment on an online gateway that is not paid yet (failed with its page, or
   cancelled with its order, too) is asked about every few minutes while its page is open, and every quarter of an hour
-  for two hours after, should its callback never come. Variza is not asked: its webhook's word is read instead. A
+  for two hours after, should its callback (or webhook) never come. Variza is not asked: its webhook's word is read
+  instead. A
   payment still waiting after that is given up on — unless its gateway said money came in on it: that one is asked
   about until 48 hours after its page closed, then held for you — at once, should the gateway close it before. A held
   payment is asked about no more

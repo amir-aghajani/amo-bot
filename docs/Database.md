@@ -146,10 +146,12 @@ measured on MySQL and MariaDB:
   the secrets of its staged rows — until it ends. A customer an import learned had bought in the other bot carries
   `users.bought_elsewhere_at` (`User::boughtElsewhere()`): no newcomer here, whatever they bought in the shop.
 - **The bank's deposit SMS** («تایید خودکار واریز», [Payment methods](Payment-Methods.md#confirmed-by-the-banks-sms))
-  are `deposits`: each SMS a phone app forwarded, once — unique by shop, the app (`source`) and the app's own id for it
-  (`external_id`), so a retry finds it —, with its sum in Rial, bank, sender and words (`body`), what came of it
-  (`status`, and `note` when it approved nothing) and the card payment it approved (`payment_id`). They are kept 90
-  days.
+  are `deposits`: each SMS a phone app forwarded, or deposit Rikhtam reported, once — unique by shop, its source
+  (`source`: `forapp`, `rikhtam`) and the source's own id for it (`external_id`), so a retry finds it —, with its sum in
+  Rial, bank, sender and words (`body`; for Rikhtam, which sends no SMS, a line of its sum, account and time), what came
+  of it (`status`, and `note` when it approved nothing) and the card payment it approved (`payment_id`). They are kept
+  90 days. The shop's Rikhtam key and what Rikhtam said when its address was registered are settings
+  (`deposits.rikhtam_key`, encrypted, and `deposits.rikhtam_hook`).
 - **Settings** a panel changes live in the `settings` table, a JSON value per key and bot (`Settings\Services\Settings`);
   the installation's own configuration is `config.php`, never the database ([Configuration](Configuration.md)).
 - **Rows written outside AmoBot** — imported, or added by hand in phpMyAdmin — may lack what AmoBot always writes: a

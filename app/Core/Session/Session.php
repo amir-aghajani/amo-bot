@@ -93,6 +93,25 @@ final class Session
         }
     }
 
+    /**
+     * Runs `$request` — a request served inside this one (the bot's management asking the panels' API in-process) —
+     * and holds the session again after it should it have let go (release()): its end is not this one's, nor that of
+     * the next it serves in a long-running process.
+     *
+     * @template T
+     * @param \Closure(): T $request
+     * @return T
+     */
+    public function within(\Closure $request): mixed
+    {
+        $released = $this->released;
+        try {
+            return $request();
+        } finally {
+            $this->released = $released;
+        }
+    }
+
     /** The request is over: release(), and ready for the next request. */
     public function end(): void
     {

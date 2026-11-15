@@ -2,7 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { SettingsPage } from '@/apps/admin/pages/settings'
 import { APPEARANCE_DESCRIPTION } from '@/components/appearance-card'
-import type { ConfigSettingsResponse } from '@/lib/api-types'
+import type { ConfigSettingsResponse, OwnerTelegramResponse } from '@/lib/api-types'
 import { queryKeys } from '@/lib/query-keys'
 import { ThemeProvider } from '@/lib/theme'
 import { signedIn, until } from '@/test/render'
@@ -14,9 +14,13 @@ import { json, refusal, server } from '@/test/server'
  * said on the sections it keeps from drawing, not on theirs.
  */
 
+/** The login's section reads the owner's Telegram accounts on its own (its «مدیریت از ربات» card): none linked. */
+const OWNER_TELEGRAM = '/api/admin/settings/owner-telegram'
+const NO_ACCOUNTS: OwnerTelegramResponse = { accounts: [], link_open_until: null }
+
 /** The page at `at`, config.php's read refused by the server. */
 async function show(at: string) {
-  server().on('GET', '/api/admin/settings/config', refusal(500, 'خطای داخلی'))
+  server().on('GET', '/api/admin/settings/config', refusal(500, 'خطای داخلی')).on('GET', OWNER_TELEGRAM, json(NO_ACCOUNTS))
   const { client, wrapper } = signedIn({ at })
   render(
     <ThemeProvider>
@@ -46,7 +50,7 @@ const CONFIG: ConfigSettingsResponse = {
 
 describe('the panel’s settings, config.php read', () => {
   it('name the file’s whole path — where the File Manager finds it —, wrapping on a phone rather than running past its edge', async () => {
-    server().on('GET', '/api/admin/settings/config', json(CONFIG)).on('GET', '/api/admin/system', refusal(500, 'خطای داخلی'))
+    server().on('GET', '/api/admin/settings/config', json(CONFIG)).on('GET', '/api/admin/system', refusal(500, 'خطای داخلی')).on('GET', OWNER_TELEGRAM, json(NO_ACCOUNTS))
     render(
       <ThemeProvider>
         <SettingsPage />
@@ -71,6 +75,7 @@ describe('the SMS account’s credit', () => {
       .on('GET', '/api/admin/settings/config', json(WITH_SMS))
       .on('GET', '/api/admin/system', refusal(500, 'خطای داخلی'))
       .on('GET', CREDIT, json({ credit: null }))
+      .on('GET', OWNER_TELEGRAM, json(NO_ACCOUNTS))
     render(
       <ThemeProvider>
         <SettingsPage />

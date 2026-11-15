@@ -12,8 +12,9 @@ use App\Modules\Telegram\Messages;
 
 /**
  * A backup file the owner uploads, told by its bytes, never its name: a zip (Faoxima's own backup.zip — backup.sql
- * beside the bot's files —, an export zipped), a gzip, or plain SQL. inspect() checks it holds a dump before it is
- * kept; unpack() writes the dump out plain, a step at a time, within a size and the disk's free space.
+ * beside the bot's files —, an export zipped), a gzip, or plain SQL (MirzaBot's own, backup_<date>.sql). inspect() checks
+ * it holds a dump — not one behind a password — before it is kept; unpack() writes the dump out plain, a step at a time,
+ * within a size and the disk's free space.
  */
 final class BackupFile
 {
@@ -54,6 +55,10 @@ final class BackupFile
                 $entry = self::entry($zip);
                 if ($entry === null) {
                     throw ImportRefusedException::on('file', ImportRefusedException::NO_SQL_IN_ZIP);
+                }
+                // A dump behind a password (MirzaBot's own backups before 0.1.6): the owner opens it, the shop never guesses.
+                if (($zip->statName($entry)['encryption_method'] ?? \ZipArchive::EM_NONE) !== \ZipArchive::EM_NONE) {
+                    throw ImportRefusedException::on('file', ImportRefusedException::ENCRYPTED_ZIP);
                 }
                 $stream = $zip->getStream($entry);
                 $head = $stream === false ? '' : (string) @stream_get_contents($stream, self::HEAD);

@@ -11,13 +11,14 @@ use App\Support\Money;
 use Psr\Http\Message\ResponseInterface as Response;
 
 /**
- * The page a customer's browser lands on when an online gateway sends them back to the shop (Zarinpal, AqayePardakht and
- * Variza do, once paid or not; Aban and Plisio from their pages on an https shop): what the shop's own asking found —
- * paid, its money to the wallet, not yet, not paid, held for support —, or that the gateway could not be asked or the
- * address names no payment; and, for a customer with a Telegram account, the way back to the bot (one of the website
- * alone is pointed to their account on the site, which Payments does not know the address of). Also the page that leads a customer on to a gateway's own page
- * when the gateway takes them only from the shop's address (go()). The only pages PHP answers: plain HTML with their own
- * policy — no script, nothing loaded, their styles inline.
+ * The page a customer's browser lands on when an online gateway sends them back to the shop (Zarinpal, AqayePardakht,
+ * Variza and Bluepal do, once paid or not; Aban, Plisio and Rikhtam from their pages on an https shop — Rialit sends
+ * nobody back): what the shop's own asking found — paid, its money to the wallet, not yet, not paid, held for support —,
+ * or that the gateway could not be asked or the address names no payment; and, for a customer with a Telegram account,
+ * the way back to the bot (one of the website alone is pointed to their account on the site, which Payments does not
+ * know the address of). Also the page that leads a customer on to a gateway's own page when the gateway takes them only
+ * from the shop's address (go()). The only pages PHP answers: plain HTML with their own policy — no script, nothing
+ * loaded, their styles inline.
  */
 final class ReturnPage
 {

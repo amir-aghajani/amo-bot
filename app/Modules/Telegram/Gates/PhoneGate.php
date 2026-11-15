@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Telegram\Gates;
 
+use App\Modules\Telegram\Admin\AdminSeats;
 use App\Modules\Telegram\Context;
 use App\Modules\Telegram\Texts\BotText;
 use App\Modules\Telegram\Texts\BotTexts;
@@ -25,11 +26,13 @@ final class PhoneGate implements Gate
         private readonly PhoneRequirement $phone,
         private readonly PhoneAsk $ask,
         private readonly BotTexts $texts,
+        private readonly AdminSeats $seats,
     ) {}
 
     public function pass(Context $ctx): bool
     {
-        if (!$this->phone->applies($ctx->user)) {
+        // Whoever manages the shop, and the owner's open link being opened, are never asked here (AdminSeats).
+        if (!$this->phone->applies($ctx->user) || $this->seats->passGates($ctx)) {
             return true;
         }
 

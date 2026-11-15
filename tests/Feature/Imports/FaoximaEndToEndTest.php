@@ -7,7 +7,6 @@ namespace Tests\Feature\Imports;
 use App\Modules\Catalog\Models\Plan;
 use App\Modules\Catalog\Models\PlanCategory;
 use App\Modules\Discounts\Models\DiscountCode;
-use App\Modules\Imports\Budget;
 use App\Modules\Imports\Enums\ImportPhase;
 use App\Modules\Imports\Imports;
 use App\Modules\Imports\Models\Import;
@@ -33,17 +32,20 @@ use Tests\Support\FakeTelegram;
  * A Faoxima shop brought over end to end through the owner's panel, by the real pieces — the sources reading its backup,
  * the Faoxima migrator, the core writing — from tests/Fixtures/imports/faoxima: Faoxima's own backup (backup.zip, its
  * backup.sql beside its vpnbot/ folder) and a mysqldump export of the same data read to the same survey; its panels
- * mapped to the shop's Marzban, 3x-ui and PasarGuard servers, whose panels only list their clients; everything it brings
- * in the shop as Faoxima had it, quietly, nothing written to a panel; the same import again bringing nothing twice; and
- * the same shop when every step stops a few rows in.
+ * mapped to the shop's Marzban, 3x-ui, PasarGuard and Rebecca servers, whose panels only list (and Rebecca read) their
+ * clients; everything it brings in the shop as Faoxima had it, quietly, nothing written to a panel; the same import
+ * again bringing nothing twice; and the same shop when every step stops a few rows in.
  */
 final class FaoximaEndToEndTest extends HttpTestCase
 {
+    use ImportSteps;
+
     private const FIXTURES = __DIR__ . '/../../Fixtures/imports/faoxima';
 
     /**
      * What the panels may be asked, in a run's order: Marzban's sign-in, its admin (a sudo one, who sees every user) and
-     * users, 3x-ui's clients and settings, PasarGuard's users.
+     * users, 3x-ui's clients and settings, PasarGuard's users, Rebecca's admin (a sudo one), users and — its listing
+     * leaving the device limit unsaid — the one user the import adopts there.
      */
     private const READS = [
         'POST de.vpnshop.example/api/admin/token',
@@ -52,7 +54,13 @@ final class FaoximaEndToEndTest extends HttpTestCase
         'GET nl.vpnshop.example/Xk9pQ/panel/api/clients/list',
         'POST nl.vpnshop.example/Xk9pQ/panel/api/setting/all',
         'GET fi.vpnshop.example/api/users',
+        'GET uk.vpnshop.example/api/admin',
+        'GET uk.vpnshop.example/api/users',
+        'GET uk.vpnshop.example/api/user/rz_uk',
     ];
+
+    /** rz_uk's subscription token on Rebecca: base64url("rz_uk,1730500000") and its 10-character signature. */
+    private const REBECCA_TOKEN = 'cnpfdWssMTczMDUwMDAwMA' . 'Xq7Lm2Pz9K';
 
     /** The required channel as Telegram answers for it. */
     private const CHANNEL = ['id' => -1001234500001, 'type' => 'channel', 'title' => 'کانال اطلاع‌رسانی', 'username' => 'vpnshop_news'];
@@ -63,16 +71,18 @@ final class FaoximaEndToEndTest extends HttpTestCase
     private Server $germany;
     private Server $netherlands;
     private Server $finland;
+    private Server $england;
 
     protected function setUp(): void
     {
         parent::setUp();
 
         $this->loginAsAdmin();
-        // The shop's servers on Faoxima's panels: Marzban with its admin's login, 3x-ui and PasarGuard with a token.
+        // The shop's servers on Faoxima's panels: Marzban with its admin's login, 3x-ui, PasarGuard and Rebecca with a token.
         $this->germany = Server::query()->create(['name' => 'آلمان', 'driver' => 'marzban', 'base_url' => 'https://de.vpnshop.example:8000', 'username' => 'admin', 'password' => 'secret', 'is_active' => true, 'serves_subscriptions' => true]);
         $this->netherlands = Server::query()->create(['name' => 'هلند', 'driver' => '3x-ui', 'base_url' => 'https://nl.vpnshop.example:2053/Xk9pQ', 'api_token' => 'xui-token', 'is_active' => true, 'serves_subscriptions' => true, 'meta' => ['subscription_url' => 'https://nl.vpnshop.example:2096/sub']]);
         $this->finland = Server::query()->create(['name' => 'فنلاند', 'driver' => 'pasarguard', 'base_url' => 'https://fi.vpnshop.example', 'api_token' => 'pg-key', 'is_active' => true, 'serves_subscriptions' => true]);
+        $this->england = Server::query()->create(['name' => 'انگلیس', 'driver' => 'rebecca', 'base_url' => 'https://uk.vpnshop.example', 'api_token' => 'rk_ShopsOwnRebeccaKeyForTestsOnly_0123456789ab', 'is_active' => true, 'serves_subscriptions' => true]);
 
         // The panels answer by address, however many times and in whatever order a run asks (the fake panel's own queue
         // answers in order); put back offline once the test is over, as the fake panel is.
@@ -91,14 +101,14 @@ final class FaoximaEndToEndTest extends HttpTestCase
         self::assertSame(['review', 'backup.zip', null], [$zip['phase'], $zip['file_name'], $zip['version']]);
 
         $survey = $zip['survey'];
-        self::assertSame(['customers' => 7, 'balances' => 4, 'services' => 5, 'tests' => 1, 'plans' => 4, 'discount_codes' => 4, 'gift_codes' => 4, 'channels' => 1, 'cards' => 2, 'resellers' => 1], $survey['counts']);
-        self::assertSame('392000.00', $survey['balance_total'], "85,000 + 420,000 − 125,000 + 12,000: the reseller bot's customer left out");
+        self::assertSame(['customers' => 8, 'balances' => 5, 'services' => 6, 'tests' => 1, 'plans' => 4, 'discount_codes' => 4, 'gift_codes' => 4, 'channels' => 1, 'cards' => 2, 'resellers' => 1], $survey['counts'], "the customer who last opened Sara's reseller bot, with a wallet and a purchase here, the bot's own");
+        self::assertSame('437000.00', $survey['balance_total'], "85,000 + 420,000 − 125,000 + 12,000 + 45,000: the reseller bot's own customer (no wallet here) left out");
         self::assertSame([
-            ['آلمان-مرزبان', 'marzban', 'marzban', true, 1, $this->germany->id, null],
+            ['آلمان-مرزبان', 'marzban', 'marzban', true, 2, $this->germany->id, null],
             ['هلند-ثنایی', 'x-ui_single', '3x-ui', true, 2, $this->netherlands->id, null],
             ['PasarGuard-FI', 'pasarguard', 'pasarguard', true, 2, $this->finland->id, null],
-            ['Rebecca-UK', 'rebecca', null, false, 1, null, 'این فروشگاه هنوز کانکتوری برای این نوع پنل ندارد.'],
-        ], array_map(static fn(array $panel): array => [$panel['key'], $panel['type'], $panel['driver'], $panel['addable'], $panel['services'], $panel['suggested_server_id'], $panel['unsupported']], $survey['panels']), 'no panel of manual sales; each suggested on the shop\'s server at its address');
+            ['Rebecca-UK', 'rebecca', 'rebecca', true, 1, $this->england->id, null],
+        ], array_map(static fn(array $panel): array => [$panel['key'], $panel['type'], $panel['driver'], $panel['addable'], $panel['services'], $panel['suggested_server_id'], $panel['unsupported']], $survey['panels']), 'no panel of manual sales; Rebecca on its connector, by the rk_ key Faoxima kept; each suggested on the shop\'s server at its address');
         self::assertSame([['name' => 'نماینده عادی', 'agent_pricing' => true, 'customers' => 1], ['name' => 'نماینده پیشرفته', 'agent_pricing' => true, 'customers' => 1]], $survey['groups']);
         self::assertSame([
             ['key' => '1000000001', 'telegram_id' => 1000000001, 'username' => 'shop_owner', 'role' => 'administrator'],
@@ -109,16 +119,17 @@ final class FaoximaEndToEndTest extends HttpTestCase
             'تاریخچه کیف پول' => 3,
             'تاریخچه تمدیدها و خریدهای اضافه سرویس‌ها' => 2,
             'ربات‌های نمایندگی' => 1,
+            'کیف پول مشتری‌های ربات‌های نمایندگی (در فایل‌های ربات قبلی است، نه دیتابیسش)' => 1,
             'کانفیگ‌های انبار و فروش دستی' => 2,
-            'سرویس‌های پنل‌هایی که این فروشگاه کانکتورشان را ندارد' => 1,
             'قیمت‌های حجم و زمان اضافه و سرویس دلخواه پنل‌ها' => 4,
-        ], array_column($survey['left'], 'count', 'what'), 'three messages in two tickets; a stock config and a manual sale; Rebecca\'s one service; each panel\'s prices for extras');
+            'تاریخچه استفاده از کدهای تخفیف و هدیه (سقف استفاده هر مشتری از نو شمرده می‌شود)' => 2,
+        ], array_column($survey['left'], 'count', 'what'), 'three messages in two tickets; the reseller bot\'s own customer\'s wallet, in its files; a stock config and a manual sale; each panel\'s prices for extras; a gift code used twice — every panel\'s services come');
         self::assertCount(7, $survey['warnings']);
         self::assertSame('۱ مشتری در ربات قبلی بدهکار بودند (جمعا ۱۲۵٬۰۰۰ تومان)؛ کیف پولشان اینجا هم منفی می‌آید.', $survey['warnings'][0]);
         self::assertSame('۱ نفر از ادمین‌های ربات قبلی پشتیبان یا فروشنده بودند؛ در فهرست هستند ولی اینجا ادمین نمی‌شوند.', $survey['warnings'][1]);
         self::assertSame('۱ مشتری تخفیف شخصی دارند؛ ربات قبلی کد تخفیف را از آن‌ها نمی‌پذیرفت، ولی اینجا کدهای تخفیف برایشان هم کار می‌کند.', $survey['warnings'][3], 'mina_ref\'s 15%, with codes coming');
         self::assertStringContainsString("«\u{2068}هلند-ثنایی\u{2069}»", $survey['warnings'][5], 'its links went through the old bot (subvip)');
-        self::assertSame(['آلمان-مرزبان' => 'server', 'هلند-ثنایی' => 'server', 'PasarGuard-FI' => 'server', 'Rebecca-UK' => 'skip'], array_map(static fn(array $choice): string => $choice['action'], $zip['proposed']['panels']));
+        self::assertSame(['آلمان-مرزبان' => 'server', 'هلند-ثنایی' => 'server', 'PasarGuard-FI' => 'server', 'Rebecca-UK' => 'server'], array_map(static fn(array $choice): string => $choice['action'], $zip['proposed']['panels']));
         self::assertSame([], $this->panelCalls, 'reading asks no panel');
 
         self::assertSame(204, $this->deleteJson("/api/admin/imports/{$zip['id']}")->getStatusCode());
@@ -162,8 +173,8 @@ final class FaoximaEndToEndTest extends HttpTestCase
 
         self::assertNotSame($first['id'], $again['id']);
         self::assertSame($shop, $this->shop(), 'not a customer, a balance, a plan, a service, a code or a card brought twice');
-        self::assertSame(4, WalletTransaction::query()->count(), 'each balance credited once');
-        self::assertSame(['customers' => 6, 'groups' => 2, 'plans' => 4, 'services' => 4, 'discount_codes' => 3, 'gift_codes' => 1, 'cards' => 1], array_filter(array_map(static fn(array $count): int => $count['linked'], $again['counts'])), 'what the first brought, recognised');
+        self::assertSame(5, WalletTransaction::query()->count(), 'each balance credited once');
+        self::assertSame(['customers' => 7, 'groups' => 2, 'plans' => 4, 'services' => 6, 'discount_codes' => 3, 'gift_codes' => 1, 'cards' => 1], array_filter(array_map(static fn(array $count): int => $count['linked'], $again['counts'])), 'what the first brought, recognised');
         self::assertSame(0, array_sum(array_column($again['counts'], 'created')));
         self::assertSame([], $this->panelCalls, 'every service recognised by what it became: no panel asked again');
     }
@@ -212,7 +223,8 @@ final class FaoximaEndToEndTest extends HttpTestCase
             5012345673 => [null, null, 'active', 'customer', 0, null, ['نماینده پیشرفته'], '-125000.00'],
             5012345674 => ['blocked_user', null, 'banned', 'customer', 0, null, [], '0.00'],
             5012345675 => ['mina_ref', null, 'active', 'customer', 15, 5012345671, [], '12000.00'],
-        ], $shop['customers'], "Faoxima's administrator an admin (chosen), its support staff not; the agents in their groups; the reseller bot's customer left out");
+            5012345677 => ['loyal_visitor', null, 'active', 'customer', 0, null, [], '45000.00'],
+        ], $shop['customers'], "Faoxima's administrator an admin (chosen), its support staff not; the agents in their groups; one who last opened Sara's reseller bot (`bottype`) but has a wallet and a purchase here the bot's own; the reseller bot's own customer left out");
         self::assertSame(1730000000, User::query()->where('telegram_id', 5012345671)->sole()->created_at?->getTimestamp(), 'a customer since they joined Faoxima');
 
         self::assertSame([
@@ -220,6 +232,7 @@ final class FaoximaEndToEndTest extends HttpTestCase
             [5012345672, 'credit', '420000.00', '420000.00'],
             [5012345673, 'debit', '125000.00', '-125000.00'],
             [5012345675, 'credit', '12000.00', '12000.00'],
+            [5012345677, 'credit', '45000.00', '45000.00'],
         ], $shop['wallet'], 'each balance a wallet line, the debt a debit below zero');
         self::assertSame(['موجودی منتقل‌شده از Faoxima'], WalletTransaction::query()->distinct()->pluck('description')->all());
         self::assertSame(['نماینده عادی' => true, 'نماینده پیشرفته' => true], $shop['groups'], 'paying agent prices');
@@ -227,7 +240,7 @@ final class FaoximaEndToEndTest extends HttpTestCase
 
         self::assertSame([
             // [category, price, agent price, hours, GB, devices, note, on, servers]
-            'یک ماهه ۵۰ گیگ' => ['ماهانه', '180000.00', '140000.00', 720, 50.0, 2, 'مناسب استفاده روزمره', false, ['آلمان', 'هلند', 'فنلاند']],
+            'یک ماهه ۵۰ گیگ' => ['ماهانه', '180000.00', '140000.00', 720, 50.0, 2, 'مناسب استفاده روزمره', false, ['آلمان', 'هلند', 'فنلاند', 'انگلیس']],
             'سه ماهه ۱۵۰ گیگ' => ['سه ماهه', '450000.00', null, 2160, 150.0, 0, null, false, ['آلمان', 'هلند']],
             'نامحدود یک ماهه' => ['ماهانه', '350000.00', null, 720, 0.0, 1, "بدون محدودیت حجم\nفقط یک کاربر \"همزمان\" - مناسب 'خانواده'", false, ['فنلاند']],
             'پلن ویژه همکاران' => ['ماهانه', '90000.00', null, 720, 40.0, 0, null, false, ['فنلاند']],
@@ -239,7 +252,10 @@ final class FaoximaEndToEndTest extends HttpTestCase
             'sara_x1' => [5012345672, 'هلند', 'یک ماهه ۵۰ گیگ', false, null, 'https://nl.vpnshop.example:2096/sub/sarax1sub', 53687091200, '2030-02-01 00:00:00', false],
             'mina_test' => [5012345675, 'فنلاند', null, true, null, 'https://fi.vpnshop.example/sub/bWluYQ', 104857600, '2030-03-01 00:00:00', true],
             'agent2_9' => [5012345673, 'فنلاند', 'نامحدود یک ماهه', false, 'کار "دفتر"', 'https://fi.vpnshop.example/sub/YWdlbnQy', 0, '2030-04-01 00:00:00', false],
-        ], $shop['services'], 'adopted as the panels have them; bought under the agents\' twin, its plan; the test with none; not the stock config, the removed, the unpaid, Rebecca\'s or the manual sale');
+            'rz_uk' => [5012345671, 'انگلیس', 'یک ماهه ۵۰ گیگ', false, null, 'https://uk.vpnshop.example/sub/' . self::REBECCA_TOKEN, 53687091200, '2030-05-01 00:00:00', false],
+            'loyal_1' => [5012345677, 'آلمان', 'یک ماهه ۵۰ گیگ', false, null, 'https://de.vpnshop.example:8000/sub/bG95YWw', 53687091200, '2030-01-01 00:00:00', false],
+        ], $shop['services'], 'adopted as the panels have them; bought under the agents\' twin, its plan; the test with none; Rebecca\'s by its token link, made whole on the panel\'s address; not the stock config, the removed, the unpaid, the manual sale or the one bought in the reseller bot');
+        self::assertSame(2, Subscription::query()->where('remote_name', 'rz_uk')->value('ip_limit'), "its device limit, which Rebecca's listing leaves out: the user read on its own");
 
         self::assertSame([
             // [type, value, uses, per customer, orders, plans, servers, first purchase, ends, on, note]
@@ -252,13 +268,13 @@ final class FaoximaEndToEndTest extends HttpTestCase
         self::assertSame([[self::CHANNEL['id'], 'کانال اطلاع‌رسانی', 'vpnshop_news']], $shop['channels']);
 
         self::assertSame([
-            'customers' => ['created' => 6, 'linked' => 0, 'skipped' => 1],
-            'balances' => ['created' => 4, 'linked' => 0, 'skipped' => 0],
+            'customers' => ['created' => 7, 'linked' => 0, 'skipped' => 1],
+            'balances' => ['created' => 5, 'linked' => 0, 'skipped' => 0],
             'groups' => ['created' => 2, 'linked' => 0, 'skipped' => 0],
             'servers' => ['created' => 0, 'linked' => 0, 'skipped' => 0],
             'plans' => ['created' => 4, 'linked' => 0, 'skipped' => 0],
             'categories' => ['created' => 2, 'linked' => 0, 'skipped' => 0],
-            'services' => ['created' => 4, 'linked' => 0, 'skipped' => 2],
+            'services' => ['created' => 6, 'linked' => 0, 'skipped' => 1],
             'discount_codes' => ['created' => 3, 'linked' => 0, 'skipped' => 1],
             'gift_codes' => ['created' => 1, 'linked' => 0, 'skipped' => 3],
             'channels' => ['created' => 1, 'linked' => 0, 'skipped' => 0],
@@ -266,13 +282,12 @@ final class FaoximaEndToEndTest extends HttpTestCase
         ], $import['counts']);
         self::assertSame([
             'reseller' => 2,
-            'panel_skipped' => 1,
             'used_up' => 2,
             'agents_only_plan' => 1,
             'multi_use_gift' => 1,
             'card_invalid' => 1,
             'one_customer' => 1,
-        ], array_column($import['problems']['by_reason'], 'count', 'reason'), "the reseller bot's customer and service; Rebecca's service; a discount and a gift code used up");
+        ], array_column($import['problems']['by_reason'], 'count', 'reason'), "the reseller bot's customer and service; a discount and a gift code used up");
     }
 
     /**
@@ -324,7 +339,7 @@ final class FaoximaEndToEndTest extends HttpTestCase
     }
 
     /**
-     * The owner's choices: Faoxima's three panels on the shop's servers, Rebecca's left; its admins and channel too.
+     * The owner's choices: Faoxima's four panels on the shop's servers; its admins and channel too.
      *
      * @return array<string, mixed>
      */
@@ -335,7 +350,7 @@ final class FaoximaEndToEndTest extends HttpTestCase
                 'آلمان-مرزبان' => ['action' => 'server', 'server_id' => $this->germany->id],
                 'هلند-ثنایی' => ['action' => 'server', 'server_id' => $this->netherlands->id],
                 'PasarGuard-FI' => ['action' => 'server', 'server_id' => $this->finland->id],
-                'Rebecca-UK' => ['action' => 'skip', 'server_id' => null],
+                'Rebecca-UK' => ['action' => 'server', 'server_id' => $this->england->id],
             ],
             'admins' => true,
             'channels' => true,
@@ -388,50 +403,10 @@ final class FaoximaEndToEndTest extends HttpTestCase
     }
 
     /**
-     * Continue the import while it is in `$phase`, as the page does.
-     *
-     * @return array<string, mixed> The import as it left it
-     */
-    private function continueWhile(int $id, string $phase): array
-    {
-        for ($step = 0; $step < 50; $step++) {
-            $response = $this->postJson("/api/admin/imports/{$id}/continue");
-            self::assertSame(200, $response->getStatusCode(), (string) $response->getBody());
-            $import = $this->decode($response)['import'];
-            if ($import['phase'] !== $phase) {
-                return $import;
-            }
-        }
-
-        self::fail("Import #{$id} stayed {$phase} after 50 steps.");
-    }
-
-    /**
-     * Step the import while it is in `$phase`, each step spent after `$checks` checks; `$after` sees it after each.
-     *
-     * @param (\Closure(Import): void)|null $after
-     * @return int The steps it took
-     */
-    private function stepWhile(Import $import, ImportPhase $phase, int $checks, ?\Closure $after = null): int
-    {
-        $imports = $this->service(Imports::class);
-        for ($steps = 1; $steps <= 1000; $steps++) {
-            $imports->advance($import, Budget::checks($checks));
-            if ($after !== null) {
-                $after($import);
-            }
-            if ($import->phase !== $phase) {
-                return $steps;
-            }
-        }
-
-        self::fail("Import #{$import->id} stayed {$phase->value} after 1000 steps.");
-    }
-
-    /**
      * Faoxima's panels, answering by address: Marzban signs its admin in (a sudo admin) and lists its users, 3x-ui its
-     * settings and clients, PasarGuard its users — each with the clients Faoxima's live services are, and one that is no
-     * service of its; anything else is a 404, which no import should ask.
+     * settings and clients, PasarGuard its users, Rebecca its admin (sudo), a page of users and one user's detail, as its
+     * Go handlers answer — each with the clients Faoxima's live services are, and one that is no service of its;
+     * anything else is a 404, which no import should ask.
      *
      * @param array<string, mixed> $options
      */
@@ -443,14 +418,23 @@ final class FaoximaEndToEndTest extends HttpTestCase
         $json = static fn(array $body): Response => new Response(200, ['Content-Type' => 'application/json'], (string) json_encode($body));
         $marzban = static fn(string $name, int $limit, int $expire, string $token): array => ['username' => $name, 'status' => 'active', 'used_traffic' => 1073741824, 'data_limit' => $limit, 'expire' => $expire, 'subscription_url' => "/sub/{$token}", 'online_at' => null];
         $pasarguard = static fn(string $name, int $limit, string $expire, string $token): array => ['username' => $name, 'status' => 'active', 'used_traffic' => 0, 'data_limit' => $limit, 'expire' => $expire, 'subscription_url' => "/sub/{$token}", 'online_at' => null];
+        // A Rebecca user as its listing has it (no device limit, no waiting term); its detail adds them.
+        $rebecca = static fn(int $id, string $name, int $limit, int $expire, string $token, string $key): array => [
+            'id' => $id, 'username' => $name, 'status' => 'active', 'used_traffic' => 2147483648, 'lifetime_used_traffic' => 2147483648, 'created_at' => '2024-11-02T10:00:00Z',
+            'expire' => $expire, 'data_limit' => $limit, 'data_limit_reset_strategy' => 'no_reset', 'online_at' => '2026-11-14T08:30:00Z', 'is_online' => false,
+            'service_id' => 1, 'service_name' => 'UK', 'admin_id' => 1, 'admin_username' => 'admin', 'links' => [], 'subscription_url' => "/sub/{$token}",
+            'subscription_urls' => ['primary' => "/sub/{$token}", 'username-key' => "/sub/{$name}/{$key}", 'key' => "/sub/{$key}", 'token' => "/sub/{$token}"], 'group' => null, 'tags' => [],
+        ];
+        $rzUk = $rebecca(7, 'rz_uk', 53687091200, 1903824000, self::REBECCA_TOKEN, '3f1c9a7e5b2d4c6a8e0f1b3d5c7a9e2f');
 
         return new FulfilledPromise(match ($call) {
             'POST de.vpnshop.example/api/admin/token' => $json(['access_token' => 'jwt', 'token_type' => 'bearer']),
             'GET de.vpnshop.example/api/admin' => $json(['username' => 'admin', 'is_sudo' => true, 'telegram_id' => null, 'discord_webhook' => null, 'users_usage' => 0]),
             'GET de.vpnshop.example/api/users' => $json(['users' => [
                 $marzban('5012345671_rz1', 53687091200, 1893456000, 'cnoxMQ'),
+                $marzban('loyal_1', 53687091200, 1893456000, 'bG95YWw'),
                 $marzban('not_from_faoxima', 0, 1893456000, 'b3RoZXI'),
-            ], 'total' => 2]),
+            ], 'total' => 3]),
             'POST nl.vpnshop.example/Xk9pQ/panel/api/setting/all' => $json(['success' => true, 'msg' => '', 'obj' => ['subEnable' => true, 'subPort' => 2096, 'subPath' => '/sub/']]),
             'GET nl.vpnshop.example/Xk9pQ/panel/api/clients/list' => $json(['success' => true, 'msg' => '', 'obj' => [
                 ['email' => 'sara_x1', 'subId' => 'sarax1sub', 'enable' => true, 'totalGB' => 53687091200, 'expiryTime' => 1896134400000, 'traffic' => ['up' => 1, 'down' => 2, 'lastOnline' => 0]],
@@ -460,6 +444,16 @@ final class FaoximaEndToEndTest extends HttpTestCase
                 $pasarguard('mina_test', 104857600, '2030-03-01T00:00:00', 'bWluYQ'),
                 $pasarguard('agent2_9', 0, '2030-04-01T00:00:00', 'YWdlbnQy'),
             ], 'total' => 2]),
+            'GET uk.vpnshop.example/api/admin' => $json(['username' => 'admin', 'role' => 'sudo', 'permissions' => [], 'telegram_id' => null, 'users_usage' => 0]),
+            'GET uk.vpnshop.example/api/users' => $json(['users' => [
+                $rebecca(3, 'not_from_faoxima', 0, 0, 'bm90X2Zyb21fZmFveGltYSwxNzMwMDAwMDAwYbc4Kp2Lm0', '0a1b2c3d4e5f60718293a4b5c6d7e8f9'),
+                $rzUk,
+            ], 'link_templates' => [], 'total' => 2, 'status_breakdown' => ['active' => 2]]),
+            'GET uk.vpnshop.example/api/user/rz_uk' => $json($rzUk + [
+                'credential_key' => '3f1c9a7e5b2d4c6a8e0f1b3d5c7a9e2f', 'flow' => null, 'note' => null, 'telegram_id' => null, 'contact_number' => null, 'sub_updated_at' => null,
+                'sub_last_user_agent' => null, 'on_hold_expire_duration' => null, 'on_hold_timeout' => null, 'ip_limit' => 2, 'speed_limit_kbps' => 0, 'auto_delete_in_days' => null,
+                'proxies' => [], 'excluded_inbounds' => [], 'inbounds' => [], 'next_plans' => [], 'service_host_orders' => [],
+            ]),
             default => new Response(404, ['Content-Type' => 'application/json'], '{"detail":"Not Found"}'),
         });
     }

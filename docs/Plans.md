@@ -226,7 +226,11 @@ plan's other servers still sell.
 
 «پیش‌نمایش» shows every plan's prices before and after, and what keeps a plan from the change: a price that would go
 below zero, or a first-purchase or agent price no longer below the price (change both, or empty it). Nothing is saved
-until «اعمال تغییر», and then every plan changes at once — or none, while one of them cannot take it. Changing a price
+until «اعمال تغییر», which applies **exactly what the preview showed**: every plan changes at once — or none, while one
+of them cannot take it, or its prices moved since the preview (another change meanwhile, or this one applied already).
+Then the refusal names the plans and the preview is dropped: preview again. Any edit to the change drops it too. The
+bot's management does the same, the plans that cannot take it listed first
+([Managing the shop from the bot](Bot-Management.md#the-shop)). Changing a price
 changes the next renewal of the services sold on the plan, as any change of price does.
 
 ## Changing a plan

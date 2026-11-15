@@ -24,7 +24,7 @@ final class BackupFormatsTest extends StagingTestCase
             $read[$file] = $this->read((string) file_get_contents(dirname(__DIR__, 3) . '/Fixtures/imports/faoxima/' . $file));
         }
 
-        self::assertSame(7, count($read['backup-php.sql']['customers']), 'the fixture is read whole');
+        self::assertSame(8, count($read['backup-php.sql']['customers']), 'the fixture is read whole');
         foreach (['backup-mysqldump.sql', 'backup-mariadb.sql'] as $file) {
             self::assertSame($read['backup-php.sql'], $read[$file], $file);
         }

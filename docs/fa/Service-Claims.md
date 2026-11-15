@@ -29,7 +29,9 @@
   آن که کلاینت را مشخص می‌کند ملاک است؛
 - **کانفیگ** — <code dir="ltr">vless://</code>، <code dir="ltr">vmess://</code>، <code dir="ltr">trojan://</code>،
   <code dir="ltr">ss://</code>، <code dir="ltr">hysteria2://</code> (<code dir="ltr">hy2://</code>) یا
-  <code dir="ltr">tuic://</code>: شناسه (id) یا رمز آن ملاک است.
+  <code dir="ltr">tuic://</code>: شناسه (id) یا رمز آن ملاک است. روی سرور Rebecca فقط کانفیگ VLESS یا VMess: رمز
+  کانفیگ Trojan و Shadowsocks آن هشی است که پنل جست‌وجو نمی‌کند، پس آن‌جا لینک اشتراک را بفرستید. روی سرور Remnawave کانفیگ
+  VLESS، Trojan یا Shadowsocks ملاک است ([سرورها](Servers.md#کانکتورها)).
 
 پیام می‌تواند لینک را میان کلمه‌های دیگر داشته باشد، یا چند کانفیگ یک سرویس را: لینک‌هایش با هم خوانده می‌شوند، حداکثر
 پنج‌تا، پس آدرس بی‌ربطی کنار آن‌ها ضرری ندارد.

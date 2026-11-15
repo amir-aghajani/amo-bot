@@ -153,12 +153,14 @@ final class PasarGuardClientTest extends TestCase
         self::assertSame(AuthenticationFailure::Token, $failure->failure);
         self::assertStringContainsString('API Keys', $failure->hint);
         self::assertStringContainsString('5.1', $failure->hint, 'older panels know no API keys');
+        self::assertStringContainsString('Max Requests', $failure->hint, 'a key out of requests, or of an admin switched off, is a 401 too');
 
         $this->panel->raw(self::json(403, ['detail' => 'Permission denied: users.create']));
         $failure = self::failure(fn() => $this->keyClient()->post('/api/user', ['username' => 'a']));
         self::assertInstanceOf(AuthenticationException::class, $failure);
         self::assertSame(AuthenticationFailure::Scope, $failure->failure);
         self::assertSame('Permission denied: users.create', $failure->panelMessage);
+        self::assertStringContainsString('Inherit admin permissions', $failure->hint, 'the key\'s own switch, in the panel\'s words');
     }
 
     public function testAnAdminWithoutTheRightsGetsThePanelsReason(): void
@@ -170,6 +172,90 @@ final class PasarGuardClientTest extends TestCase
         self::assertInstanceOf(PasarGuardApiException::class, $failure);
         self::assertSame(403, $failure->httpStatus);
         self::assertSame('Permission denied: groups.read', $failure->panelMessage);
+        self::assertStringContainsString('administrator', $failure->hint, 'its role lacks it: another role is the remedy');
+    }
+
+    /**
+     * A 403 is a key without the right only when PasarGuard says "Permission denied": its other 403s refuse the call
+     * whichever way the shop came in — an admin out of traffic, a role that makes users from templates only.
+     */
+    public function testA403ThatIsNoMissingPermissionIsTheCallsRefusalEitherWayIn(): void
+    {
+        foreach ([
+            'Admin is limited — write actions blocked' => 'limited',
+            'Admin is limited — all access blocked' => 'limited',
+            'Manual user create/modify is not allowed for your role' => 'Require template',
+        ] as $detail => $hint) {
+            foreach ([
+                'a key' => [fn(): PasarGuardClient => $this->keyClient(), []],
+                'an admin' => [fn(): PasarGuardClient => $this->passwordClient(), [self::token('jwt')]],
+            ] as $way => [$client, $signIn]) {
+                $this->panel->raw(...$signIn, ...[self::json(403, ['detail' => $detail])]);
+
+                $failure = self::failure(fn() => $client()->post('/api/user', ['username' => 'amir_1']));
+
+                self::assertInstanceOf(PasarGuardApiException::class, $failure, "{$way}: {$detail}");
+                self::assertSame(403, $failure->httpStatus);
+                self::assertStringContainsString($hint, $failure->hint, "{$way}: {$detail}");
+                self::assertFalse($failure->hidesAnothersClient(), "{$way}: {$detail} is no other admin's user");
+                // All access blocked, the admin can do nothing until given traffic: the server is out of use.
+                self::assertSame($detail === 'Admin is limited — all access blocked', $failure->unavailable(), "{$way}: {$detail}");
+            }
+        }
+    }
+
+    /** Only 3.x–4.x's "You're not allowed" hides another admin's user; a permission the admin's role lacks does not. */
+    public function testOnlyAnotherAdminsUserIsANameTakenBehindA403(): void
+    {
+        foreach (["You're not allowed" => true, 'Permission denied: users.read' => false] as $detail => $hidden) {
+            $this->panel->raw(self::token('jwt'), self::json(403, ['detail' => $detail]));
+
+            $failure = self::failure(fn() => $this->passwordClient()->get('/api/user/by-username/amir_1'));
+
+            self::assertInstanceOf(PasarGuardApiException::class, $failure, $detail);
+            self::assertSame($hidden, $failure->hidesAnothersClient(), $detail);
+            self::assertFalse($failure->unavailable(), $detail);
+        }
+    }
+
+    public function testAnAdminSwitchedOffAfterItSignedInIsAnAuthenticationFailure(): void
+    {
+        $this->panel->raw(self::token('jwt'), self::json(200, ['users' => []]), self::json(403, ['detail' => 'your account has been disabled']));
+        $client = $this->passwordClient();
+        $client->get('/api/users');
+
+        $failure = self::failure(fn() => $client->get('/api/users'));
+
+        self::assertInstanceOf(AuthenticationException::class, $failure, 'the panel cannot be used at all: no refusal of one call');
+        self::assertSame(AuthenticationFailure::Login, $failure->failure, 'as its sign-in would be refused now');
+        self::assertStringContainsString('Admins', $failure->hint);
+    }
+
+    /**
+     * What a role (or the admin itself) limits, or demands of every user, is the role's to change: the refusal says so.
+     * Before 5.0, a non-sudo admin is refused another admin's user.
+     */
+    public function testTheRolesRefusalsSayWhatToChangeOnThePanel(): void
+    {
+        foreach ([
+            [400, 'User limit reached (10)', 'تعداد'],
+            [400, 'Data limit cannot be unlimited; maximum is 50.0 GB', 'حجم'],
+            [400, 'Expire cannot exceed 30 days from now', 'مدت'],
+            [400, 'On-hold duration cannot exceed 30 days', 'مدت'],
+            [400, 'On-hold timeout cannot be unlimited; maximum is 1 day from now', 'On-hold timeout'],
+            [400, 'HWID limit cannot be unlimited; maximum is 3', 'HWID'],
+            [404, 'Group not found', 'Allowed groups'],
+            [403, "You're not allowed", 'sudo'],
+            [409, 'User already exists', ''],
+        ] as [$status, $detail, $hint]) {
+            $this->panel->raw(self::json($status, ['detail' => $detail]));
+
+            $failure = self::failure(fn() => $this->keyClient()->post('/api/user', ['username' => 'amir_1']));
+
+            self::assertInstanceOf(PasarGuardApiException::class, $failure, $detail);
+            self::assertSame([$status, $detail], [$failure->httpStatus, $failure->panelMessage]);
+            $hint === '' ? self::assertSame('', $failure->hint, $detail) : self::assertStringContainsString($hint, $failure->hint, $detail);
+        }
     }
 
     public function testOnlyTheUserNotFoundAnswerMeansNoSuchUser(): void

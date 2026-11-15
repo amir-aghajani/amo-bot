@@ -97,10 +97,15 @@ open a ticket.
   manages a customer from their card (`/manage`: services, wallet, a service by hand, discount, groups, role, ban) —
   and, in the main bot's group, decides agency requests
   ([Report group](Telegram-Group.md));
-- works the shop's daily work on its website, while the website lets its admins in ([Website](Website.md#the-shops-admins)).
+- works the shop's daily work on its website, while the website lets its admins in ([Website](Website.md#the-shops-admins));
+- manages the shop from the bot's private chat — «⚙️ مدیریت» or `/admin` —, the daily work and what you grant, while
+  «تنظیمات ربات › مدیران ربات» lets them in ([Managing the shop from the bot](Bot-Management.md#the-shops-admins)).
 
-The role is given and taken here, or by another bot admin from a customer's card in the report group
-([A customer's card](Telegram-Group.md#a-customers-card)) — never from the website. The card never makes an admin of a
+The role is given and taken here, by you or the agent from a customer's page in the bot's management («🛡 مدیر ربات
+کردن»), or by another bot admin from a customer's card in the report group
+([A customer's card](Telegram-Group.md#a-customers-card)) — never from the website, and never by an admin in the bot's
+management. Your own Telegram account is made one when you link it from «تنظیمات پنل › ورود به پنل › مدیریت از ربات»,
+and is one no more when you let it go there — unless it was an admin before. The card never makes an admin of a
 customer with their own discount or in a «همکار» group: an admin's prices are yours to lower, so that is done here. To
 make yourself one, start the bot from your own Telegram account first, then find yourself in the list; «نقش › مدیران
 ربات» lists the admins. An agent is made the admin of their own bot by itself, the first time they write to it. The

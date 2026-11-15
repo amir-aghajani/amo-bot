@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Settings\Services;
 
 use App\Core\Exceptions\ValidationException;
+use App\Core\Forms\Fields\Field;
 use App\Core\Forms\Form;
 use App\Modules\Settings\DeclaresSettings;
 use App\Modules\Settings\Exceptions\UnknownGroupException;
@@ -50,6 +51,24 @@ final class BotSettingsScreen
                 $this->settings->save($declared, $input);
 
                 return;
+            }
+        }
+
+        throw new UnknownGroupException();
+    }
+
+    /**
+     * The names of `$group`'s fields, in order: what a save of the group sends (the bot's management screens send the
+     * whole group with one field changed).
+     *
+     * @return list<string>
+     * @throws UnknownGroupException
+     */
+    public function names(string $group): array
+    {
+        foreach ($this->groups() as $declared) {
+            if ($declared->key === $group) {
+                return array_map(static fn(Field $field): string => $field->name, $declared->fields);
             }
         }
 

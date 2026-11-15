@@ -21,8 +21,8 @@ final class WiringTest extends DatabaseTestCase
     {
         $migrators = $this->app()->container()->get('import.migrators');
         self::assertInstanceOf(Registry::class, $migrators);
-        self::assertSame(['faoxima'], array_map(static fn(Driver $migrator): string => $migrator->key(), $migrators->all()));
-        self::assertSame(['faoxima'], array_map(static fn(Driver $migrator): string => $migrator->key(), $this->service(Imports::class)->migrators()));
+        self::assertSame(['faoxima', 'mirzabot'], array_map(static fn(Driver $migrator): string => $migrator->key(), $migrators->all()));
+        self::assertSame(['faoxima', 'mirzabot'], array_map(static fn(Driver $migrator): string => $migrator->key(), $this->service(Imports::class)->migrators()));
     }
 
     public function testTheImportsArePrunedDaily(): void

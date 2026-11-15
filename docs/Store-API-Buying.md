@@ -54,7 +54,9 @@ In checkout order, as the bot offers them. `kind: "instant"` is the wallet — p
 credit counting); `"manual"` is a card-to-card transfer and its receipt; `"online"` is an online gateway, paid on its own
 page ([paying online](#paying-online)). A way of paying whose driver is no longer installed is never offered (an earlier
 payment made with one shows it in its order with `kind: null`). The wallet pays every kind of order but a top-up.
-`for` is required: anything but the six kinds is `422` on `for`.
+A gateway whose payer is a Telegram account (Rialit) is never listed for a customer without one — signed in by SMS
+alone —, and paying with it anyway is a `422` on `method_id`, nothing ordered. `for` is required: anything but the six
+kinds is `422` on `for`.
 
 Each way is offered for the amounts between its `min_amount` and `max_amount` (Toman; `null`: no bound).
 
@@ -682,8 +684,8 @@ top-ups, so each transfer is a different amount and its receipt is told apart: `
 the whole of it lands on the balance once approved.
 
 Paid online, the gateway's page may ask more than `amount` — a few Toman of the gateway's own, to tell its transfers
-apart, and the gateway's fee the shop passes on to customers (`link.fee`): show `link.amount` as what to pay (Variza's
-and Plisio's pages ask in their own terms: [paying online](#paying-online)). `amount` — the order's, and its
+apart, and the gateway's fee the shop passes on to customers (`link.fee`): show `link.amount` as what to pay (Variza's,
+Plisio's and Rikhtam's pages ask in their own terms: [paying online](#paying-online)). `amount` — the order's, and its
 payment's — is what lands on the balance once the gateway says it was paid; the rest is the gateway's.
 
 ## What a checkout answers
@@ -1068,23 +1070,27 @@ gateway's own page, and the gateway tells the shop. Its checkout answers `link`,
 ```
 
 - `url` — where the customer pays. Open it for them in a new tab, so the order's page stays behind it. It is one of:
-  - the gateway's own page (CubePay, Zarinpal, AbanGateway, Plisio, Variza);
+  - the gateway's own page (CubePay, Zarinpal, AbanGateway, Plisio, Variza, Bluepal, Rialit, Rikhtam's crypto);
   - for AqayePardakht, a short page on the shop's own address, whose button leads on to the bank's page: the bank opens
     its page only for a visitor coming from the domain registered for the gateway — the shop's —, which your site is not;
   - a Telegram link (`https://t.me/…`, AtlasPay's mini app): the customer pays in Telegram.
 
-  Once they have paid (or given up), Zarinpal, AqayePardakht and Variza — and AbanGateway and Plisio, on a shop served
-  over `https://` — send the customer's browser back to the shop's own address, never to a page of your choosing. That
+  Once they have paid (or given up), Zarinpal, AqayePardakht, Variza and Bluepal — and AbanGateway, Plisio and
+  Rikhtam's crypto, on a shop served over `https://` — send the customer's browser back to the shop's own address (by
+  a link or a posted form alike), never to a page of your choosing (Rialit sends them back nowhere: your page, behind,
+  is where they return). That
   page shows what came of it, with the way back to the bot for a customer with a Telegram account; one without is told
   to look at their account on the site, and given no link. Your own page, behind, learns the outcome with
   `POST /payments/{id}/check` or `GET /orders/{id}`.
 - `amount` — what to pay, in Toman: the payment's own, or more when the gateway adds a few Toman to tell its transfers
-  apart (above: 37) or passes on its fee (`fee`). Show this one as what they pay. Two gateways' pages ask in their own
-  terms: Variza's asks a few Toman more of its own, and Plisio's asks the sum in the coin the customer picks. The order's
+  apart (above: 37) or passes on its fee (`fee`). Show this one as what they pay. Three gateways' pages ask in their own
+  terms: Variza's asks a few Toman more of its own, and Plisio's and Rikhtam's ask the sum in the coin the customer
+  picks. The order's
   `amount` is what they bought, and what a top-up adds to the wallet. `amount_rial` is the same in Rial (ten to the Toman),
   the digits a banking app takes: copy it for a transfer to `card`.
 - `fee` — of `amount`, the gateway's fee the customer pays, in Toman (`null` for none): the one the shop passes on
-  (CubePay), Zarinpal's when the merchant set the payer to pay it, or AtlasPay's markup on the order's amount. Say it
+  (CubePay), Zarinpal's or Rialit's when the merchant set the payer to pay it, or AtlasPay's markup on the order's
+  amount. Say it
   beside the sum, as the bot does: «شامل ۲٬۰۰۰ تومان کارمزد درگاه».
 - `expires_at` — until when the page takes money: the gateway's own end, or the time the shop keeps its page when the
   gateway gives none. A countdown may show it.
@@ -1100,7 +1106,7 @@ of the payment — it never takes the call's word for it —, and asks it every 
 page closed (48 hours while the gateway says money came in on it that it has not settled yet: a receipt in review, a
 sum paid in part) — the defaults of the owner's [«زمان‌بندی کارها»](Running-In-Production.md#the-task-schedule). Variza
 answers no question: its word is its webhook, which the shop believes only when it is signed
-with the merchant's secret. A payment the gateway says was paid is settled at once — the order paid and delivered, as a card
+with the merchant's secret; Rialit's webhook, which nothing signs, only makes the shop ask it. A payment the gateway says was paid is settled at once — the order paid and delivered, as a card
 payment approved is ([the review](#the-review)) — and the customer gets a `payment_settled` notice. Meanwhile read
 `GET /orders/{id}` every 15–30 seconds while the order's page is open, until it is `fulfilled`, `failed` or `cancelled`
 or its payment `failed`. Offer a button that asks the gateway now — the bot's is «🔄 بررسی پرداخت» —, or ask as the

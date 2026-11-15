@@ -5,11 +5,13 @@ declare(strict_types=1);
 namespace Tests\Unit\Providers\PasarGuard;
 
 use App\Modules\Providers\Contracts\ProviderInterface;
+use App\Modules\Providers\Drivers\PasarGuard\PasarGuardApiException;
 use App\Modules\Providers\Drivers\PasarGuard\PasarGuardDriver;
 use App\Modules\Providers\DTO\ClientInfo;
 use App\Modules\Providers\DTO\ClientLink;
 use App\Modules\Providers\DTO\ClientSpec;
 use App\Modules\Providers\DTO\Expiry;
+use App\Modules\Providers\DTO\InboundInfo;
 use App\Modules\Providers\Enums\CoreState;
 use App\Modules\Providers\Exceptions\NotFoundException;
 use App\Modules\Providers\Exceptions\ProviderException;
@@ -68,11 +70,12 @@ final class PasarGuardProviderTest extends TestCase
             'group_ids' => [3, 5],
             'data_limit' => 30 * 1024 ** 3,
             'data_limit_reset_strategy' => 'no_reset',
+            'auto_delete_in_days' => -1,
             'status' => 'on_hold',
             'expire' => 0,
             'on_hold_expire_duration' => self::MONTH,
             'note' => '42 | amir',
-        ], $this->panel->params(0), 'no IP limit (the panel has none), no credentials (the panel mints them)');
+        ], $this->panel->params(0), 'never deleted by the panel\'s own clean-up; no IP limit (the panel has none), no credentials (the panel mints them)');
 
         self::assertSame('amir_1', $client->name);
         self::assertTrue($client->enabled);
@@ -99,6 +102,18 @@ final class PasarGuardProviderTest extends TestCase
         self::assertSame(0, $this->panel->params(1)['expire']);
         self::assertArrayNotHasKey('note', $this->panel->params(1), 'nothing to say leaves the note alone');
         self::assertSame([null, null], [$never->expiry->deadline(), $never->expiry->pendingSeconds()]);
+        self::assertSame([-1, -1], [$this->panel->params(0)['auto_delete_in_days'], $this->panel->params(1)['auto_delete_in_days']], 'never removed by the panel\'s clean-up of ended users (crud.autodelete_expired_users skips a negative day count, whatever the panel\'s own setting): the shop removes them itself');
+    }
+
+    public function testANoteIsCutToWhatPasarGuardKeeps(): void
+    {
+        $provider = $this->provider([self::json(201, self::user()), self::json(200, self::user())]);
+
+        $provider->createClient(['3'], new ClientSpec('amir_1', comment: str_repeat('ی', 600)));
+        $provider->updateClient(new ClientSpec('amir_1', comment: str_repeat('a', 501)));
+
+        self::assertSame(500, mb_strlen($this->panel->params(0)['note']), 'PasarGuard refuses a note over 500 characters (its user models\' max_length)');
+        self::assertSame(str_repeat('a', 500), $this->panel->params(1)['note']);
     }
 
     public function testAClientWantedSwitchedOffIsSwitchedOffAsItIsMade(): void
@@ -153,10 +168,22 @@ final class PasarGuardProviderTest extends TestCase
         $provider->updateClient(new ClientSpec('amir_1'));
 
         self::assertSame(['PUT /api/user/by-username/amir_1', 'PUT /api/user/by-username/amir_1'], $this->panel->calls());
-        self::assertSame(['data_limit' => 60 * 1024 ** 3, 'status' => 'on_hold', 'expire' => 0, 'on_hold_expire_duration' => 2 * self::MONTH, 'note' => '42 | amir'], $this->panel->params(0));
+        self::assertSame(['data_limit' => 60 * 1024 ** 3, 'data_limit_reset_strategy' => 'no_reset', 'status' => 'on_hold', 'expire' => 0, 'on_hold_expire_duration' => 2 * self::MONTH, 'note' => '42 | amir'], $this->panel->params(0));
         self::assertSame(60 * 1024 ** 3, $client->totalBytes);
         // Unlimited and endless: 0 for each; no comment leaves the panel's note alone.
-        self::assertSame(['data_limit' => 0, 'status' => 'active', 'expire' => 0], $this->panel->params(1));
+        self::assertSame(['data_limit' => 0, 'data_limit_reset_strategy' => 'no_reset', 'status' => 'active', 'expire' => 0], $this->panel->params(1));
+    }
+
+    public function testAnUpdateDropsAResetScheduleThePanelKept(): void
+    {
+        // An adopted user, its quota reset every month by the panel: the shop's quota is once a term.
+        $monthly = self::user(['status' => 'active', 'expire' => '2030-01-01T00:00:00Z', 'on_hold_expire_duration' => null, 'data_limit_reset_strategy' => 'month']);
+        $provider = $this->provider([self::json(200, ['data_limit_reset_strategy' => 'no_reset'] + $monthly)]);
+
+        $provider->updateClient(new ClientSpec('amir_1', 10, Expiry::at(new \DateTimeImmutable('2030-01-01 00:00:00', new \DateTimeZone('UTC')))));
+
+        self::assertSame(['PUT /api/user/by-username/amir_1'], $this->panel->calls(), 'no read first: the strategy is sent whatever the user had');
+        self::assertSame(['data_limit' => 10, 'data_limit_reset_strategy' => 'no_reset', 'status' => 'active', 'expire' => 1893456000], $this->panel->params(0), 'the panel\'s monthly reset replaced by none — which even a role that may not pick a strategy may send');
     }
 
     public function testAnUpdateOfAUserKeptOffSendsItDisabledWithItsTerm(): void
@@ -170,15 +197,16 @@ final class PasarGuardProviderTest extends TestCase
         $provider->updateClient(new ClientSpec('amir_1', 10, Expiry::at(new \DateTimeImmutable('2026-11-01 00:00:00', new \DateTimeZone('UTC'))), enabled: false));
 
         // A term still waiting keeps its duration, for the switch to put it back on hold.
-        self::assertSame(['data_limit' => 10, 'status' => 'disabled', 'expire' => 0, 'on_hold_expire_duration' => self::MONTH], $this->panel->params(0));
+        self::assertSame(['data_limit' => 10, 'data_limit_reset_strategy' => 'no_reset', 'status' => 'disabled', 'expire' => 0, 'on_hold_expire_duration' => self::MONTH], $this->panel->params(0));
         self::assertFalse($client->enabled);
-        self::assertSame(['data_limit' => 10, 'status' => 'disabled', 'expire' => 1793491200], $this->panel->params(1));
+        self::assertSame(['data_limit' => 10, 'data_limit_reset_strategy' => 'no_reset', 'status' => 'disabled', 'expire' => 1793491200], $this->panel->params(1));
     }
 
     /**
-     * PasarGuard's API cannot clear a duration, so one stays on a user whose waiting term was replaced; and PasarGuard
-     * puts a switched-off user that keeps one back on hold when it is switched on. An unlimited service switched off and
-     * switched back on with its term is put active from there: unlimited it stays.
+     * PasarGuard's API cannot clear a duration (0 reads as "no change", and a negative one is refused: unlike Marzban's,
+     * its field is `ge=0`), so one stays on a user whose waiting term was replaced; and PasarGuard 5.1+ puts a switched-off
+     * user that keeps one back on hold when it is switched on. An unlimited service switched off and switched back on with
+     * its term is put active from there: unlimited it stays.
      */
     public function testAnUnlimitedServiceSwitchedBackOnWithItsTermStaysUnlimited(): void
     {
@@ -191,7 +219,7 @@ final class PasarGuardProviderTest extends TestCase
         $client = $provider->updateClient(new ClientSpec('amir_1', 0, Expiry::never()));
 
         self::assertSame(['PUT /api/user/by-username/amir_1', 'PUT /api/user/by-username/amir_1'], $this->panel->calls());
-        self::assertSame(['data_limit' => 0, 'status' => 'active', 'expire' => 0], $this->panel->params(0));
+        self::assertSame(['data_limit' => 0, 'data_limit_reset_strategy' => 'no_reset', 'status' => 'active', 'expire' => 0], $this->panel->params(0), 'no duration sent: a negative one would be refused');
         self::assertSame(['status' => 'active'], $this->panel->params(1), 'from on hold, the panel takes "active" as asked');
         self::assertTrue($client->enabled);
         self::assertSame([null, null], [$client->expiry->deadline(), $client->expiry->pendingSeconds()], 'no end at all, the leftover no term');
@@ -429,15 +457,55 @@ final class PasarGuardProviderTest extends TestCase
 
     public function testAPrefixTheOwnerPutBeforeTheLinksIsNotThePanelsPath(): void
     {
+        $own = 'dGVzdC10b2tlbi1zaWduZWQx.c2ln';
         $provider = $this->provider([
-            // Links under a proxy's path (the owner's prefix): the panel itself serves them at /sub.
-            self::json(200, ['users' => [self::user(['subscription_url' => 'https://cdn.example.com/vpn/links/sub/dGVzdA.sig'])], 'total' => 1]),
-            self::json(200, ['username' => 'amir_1']),
+            // Links under the panel's subscription URL prefix with a path of its own: the panel serves them at /sub.
+            self::json(200, ['users' => [self::user(['subscription_url' => "https://cdn.example.com/vpn/links/sub/{$own}"])], 'total' => 1]),
+            self::json(404, ['detail' => 'Not Found']),  // /vpn/links/sub: the owner's prefix
+            self::json(404, ['detail' => 'Not Found']),  // /links/sub
+            self::json(200, ['username' => 'amir_1']),   // /sub: the user whose link it is
+            self::json(200, ['username' => 'amir_1']),   // the customer's token
             self::json(200, self::user()),
         ]);
 
         self::assertSame('amir_1', $provider->findClientByLink(self::link('https://cdn.example.com/vpn/links/sub/' . self::TOKEN))?->name);
-        self::assertSame('GET /sub/' . self::TOKEN . '/info', $this->panel->calls()[1], 'only the folder the token is in');
+        self::assertSame([
+            'GET /api/users',
+            "GET /vpn/links/sub/{$own}/info",
+            "GET /links/sub/{$own}/info",
+            "GET /sub/{$own}/info",
+            'GET /sub/' . self::TOKEN . '/info',
+            'GET /api/user/by-username/amir_1',
+        ], $this->panel->calls(), 'the folders before the token tried longest first, with the listed user\'s own token: the one answering with that user is the panel\'s');
+        foreach ([1, 2, 3, 4] as $public) {
+            self::assertFalse($this->panel->request($public)->hasHeader('X-Api-Key'), 'asked as a client app asks');
+        }
+    }
+
+    public function testASubscriptionPathOfSeveralFoldersIsFound(): void
+    {
+        $own = 'dGVzdC10b2tlbi1zaWduZWQx.c2ln';
+        $provider = $this->provider([
+            // The panel's XRAY_SUBSCRIPTION_PATH is "my/subs", its links paths.
+            self::json(200, ['users' => [self::user(['username' => 'zed_9', 'subscription_url' => "/my/subs/{$own}"])], 'total' => 1]),
+            self::json(200, ['username' => 'zed_9']),
+            self::json(200, ['username' => 'amir_1']),
+            self::json(200, self::user()),
+        ]);
+
+        self::assertSame('amir_1', $provider->findClientByLink(self::link('https://pg.example:8000/my/subs/' . self::TOKEN))?->name);
+        self::assertSame(['GET /api/users', "GET /my/subs/{$own}/info", 'GET /my/subs/' . self::TOKEN . '/info', 'GET /api/user/by-username/amir_1'], $this->panel->calls());
+
+        // No folder answering with the listed user: no path, so no customer's token is shown anywhere.
+        $provider = $this->provider([
+            self::json(200, ['users' => [self::user(['subscription_url' => "/a/b/c/d/{$own}"])], 'total' => 1]),
+            self::json(404, ['detail' => 'Not Found']),
+            self::json(200, ['username' => 'someone_else']),
+            self::json(403, ['detail' => 'Invalid subscription token']),
+        ]);
+
+        self::assertNull($provider->findClientByLink(self::link('https://pg.example:8000/a/b/c/d/' . self::TOKEN)));
+        self::assertSame(['GET /api/users', "GET /b/c/d/{$own}/info", "GET /c/d/{$own}/info", "GET /d/{$own}/info"], $this->panel->calls(), 'the last three folders at most');
     }
 
     public function testAMessageWithALinkAndAConfigShowsTheLinksTokenFirst(): void
@@ -572,7 +640,7 @@ final class PasarGuardProviderTest extends TestCase
         $provider->setClientEnabled('amir_1', false);
         self::assertSame(['status' => 'disabled'], $this->panel->params(0));
 
-        // Never connected: back on hold with its term — a panel before 5.0 would make plain "active" endless.
+        // Never connected: back on hold with its term — a panel before 5.1 would make plain "active" endless.
         $provider->setClientEnabled('amir_1', true);
         self::assertSame(['GET /api/user/by-username/amir_1', 'PUT /api/user/by-username/amir_1'], array_slice($this->panel->calls(), 1, 2));
         self::assertSame(['status' => 'on_hold', 'on_hold_expire_duration' => self::MONTH], $this->panel->params(2));
@@ -587,17 +655,36 @@ final class PasarGuardProviderTest extends TestCase
         self::assertCount(6, $this->panel->calls());
     }
 
-    public function testDeleteAndResetAddressTheUserByName(): void
+    /**
+     * One DELETE by name, whoever owns the user: PasarGuard reads the user before it deletes it and takes it off its nodes
+     * in the background, so it has no failure after a delete done (Marzban 0.8.2–0.8.4's 500 for a user no admin owns).
+     */
+    public function testDeleteIsOneCallByNameAndAUserThePanelDoesNotHaveIsNotFound(): void
     {
-        $provider = $this->provider([new Response(204), self::json(200, self::user()), self::json(404, ['detail' => 'User not found'])]);
+        $provider = $this->provider([new Response(204), self::json(404, ['detail' => 'User not found'])]);
 
         $provider->deleteClient('amir_1');
-        $provider->resetClientTraffic('amir_1');
-
-        self::assertSame(['DELETE /api/user/by-username/amir_1', 'POST /api/user/by-username/amir_1/reset'], $this->panel->calls());
+        self::assertSame(['DELETE /api/user/by-username/amir_1'], $this->panel->calls());
+        self::assertSame('', (string) $this->panel->request(0)->getBody(), 'the delete takes no body');
 
         $this->expectException(NotFoundException::class);
         $provider->deleteClient('amir_1');
+    }
+
+    /**
+     * Before 5.1 PasarGuard's reset makes every user but an expired or switched-off one active (crud.reset_user_data_usage:
+     * `status not in [expired, disabled]`), so one on hold would run with no end at all: it goes back on hold with its
+     * term. From 5.1 the reset makes only a limited user active, and nothing more is sent.
+     */
+    public function testAResetIsOnePostTheTermIsSentAfter(): void
+    {
+        // A panel before 5.1 makes an on-hold user active on a reset; the update that follows it puts the term back.
+        $provider = $this->provider([self::json(200, self::user(['status' => 'active', 'used_traffic' => 0]))]);
+
+        $provider->resetClientTraffic('amir_1');
+
+        self::assertSame(['POST /api/user/by-username/amir_1/reset'], $this->panel->calls());
+        self::assertSame('', (string) $this->panel->request(0)->getBody(), 'the reset takes no body');
     }
 
     public function testRotatingRevokesTheSubscriptionAndAnswersTheNewLink(): void
@@ -642,6 +729,61 @@ final class PasarGuardProviderTest extends TestCase
         self::assertFalse($old->enabled, 'a switch as loosely typed as any');
     }
 
+    /**
+     * PasarGuard's built-in operator role — which every non-sudo admin became in 5.0 — may "View simple list" of groups
+     * but not "View" them: its GET /api/groups is a 403. Its groups come from the simple list, ids and names alone, each
+     * read as on; the same for a key whose own permissions give that list only.
+     */
+    public function testARoleThatSeesOnlyTheGroupsSimpleListSellsThoseGroups(): void
+    {
+        $simple = self::json(200, ['groups' => [['id' => 3, 'name' => 'VIP'], ['id' => 5, 'name' => 'Germany']], 'total' => 2]);
+        foreach ([
+            'an operator admin' => [['username' => 'reseller', 'password' => 'pw', 'api_token' => null], [self::json(200, ['access_token' => 'jwt', 'token_type' => 'bearer'])], ['POST /api/admin/token']],
+            'a key with its own permissions' => [[], [], []],
+        ] as $case => [$columns, $signIn, $signedIn]) {
+            $provider = $this->provider([...$signIn, self::json(403, ['detail' => 'Permission denied: groups.read']), $simple], columns: $columns);
+
+            $groups = $provider->listInbounds();
+
+            self::assertSame([...$signedIn, 'GET /api/groups', 'GET /api/groups/simple'], $this->panel->calls(), $case);
+            self::assertSame([['3', 'VIP', '', true, 0], ['5', 'Germany', '', true, 0]], array_map(static fn(InboundInfo $group): array => [$group->key, $group->remark, $group->tag, $group->enabled, $group->clientCount], $groups), "{$case}: no inbound tags, users or switch in the simple list");
+        }
+    }
+
+    public function testAGroupsRefusalThatIsNoMissingPermissionIsNoReasonForTheSimpleList(): void
+    {
+        $provider = $this->provider([self::json(403, ['detail' => 'Admin is limited — all access blocked'])]);
+
+        try {
+            $provider->listInbounds();
+            self::fail('the admin is out of traffic');
+        } catch (PasarGuardApiException $e) {
+            self::assertSame(403, $e->httpStatus);
+            self::assertStringContainsString('limited', $e->hint);
+        }
+        self::assertSame(['GET /api/groups'], $this->panel->calls(), 'the simple list would be refused the same');
+    }
+
+    /**
+     * Before 5.0 a non-sudo admin is refused another admin's user (403 "You're not allowed"): a refusal with what to do,
+     * which the sync logs without marking the service deleted. From 5.0 a role that reads only its own users is told "User
+     * not found" for it — the panel hides it —, so it reads as gone.
+     */
+    public function testAnotherAdminsUserIsRefusedBefore50AndHiddenFrom50(): void
+    {
+        $provider = $this->provider([self::json(403, ['detail' => "You're not allowed"]), self::json(404, ['detail' => 'User not found'])]);
+
+        try {
+            $provider->findClient('amir_1');
+            self::fail('a non-sudo admin sees only its own users');
+        } catch (PasarGuardApiException $e) {
+            self::assertSame(403, $e->httpStatus, 'the code ProvisioningService::taken() reads as a name taken');
+            self::assertStringContainsString('sudo', $e->hint);
+        }
+
+        self::assertNull($provider->findClient('amir_1'), 'hidden: nothing tells it from a user deleted');
+    }
+
     public function testStatusIsTheHostsVitalsWithTheCoreUnknown(): void
     {
         $provider = $this->provider([self::json(200, [
@@ -671,15 +813,16 @@ final class PasarGuardProviderTest extends TestCase
     /**
      * @param list<Response> $responses
      * @param array<string, mixed> $meta
+     * @param array<string, mixed> $columns The server's own, over its API key (an admin's username and password instead)
      */
-    private function provider(array $responses, array $meta = []): ProviderInterface
+    private function provider(array $responses, array $meta = [], array $columns = []): ProviderInterface
     {
         $this->app(); // registers the encrypter the Server casts need
 
         $this->panel = new FakePanel();
         $this->panel->raw(...$responses);
 
-        $server = new Server([
+        $server = new Server($columns + [
             'name' => 'PG',
             'driver' => 'pasarguard',
             'base_url' => 'https://pg.example:8000',

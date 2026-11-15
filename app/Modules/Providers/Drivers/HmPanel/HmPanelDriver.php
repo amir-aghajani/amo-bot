@@ -50,7 +50,7 @@ final class HmPanelDriver implements PanelDriver
                     token: 'کلید API',
                     tokenHint: 'در «تنظیمات ← API» پنل کلیدی با دسترسی * بسازید (یا با clients.read، clients.write، clients.renew و inbounds.read). پنل کلید را فقط یک بار نشان می‌دهد.',
                     tokenPattern: self::KEY_PATTERN,
-                    tokenMismatch: 'کلید API باید کامل باشد و با hmp_ شروع شود؛ پنل آن را فقط یک بار، همان لحظه ساخت نشان می‌دهد.',
+                    tokenMismatch: "کلید API باید کامل باشد و با \u{2068}hmp_\u{2069} شروع شود؛ پنل آن را فقط یک بار، همان لحظه ساخت نشان می‌دهد.",
                     loginHint: null,
                 ),
                 ...PanelConnection::options(

@@ -18,6 +18,7 @@ final class ImportRefusedException
     // «.sql» is set apart (U+2068…U+2069): in a right-to-left line it would read «sql.».
     public const NOT_A_DUMP = "این فایل، پشتیبان دیتابیس نیست؛ فایل \u{2068}.sql\u{2069} پشتیبان ربات قبلی را بارگذاری کنید، یا zip یا gz آن را.";
     public const NO_SQL_IN_ZIP = "در این فایل zip هیچ فایل \u{2068}.sql\u{2069} پیدا نشد.";
+    public const ENCRYPTED_ZIP = "این فایل zip رمز دارد؛ آن را با رمزش باز کنید و فایل \u{2068}.sql\u{2069} داخلش را بارگذاری کنید، یا از phpMyAdmin خروجی بگیرید.";
     public const BROKEN = 'این فایل ناقص است یا خراب شده و تا آخر خوانده نشد؛ پشتیبان را دوباره بگیرید و بارگذاری کنید.';
     public const NO_ZIP = "افزونه zip روی این هاست فعال نیست؛ فایل \u{2068}.sql\u{2069} را از داخل zip دربیاورید و همان را بارگذاری کنید.";
     public const NO_SPACE = 'فضای خالی هاست برای نگه داشتن و باز کردن این فایل کافی نیست؛ کمی جا باز کنید و دوباره امتحان کنید.';
@@ -37,6 +38,13 @@ final class ImportRefusedException
     public const EMPTY_DATABASE = 'این دیتابیس هیچ جدولی ندارد.';
     public const CONNECTION_LOST = 'خواندن دیتابیس ربات قبلی نیمه‌کاره ماند (%s)؛ اتصال را بررسی کنید و انتقال را از نو شروع کنید.';
     public const NOT_THIS_BOT = 'این داده‌ها مال %s نیست؛ جدول‌هایی که این ربات دارد پیدا نشد (%s).';
+    /** The data has the bot's tables, and marks of a bot no migrator reads (one of its kin). */
+    public const NOT_ITS = 'این داده‌ها مال %s نیست.';
+    /**
+     * The data is another bot's, one an import reads too (%1$s: that bot, %2$s: the one picked): the import has failed,
+     * its report's «انتقال تازه» starts another.
+     */
+    public const ANOTHER_BOT = 'این داده‌های %1$s است، نه %2$s؛ با «انتقال تازه» از نو شروع کنید و این بار %1$s را انتخاب کنید.';
     /** A data-only export: its INSERTs name no columns and no CREATE TABLE says them (%s: a few of those tables). */
     public const NO_STRUCTURE = 'این فایل فقط داده‌های جدول‌ها را دارد، بدون ساختارشان (%s)؛ پشتیبان را دوباره با ساختار بگیرید (در phpMyAdmin گزینه «ساختار و داده» یا Structure and data)، یا پشتیبان خود ربات قبلی را بارگذاری کنید.';
     public const UNKNOWN_MIGRATOR = 'ربات قبلی را از فهرست انتخاب کنید.';

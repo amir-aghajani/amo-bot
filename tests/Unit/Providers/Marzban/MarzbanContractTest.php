@@ -36,6 +36,9 @@ final class MarzbanContractTest extends TestCase
 
     private const TOKEN = 'YW1pcl8xLDE3NjAyNjI0MDA4f3Kq1ZbXy';
 
+    /** A user's admin as Marzban answers it; a user no admin owns has `admin: null`. */
+    private const ADMIN = ['username' => 'admin', 'is_sudo' => true, 'telegram_id' => null, 'discord_webhook' => null, 'users_usage' => null];
+
     /** @var array<string, mixed>|null */
     private static ?array $spec = null;
 
@@ -59,12 +62,13 @@ final class MarzbanContractTest extends TestCase
         yield 'createClient (on hold)' => [static fn(ProviderInterface $p) => $p->createClient(['VLESS TCP REALITY', 'VMess WS'], $waiting), [self::json(self::inbounds()), self::json(self::user())], ['GET /api/inbounds', 'POST /api/user']];
         yield 'createClient (a deadline, switched off)' => [static fn(ProviderInterface $p) => $p->createClient(['Trojan WS'], $fixed), [self::json(self::inbounds()), self::json(self::user()), self::json(self::user(['status' => 'disabled']))], ['GET /api/inbounds', 'POST /api/user', 'PUT /api/user/amir_1']];
         yield 'updateClient (on hold, its next plan sent back)' => [static fn(ProviderInterface $p) => $p->updateClient($waiting), [self::json($planned), self::json($planned)], ['GET /api/user/amir_1', 'PUT /api/user/amir_1']];
-        yield 'updateClient (switched off)' => [static fn(ProviderInterface $p) => $p->updateClient($fixed), [self::json(self::user()), self::json(self::user(['status' => 'disabled']))], ['GET /api/user/amir_1', 'PUT /api/user/amir_1']];
+        yield 'updateClient (switched off, the duration it waited for overwritten)' => [static fn(ProviderInterface $p) => $p->updateClient($fixed), [self::json(self::user()), self::json(self::user(['status' => 'disabled']))], ['GET /api/user/amir_1', 'PUT /api/user/amir_1']];
         yield 'rotateClientCredentials' => [static fn(ProviderInterface $p) => $p->rotateClientCredentials('amir_1'), [self::json(self::user())], ['POST /api/user/amir_1/revoke_sub']];
         yield 'setClientEnabled (off)' => [static fn(ProviderInterface $p) => $p->setClientEnabled('amir_1', false), [self::json($planned), self::json(self::user(['status' => 'disabled']))], ['GET /api/user/amir_1', 'PUT /api/user/amir_1']];
         yield 'setClientEnabled (on, back on hold)' => [static fn(ProviderInterface $p) => $p->setClientEnabled('amir_1', true), [self::json(self::user(['status' => 'disabled'])), self::json(self::user())], ['GET /api/user/amir_1', 'PUT /api/user/amir_1']];
         yield 'setClientEnabled (on)' => [static fn(ProviderInterface $p) => $p->setClientEnabled('amir_1', true), [self::json(self::user(['status' => 'disabled', 'on_hold_expire_duration' => null, 'expire' => 1893456000])), self::json(self::user())], ['GET /api/user/amir_1', 'PUT /api/user/amir_1']];
-        yield 'deleteClient' => [static fn(ProviderInterface $p) => $p->deleteClient('amir_1'), [self::json(['detail' => 'User successfully deleted'])], ['DELETE /api/user/amir_1']];
+        yield 'deleteClient (an admin\'s user)' => [static fn(ProviderInterface $p) => $p->deleteClient('amir_1'), [self::json(self::user(['admin' => self::ADMIN])), self::json(['detail' => 'User successfully deleted'])], ['GET /api/user/amir_1', 'DELETE /api/user/amir_1']];
+        yield 'deleteClient (no admin\'s, switched off first; the panel\'s 500, then gone)' => [static fn(ProviderInterface $p) => $p->deleteClient('amir_1'), [self::json($planned + ['admin' => null]), self::json(['status' => 'disabled'] + $planned), new Response(500, ['Content-Type' => 'text/plain; charset=utf-8'], 'Internal Server Error'), self::json(['detail' => 'User not found'], 404)], ['GET /api/user/amir_1', 'PUT /api/user/amir_1', 'DELETE /api/user/amir_1', 'GET /api/user/amir_1']];
         yield 'findClient' => [static fn(ProviderInterface $p) => $p->findClient('amir_1', presence: true), [self::json(self::user())], ['GET /api/user/amir_1']];
         yield 'listClients' => [static fn(ProviderInterface $p) => $p->listClients(), [self::json(['username' => 'admin', 'is_sudo' => true]), $users], ['GET /api/admin', 'GET /api/users']];
         yield 'findClientByLink (a link)' => [static fn(ProviderInterface $p) => $p->findClientByLink(self::link('https://sub.example.com/sub/' . self::TOKEN)), [$users, self::json(['username' => 'amir_1']), self::json(self::user())], ['GET /api/users', 'GET /sub/' . self::TOKEN . '/info', 'GET /api/user/amir_1']];
@@ -292,9 +296,9 @@ final class MarzbanContractTest extends TestCase
         ];
     }
 
-    private static function json(mixed $body): Response
+    private static function json(mixed $body, int $status = 200): Response
     {
-        return new Response(200, ['Content-Type' => 'application/json'], (string) json_encode($body));
+        return new Response($status, ['Content-Type' => 'application/json'], (string) json_encode($body));
     }
 
     private static function link(string $text): ClientLink

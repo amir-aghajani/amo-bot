@@ -58,9 +58,18 @@ export function ProbeResult({ probe }: { probe: Probe }) {
         {status && (
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             <Stat label={status.core_name ? `هسته ${status.core_name}` : 'هسته'} value={CORE_STATES[status.core_state]} sub={status.core_version || undefined} />
-            <Stat label="CPU" value={formatPercent(Math.round(status.cpu_percent))} sub={status.uptime_seconds > 0 ? `روشن از ${formatSpan(status.uptime_seconds)} پیش` : undefined} />
+            {/* A panel that reports no CPU load or no disk (Remnawave) shows a dash, not a zero it never said. */}
+            <Stat
+              label="CPU"
+              value={status.cpu_percent === null ? '—' : formatPercent(Math.round(status.cpu_percent))}
+              sub={status.uptime_seconds > 0 ? `روشن از ${formatSpan(status.uptime_seconds)} پیش` : undefined}
+            />
             <Stat label="RAM" value={formatBytes(status.memory_used)} sub={status.memory_total > 0 ? `از ${formatBytes(status.memory_total)}` : undefined} />
-            <Stat label="دیسک" value={formatBytes(status.disk_used)} sub={status.disk_total > 0 ? `از ${formatBytes(status.disk_total)}` : undefined} />
+            <Stat
+              label="دیسک"
+              value={status.disk_total === 0 && status.disk_used === 0 ? '—' : formatBytes(status.disk_used)}
+              sub={status.disk_total > 0 ? `از ${formatBytes(status.disk_total)}` : undefined}
+            />
           </div>
         )}
 

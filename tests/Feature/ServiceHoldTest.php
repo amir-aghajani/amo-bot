@@ -99,6 +99,23 @@ final class ServiceHoldTest extends DatabaseTestCase
         self::assertTrue($logs->hasInfoThatContains('took the update of client ali_1 though it did not answer'));
     }
 
+    public function testARenewalThePanelStartedAtOnceThoughItsAnswerNeverCameIsDeliveredOnce(): void
+    {
+        // An ended service's renewal is a term from the first connection, which Remnawave starts at once: read back as a
+        // deadline that far from a moment while the call was out, it is the renewal the panel took.
+        $this->subscription->update(['expires_at' => now()->subDay()]);
+        FakeProvider::mirror($this->subscription->refresh());
+        FakeProvider::$defersClock = false;
+        FakeProvider::$unanswered = [$this->server->id => ['updateClient']];
+
+        $order = $this->payRenewal();
+
+        self::assertSame(OrderStatus::Fulfilled, $order->refresh()->status, (string) $order->notes);
+        self::assertNotNull(FakeProvider::lastUpdate('ali_1')->expiry->pendingSeconds(), 'sent as a term from the first connection');
+        self::assertSame('2026-10-20', $this->subscription->refresh()->expires_at?->format('Y-m-d'), 'the plan\'s 30 days from now, once');
+        self::assertCount(1, FakeProvider::$updated, 'never sent again: a retry would have added the 30 days twice');
+    }
+
     public function testARenewalThePanelTookThoughItsReadBackWasRefusedIsDeliveredOnce(): void
     {
         FakeProvider::$unread = [$this->server->id => ['updateClient']];

@@ -14,9 +14,11 @@ use App\Modules\Providers\DTO\PanelStatus;
 use App\Modules\Providers\Enums\CoreState;
 use App\Modules\Providers\Exceptions\NotFoundException;
 use App\Modules\Providers\Exceptions\ProviderException;
+use App\Modules\Providers\Exceptions\UnexpectedResponseException;
 use App\Modules\Providers\Exceptions\UnsupportedOperationException;
 use App\Modules\Providers\Support\PanelConnection;
 use App\Modules\Providers\Support\Raw;
+use App\Modules\Providers\Support\SubscriptionPath;
 
 /**
  * ProviderInterface for Marzban panels (0.8 and later), on MarzbanClient — the client of one server's panel, built by
@@ -25,10 +27,12 @@ use App\Modules\Providers\Support\Raw;
  * A client is a Marzban user, addressed by username (the contract's `name`) through /api/user/{username}. The shop's
  * inbounds are the inbounds of the panel's Xray config, keyed by their tag (unique across it): a user is made with a
  * proxy of each protocol its inbounds speak (`proxies`, settings left for the panel to mint) and those inbounds' tags by
- * protocol (`inbounds`). A term from the first connection is Marzban's "on hold" (`on_hold_expire_duration`); a deadline
- * is its `expire` in unix seconds, 0 for none. Marzban has no per-client IP limit, so ClientSpec::$ipLimit is not sent.
- * A username is 3 to 32 letters, digits and `_` (MarzbanDriver::capabilities()). An update that names no next plan
- * drops the one a user had (Marzban's update_user), so every update is sent the one the user has (nextPlan()).
+ * protocol (`inbounds`) — which Marzban keeps as the inbounds of those protocols the user is left out of, so an inbound
+ * added to the panel later, of a protocol the user has, reaches it too. A term from the first connection is Marzban's
+ * "on hold" (`on_hold_expire_duration`); a deadline is its `expire` in unix seconds, 0 for none. Marzban has no
+ * per-client IP limit, so ClientSpec::$ipLimit is not sent. A username is 3 to 32 letters, digits and `_`
+ * (MarzbanDriver::capabilities()). An update that names no next plan drops the one a user had (Marzban's update_user),
+ * so every update is sent the one the user has (nextPlan()).
  *
  * A non-sudo admin sees only the users it made: its panel is not listed at once (listClients()), and another admin's
  * user is refused with what to do about it (MarzbanApiException::refused()).
@@ -60,9 +64,6 @@ final class MarzbanProvider implements ProviderInterface
     /** The most parts of a link shown to the panel's subscription route at one try: each is a request. */
     private const TOKENS_MAX = 3;
 
-    /** The most folders before a link's token tried as the panel's subscription path (its XRAY_SUBSCRIPTION_PATH may be several). */
-    private const PATH_FOLDERS_MAX = 3;
-
     /** What a next plan is, as Marzban takes it back (NextPlanModel). */
     private const NEXT_PLAN = ['data_limit', 'expire', 'add_remaining_traffic', 'fire_on_either'];
 
@@ -71,6 +72,15 @@ final class MarzbanProvider implements ProviderInterface
 
     /** The longest note Marzban keeps. */
     private const NOTE_MAX = 500;
+
+    /** A user's auto-delete days that keep the panel from ever deleting it (crud.autodelete_expired_users skips negatives). */
+    private const NEVER_AUTODELETE = -1;
+
+    /**
+     * An on-hold duration Marzban reads as none: its API cannot clear one (0 means "no change"), and its share and review
+     * code skip a negative duration — so a duration a replaced term left is overwritten with it.
+     */
+    private const NO_DURATION = -1;
 
     /** Whether the admin signed in with is a sudo admin, once asked (sudo()). */
     private ?bool $sudo = null;
@@ -147,6 +157,9 @@ final class MarzbanProvider implements ProviderInterface
             ...$this->access($inboundKeys),
             'data_limit' => $spec->totalBytes,
             'data_limit_reset_strategy' => 'no_reset',
+            // Never removed by the panel's own clean-up of ended users (USERS_AUTODELETE_DAYS): the shop removes an ended
+            // service itself, after its renewal window — a user's days are set only as it is made.
+            'auto_delete_in_days' => self::NEVER_AUTODELETE,
         ] + self::term($spec->expiry) + self::note($spec));
         if (!$spec->enabled) {
             $user = $this->switchedOff($spec->name);
@@ -181,15 +194,19 @@ final class MarzbanProvider implements ProviderInterface
     }
 
     /**
-     * The user read, then one PUT with its next plan sent back (nextPlan()): the panel keeps the user's proxies,
-     * inbounds, link and its own reset strategy.
+     * The user read, then one PUT with its next plan sent back (nextPlan()): the panel keeps the user's proxies, inbounds
+     * and link. The traffic is the term's alone — no reset on a schedule the panel kept (an adopted user's): the quota is
+     * once a term —, and a term not waiting leaves no duration behind (NO_DURATION).
      */
     public function updateClient(ClientSpec $spec): ClientInfo
     {
         $path = self::USER . rawurlencode($spec->name);
+        $before = $this->client->get($path);
+        $leftover = $spec->expiry->pendingSeconds() === null && Raw::int($before, 'on_hold_expire_duration') > 0;
         $user = $this->client->put($path, [
             'data_limit' => $spec->totalBytes,
-        ] + self::term($spec->expiry, $spec->enabled) + self::note($spec) + self::nextPlan($this->client->get($path)));
+            'data_limit_reset_strategy' => 'no_reset',
+        ] + self::term($spec->expiry, $spec->enabled) + ($leftover ? ['on_hold_expire_duration' => self::NO_DURATION] : []) + self::note($spec) + self::nextPlan($before));
 
         return $this->clientOf($user, online: null);
     }
@@ -203,7 +220,8 @@ final class MarzbanProvider implements ProviderInterface
     /**
      * The user read, then switched — once it is not as asked already —, its next plan sent back. Switched on, one whose
      * term never started goes back on hold with it (waitingTerm()), sent explicitly: plain "active" would leave it with no
-     * end at all.
+     * end at all. Any other goes active with its own limit and deadline sent back, so the panel finds it limited or expired
+     * at once (update_user judges them only when sent) — not ten seconds later, at its next review, connected meanwhile.
      */
     public function setClientEnabled(string $name, bool $enabled): void
     {
@@ -218,13 +236,41 @@ final class MarzbanProvider implements ProviderInterface
         $this->client->put($path, match (true) {
             !$enabled => ['status' => 'disabled'],
             $pending !== null => ['status' => 'on_hold', 'on_hold_expire_duration' => $pending],
-            default => ['status' => 'active'],
+            default => ['status' => 'active', 'data_limit' => Raw::int($user, 'data_limit'), 'expire' => self::deadline($user)?->getTimestamp() ?? 0],
         } + self::nextPlan($user));
     }
 
+    /**
+     * The user read (a missing one is the contract's NotFoundException), then deleted. Marzban 0.8.2–0.8.4 deletes a user
+     * no admin owns — one made by the `.env` sudo admin, or whose admin was removed — from its database and then fails
+     * the request (HTTP 500, its issue #1634) before taking it off Xray, where it would go on working until the core
+     * restarts: such a user is switched off first, which takes it off Xray, and a 5xx after which the user is gone is the
+     * delete done.
+     */
     public function deleteClient(string $name): void
     {
-        $this->client->delete(self::USER . rawurlencode($name));
+        $path = self::USER . rawurlencode($name);
+        $user = $this->client->get($path);
+        if (($user['admin'] ?? null) === null && Raw::string($user, 'status') !== 'disabled') {
+            $this->client->put($path, ['status' => 'disabled'] + self::nextPlan($user));
+        }
+
+        try {
+            $this->client->delete($path);
+        } catch (UnexpectedResponseException $e) {
+            if ($e->httpStatus < 500) {
+                throw $e;
+            }
+            // The delete's own failure is what goes on — it may have been done —, whatever the look after it says.
+            try {
+                $this->client->get($path);
+            } catch (NotFoundException) {
+                return;
+            } catch (ProviderException) {
+            }
+
+            throw $e;
+        }
     }
 
     /** Presence comes with the user: seen within Marzban's own window. */
@@ -236,7 +282,7 @@ final class MarzbanProvider implements ProviderInterface
             return null;
         }
 
-        $seen = self::moment($user['online_at'] ?? null);
+        $seen = Raw::moment($user['online_at'] ?? null);
 
         return $this->clientOf($user, online: $presence ? $seen !== null && $seen->getTimestamp() >= now()->getTimestamp() - self::ONLINE_WINDOW_SECONDS : null);
     }
@@ -271,10 +317,12 @@ final class MarzbanProvider implements ProviderInterface
     {
         $tokens = array_slice(array_values(array_filter($link->tokens, static fn(string $token): bool => strlen($token) >= self::TOKEN_MIN && preg_match(self::TOKEN, $token) === 1)), 0, self::TOKENS_MAX);
         $path = $tokens === [] ? null : $this->subscriptionPath();
-        foreach ($path === null ? [] : $tokens as $token) {
-            $name = Raw::string($this->client->anonymous($path . '/' . $token . '/info') ?? [], 'username');
-            if ($name !== '') {
-                return $this->findClient($name);
+        if ($path !== null) {
+            foreach ($tokens as $token) {
+                $name = $this->owner($path, $token);
+                if ($name !== '') {
+                    return $this->findClient($name);
+                }
             }
         }
 
@@ -291,10 +339,10 @@ final class MarzbanProvider implements ProviderInterface
 
     /**
      * The user read, its usage reset, then its status put back when the reset changed it. Marzban's reset means to make a
-     * limited user active again, but its test of the status misreads (crud.reset_user_data_usage: `not in (expired or
-     * disabled)` is a test on the word "expired"), so it makes a switched-off user active, and one on hold active with no
-     * end at all: the first goes back off, the second back on hold with its term. The reset drops the user's next plan,
-     * as Marzban means it to.
+     * limited user active again; in 0.8.x its test of the status misreads (crud.reset_user_data_usage: `not in (expired or
+     * disabled)` is a test on the word "expired"), so it makes a switched-off user active, and in every version one on hold
+     * becomes active with no end at all: the first goes back off, the second back on hold with its term. The reset drops
+     * the user's next plan, as Marzban means it to.
      */
     public function resetClientTraffic(string $name): void
     {
@@ -404,36 +452,22 @@ final class MarzbanProvider implements ProviderInterface
     }
 
     /**
-     * The path the panel serves subscription links under (its XRAY_SUBSCRIPTION_PATH, "/sub" by default), read off one
-     * user's link: the folders its token is in. That path may be several folders, and a prefix the owner put in front of
-     * the links (the panel's XRAY_SUBSCRIPTION_URL_PREFIX, a proxy's path) is not the panel's: with more than one folder,
-     * the last PATH_FOLDERS_MAX are tried, longest first, by asking the panel about that user's own token — the path that
-     * answers with that user is the one. Null with no user to read, or none answering.
+     * The path the panel serves subscription links under (its XRAY_SUBSCRIPTION_PATH, "/sub" by default; the panel's
+     * XRAY_SUBSCRIPTION_URL_PREFIX or a proxy's path in front of the links is not), read off one user's link
+     * (SubscriptionPath::find()). Null with no user to read, or none answering.
      */
     private function subscriptionPath(): ?string
     {
         $user = Raw::objectsOf($this->client->get('/api/users', ['offset' => 0, 'limit' => 1])['users'] ?? null)[0] ?? [];
-        $folders = array_values(array_filter(explode('/', (string) parse_url(Raw::string($user, 'subscription_url'), PHP_URL_PATH)), static fn(string $part): bool => $part !== ''));
-        $token = array_pop($folders);
-        if ($token === null || $folders === []) {
-            return null;
-        }
+        $name = Raw::string($user, 'username');
 
-        $paths = [];
-        for ($count = min(self::PATH_FOLDERS_MAX, count($folders)); $count > 0; $count--) {
-            $paths[] = '/' . implode('/', array_slice($folders, -$count));
-        }
-        if (count($paths) === 1) {
-            return $paths[0];
-        }
+        return SubscriptionPath::find(Raw::string($user, 'subscription_url'), fn(string $path, string $token): bool => $this->owner($path, $token) === $name);
+    }
 
-        foreach ($paths as $path) {
-            if (Raw::string($this->client->anonymous($path . '/' . $token . '/info') ?? [], 'username') === Raw::string($user, 'username')) {
-                return $path;
-            }
-        }
-
-        return null;
+    /** The username the panel's subscription route under `$path` answers `$token` with; empty for none. */
+    private function owner(string $path, string $token): string
+    {
+        return Raw::string($this->client->anonymous($path . '/' . $token . '/info') ?? [], 'username');
     }
 
     /**
@@ -510,9 +544,9 @@ final class MarzbanProvider implements ProviderInterface
                 $deadline !== null => Expiry::at($deadline),
                 default => Expiry::never(),
             },
-            subscriptionUrl: $this->linkOf(Raw::string($user, 'subscription_url')),
+            subscriptionUrl: $this->connection->subscriptionLink(Raw::string($user, 'subscription_url')),
             online: $online,
-            lastOnlineAt: self::moment($user['online_at'] ?? null),
+            lastOnlineAt: Raw::moment($user['online_at'] ?? null),
         );
     }
 
@@ -544,38 +578,6 @@ final class MarzbanProvider implements ProviderInterface
      */
     private static function deadline(array $user): ?\DateTimeImmutable
     {
-        $expire = $user['expire'] ?? null;
-
-        return is_numeric($expire) && (int) $expire > 0 ? new \DateTimeImmutable('@' . (int) $expire) : null;
-    }
-
-    /**
-     * The link the customer gets: the panel's, made absolute against the panel's address when it is a path, or the
-     * server's own prefix in front of its token when one is set.
-     */
-    private function linkOf(string $url): ?string
-    {
-        if ($url === '') {
-            return null;
-        }
-        if ($this->connection->subscriptionUrl !== null) {
-            return $this->connection->subscriptionUrl . '/' . basename((string) parse_url($url, PHP_URL_PATH));
-        }
-
-        return str_starts_with($url, '/') ? $this->connection->baseUrl . $url : $url;
-    }
-
-    /** A moment Marzban wrote (ISO 8601 without a zone: UTC), or null. */
-    private static function moment(mixed $value): ?\DateTimeImmutable
-    {
-        if (!is_string($value) || $value === '') {
-            return null;
-        }
-
-        try {
-            return (new \DateTimeImmutable($value, new \DateTimeZone('UTC')))->setTimezone(new \DateTimeZone('UTC'));
-        } catch (\Exception) {
-            return null;
-        }
+        return Raw::seconds(Raw::int($user, 'expire'));
     }
 }

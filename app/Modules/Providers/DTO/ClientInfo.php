@@ -24,7 +24,7 @@ final class ClientInfo
         /** Connected right now; null = the panel cannot tell, or was not asked (ProviderInterface::findClient()). */
         public readonly ?bool $online = null,
         public readonly ?\DateTimeImmutable $lastOnlineAt = null,
-        /** Its concurrent IPs, 0 = unlimited; null = the panel keeps no such limit. */
+        /** Its concurrent IPs, 0 = unlimited; null = the panel keeps no such limit, or its listing does not say it (Rebecca's). */
         public readonly ?int $ipLimit = null,
     ) {
         $this->expiry = $expiry ?? Expiry::never();

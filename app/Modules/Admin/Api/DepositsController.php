@@ -12,6 +12,7 @@ use App\Modules\Payments\Deposits\Contracts\DepositSource;
 use App\Modules\Payments\Deposits\DepositSources;
 use App\Modules\Payments\Deposits\Services\Deposits;
 use App\Modules\Payments\Deposits\Services\DepositSettings;
+use App\Modules\Payments\Deposits\Services\RikhtamDeposits;
 use App\Modules\Payments\Enums\DepositStatus;
 use App\Modules\Payments\Models\Deposit;
 use App\Support\Input;
@@ -21,7 +22,8 @@ use Psr\Http\Message\ServerRequestInterface as Request;
 
 /**
  * «تایید خودکار واریز» (both panels, each shop its own): its switch, where the phone app sends the bank's SMS and the key
- * it sends with them, whether they have been coming — and the SMS that came, newest first.
+ * it sends with them, whether they have been coming, Rikhtam connected by its gateway's key (RikhtamDeposits) — and the
+ * deposits that came, newest first.
  */
 final class DepositsController extends ApiController
 {
@@ -29,6 +31,7 @@ final class DepositsController extends ApiController
         private readonly DepositSettings $settings,
         private readonly DepositSources $sources,
         private readonly Deposits $deposits,
+        private readonly RikhtamDeposits $rikhtam,
         private readonly Urls $urls,
     ) {}
 
@@ -58,6 +61,34 @@ final class DepositsController extends ApiController
         return $this->json($response, $this->present());
     }
 
+    /**
+     * PUT /deposits/settings/rikhtam — {secret}: connects the Rikhtam gateway whose «کلید امنیتی» it is, registering the
+     * shop's address with it, and switches «تایید خودکار واریز» on; Rikhtam's refusal is a 422 on `secret`, nothing kept
+     */
+    public function connectRikhtam(Request $request, Response $response): Response
+    {
+        $secret = $this->input($request)['secret'] ?? null;
+        $this->rikhtam->connect(is_string($secret) ? $secret : '');
+
+        return $this->json($response, $this->present());
+    }
+
+    /** POST /deposits/settings/rikhtam/hook — registers the shop's address with its Rikhtam gateway again (after a move) */
+    public function hookRikhtam(Request $request, Response $response): Response
+    {
+        $this->rikhtam->hookAgain();
+
+        return $this->json($response, $this->present());
+    }
+
+    /** DELETE /deposits/settings/rikhtam — forgets the Rikhtam key: a deposit signed with it is refused from now on */
+    public function disconnectRikhtam(Request $request, Response $response): Response
+    {
+        $this->rikhtam->disconnect();
+
+        return $this->json($response, $this->present());
+    }
+
     /** GET /deposits — ?status=&search=&page= */
     public function index(Request $request, Response $response): Response
     {
@@ -68,7 +99,10 @@ final class DepositsController extends ApiController
     private function present(): array
     {
         $enabled = $this->settings->enabled();
+        // Whether the phone apps' messages have been coming: Rikhtam's deposits, which come another way, say nothing of it.
+        $apps = array_map(static fn(DepositSource $source): string => $source->key(), $this->sources->all());
         $last = static fn(?DepositStatus $status): ?string => Deposit::query()
+            ->whereIn('source', $apps)
             ->when($status !== null, static fn($query) => $query->where('status', $status?->value))
             ->when($status === null, static fn($query) => $query->where('status', '!=', DepositStatus::Test->value))
             ->latest('id')->first()?->created_at?->toIso8601String();
@@ -85,6 +119,7 @@ final class DepositsController extends ApiController
             'last_received_at' => $last(null),
             'last_test_at' => $last(DepositStatus::Test),
             'waiting' => Deposit::query()->whereIn('status', [DepositStatus::Unmatched->value, DepositStatus::Ambiguous->value])->where('created_at', '>=', now()->subDays(7))->count(),
+            'rikhtam' => $this->rikhtam->present(),
         ];
     }
 }

@@ -11,7 +11,10 @@ enum DepositStatus: string
     case Received = 'received';
     /** It approved the one open card payment that asked its sum. */
     case Matched = 'matched';
-    /** A deposit no open card payment asks, or one ForApp did not recognise as a bank's: support's to look at. */
+    /**
+     * A deposit no open card payment asks, one its source could not vouch for (ForApp did not recognise it as a bank's), or
+     * one attached to a payment by hand that could not pay it: support's to look at.
+     */
     case Unmatched = 'unmatched';
     /** A deposit more than one open card payment asks: none approved, support's to decide. */
     case Ambiguous = 'ambiguous';

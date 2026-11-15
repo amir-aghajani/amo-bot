@@ -251,4 +251,20 @@ final class PanelConnection
 
         return $options;
     }
+
+    /**
+     * The subscription link a customer gets for the panel's own `$url` (empty: none): the server's prefix in front of its
+     * token when one is set, else the panel's, made absolute against the panel's address when it is a path.
+     */
+    public function subscriptionLink(string $url): ?string
+    {
+        if ($url === '') {
+            return null;
+        }
+        if ($this->subscriptionUrl !== null) {
+            return $this->subscriptionUrl . '/' . basename((string) parse_url($url, PHP_URL_PATH));
+        }
+
+        return str_starts_with($url, '/') ? $this->baseUrl . $url : $url;
+    }
 }

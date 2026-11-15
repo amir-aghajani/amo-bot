@@ -27,7 +27,8 @@ final class Urls
 
     /**
      * An online gateway's webhook for its every payment, by its driver — one a gateway signs, with its own secret, for the
-     * shop to hear (Payments\Contracts\SignedWebhook): no secret in the address.
+     * shop to hear (Payments\Contracts\SignedWebhook), or one that only names a payment for the shop to ask about
+     * (Payments\Contracts\NamingWebhook): no secret in the address.
      */
     public const PAYMENT_WEBHOOK = '/payments/webhooks/{driver:[a-z0-9]+}';
 
@@ -36,6 +37,12 @@ final class Urls
      * header (`X-API-Key`), as the app sends it.
      */
     public const DEPOSIT_WEBHOOK = '/webhooks/deposits/{source:[a-z0-9]+}/{bot:[0-9]+}';
+
+    /**
+     * Rikhtam's one address for a shop (rikhtam.com): its deposits and its crypto payments alike, each signed with the
+     * gateway's key in its body — the shop's id, no secret in the address.
+     */
+    public const RIKHTAM_WEBHOOK = '/webhooks/rikhtam/{bot:[0-9]+}';
 
     /** The website's API (the Store API): its version, then the store key that names the shop — no secret. */
     public const STORE = '/api/store/v1/{store:[0-9a-f]{24}}';
@@ -75,7 +82,7 @@ final class Urls
         return $this->base() . self::fill(self::PAYMENT_CALLBACK, ['payment' => (string) $payment, 'secret' => $secret]);
     }
 
-    /** Where an online gateway that signs its webhooks tells the shop about its payments, its owner pasting it there. */
+    /** Where an online gateway with a webhook (Variza, Rialit) tells the shop about its payments, its owner pasting it there. */
     public function paymentWebhook(string $driver): string
     {
         return $this->base() . self::fill(self::PAYMENT_WEBHOOK, ['driver' => $driver]);
@@ -85,6 +92,12 @@ final class Urls
     public function depositWebhook(string $source, int $bot): string
     {
         return $this->base() . self::fill(self::DEPOSIT_WEBHOOK, ['source' => $source, 'bot' => (string) $bot]);
+    }
+
+    /** Where Rikhtam tells a shop of its deposits and crypto payments, the shop registering it with Rikhtam itself. */
+    public function rikhtamWebhook(int $bot): string
+    {
+        return $this->base() . self::fill(self::RIKHTAM_WEBHOOK, ['bot' => (string) $bot]);
     }
 
     /** The base address of a website's API, handed to its developer. */

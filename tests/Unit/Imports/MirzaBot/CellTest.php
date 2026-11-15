@@ -2,15 +2,15 @@
 
 declare(strict_types=1);
 
-namespace Tests\Unit\Imports\Faoxima;
+namespace Tests\Unit\Imports\MirzaBot;
 
-use App\Modules\Imports\Migrators\Faoxima\Cell;
+use App\Modules\Imports\Migrators\MirzaBot\Cell;
 use PHPUnit\Framework\TestCase;
 
-/** Faoxima's values read: its placeholders as nothing, numbers kept as text, unix times, comma-separated lists. */
+/** MirzaBot's values read (and Faoxima's, descended from it): its placeholders as nothing, numbers kept as text, unix times, lists, channels. */
 final class CellTest extends TestCase
 {
-    public function testTextWithoutFaoximasPlaceholders(): void
+    public function testTextWithoutItsPlaceholders(): void
     {
         self::assertSame(['a b', null, null, null, null], [Cell::text(' a b '), Cell::text(''), Cell::text('none'), Cell::text('NULL'), Cell::text(null)]);
     }
@@ -31,5 +31,19 @@ final class CellTest extends TestCase
         self::assertSame([null, null, null], [Cell::moment('0'), Cell::moment('none'), Cell::moment('1403/01/01')]);
         self::assertSame(['آلمان ۱', 'هلند'], Cell::list(' آلمان ۱ ,هلند,,آلمان ۱'));
         self::assertSame([], Cell::list(null));
+    }
+
+    public function testAChannelAsTheBotAsksTelegramAboutIt(): void
+    {
+        self::assertSame(
+            ['-1001234567890', '@my_channel', '@my_channel', '@my_channel', '@vpn_news', '@vpn_news', '@vpn_news'],
+            [Cell::chat('-1001234567890'), Cell::chat('@my_channel'), Cell::chat('my_channel'), Cell::chat('https://t.me/my_channel'), Cell::chat('t.me/s/vpn_news'), Cell::chat('https://telegram.me/vpn_news/'), Cell::chat('https://t.me/vpn_news?start=1')],
+            'a chat id, an @username kept with its @, bare, or in a t.me link',
+        );
+        self::assertSame(
+            [null, null, null, null, null],
+            [Cell::chat('https://t.me/joinchat/AbCdEf'), Cell::chat('https://t.me/+AbCdEf'), Cell::chat('t.me/joinchat'), Cell::chat('@ab'), Cell::chat('-123')],
+            'an invite link, a username Telegram would not take, a short number',
+        );
     }
 }

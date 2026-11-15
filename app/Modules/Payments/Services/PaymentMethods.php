@@ -63,8 +63,9 @@ final class PaymentMethods
      * The methods offered for this kind of order at `$amount`, in checkout order: enabled, with an installed driver, able
      * to pay it (pays()), the amount within their bounds (within()) and — a card method — with a card that has room for it
      * today — or one `$customer` holds a payment of waiting on such an order, which asking again shows them; any while
-     * the shop takes card payments in support's private chat (PaymentCards::offers()). A null amount is any: the bounds
-     * and the caps are not asked.
+     * the shop takes card payments in support's private chat (PaymentCards::offers()) —; never one whose gateway's payer
+     * is a Telegram account to a `$customer` without one (Rialit to a website customer signed in by SMS). A null amount is
+     * any: the bounds and the caps are not asked.
      *
      * @return list<PaymentMethod>
      */
@@ -85,7 +86,8 @@ final class PaymentMethods
      * Refuse a `$type` order of `$amount` the method does not take now (takes()), in the customer's words: the one check
      * of every checkout (Checkout::pay()), the bot's and the website's.
      *
-     * @throws MethodUnavailableException 422 on `method_id`: outside its bounds, or no card of it with room today
+     * @throws MethodUnavailableException 422 on `method_id`: outside its bounds, no card of it with room today, or a
+     *                                    gateway whose payer is a Telegram account and a customer without one
      */
     public function allow(PaymentMethod $method, OrderType $type, string $amount, ?User $customer = null): void
     {
@@ -118,14 +120,15 @@ final class PaymentMethods
     }
 
     /**
-     * Whether the method takes a `$type` order of `$amount` (null: any): within its bounds, and — a card method — a card of
-     * it with room for it today (PaymentCards::offers(), with `$customer`). Nothing to pay it takes whatever it is: the
+     * Whether the method takes a `$type` order of `$amount` (null: any): within its bounds, — a card method — a card of it
+     * with room for it today (PaymentCards::offers(), with `$customer`), and — a gateway whose payer is a Telegram account
+     * (GatewayRegistry::paidByTelegram(): Rialit) — a `$customer` who has one. Nothing to pay it takes whatever it is: the
      * wallet settles a free order (Checkout::pay()).
      */
     private function takes(PaymentMethod $method, OrderType $type, ?string $amount, ?User $customer = null): bool
     {
         return $amount === null
-            ? !$this->gateways->isManual($method) || $this->cards->offers($method, $type, null, $customer)
+            ? !$this->noTelegram($method, $customer) && (!$this->gateways->isManual($method) || $this->cards->offers($method, $type, null, $customer))
             : $this->refusal($method, $type, $amount, $customer) === null;
     }
 
@@ -134,10 +137,17 @@ final class PaymentMethods
     {
         return match (true) {
             !Money::isPositive($amount) => null,
+            $this->noTelegram($method, $customer) => MethodUnavailableException::noTelegram($method),
             !self::within($method, $amount) => MethodUnavailableException::outOfBounds($method),
             $this->gateways->isManual($method) && !$this->cards->offers($method, $type, $amount, $customer) => MethodUnavailableException::noCard($method),
             default => null,
         };
+    }
+
+    /** Whether `$customer` has no Telegram account to pay with a method whose gateway's payer is one (Rialit's). */
+    private function noTelegram(PaymentMethod $method, ?User $customer): bool
+    {
+        return $customer !== null && $customer->telegram_id === null && $this->gateways->paidByTelegram($method->driver);
     }
 
     /** Whether the method may pay that kind of order: any, except the wallet paying its own top-up. */
@@ -317,6 +327,8 @@ final class PaymentMethods
                 'driver_label' => $descriptor->label ?? $method->driver,
                 'kind' => $this->gateways->kind($method->driver)?->value,
                 'builtin' => $this->gateways->builtin($method->driver),
+                // Whether the shop sets its gateway's webhook address itself (GatewayWebhooks): the screens offer it then.
+                'registers_webhook' => $this->gateways->registersWebhook($method->driver),
                 'label' => $method->label,
                 'summary' => $this->gateways->summary($method),
                 // An object even when empty (the wallet's): JSON would make an empty PHP array a list.

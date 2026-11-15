@@ -13,6 +13,7 @@
 - راهنمای مالک فروشگاه
   - [نمای کلی](Owners-Guide.md)
   - [پنل‌ها](Panels.md)
+  - [مدیریت فروشگاه از ربات](Bot-Management.md)
   - [سرورها](Servers.md)
   - [پلن‌ها](Plans.md)
   - [روش‌های پرداخت](Payment-Methods.md)

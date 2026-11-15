@@ -281,7 +281,7 @@ describe('changing several plans’ prices at once', () => {
     expect(dialog.getByRole('button', { name: 'اعمال تغییر' }).getAttribute('aria-disabled')).toBe('true')
   })
 
-  it('applied, sends the change previewed and puts the plans it answers with in the list', async () => {
+  it('applied, sends the change previewed with the prices it showed and puts the plans it answers with in the list', async () => {
     server()
       .on('POST', '/api/admin/plans/prices/preview', json(previewOf()))
       .on(
@@ -297,8 +297,10 @@ describe('changing several plans’ prices at once', () => {
     fireEvent.click(dialog.getByRole('button', { name: 'اعمال تغییر' }))
 
     await until(() => expect(server().sent('POST', '/api/admin/plans/prices')).toHaveLength(1))
-    expect(server().sent('POST', '/api/admin/plans/prices')[0]?.body).toEqual(server().sent('POST', '/api/admin/plans/prices/preview')[0]?.body)
-    expect(server().sent('POST', '/api/admin/plans/prices')[0]?.body).toEqual(TEN_PERCENT)
+    const previewed = previewOf().changes.map(({ id, before }) => ({ id, before }))
+    // The change previewed, and each plan's prices as the preview showed them: the server makes it on those or refuses.
+    expect(server().sent('POST', '/api/admin/plans/prices/preview')[0]?.body).toEqual(TEN_PERCENT)
+    expect(server().sent('POST', '/api/admin/plans/prices')[0]?.body).toEqual({ ...TEN_PERCENT, previewed })
     await until(() => expect(screen.queryByRole('dialog', { name: 'تغییر گروهی قیمت' })).toBeNull())
     const list = within(screen.getByRole('table', { name: 'پلن‌ها' }))
     expect(list.getByText('۱۳۲٬۰۰۰ تومان')).toBeTruthy()

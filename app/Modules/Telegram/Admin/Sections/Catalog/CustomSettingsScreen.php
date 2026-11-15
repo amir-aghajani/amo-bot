@@ -1,0 +1,121 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Modules\Telegram\Admin\Sections\Catalog;
+
+use App\Modules\Settings\Services\BotSettingsScreen;
+use App\Modules\Telegram\Admin\AdminSeat;
+use App\Modules\Telegram\Admin\Ui\Admin;
+use App\Modules\Telegram\Admin\Ui\Answer;
+use App\Modules\Telegram\Admin\Ui\Button;
+use App\Modules\Telegram\Admin\Ui\Settings\BotGroupSource;
+use App\Modules\Telegram\Admin\Ui\Settings\FieldDef;
+use App\Modules\Telegram\Admin\Ui\Settings\SettingsScreen;
+use App\Modules\Telegram\Admin\Ui\Settings\SettingsSource;
+use App\Modules\Telegram\Admin\Ui\View;
+
+/**
+ * «تنظیمات سرویس دلخواه» (the bot settings' `custom_services` group, the main shop's alone): the switch, each quantity's
+ * bounds and the amounts offered as buttons, the devices of a built service and the servers it is built on — ticked
+ * among the shop's —; the tiers (CustomTiersScreen) and the calculator (CustomCalculatorScreen) beside them.
+ */
+final class CustomSettingsScreen extends SettingsScreen
+{
+    public const ID = 'css';
+
+    /**
+     * @var array<string, string> The shop's servers by id, to tick: read with each request
+     */
+    private array $servers = [];
+
+    public function __construct(private readonly BotSettingsScreen $settings) {}
+
+    public function allows(AdminSeat $seat): bool
+    {
+        return CustomServicesScreen::opens($seat);
+    }
+
+    public function show(Admin $admin, array $args): View
+    {
+        $this->servers($admin);
+
+        return parent::show($admin, $args);
+    }
+
+    public function act(Admin $admin, string $action, array $args): View
+    {
+        $this->servers($admin);
+
+        return parent::act($admin, $action, $args);
+    }
+
+    public function input(Admin $admin, string $action, array $args, Answer $answer): View
+    {
+        $this->servers($admin);
+
+        return parent::input($admin, $action, $args, $answer);
+    }
+
+    protected function screen(): string
+    {
+        return self::ID;
+    }
+
+    protected function title(): string
+    {
+        return '⚙️ تنظیمات سرویس دلخواه';
+    }
+
+    protected function path(): array
+    {
+        return ['مدیریت', 'فروشگاه', 'سرویس دلخواه'];
+    }
+
+    protected function parent(): string
+    {
+        return CustomServicesScreen::ID;
+    }
+
+    protected function intro(): string
+    {
+        return 'مشتری حجم و مدت سرویسش را خودش انتخاب می‌کند و قیمت هر کدام با پله‌های قیمت آن حساب می‌شود؛ قیمت حجم و قیمت مدت با هم جمع می‌شوند و تخفیف‌های مشتری از آن کم می‌شود.';
+    }
+
+    protected function fields(): array
+    {
+        $options = static fn(string $examples): string => "عددها را جدا از هم بنویسید (حداکثر ۸ دکمه)، مثل «{$examples}»؛ مشتری عدد دیگری بین کمترین و بیشترین را هم می‌نویسد. خالی یعنی مشتری عدد را خودش می‌نویسد.";
+
+        return [
+            FieldDef::toggle('custom_enabled', 'سرویس دلخواه فعال باشد', 'روشن که باشد، در ربات زیر پلن‌ها دکمه «ساخت سرویس دلخواه» می‌آید و وب‌سایت هم آن را می‌فروشد — تا وقتی هر دو قیمت پله دارند و یکی از سرورهای انتخاب‌شده مشتری تازه می‌گیرد.'),
+            FieldDef::number('custom_traffic_min', 'کمترین حجم', 'گیگابایت', 'کمترین گیگابایتی که مشتری می‌سازد؛ هیچ‌وقت کمتر از شروع اولین پله نیست.'),
+            FieldDef::number('custom_traffic_max', 'بیشترین حجم', 'گیگابایت', 'بیشترین گیگابایتی که مشتری می‌سازد.'),
+            FieldDef::list('custom_traffic_options', 'حجم‌های پیشنهادی', 'گیگابایت', $options('۱۰ ۵۰ ۱۰۰'))->nullable(),
+            FieldDef::number('custom_days_min', 'کمترین زمان', 'روز', 'کمترین روزی که مشتری می‌سازد؛ هیچ‌وقت کمتر از شروع اولین پله نیست.'),
+            FieldDef::number('custom_days_max', 'بیشترین زمان', 'روز', 'بیشترین روزی که مشتری می‌سازد.'),
+            FieldDef::list('custom_days_options', 'زمان‌های پیشنهادی', 'روز', $options('۳۰ ۶۰ ۹۰'))->nullable(),
+            FieldDef::number('custom_devices', 'تعداد کاربر هم‌زمان', 'کاربر', 'بین ۰ تا ۱۰۰؛ ۰ یعنی نامحدود.'),
+            FieldDef::multi('custom_servers', 'سرورها', $this->servers, 'مشتری روی یکی از این سرورها سرویس می‌سازد؛ سروری که الان نمی‌فروشد (خاموش، پر یا بدون لینک اشتراک) به مشتری نشان داده نمی‌شود. سرویس روی همه اینباندهای قابل فروش سرور ساخته می‌شود.'),
+        ];
+    }
+
+    protected function source(): SettingsSource
+    {
+        return new BotGroupSource('custom_services', $this->settings);
+    }
+
+    protected function extra(View $view, Admin $admin, array $values): void
+    {
+        $view->row(Button::to('📶 پله‌های قیمت حجم', CustomTiersScreen::ID, 'show', 'traffic', self::ID), Button::to('📅 پله‌های قیمت مدت', CustomTiersScreen::ID, 'show', 'days', self::ID))
+            ->row(Button::to('🧮 ماشین حساب قیمت', CustomCalculatorScreen::ID, 'show', self::ID));
+    }
+
+    /** The shop's servers to tick, each marked when it cannot sell now. */
+    private function servers(Admin $admin): void
+    {
+        $this->servers = [];
+        foreach (PlanEditScreen::options($admin)['servers'] as $server) {
+            $this->servers[(string) $server['id']] = (string) $server['name'] . (is_string($server['unsellable_reason'] ?? null) ? ' (الان نمی‌فروشد)' : '');
+        }
+    }
+}

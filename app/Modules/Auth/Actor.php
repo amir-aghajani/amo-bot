@@ -24,6 +24,8 @@ final class Actor
         public readonly ?int $userId,
         /** @var list<string>|null What a shop's admin on its website may use beyond the daily work (Principal::$grants); null: every grant. */
         private readonly ?array $grants = null,
+        /** Whether the decision is made from the bot's private chat (Principal::$inBot). */
+        public readonly bool $inBot = false,
     ) {}
 
     public static function of(Principal $principal): self
@@ -34,7 +36,7 @@ final class Actor
             PrincipalKind::Staff => ActorKind::Staff,
         };
 
-        return new self($kind, $principal->name, $principal->customer?->id, $principal->grants);
+        return new self($kind, $principal->name, $principal->customer?->id, $principal->grants, $principal->inBot);
     }
 
     /** One of the shop's admins deciding in its report group, by their account. */

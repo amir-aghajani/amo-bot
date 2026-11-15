@@ -9,6 +9,9 @@ use App\Core\Drivers\UnknownDriverException;
 use App\Core\Forms\Fields\Field;
 use App\Modules\Payments\Contracts\GatewayDriver;
 use App\Modules\Payments\Contracts\GatewayInterface;
+use App\Modules\Payments\Contracts\OnlineGateway;
+use App\Modules\Payments\Contracts\RegistersWebhook;
+use App\Modules\Payments\Contracts\TelegramPayer;
 use App\Modules\Payments\Enums\GatewayKind;
 use App\Modules\Payments\Models\Payment;
 use App\Modules\Payments\Models\PaymentMethod;
@@ -60,6 +63,18 @@ final class GatewayRegistry
         return $this->kind($method->driver) === GatewayKind::Manual;
     }
 
+    /** Whether the shop sets the driver's webhook address at its gateway itself (Contracts\RegistersWebhook: Rialit). */
+    public function registersWebhook(string $driver): bool
+    {
+        return $this->onlineGatewayIs($driver, RegistersWebhook::class);
+    }
+
+    /** Whether the driver's gateway takes only a payer with a Telegram account (Contracts\TelegramPayer: Rialit). */
+    public function paidByTelegram(string $driver): bool
+    {
+        return $this->onlineGatewayIs($driver, TelegramPayer::class);
+    }
+
     /**
      * The driver's one line about the method from its settings; null for none (the wallet; a card method, whose cards are
      * rows of their own), or no driver installed.
@@ -83,6 +98,17 @@ final class GatewayRegistry
     public function forPayment(Payment $payment): GatewayInterface
     {
         return $this->forMethod($payment->method);
+    }
+
+    /**
+     * Whether the driver's gateway is an online one of `$contract`. A driver's gateway is of one type whatever its
+     * settings, so one made of none says it — nothing decrypted, nothing called. False for a driver no longer installed.
+     *
+     * @param class-string<OnlineGateway> $contract
+     */
+    private function onlineGatewayIs(string $driver, string $contract): bool
+    {
+        return $this->kind($driver) === GatewayKind::Online && $this->drivers->get($driver)->gateway([]) instanceof $contract;
     }
 
     /**

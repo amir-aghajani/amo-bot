@@ -11,7 +11,7 @@ of them is in [Servers](Servers.md), [Services](Services.md), [Test accounts](Te
 
 | Module | Holds |
 |---|---|
-| `app/Modules/Providers` | Servers, the connector contract, the 3X-UI, PasarGuard, HMPanel and Marzban connectors, panel health |
+| `app/Modules/Providers` | Servers, the connector contract, the 3X-UI, PasarGuard, HMPanel, Marzban, Rebecca and Remnawave connectors, panel health |
 | `app/Modules/Subscriptions` | Services, provisioning, the operations, grants, renewals, extras, reminders, free test accounts, the automatic removal, the sync |
 | `app/Modules/Bots` | The bots, `CurrentBot` and the shop scope |
 | `app/Modules/Notifications` | Every notice a customer gets, kept for their website and sent by Telegram or email |
@@ -38,8 +38,10 @@ limit the panel enforces).
   TOTP code) → `ThreeXuiApi` (one method per endpoint, held to the panel's own OpenAPI file by `ThreeXuiContractTest`)
   → `ThreeXuiProvider`. A term from the first connection is a negative `expiryTime`.
 - **PasarGuard** (`Drivers/PasarGuard`, 3.1+): `PasarGuardClient` (API key, or a password traded for a kept token) →
-  `PasarGuardProvider`. Its groups are the shop's inbounds; a term from the first connection is "on hold"; it has no IP
-  limit.
+  `PasarGuardProvider`. Its groups are the shop's inbounds (their simple list for a role that may read only that); a
+  term from the first connection is "on hold"; it has no IP limit; users are made exempt from the panel's own
+  auto-delete and every update sets no traffic reset; only "Permission denied" to a key is a missing scope, its other
+  refusals carry hints in its own words, and an admin with all access blocked puts the server out of use.
 - **HMPanel** (`Drivers/HmPanel`, 2.5+): `HmPanelClient` (its `hmp_…` API key, the one way in) → `HmPanelProvider`. The
   inbounds of the 3x-ui panels beneath it, one panel a client; clients found by name through lookup, then called by
   HMPanel's id; 3x-ui's term and IP limit passed on; no status, no rotation; a key's calls per minute kept few.
@@ -47,13 +49,33 @@ limit the panel enforces).
   requests by `MarzbanTokens`) → `MarzbanProvider`. The Xray config's inbounds by tag; a term from the first connection
   is "on hold"; every update reads the user and sends its next plan back, and a traffic reset puts its status back; no
   IP limit; rotation by revoking the subscription; a link claimed is asked of the panel's own subscription route; a
-  non-sudo admin's server is read client by client (`listClients()` unsupported). Marzban and PasarGuard cannot clear
-  an on-hold duration through their APIs: a switched-off client without a deadline that carries one reads as waiting,
-  as the panels read it, and PasarGuard's connector puts back active one it put on hold that is not waiting.
+  non-sudo admin's server is read client by client (`listClients()` unsupported); users are made exempt from the
+  panel's own auto-delete, every update sets no traffic reset, and a user no admin owns is switched off before it is
+  deleted (Marzban 0.8.2–0.8.4 fails such a delete before taking it off Xray). Marzban and PasarGuard cannot clear an
+  on-hold duration through their APIs: Marzban's connector overwrites one a replaced term left with `-1`, which Marzban
+  reads as none; a switched-off client without a deadline that carries one reads as waiting, as the panels read it, and
+  PasarGuard's connector puts back active one it put on hold that is not waiting.
+- **Rebecca** (`Drivers/Rebecca`, 1.0+): `RebeccaClient` (an admin's `rk_…` API key, the one way in) →
+  `RebeccaProvider`. Its services are the shop's inbounds, one a client (a sale naming two is refused before it is
+  sent); a term from the first connection is "on hold", cleared when replaced; every update reads the user and sends
+  one `PUT` of what it sets, `expire` only to set or take off a deadline; the IP limit is held, but its user list
+  leaves it out, so a client whose term may wait is read on its own and an import reads each listed client again;
+  rotation by revoking the subscription; a link claimed (a token, or a VLESS or VMess id) is asked of the panel's own
+  subscription route; a standard or reseller admin's server is read client by client (`listClients()` unsupported).
+- **Remnawave** (`Drivers/Remnawave`, 2.1+): `RemnawaveClient` (an API token made in the panel, the one way in; the
+  forwarded headers an HTTPS proxy would add, on a plain http address on the shop's host or its private network; an
+  auth portal's gate key as `X-Api-Key`) →
+  `RemnawaveProvider`. Its internal squads are the shop's inbounds, several a client; a user is read by username, then
+  addressed by its uuid (2.x) or id (3.x); no term from the first connection — one starts at the sale —, "never" a
+  deadline in 2099; every update sets no traffic reset and keeps the squads; no IP limit; rotation by revoking the
+  subscription; a link claimed is asked as a short id, or its config's credentials matched against the listing; no CPU
+  load in its status.
 - **Shared** (`Providers/Support`): `PanelConnection` and `PanelCredentials` (the fields every connector's form shares,
   and how a stored server reads them back), `PanelHttp` (the one request shape — the connection's TLS rule and
-  timeouts, redirects never followed — and the readings of an answer that is not the API), `Raw` (defensive readers
-  for loosely typed panel JSON).
+  timeouts, redirects never followed — and the readings of an answer that is not the API; `anonymous()` reads a
+  panel's subscription route as a customer's app would), `Raw` (defensive readers for loosely typed panel JSON, its
+  moments and seconds among them), `SubscriptionPath` (which folders of a link are the panel's subscription path, so a
+  link pasted in is matched to its client).
 
 **A server's SOCKS5 proxy** (`servers.proxy_*`, its password encrypted) is a request option of its panel's requests
 alone: `PanelConnection::requestOptions()` adds `proxy => socks5h://[user:password@]host:port` (the login URL-encoded,
@@ -146,7 +168,10 @@ Three rules keep concurrent work safe — keep them in any change here:
    past its time) still writes the answer by the row's key and logs it (`record()`): undoing or retrying would apply
    it twice. A change whose answer never came, or whose read-back failed (`ProviderException::mayHaveBeenDone()`,
    below), has the panel asked: a client there just as it was sent — its quota, term, switch and, where the panel keeps
-   one, device limit (`took()`) — took it, and that answer is recorded (`update()`), so a retry never adds the same
+   one, device limit (`took()`) — took it, and that answer is recorded (`update()`). A term may come back as a panel
+   words it (`tookTerm()`, Remnawave's): one from the first connection as a deadline that far from a moment while the
+   call was out, a deadline gone by as the soonest the panel takes or as the one it had, within `TERM_SLACK` (5
+   minutes) for the panel's clock. So a retry never adds the same
    renewal, extra or grant on top of what the panel has, nor does a refund take it back twice. A panel that cannot be
    asked, or has the client otherwise, leaves the failure as it came. A move that loses its lease before deleting the
    old client takes the new one back.
@@ -206,9 +231,12 @@ ask the same name), and a request made again with its key asks what its order wa
 the panel — one `findClient()` through `onPanel()`, asked only for an order with a name — has no client by it (one made
 by hand); else the pattern's. The shop knows only the names of the services it keeps, so `ProvisioningService::named()`
 makes every new client — a purchase's, a test's, a moved service's on its target — and, whenever the panel refuses its
-name (`PanelApiException`) and has a client by it (one `findClient()`, asked only then) — made there by hand with the
-pattern's next name or the moved service's own, or another order's asking the same name delivered at the same moment —,
-tries the pattern's next (`next()`, a test's by the test pattern, each name drawn once), `NAME_TRIES` (10) names in
+name with a 409 (its "already exists", taken without a look: PasarGuard 5 hides another admin's user from an admin
+limited to its own), or refuses it otherwise (`PanelApiException`) and has a client by it (one `findClient()`, asked
+only then — `taken()`; a refusal to show it counts when it means another admin's user,
+`PanelApiException::hidesAnothersClient()`, while one for a permission the admin lacks fails the call) — made there by
+hand with the pattern's next name or the moved service's own, or another order's asking the same name delivered at the
+same moment —, tries the pattern's next (`next()`, a test's by the test pattern, each name drawn once), `NAME_TRIES` (10) names in
 all; a refusal for another reason fails the delivery (or the move) as it came. The bot keeps a name per checkout in
 the chat's session (`_client_name`, as a discount code is kept), and `requestedName()` hands it to the order while its
 way is still offered.

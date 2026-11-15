@@ -60,12 +60,14 @@ walks every route to prove it.
 |---|---|
 | `/api/admin` (the owner's panel) | installed › CSRF header on a change › session › the owner signed in › the shop the request names |
 | `/api/agent` (an agent's panel) | installed › CSRF header on a change › session › an agent signed in, in their bot's shop |
+| `/api/bot-admin/{owner,agent,staff}` (the bot's management, in-process) | the seat the bot put on the request, or a 404 › the seat's kind is the door's › a grant the route names › its shop, as its principal (`Telegram\Admin\Door\BotAdminDoor`) |
 | `/api/install` | not installed yet › CSRF header on a change › the install key |
 | `/api/store/v1/{store}` | installed › the website or the mini app the key opens › JSON bodies › (what one door alone has: that door) › (a customer's bearer token) |
 | `…/admin` under the store | › the website's door › a customer's token › one of the shop's admins, let in, on a session that is not the mini app's, signed in recently enough |
 | `/webhooks/…`, `/cron/{token}`, `/payments/callback/{payment}/{secret}` (an online gateway's callback) | installed (a secret in the address authenticates) |
-| `/payments/webhooks/{driver}` (the webhook a gateway signs: Variza's) | installed (the signature authenticates) |
+| `/payments/webhooks/{driver}` (a gateway's webhook: one it signs, Variza's; one that only names a payment, Rialit's) | installed (the signature authenticates; an unsigned one is only a reason to ask the gateway) |
 | `/webhooks/deposits/{source}/{bot}` (the bank SMS a phone app forwards: ForApp's) | installed (the shop's key in `X-API-Key` authenticates) |
+| `/webhooks/rikhtam/{bot}` (Rikhtam's deposits and crypto word, the shop registering the address itself) | installed (the Rikhtam gateway's key in the body authenticates) |
 | `/`, `/health`, `/api/app` | nothing: they answer before installation too |
 
 A controller is *load → service → present*. It lets the shop's refusals through: a `Core\Exceptions\DomainRuleException`
@@ -109,14 +111,14 @@ module implements: `Core\Scheduling\Shops` is the Bots module's `BotShops`.
 
 | Module | What it is |
 |---|---|
-| Providers | The VPN panels: connectors (3X-UI, PasarGuard, HMPanel, Marzban), servers and their health |
+| Providers | The VPN panels: connectors (3X-UI, PasarGuard, HMPanel, Marzban, Rebecca, Remnawave), servers and their health |
 | Catalog | Plans, categories, and which servers can sell a plan today |
 | Subscriptions | A customer's service on a panel: provisioning, sync, renewal, moves, grants, extras, reminders |
 | Orders, Payments | The order's lifecycle; payment methods, the checkout the bot and the website share, the settlement |
 | Discounts, Rewards | Codes, sales, loyalty tiers; cashback, gift codes, the lucky wheel, the nightly draw |
 | Users, Referrals | Customers, wallets, groups and pictures; invite links and commissions |
 | Agency, Bots | Agents, their levels and traffic; the bots, and whose shop the code works in |
-| Telegram | The bots: update dispatch, handlers, gates, texts, keyboards, broadcasts, the report group |
+| Telegram | The bots: update dispatch, handlers, gates, texts, keyboards, broadcasts, the report group, the shop's management in the private chat |
 | Accounts, Store | Customers' sign-in on a website or the mini app, and their accounts; the Store API, its two doors, and the mini app's settings |
 | Notifications, Support, Reviews | What the shop tells a customer; support tickets; customers' reviews |
 | Auth | The panels' sign-in, the throttle, principals and actors, the grants a shop gives its website's admins (`StaffGrant`) |
@@ -152,7 +154,9 @@ installation as a whole.
 ## Principals and actors
 
 Whoever works a shop through an API is a **principal** (`Auth\Principal`): the owner on their panel, an agent on
-theirs, or one of a shop's admins (a customer whose role is admin) on its website's admin API. The route group's guard
+theirs, or one of a shop's admins (a customer whose role is admin) on its website's admin API — or any of the three in
+the bot's private chat, whose management asks the panels' API in-process with a principal marked `inBot`
+([The bots at work](#the-bots-at-work)). The route group's guard
 puts it on the request (`Principal::of()`), runs the request in its shop, and makes it the request's reader
 (`Auth\CurrentPrincipal`) — an answer can depend on who reads it; the owner's login, for one, is shown to nobody else.
 
@@ -172,6 +176,14 @@ its bot's shop, `Telegram\Update\Dispatcher` claims the update id (each is serve
 gates (bot off, phone, channels) and hands the update to the handler `routes/bot.php` maps its command, button,
 callback or conversation step to; then the report group's queue is sent. The details are on
 [Internals: Telegram bot](Internals-Telegram-Bot.md).
+
+**The shop's management in the private chat** (`Telegram\Admin`) is a third client of the panels' API, beside the two
+panels and the website's admin area: whoever has a seat (`AdminSeats`: the owner's linked Telegram account, an agent in
+their own bot, a shop's admin while its «مدیران ربات» lets them in) moves through screens whose every read and write is a
+request to the panels' own routes, built by `PanelBridge` and handled by the app's HTTP kernel in the same process,
+through the door `/api/bot-admin` — no copy of a rule, the same refusals, the same log lines, the change feed moving
+open panels. A decision made there keeps its maker as the panels' do; a ticket's answer is written on the channel
+`manage`.
 
 ## Background work
 
@@ -280,7 +292,8 @@ was done — `continue` says so as `stepped: false`, and the panel, or the comma
   with where the reading got to in one transaction (`RowWriter`), so a step stopped anywhere stages no row twice.
   Everything after reads the staged copy (`Staging\DatabaseStaged`): the other bot may be gone, and a migrator never
   knows its source. Read whole, the schema is `Migrator::recognize()`d — not the bot's, the import fails in words naming
-  the tables missing (a dump of data without its tables' structure, in words of its own) —, `survey()` makes the review,
+  the bot it is when another migrator takes it (Faoxima's database told from MirzaBot's, its ancestor's), else the
+  tables missing (a dump of data without its tables' structure, in words of its own) —, `survey()` makes the review,
   and the panels' connections are kept encrypted apart from it (`imports.panels`), so the survey the panels read holds
   no secret. Then `Stager::readingDone()` deletes the uploaded file, its dump and the database's connection: the old
   database whole, the bot's token and keys in it, is not needed again.
@@ -360,6 +373,6 @@ Writes are atomic (a temporary file renamed over the real one) or done under a f
 
 What the shop does through someone else — a VPN panel, a payment gateway, the database, email, a captcha, the other bot
 an import reads — is a driver of a family on one small kernel (`Core\Drivers`, `Core\Forms`). A driver describes its own form, and the panels draw
-it from that description alone. See [Drivers](Drivers.md). The phone apps that forward a bank's deposit SMS
-(«تایید خودکار واریز») stand beside the kernel, with no form: each is a `Payments\Deposits\Contracts\DepositSource` that
-reads its app's body — ForApp the first —, listed in `Payments\Deposits\DepositSources`.
+it from that description alone. See [Drivers](Drivers.md). Where a bank's deposits come from
+(«تایید خودکار واریز») stands beside the kernel, with no form: each is a `Payments\Deposits\Contracts\DepositSource` that
+reads its sender's body — ForApp's forwarded SMS, Rikhtam's word —, listed in `Payments\Deposits\DepositSources`.

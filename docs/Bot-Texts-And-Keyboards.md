@@ -3,7 +3,9 @@
 # Bot texts and keyboards
 
 «ربات › متن‌های ربات» and «ربات › کیبوردها», in both panels: everything the bot says to a customer, and its menu — every
-shop its own.
+shop its own. Both are in the bot's management too, «⚙️ مدیریت › 🤖 ربات»: a text rewritten by sending it as it should
+read, a keyboard edited button by button ([Managing the shop from the bot](Bot-Management.md#the-bot)). The words and
+the screens of the management itself are fixed, as the panels' are.
 
 ## The bot's texts
 

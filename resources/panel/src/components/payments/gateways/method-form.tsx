@@ -1,4 +1,5 @@
-import { toast } from 'sonner'
+import { useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { driverDraft, driverPayload, type DriverDraft } from '@/components/driver-form/draft'
 import { DriverFields } from '@/components/driver-form/driver-fields'
 import { Field } from '@/components/field'
@@ -7,19 +8,27 @@ import { MoneyField } from '@/components/money-field'
 import { cardsDraft, cardsPayload, cardsRead, newCard, type CardDraft } from '@/components/payments/cards'
 import { CardsEditor } from '@/components/payments/cards-editor'
 import { gatewayKind } from '@/components/payments/gateways'
+import { GatewayWebhook, keepWebhook, toastSaved } from '@/components/payments/gateways/webhook'
 import { SwitchRow } from '@/components/switch-row'
 import { Input } from '@/components/ui/input'
 import { api } from '@/lib/api'
-import type { DriverDescription, DriverValues, PaymentMethodCreateRequest, PaymentMethodRow, PaymentMethodUpdateRequest } from '@/lib/api-types'
+import type { DriverDescription, DriverValues, PaymentMethodCreateRequest, PaymentMethodRow, PaymentMethodUpdateRequest, PaymentMethodWebhookResponse } from '@/lib/api-types'
 import { amountDraft } from '@/lib/format'
+import { queryKeys } from '@/lib/query-keys'
 import { asAmount, trimmed, useForm } from '@/lib/use-form'
 
 interface MethodFormProps {
   driver: DriverDescription
   /** Present when editing: a method of that driver. */
   method?: PaymentMethodRow
-  onSaved: (method: PaymentMethodRow) => void
+  /**
+   * Saved: the method as saved, and whether the save found its gateway's webhook going to another site's address this
+   * view had not shown (a Rialit method's) — the method's view is then where to decide: it stays open, or opens.
+   */
+  onSaved: (method: PaymentMethodRow, webhookElsewhere: boolean) => void
   onCancel: () => void
+  /** The view opens on the gateway's webhook (a method just added whose gateway sends it elsewhere): its block takes the focus. */
+  webhookFirst?: boolean
 }
 
 /**
@@ -49,7 +58,10 @@ const text = (values: MethodDraft, name: string): string => {
  * fields (drawn from its description), a card method's cards, and the switch. A new method names its driver; an
  * existing one keeps it. The wallet has nothing of its own: its label, bounds and switch.
  */
-export function MethodForm({ driver, method, onSaved, onCancel }: MethodFormProps) {
+export function MethodForm({ driver, method, onSaved, onCancel, webhookFirst = false }: MethodFormProps) {
+  const queryClient = useQueryClient()
+  // Counted up each time the webhook's block is what to read next (GatewayWebhook's `attention`).
+  const [attention, setAttention] = useState(webhookFirst ? 1 : 0)
   // What the row keeps (its `config`, closed per driver): its form's fields by name.
   const stored: DriverValues | undefined = method ? { ...method.config } : undefined
   const kind = gatewayKind(driver)
@@ -92,10 +104,16 @@ export function MethodForm({ driver, method, onSaved, onCancel }: MethodFormProp
     const data = await submit(() =>
       method ? api.put(`/payment-methods/${method.id}`, form as PaymentMethodUpdateRequest) : api.post('/payment-methods', { ...form, driver: driver.key } as PaymentMethodCreateRequest),
     )
-    if (data) {
-      toast.success(method ? 'روش پرداخت ذخیره شد' : 'روش پرداخت اضافه شد')
-      onSaved(data.method)
-    }
+    if (!data) return
+    // A Rialit method's save registers the shop's address when Rialit has none, and never puts it over another site's:
+    // that is news only when this view did not say so already (the same address), or the owner is nagged on every save.
+    const { webhook } = data
+    const shown = method && queryClient.getQueryData<PaymentMethodWebhookResponse>(queryKeys.paymentMethodWebhook(method.id))?.webhook
+    const elsewhere = webhook?.state === 'elsewhere' && !(shown?.state === 'elsewhere' && shown.url === webhook.url)
+    if (webhook) keepWebhook(queryClient, data.method.id, webhook)
+    toastSaved(method ? 'روش پرداخت ذخیره شد' : 'روش پرداخت اضافه شد', webhook, driver.label, elsewhere)
+    if (elsewhere) setAttention((count) => count + 1)
+    onSaved(data.method, elsewhere)
   })
 
   return (
@@ -130,7 +148,10 @@ export function MethodForm({ driver, method, onSaved, onCancel }: MethodFormProp
 
       <DriverFields driver={driver} stored={stored} draft={driverPart(values)} set={set} error={error} idPrefix="method" />
 
-      {/* An online gateway's terms of setting it up — the shop's address it calls, Variza's webhook address to give it —, for an edit too. */}
+      {/* Where the gateway sends its webhook (Rialit's, which the shop registers itself), once there is a method to ask about. */}
+      {method?.registers_webhook && <GatewayWebhook method={method} attention={attention} held={busy} />}
+
+      {/* An online gateway's terms of setting it up — the shop's address it calls, the webhook address to give Variza or Rialit —, for an edit too. */}
       {kind === 'online' && driver.notes.length > 0 && <GatewayNotes notes={driver.notes} />}
 
       {cards && <CardsEditor cards={cardsOf(values)} onChange={(next) => set('cards', next)} errors={errors.cards} idPrefix="method" />}

@@ -37,6 +37,12 @@ export function PaymentMethodsPage() {
   const [adding, setAdding] = useState(false)
   // A method is added through the driver picker; the editor only ever opens on one that exists.
   const editor = useEditor<PaymentMethodRow>()
+  // A method just added whose gateway sends its webhook to another site's address: its view opens on that.
+  const [webhookFirst, setWebhookFirst] = useState<number | null>(null)
+  const edit = (method: PaymentMethodRow) => {
+    setWebhookFirst(null)
+    editor.edit(method)
+  }
   const [removing, setRemoving] = useState<PaymentMethodRow | null>(null)
   const list = useRows({
     query: paymentMethodsQuery,
@@ -111,7 +117,7 @@ export function PaymentMethodsPage() {
                         {Icon ? <Icon className="size-4" /> : <span className="text-footnote font-semibold">{method.driver_label.slice(0, 2)}</span>}
                       </span>
                       <div className="grid">
-                        {editable ? <RowTitleButton onClick={() => editor.edit(method)}>{method.label}</RowTitleButton> : <span className="font-medium text-foreground">{method.label}</span>}
+                        {editable ? <RowTitleButton onClick={() => edit(method)}>{method.label}</RowTitleButton> : <span className="font-medium text-foreground">{method.label}</span>}
                         <span className="text-footnote text-muted-foreground">{method.driver_label}</span>
                         {summary && <span className="text-footnote md:hidden">{summary}</span>}
                       </div>
@@ -127,7 +133,7 @@ export function PaymentMethodsPage() {
                   </TableCell>
                   <TableCell>
                     {/* The wallet is built in: never deleted — its name opens its form. A row whose driver is gone can still go. */}
-                    {!method.builtin && <EditMenu label={method.label} onEdit={editable ? () => editor.edit(method) : undefined} onRemove={() => setRemoving(method)} />}
+                    {!method.builtin && <EditMenu label={method.label} onEdit={editable ? () => edit(method) : undefined} onRemove={() => setRemoving(method)} />}
                   </TableCell>
                 </TableRow>
               )
@@ -143,9 +149,15 @@ export function PaymentMethodsPage() {
       <AddMethodModal
         open={adding}
         onClose={() => setAdding(false)}
-        onCreated={(method) => {
+        onCreated={(method, webhookElsewhere) => {
           list.upsert(method)
           setAdding(false)
+          // Rialit sends its webhook to another site's address, which the shop never replaces by itself: the new
+          // method's view, where it is replaced, opens on it.
+          if (webhookElsewhere) {
+            setWebhookFirst(method.id)
+            editor.edit(method)
+          }
         }}
       />
 
@@ -168,9 +180,13 @@ export function PaymentMethodsPage() {
               <MethodForm
                 driver={driver}
                 method={method}
-                onSaved={(saved) => {
+                webhookFirst={webhookFirst === method.id}
+                onSaved={(saved, webhookElsewhere) => {
                   list.upsert(saved)
-                  editor.close()
+                  // Saved, but Rialit sends its webhook to another site's address this view had not shown: it stays open
+                  // on that, where it is replaced.
+                  if (webhookElsewhere) editor.edit(saved)
+                  else editor.close()
                 }}
                 onCancel={editor.close}
               />

@@ -77,7 +77,8 @@ which calls `outgoingFake()`.
 | `Support\FakeTelegram` | the Bot API and bot:poll's long polls | `telegram()` — `reply()`, `fail()`, `on($method, …)`, `calls()`, `params()`, `sentTo()` |
 | `Support\FakePanel` | any other outgoing HTTP: a VPN panel, Resend | `panelHttp()` — `ok()`, `fail()`, `raw()`, `refuse()`, `calls()`, `request()`, `params()`, `options()` |
 | `Fakes\FakePanelDriver`, `Fakes\FakeProvider` | a VPN panel connector, for everything above the connector | `fakePanel()`, then a server with `driver: fake` |
-| `Support\FakeCubePay`, `FakeZarinpal`, `FakeAtlasPay`, `FakeAban`, `FakePlisio`, `FakeAqayePardakht`, `FakeVariza` | each online gateway's API | `cubePay()`, `zarinpal()`, `atlasPay()`, `aban()`, `plisio()`, `aqayePardakht()`, `variza()` — each pays, closes or refuses a payment as its gateway does, `down()` takes it out of reach; `FakeVariza::webhook()` writes and signs a webhook for the test to send |
+| `Support\FakeCubePay`, `FakeZarinpal`, `FakeAtlasPay`, `FakeAban`, `FakePlisio`, `FakeAqayePardakht`, `FakeVariza`, `FakeBluepal`, `FakeRialit` | each online gateway's API | `cubePay()`, `zarinpal()`, `atlasPay()`, `aban()`, `plisio()`, `aqayePardakht()`, `variza()`, `bluepal()`, `rialit()` — each pays, closes or refuses a payment as its gateway does, `down()` takes it out of reach; `FakeVariza::webhook()` writes and signs a webhook for the test to send, `FakeRialit::webhook()` writes Rialit's unsigned one with its headers; `FakeRialit` passes on a payer's fee (`feePercent`), answers under `data` (`wrapped`), refuses as Rialit does (`ipAllowed`, `limited`, `failing`) and keeps the account's one webhook address (`webhookUrl`; each change counted in `changes` and `notices`, 20 an hour), and `FakeBluepal` answers as a young API may (`$loose`) |
+| `Support\FakeRikhtam` | Rikhtam's one address (`rikhtam.com/api.php`) for one gateway's key: `hook`, its crypto invoices, its deposits no invoice took (`$pending`) and attaching one (`$onAttach`) | `rikhtam()` — `pay()` and `expire()` move a crypto invoice on, `down()` takes it out of reach; `deposit()`, `cryptoPaid()` and `healthTest()` write what Rikhtam posts to the shop, for the test to send |
 | `Support\FakeTelegramLogin`, `FakeGoogleLogin` | the OpenID providers (keys signed by `SigningKey`) | `telegramLogin()`, `googleLogin()` |
 | `Support\FakeTurnstile`, `AltchaWidget` | Cloudflare's siteverify; a visitor's browser solving ALTCHA | `turnstile()`; `AltchaWidget::solve()` |
 | `Fakes\RecordingMailTransport` | the mail server | `mail()` — `sent()`, `to()`, `codeIn()`, `failing()` |
@@ -97,7 +98,9 @@ counts its runs, a leased table).
   names differ from its `MODULES` map ([Architecture](Architecture.md#modules)).
 - **Routes**: `tests/Feature/RouteGuardsTest` walks every route through every guard in order, and with another shop's
   row; `tests/Feature/Store/MiniAppDoorTest` asks every Store API route under a website's key and the mini app's, and
-  finds missing exactly what the description marks `x-door` for the other.
+  finds missing exactly what the description marks `x-door` for the other. `tests/Feature/BotAdmin/BotAdminDoorTest`
+  holds the bot's management to its door: nothing from outside gets in, a seat never takes another's door, an admin has
+  the daily work and its grants alone ([Internals: Telegram bot](Internals-Telegram-Bot.md#the-shops-management)).
 - **The API description**: `tests/Unit/Http/ApiDescriptionTest` holds `resources/api/openapi.yaml` to the routes, its
   objects closed, and readable by a website's own tools ([API contract](API-Contract.md#how-the-php-side-is-held-to-it)).
 - **Upgrades**: `tests/Unit/Database/UpgradesTest` holds every schema change to its upgrade ([Database](Database.md#upgrades)).

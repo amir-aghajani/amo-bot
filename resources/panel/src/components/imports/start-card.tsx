@@ -30,6 +30,11 @@ const BACKUP_FROM: Record<string, ReactNode> = {
       فایل <bdi dir="ltr">backup.zip</bdi> که ربات Faoxima هر چند ساعت به کانال گزارش‌هایش می‌فرستد؛ آخرین آن را از همان کانال دانلود کنید
     </>
   ),
+  mirzabot: (
+    <>
+      فایل <bdi dir="ltr">backup_تاریخ.sql</bdi> که ربات MirzaBot هر چند ساعت به کانال گزارش‌هایش می‌فرستد (نه فایل‌های zip ربات‌های نماینده کنارش)؛ آخرین آن را از همان کانال دانلود کنید
+    </>
+  ),
 }
 
 /** What a migrator's description says of it in words (`mark`, `vendor`); undefined for what it does not say. */

@@ -7,6 +7,7 @@ import { AppSection } from '@/apps/admin/settings/app-section'
 import { DatabaseSection } from '@/apps/admin/settings/database-section'
 import { LoginSection } from '@/apps/admin/settings/login-section'
 import { MailSection, MailTestCard } from '@/apps/admin/settings/mail-section'
+import { OwnerTelegramCard } from '@/apps/admin/settings/owner-telegram-card'
 import { SCHEDULE_DESCRIPTION, ScheduleSection } from '@/apps/admin/settings/schedule-section'
 import { SmsSection, SmsTestCard } from '@/apps/admin/settings/sms-section'
 import { TelegramSection } from '@/apps/admin/settings/telegram-section'
@@ -42,8 +43,9 @@ const OUTSIDE_THE_FILE: Partial<Record<(typeof PANEL_SETTINGS_SECTIONS)[number][
 
 /**
  * «تنظیمات پنل» (the owner's): config.php's groups — kept in a file so they stay editable even when the database is
- * broken —, the owner's login, the panel's look in this browser, AmoBot's update, the scheduled tasks' timings, the
- * backups and, in the main shop alone, the imports from another bot (sectionsOfShop()).
+ * broken —, the owner's login and the Telegram accounts that are the owner in the main bot, the panel's look in this
+ * browser, AmoBot's update, the scheduled tasks' timings, the backups and, in the main shop alone, the imports from
+ * another bot (sectionsOfShop()).
  */
 export function SettingsPage() {
   const read = useQuery({ queryKey: queryKeys.configSettings, queryFn: () => api.get<ConfigSettingsResponse>('/settings/config'), staleTime: 60_000 })
@@ -119,7 +121,12 @@ export function SettingsPage() {
             <SmsTestCard driver={data.groups.sms.driver} />
           </>
         ),
-        login: <LoginSection disabled={readOnly} />,
+        login: (
+          <>
+            <LoginSection disabled={readOnly} />
+            <OwnerTelegramCard />
+          </>
+        ),
         appearance: <AppearanceCard />,
         update: <UpdateSection />,
         schedule: <ScheduleSection />,

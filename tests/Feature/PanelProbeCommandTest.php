@@ -50,6 +50,26 @@ final class PanelProbeCommandTest extends DatabaseTestCase
         self::assertStringContainsString('Serving links.', $probe->getDisplay());
     }
 
+    /** A panel that reports no CPU load nor disk (Remnawave) has them said so, never as a 0% or 0 B it did not say. */
+    public function testWhatAPanelDoesNotReportIsSaidSo(): void
+    {
+        $this->panelHttp()->raw(
+            self::json(['response' => ['users' => [], 'total' => 0]]),
+            self::json(['response' => ['cpu' => ['cores' => 2], 'memory' => ['total' => 8 * 1024 ** 3, 'free' => 5 * 1024 ** 3, 'used' => 3 * 1024 ** 3], 'uptime' => 3600, 'timestamp' => 1763200800000]]),
+            self::json(['response' => ['total' => 1, 'internalSquads' => [['uuid' => 'a1b2c3d4-5e6f-4a7b-8c9d-0e1f2a3b4c5d', 'name' => 'Germany', 'info' => ['membersCount' => 3, 'inboundsCount' => 1], 'inbounds' => [['tag' => 'VLESS_REALITY']]]]]]),
+        );
+
+        $token = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiQVBJIn0.a0AfkgXIXEKU9nW9aNb6MgPc0Eo7xjqCdzBkUlGGLhI';
+        $probe = $this->probe(['driver' => 'remnawave', 'url' => 'https://rw.example', '--token' => $token]);
+
+        self::assertSame(Command::SUCCESS, $probe->getStatusCode(), $probe->getDisplay());
+        self::assertSame(['GET /api/users', 'GET /api/system/stats', 'GET /api/internal-squads'], $this->panelHttp()->calls());
+        self::assertMatchesRegularExpression('/CPU\s+not reported/', $probe->getDisplay());
+        self::assertMatchesRegularExpression('/Disk\s+not reported/', $probe->getDisplay());
+        self::assertMatchesRegularExpression('/Memory\s+3\.0 GiB \/ 8\.0 GiB/', $probe->getDisplay(), 'what it does report');
+        self::assertMatchesRegularExpression('/Germany/', $probe->getDisplay(), 'its squads are the inbounds');
+    }
+
     public function testAPanelIsProbedThroughASocks5Proxy(): void
     {
         $this->panelHttp()->healthyPanel();

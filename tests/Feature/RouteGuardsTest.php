@@ -18,6 +18,7 @@ use App\Modules\Store\Contracts\Door;
 use App\Modules\Store\Http\StaffMiddleware;
 use App\Modules\Store\Http\StoreMiddleware;
 use App\Modules\Store\Models\Website;
+use App\Modules\Telegram\Admin\Door\BotAdminDoor;
 use App\Modules\Telegram\Broadcasts\Audience;
 use App\Modules\Telegram\Broadcasts\BroadcastMode;
 use App\Modules\Telegram\Broadcasts\BroadcastService;
@@ -279,6 +280,12 @@ final class RouteGuardsTest extends HttpTestCase
                 continue;
             }
             $response = $this->ask($method, $path);
+            if (str_starts_with($path, BotAdminDoor::PATH . '/')) {
+                // The bot's management door is no door from outside, installed or not.
+                self::assertSame(404, $response->getStatusCode(), "{$method} {$path}");
+
+                continue;
+            }
 
             self::assertSame(503, $response->getStatusCode(), "{$method} {$path}");
             self::assertSame(InstalledMiddleware::NOT_INSTALLED, $this->decode($response)['message'], "{$method} {$path}");
@@ -391,7 +398,7 @@ final class RouteGuardsTest extends HttpTestCase
 
         $website->forceFill(['staff_grants' => array_map(static fn(StaffGrant $grant): string => $grant->value, StaffGrant::cases())])->save();
         $this->bearer($this->customerSession($sara, ['method' => SignInMethod::Telegram, 'authenticated_at' => now()->subSeconds(CustomerSessions::RECENT_SECONDS + 1)]));
-        self::assertCount(28, array_filter($routes, static fn(array $route): bool => $route[3]), 'the operations a grant opens, and approving a payment');
+        self::assertCount(30, array_filter($routes, static fn(array $route): bool => $route[3]), 'the operations a grant opens, approving a payment, and a Rikhtam deposit attached to one (its list too)');
         foreach ($routes as [$method, $path, , $recent]) {
             $response = $this->ask($method, $path);
             $asked = $response->getStatusCode() === 403 && $response->getHeaderLine('WWW-Authenticate') === RecentSignInMiddleware::CHALLENGE;
@@ -482,7 +489,8 @@ final class RouteGuardsTest extends HttpTestCase
             'message' => (string) $ticket->messages()->value('id'),
             'review' => (string) $this->review($customer)->id,
             'subscription' => (string) $this->subscription($customer, $plan, $server, 'main_1')->id,
-            'method' => (string) $this->cardMethod()->id,
+            // Rialit's: its gateway's webhook address is a read of its own (out of reach here: «unknown», still a 200).
+            'method' => (string) $this->rialitMethod()->id,
             'channel' => (string) $this->channel(-1001234, 'کانال اصلی')->id,
             'emoji' => '111',
             'gift_code' => (string) $this->giftCode()->id,

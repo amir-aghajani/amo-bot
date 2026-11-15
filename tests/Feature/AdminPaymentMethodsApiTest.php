@@ -18,10 +18,13 @@ use App\Modules\Payments\Contracts\GatewayInterface;
 use App\Modules\Payments\Drivers\Aban\AbanGateway;
 use App\Modules\Payments\Drivers\AqayePardakht\AqayePardakhtGateway;
 use App\Modules\Payments\Drivers\AtlasPay\AtlasPayGateway;
+use App\Modules\Payments\Drivers\Bluepal\BluepalGateway;
 use App\Modules\Payments\Drivers\CubePay\CubePayGateway;
 use App\Modules\Payments\Drivers\Manual\ManualGateway;
 use App\Modules\Payments\Drivers\Outside\OutsideGateway;
 use App\Modules\Payments\Drivers\Plisio\PlisioGateway;
+use App\Modules\Payments\Drivers\Rialit\RialitGateway;
+use App\Modules\Payments\Drivers\Rikhtam\RikhtamGateway;
 use App\Modules\Payments\Drivers\Variza\VarizaGateway;
 use App\Modules\Payments\Drivers\Wallet\WalletGateway;
 use App\Modules\Payments\Drivers\Zarinpal\ZarinpalGateway;
@@ -42,6 +45,7 @@ use Tests\Support\FakeAqayePardakht;
 use Tests\Support\FakeAtlasPay;
 use Tests\Support\FakeCubePay;
 use Tests\Support\FakePlisio;
+use Tests\Support\FakeRikhtam;
 use Tests\Support\FakeVariza;
 use Tests\Support\FakeZarinpal;
 
@@ -73,7 +77,7 @@ final class AdminPaymentMethodsApiTest extends HttpTestCase
         self::assertSame([WalletGateway::key(), WalletGateway::label(), true, true, 'instant', null, null], [$methods[0]['driver'], $methods[0]['label'], $methods[0]['builtin'], $methods[0]['enabled'], $methods[0]['kind'], $methods[0]['min_amount'], $methods[0]['max_amount']]);
 
         $drivers = array_column($this->decode($this->get('/api/admin/payment-methods/drivers'))['drivers'], null, 'key');
-        self::assertSame([WalletGateway::key(), ManualGateway::key(), CubePayGateway::key(), ZarinpalGateway::key(), AtlasPayGateway::key(), AbanGateway::key(), PlisioGateway::key(), AqayePardakhtGateway::key(), VarizaGateway::key()], array_keys($drivers), 'in the order they are registered');
+        self::assertSame([WalletGateway::key(), ManualGateway::key(), CubePayGateway::key(), ZarinpalGateway::key(), AtlasPayGateway::key(), AbanGateway::key(), PlisioGateway::key(), AqayePardakhtGateway::key(), VarizaGateway::key(), BluepalGateway::key(), RialitGateway::key(), RikhtamGateway::key()], array_keys($drivers), 'in the order they are registered');
         self::assertSame([WalletGateway::label(), [], ['kind' => 'instant', 'builtin' => true]], [$drivers['wallet']['label'], $drivers['wallet']['fields'], $drivers['wallet']['traits']], 'the wallet: nothing to set');
         self::assertSame(['کارت به کارت', ['kind' => 'manual', 'builtin' => false]], [$drivers['manual']['label'], $drivers['manual']['traits']]);
         self::assertSame(['instructions', 'auto_approve_after'], array_column($drivers['manual']['fields'], 'name'), "a card method's settings are its driver's form; its cards a list of their own");
@@ -613,6 +617,30 @@ final class AdminPaymentMethodsApiTest extends HttpTestCase
         self::assertSame(200, $response->getStatusCode(), (string) $response->getBody());
         $row = $this->decode($response)['method'];
         self::assertSame(['کارت مقصد: کارت‌های واریزا (تسویه تتر)', true, true], [$row['summary'], $row['config']['api_key']['set'], $row['config']['webhook_secret']['set']]);
+    }
+
+    /** Rikhtam's crypto payments through the panels' API: its key kept encrypted and never shown; its coin one of its list, said on its row. */
+    public function testARikhtamMethodKeepsItsKeyEncryptedAndSaysItsCoin(): void
+    {
+        $add = fn(array $form) => $this->postJson('/api/admin/payment-methods', $form + ['driver' => 'rikhtam', 'label' => 'ریختم (ارز دیجیتال)', 'clear_secret' => false]);
+
+        self::assertSame(['secret' => ['کلید امنیتی درگاه ریختم را وارد کنید.']], $this->decode($add(['coin' => 'any']))['errors']);
+        $this->unchecked();
+        self::assertSame(['secret' => ['کلید امنیتی را همان‌طور که پنل ریختم نشان می‌دهد کپی کنید؛ فاصله و حروف فارسی ندارد.'], 'coin' => ['ارز پرداخت را از فهرست انتخاب کنید.']], $this->decode($add(['secret' => 'rk 5e1f 0c9a', 'coin' => 'btc']))['errors'], 'a key with spaces, a coin not in the list');
+
+        $response = $add(['secret' => FakeRikhtam::KEY, 'coin' => 'usdt_ton']);
+        self::assertSame(201, $response->getStatusCode(), (string) $response->getBody());
+        $row = $this->decode($response)['method'];
+        self::assertSame(['rikhtam', 'online', 'ارز: تتر روی شبکه TON'], [$row['driver'], $row['kind'], $row['summary']]);
+        self::assertSame(['secret' => ['set' => true, 'hint' => '••••••8a6c'], 'coin' => 'usdt_ton'], $row['config']);
+        $method = PaymentMethod::query()->findOrFail($row['id']);
+        self::assertStringNotContainsString(FakeRikhtam::KEY, json_encode($method->config, JSON_THROW_ON_ERROR), 'kept encrypted');
+
+        // Saved again with the key blank: kept; the customer's pick again.
+        $response = $this->putJson("/api/admin/payment-methods/{$method->id}", ['label' => 'ریختم', 'enabled' => true, 'min_amount' => '', 'max_amount' => '', 'secret' => '', 'clear_secret' => false, 'coin' => 'any']);
+        self::assertSame(200, $response->getStatusCode(), (string) $response->getBody());
+        $row = $this->decode($response)['method'];
+        self::assertSame(['ارز: انتخاب مشتری در صفحه ریختم', true], [$row['summary'], $row['config']['secret']['set']]);
     }
 
     private function addMethod(string $label, string $card): int

@@ -2,7 +2,7 @@
     "openapi": "3.0.3",
     "info": {
         "title": "AmoBot API",
-        "version": "0.9.0",
+        "version": "0.10.0",
         "description": "AmoBot's HTTP API. Every answer is JSON; the panels are static files that render their own pages.\n\n**The panels.** `/api/admin/*` is the owner's panel and `/api/agent/*` an agent's; each has its own session. The\nowner signs in with the login kept in config.php and may work in any shop: each request names its shop in the\n`X-Shop` header (none means the main shop), and the session itself remembers no shop. An agent signs in with a\none-time link from the main bot and works only in their own bot's shop. Screens both panels have are described once,\nunder `/api/{panel}/…`; a screen only one panel has is under that panel's prefix. Panel requests send the session\ncookie, and a request that changes something also sends `X-Requested-With: XMLHttpRequest` (the CSRF guard).\n`/api/app` is public. `/api/install/*` answers only until the shop is installed, and only with the install key in\n`X-Install-Key` (the text of storage/install-key.txt, which the first request creates); without it the answer is a\n403 on `key`. Every answer carries its request id in `X-Request-Id`; an error answer also has it in its body\n(`request_id`), and every log line the request wrote carries the same id.\n\n**The Store API.** `/api/store/v1/{store}/*` is the API of a shop's own website (the main bot's or an agent's). The\nstore key in the path names the shop. A customer signs in (Telegram, Google, a code by SMS, or an email and a password,\nplus a second step when two-factor sign-in is on) and gets a bearer token: the `customer` scheme, with no cookie, session or\nCSRF header. Pages on the website's origins may call it from a browser: preflight requests are answered, and every\nanswer, errors included, carries the CORS headers.\n- Public: the plans the bot sells now, the status of the servers they are sold on and, while the website shows\n  reviews, the approved reviews with their count and average rating. Anyone may then write a review: a guest\n  through the website's captcha (only signed-in customers while the website asks for no captcha). A review waits for\n  support's approval; sent with a bearer token, it belongs to that customer.\n- A signed-in customer manages their account: names, password, two-factor sign-in, the ways they sign in (adding one\n  that another account of the shop already has offers a merge, 202) and their signed-in devices. Changing how the\n  account signs in (the password, two-factor sign-in, a way in, a merge) also needs a sign-in from the last 15\n  minutes, else a 403 whose `WWW-Authenticate` says so; `POST /me/reauthenticate` proves a way in again. A bearer\n  token alone cannot change any of it, nor hand a service to another customer (`POST /subscriptions/{id}/transfer`\n  asks the same).\n- They read their own services (refreshed from the panel, auto-renewal switched, link changed, handed to another\n  customer), add a service by its link, and read their orders and payments, wallet and ledger (and send money to\n  another customer), referral numbers and notifications. They order through the bot's checkout (a plan, a service\n  they build, a renewal, a wallet top-up, extra traffic, time or devices), each ordering request with an\n  `Idempotency-Key`, upload a card transfer's receipt, ask an online gateway what came of their payment, and redeem\n  gift codes. They open support tickets, about a service or not, write with or without a picture, close them, reopen\n  them by writing, and rate them.\n- A form on the site itself (a contact form) may use the website's captcha too: the site's backend asks the shop to\n  check the widget's token (`POST /captcha/verify`), so the site never holds the captcha's secret.\n- Request bodies are JSON (`Content-Type: application/json`). A form is accepted only where a picture may be\n  uploaded (a receipt, a ticket message); any other body type is a 415.\n- The shop's Telegram mini app opens the same API under a store key of its own: its customers sign in by the launch\n  data Telegram hands it (`POST /auth/mini-app`), and no other origin, captcha or admin API is there. As the bot\n  answers nothing before its gates, an order (a plan, a service built, a renewal, extras, a wallet top-up), a gift\n  code and a service added by its link are refused through the mini app's key (422 on `status`) while the shop asks\n  every customer for their number and this one has none (`shop.phone_required`) — where it asks it only at the\n  moments it chose (`shop.phone_moments`), just an order that is one of them: a purchase (a service built too), a\n  renewal (extras too), a card-to-card payment —, or has not joined the shop's required channels — as a free test\n  and a spin of the wheel are through either key (a free test also while `shop.phone_moments` has `test`). A\n  customer support excused from the number (`GET /me`'s `phone_exempt`) is never asked it. What only one\n  of the two has is marked `x-door` — `website` (the website's ways in and its captcha) or `mini_app` (its sign-in,\n  its logo and the fingerprint secret) —: under the other's key it is a 404. Proving a way in again by the mini\n  app's launch data or by the fingerprint secret works through the mini app's key alone.\n- A panel may look at the mini app as one of the customers (`POST /api/{panel}/mini-app/preview`): a session of\n  theirs whose `GET /me` says `session.method` `preview`, for 30 minutes from its opening. It reads through the mini\n  app's key alone — even while the mini app is switched off, where every request it makes carries its token —, opens\n  nothing under a website's key, and any request but GET or HEAD it makes is a 403 — all but a built service's price\n  (`POST /custom-services/quote` without a `discount_code`), which only works it out:\n  «این پیش‌نمایش است؛ در آن چیزی ذخیره یا فرستاده نمی‌شود.»\n\n**The website's admin API.** `/api/store/v1/{store}/admin/*` gives the shop's admins (customers whose role is admin)\nthe shop's daily work on its website, with their bearer token. It has the panel operations marked `x-staff`: the\nmarker's value is the grant the operation needs, or `true` for none.\n- It answers only while the website lets admins in (`staff_enabled`).\n- A session the mini app signed in (by its launch data) is refused, whatever was proven on it since: the mini app is\n  the customer side alone, and an admin signs in on the website itself.\n- While the website asks for a strong sign-in (`staff_strong_sign_in`), a session signed in with a password or a code\n  by SMS alone is refused: it needs Telegram, Google, or a password or a code by SMS with its second step\n  (`POST /me/reauthenticate` can prove one).\n- Every operation needs a way in proven on the session within the last 12 hours: an admin's token lasts a working\n  day, not the months a customer's does.\n- An operation that names a grant works only while the website grants it (`staff_grants`), and it needs a sign-in\n  from the last 15 minutes. Approving a payment, which delivers a service, needs one too (`x-staff-recent`).\n- Each refusal is a 403 (`StaffRefused`). The shop's configuration (payment methods, the bot's settings, texts and\n  keyboards, the report group, the website, who the admins are) is not there at all (404).\n- An admin cannot act on themselves: approve or refund their own payment, adjust their own wallet, make themselves an\n  order by hand, change their own service (days and traffic, switch, move, transfer, delete), moderate their own\n  review or clear an alert on their own referrals. These guards protect only an admin's own account: two admins can\n  do for each other what each is refused for themselves, so give the role only to people you trust.\n- They cannot touch any admin's account (their own included: ban it, put it in a group, turn off its two-factor\n  sign-in, end its sessions) or an agent's, switch «همکار» on for a group an admin is in, approve a payment without\n  a receipt in review, or leave a client on a panel that answers.\nThe admin paths are the panel paths, described once: tests/Support/ApiDescription expands each marked operation to\nits `/admin` path (the store key instead of the panel, the `customer` bearer scheme, the 401 and the 403).\n\n**Versioning.** The Store API's version is in its address: this is v1. Within v1 an answer only gains fields; no\nfield is removed, renamed or given another type, and a request keeps accepting what it accepted, so a website keeps\nworking across the shop's upgrades. A breaking change comes as v2, beside v1. Every refusal and failure uses the one\nerror shape; its `message` is written for the reader (the customer on the Store API, the admin on the panels).\n\n**The contract.** Both sides are checked against this file. Every request the PHP tests send and every answer they\nget must match it (tests/HttpTestCase); every route must be described here, and nothing else; every POST, PUT and\nPATCH describes its body or says it takes none (`x-no-body: true`) (tests/Unit/Http/ApiDescriptionTest); and the\npanels' TypeScript types are generated from it (`pnpm api:types` writes resources/panel/src/lib/api-types.ts).\nObjects are closed: a field the server sends, or a request carries, that is not described here fails the tests.\n"
     },
     "paths": {
@@ -276,7 +276,7 @@
                 }
             ],
             "post": {
-                "summary": "Set a new panel login with the recovery key. This browser is signed in with it, in the shop the request names, and every other session ends. A 422 under the field refused — a wrong or expired key on `key`, which counts as a failed sign-in —, or on `file` while the server may not write config.php; a 429 while this address must wait after failures.",
+                "summary": "Set a new panel login with the recovery key. This browser is signed in with it, in the shop the request names, and every other session ends — and every Telegram account linked as the owner, as with `PUT /auth/credentials`. A 422 under the field refused — a wrong or expired key on `key`, which counts as a failed sign-in —, or on `file` while the server may not write config.php; a 429 while this address must wait after failures.",
                 "requestBody": {
                     "required": true,
                     "content": {
@@ -405,7 +405,7 @@
                 }
             ],
             "put": {
-                "summary": "Change the panel's login. Every other session ends; this one stays signed in. A 422 under the field refused (a wrong current password counts as a failed sign-in), or on `file` while the server may not write config.php; a 429 while this address or the account must wait after failures.",
+                "summary": "Change the panel's login. Every other session ends; this one stays signed in. Every Telegram account linked as the owner (`/settings/owner-telegram`) is let go too, with the bot admin role its link gave it, and an open link ends: they are linked again afterwards. A 422 under the field refused (a wrong current password counts as a failed sign-in), or on `file` while the server may not write config.php; a 429 while this address or the account must wait after failures.",
                 "requestBody": {
                     "required": true,
                     "content": {
@@ -2114,13 +2114,13 @@
             ],
             "post": {
                 "x-staff": "catalog",
-                "summary": "Raise or lower several plans' prices at once. All or nothing: if any plan cannot take the change (a price below zero, or a first-purchase or agent price no longer below the price), nothing changes and a 422 on `plan_ids` names each such plan.",
+                "summary": "Raise or lower several plans' prices at once. All or nothing: if any plan cannot take the change (a price below zero, or a first-purchase or agent price no longer below the price) or, with `previewed`, its prices moved since the preview, nothing changes and a 422 on `plan_ids` names each such plan.",
                 "requestBody": {
                     "required": true,
                     "content": {
                         "application/json": {
                             "schema": {
-                                "$ref": "#/components/schemas/PlanPricesRequest"
+                                "$ref": "#/components/schemas/PlanPricesChangeRequest"
                             }
                         }
                     }
@@ -3505,6 +3505,71 @@
                 }
             }
         },
+        "/api/{panel}/payments/{id}/rikhtam": {
+            "parameters": [
+                {
+                    "$ref": "#/components/parameters/Panel"
+                },
+                {
+                    "$ref": "#/components/parameters/Id"
+                },
+                {
+                    "$ref": "#/components/parameters/Shop"
+                }
+            ],
+            "get": {
+                "x-staff": true,
+                "x-staff-recent": true,
+                "summary": "The deposits of the last 20 days no invoice took at Rikhtam (at most 40), to attach one to this card payment: the closest to its sum first. Offered (`actions.rikhtam`) for a payment that may be approved in a shop whose Rikhtam is connected; not connected, `connected` is false and the list empty.",
+                "description": "Refused as an approval is: a 422 on `status` for a payment that may not be approved, a 403 for an admin's own\npayment, and on the website's admin API for one without a receipt in review. A 422 on `status` when Rikhtam refuses\nthe shop's key (its own words); a 503 while Rikhtam cannot be asked.\n",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/PaymentRikhtamResponse"
+                                }
+                            }
+                        }
+                    },
+                    "default": {
+                        "$ref": "#/components/responses/Error"
+                    }
+                }
+            },
+            "post": {
+                "x-staff": true,
+                "x-staff-recent": true,
+                "summary": "Attach one of those deposits to this payment: Rikhtam sends it to the shop again, named for the payment, and it approves the payment when it covers its order's price — delivered, and the customer told, as by a bank SMS. The answer is the payment as it stands after, with Rikhtam's word (`message`) and its fee.",
+                "description": "Refused as `GET` is, before Rikhtam is asked. A 422 on `uid` for no deposit picked, Rikhtam not connected, or\nRikhtam's refusal in its own words (the deposit not found or confirmed already, the payment not taken, a billing or\nrate limit). Rikhtam's answer lost, or a refusal of its while the deposit did approve the payment (the shop's answer\nreached it too late), the shop's record decides: a 200, `message` saying so and `fee` null. A 503 while Rikhtam\ncannot be asked, or while the shop is still deciding that deposit: look at the payment again shortly.\n",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PaymentRikhtamRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Attached",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/PaymentRikhtamAttachResponse"
+                                }
+                            }
+                        }
+                    },
+                    "default": {
+                        "$ref": "#/components/responses/Error"
+                    }
+                }
+            }
+        },
         "/api/{panel}/payments/{id}/reject": {
             "parameters": [
                 {
@@ -4628,6 +4693,92 @@
                 }
             }
         },
+        "/api/{panel}/deposits/settings/rikhtam": {
+            "parameters": [
+                {
+                    "$ref": "#/components/parameters/Panel"
+                },
+                {
+                    "$ref": "#/components/parameters/Shop"
+                }
+            ],
+            "put": {
+                "summary": "Connect Rikhtam (rikhtam.com, «ریختم») by its gateway's «کلید امنیتی»: the shop registers its own address (`rikhtam.callback_url`) with that gateway, then keeps the key (encrypted) and switches «تایید خودکار واریز» on. Rikhtam then sends each deposit of the gateway's bank account to the shop, and one whose sum a single open card-to-card payment asks approves it.",
+                "description": "A 422 on `secret`, nothing kept: no key; the key another shop of the site holds (a gateway sends to one address:\nregistering this shop's would take that one's deposits) or the shop's address (APP_URL) not https — both refused\nbefore Rikhtam is asked —; the key no gateway's at Rikhtam; the shop's address not on the domain the gateway was made for (the message names\nits host and the address to put in the gateway's «آدرس کال‌بک»); an address Rikhtam does not take (not https, or\nnot public); or Rikhtam out of reach. Connecting again with another key replaces the old one.\n",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/RikhtamConnectRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Connected",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/DepositSettingsResponse"
+                                }
+                            }
+                        }
+                    },
+                    "default": {
+                        "$ref": "#/components/responses/Error"
+                    }
+                }
+            },
+            "delete": {
+                "summary": "Forget the Rikhtam key and what its registration said: a deposit or crypto word signed with it alone is refused from then on (a Rikhtam crypto method keeps its own key).",
+                "responses": {
+                    "200": {
+                        "description": "Forgotten",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/DepositSettingsResponse"
+                                }
+                            }
+                        }
+                    },
+                    "default": {
+                        "$ref": "#/components/responses/Error"
+                    }
+                }
+            }
+        },
+        "/api/{panel}/deposits/settings/rikhtam/hook": {
+            "parameters": [
+                {
+                    "$ref": "#/components/parameters/Panel"
+                },
+                {
+                    "$ref": "#/components/parameters/Shop"
+                }
+            ],
+            "post": {
+                "summary": "Register the shop's address with its Rikhtam gateway again (after the site moved): the refusals of `PUT …/rikhtam`, a 422 on `secret` — and one while Rikhtam is not connected.",
+                "x-no-body": true,
+                "responses": {
+                    "200": {
+                        "description": "Registered",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/DepositSettingsResponse"
+                                }
+                            }
+                        }
+                    },
+                    "default": {
+                        "$ref": "#/components/responses/Error"
+                    }
+                }
+            }
+        },
         "/api/{panel}/payment-methods": {
             "parameters": [
                 {
@@ -4656,7 +4807,7 @@
                 }
             },
             "post": {
-                "summary": "Add a payment method. Names a driver and fills in that driver's form.",
+                "summary": "Add a payment method. Names a driver and fills in that driver's form. A method whose gateway takes its webhook address from the shop (Rialit) has the shop's registered there when the gateway has none (`webhook`); the save never fails for the gateway's sake.",
                 "requestBody": {
                     "required": true,
                     "content": {
@@ -4673,7 +4824,7 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/PaymentMethodResponse"
+                                    "$ref": "#/components/schemas/PaymentMethodSavedResponse"
                                 }
                             }
                         }
@@ -4763,7 +4914,7 @@
                 }
             ],
             "put": {
-                "summary": "Update a payment method. Sends its driver's form again: a card method's with its cards, the wallet's its label, bounds and switch. A 404 for «خارج از فروشگاه», as for no row.",
+                "summary": "Update a payment method. Sends its driver's form again: a card method's with its cards, the wallet's its label, bounds and switch. A Rialit method has the shop's webhook address registered as at `POST /payment-methods` (`webhook`). A 404 for «خارج از فروشگاه», as for no row.",
                 "requestBody": {
                     "required": true,
                     "content": {
@@ -4780,7 +4931,7 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/PaymentMethodResponse"
+                                    "$ref": "#/components/schemas/PaymentMethodSavedResponse"
                                 }
                             }
                         }
@@ -4823,6 +4974,65 @@
                 "responses": {
                     "204": {
                         "$ref": "#/components/responses/NoContent"
+                    },
+                    "default": {
+                        "$ref": "#/components/responses/Error"
+                    }
+                }
+            }
+        },
+        "/api/{panel}/payment-methods/{id}/webhook": {
+            "parameters": [
+                {
+                    "$ref": "#/components/parameters/Panel"
+                },
+                {
+                    "$ref": "#/components/parameters/Id"
+                },
+                {
+                    "$ref": "#/components/parameters/Shop"
+                }
+            ],
+            "get": {
+                "summary": "Where the method's gateway sends its webhooks now, asked at the gateway and nothing changed — for a gateway that takes its webhook address from the shop (`PaymentMethodRow.registers_webhook`: Rialit); a 422 on `driver` for any other. Rialit not answering is no error: `unknown`, and why.",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/PaymentMethodWebhookResponse"
+                                }
+                            }
+                        }
+                    },
+                    "default": {
+                        "$ref": "#/components/responses/Error"
+                    }
+                }
+            },
+            "post": {
+                "summary": "Register the shop's webhook address with the method's gateway: where it has none; where it has another (one account for another site too, maybe), only with `replace`; where it has the shop's, nothing. Rialit tells the account's owner of each change on Telegram and by email, and takes 20 security changes an hour. A 422 on `driver` as `GET`; what Rialit would not do is no error, but the state and why (`message`).",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PaymentMethodWebhookRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Registered, or why not",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/PaymentMethodWebhookResponse"
+                                }
+                            }
+                        }
                     },
                     "default": {
                         "$ref": "#/components/responses/Error"
@@ -8370,6 +8580,100 @@
                 }
             }
         },
+        "/api/admin/settings/owner-telegram": {
+            "parameters": [
+                {
+                    "$ref": "#/components/parameters/Shop"
+                }
+            ],
+            "get": {
+                "summary": "«مدیریت از ربات» (the owner's, «تنظیمات پنل › ورود به پنل»): the Telegram accounts that are the owner in the main bot's private chat — every section of every shop from «⚙️ مدیریت» (/admin), as this login has in the panel —, oldest first, and until when the one-time link made last may be opened.",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/OwnerTelegramResponse"
+                                }
+                            }
+                        }
+                    },
+                    "default": {
+                        "$ref": "#/components/responses/Error"
+                    }
+                }
+            }
+        },
+        "/api/admin/settings/owner-telegram/link": {
+            "parameters": [
+                {
+                    "$ref": "#/components/parameters/Shop"
+                }
+            ],
+            "post": {
+                "summary": "A new one-time link (`t.me/<main bot>?start=owner-<code>`): the Telegram account that opens it within ten minutes becomes the owner in the main bot — and its bot admin, unless it was one already. It works once; a new link ends the last. At most five accounts are linked, a sixth letting the oldest go with the admin role its link gave it. The panel's current password comes first (`current_password`): blank or wrong is a 422 on it, and a wrong one counts as a failed sign-in (a 429 while this address or the account must wait). Then a 422 on `link` while the main bot's username is not known yet (check its token in «تنظیمات پنل › ربات تلگرام»). The bot's own screen («👑 حساب تلگرام مالک»), asked by an account linked already, sends no password. A new panel login (`PUT /auth/credentials`, or a recovery) lets every linked account go and ends an open link.",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/OwnerTelegramLinkRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Made",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/OwnerTelegramLinkResponse"
+                                }
+                            }
+                        }
+                    },
+                    "default": {
+                        "$ref": "#/components/responses/Error"
+                    }
+                }
+            }
+        },
+        "/api/admin/settings/owner-telegram/{telegram_id}": {
+            "parameters": [
+                {
+                    "name": "telegram_id",
+                    "in": "path",
+                    "required": true,
+                    "description": "The account's numeric Telegram id.",
+                    "schema": {
+                        "type": "integer"
+                    }
+                },
+                {
+                    "$ref": "#/components/parameters/Shop"
+                }
+            ],
+            "delete": {
+                "summary": "The account is the owner no more, and the bot admin role its link gave it goes too: from its next message the bot's management is closed to it. An account that was a bot admin before its link stays one — with the daily work while «مدیران ربات» lets admins in. One not linked changes nothing. Answers the accounts left.",
+                "responses": {
+                    "200": {
+                        "description": "Let go",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/OwnerTelegramResponse"
+                                }
+                            }
+                        }
+                    },
+                    "default": {
+                        "$ref": "#/components/responses/Error"
+                    }
+                }
+            }
+        },
         "/api/admin/imports": {
             "parameters": [
                 {
@@ -8395,7 +8699,7 @@
                 }
             },
             "post": {
-                "summary": "Start an import from the other bot's backup file: its own backup (Faoxima's `backup.zip`, as its report channel gets it), a phpMyAdmin or mysqldump export (`.sql`), or either gzipped (`.gz`) or zipped (`.zip`) — told apart by its bytes, not its name. The file is kept and the import starts reading it (phase `reading`); the page then calls `POST /imports/{id}/continue` until it is read. A 422 says why one is refused: under `migrator` a bot not in the list; under `file` none, one past the host's upload limit, or no database backup; under `import` another import under way.",
+                "summary": "Start an import from the other bot's backup file: its own backup (Faoxima's `backup.zip`, MirzaBot's `backup_<date>.sql`, as their report channels get them), a phpMyAdmin or mysqldump export (`.sql`), or either gzipped (`.gz`) or zipped (`.zip`) — told apart by its bytes, not its name. The file is kept and the import starts reading it (phase `reading`); the page then calls `POST /imports/{id}/continue` until it is read. A 422 says why one is refused: under `migrator` a bot not in the list; under `file` none, one past the host's upload limit, no database backup, or one in a zip behind a password; under `import` another import under way.",
                 "requestBody": {
                     "required": true,
                     "content": {
@@ -12944,13 +13248,13 @@
             ],
             "post": {
                 "x-staff": "catalog",
-                "summary": "Raise or lower several plans' prices at once. All or nothing: if any plan cannot take the change (a price below zero, or a first-purchase or agent price no longer below the price), nothing changes and a 422 on `plan_ids` names each such plan.",
+                "summary": "Raise or lower several plans' prices at once. All or nothing: if any plan cannot take the change (a price below zero, or a first-purchase or agent price no longer below the price) or, with `previewed`, its prices moved since the preview, nothing changes and a 422 on `plan_ids` names each such plan.",
                 "requestBody": {
                     "required": true,
                     "content": {
                         "application/json": {
                             "schema": {
-                                "$ref": "#/components/schemas/PlanPricesRequest"
+                                "$ref": "#/components/schemas/PlanPricesChangeRequest"
                             }
                         }
                     }
@@ -14545,6 +14849,90 @@
                             "application/json": {
                                 "schema": {
                                     "$ref": "#/components/schemas/PaymentResponse"
+                                }
+                            }
+                        }
+                    },
+                    "default": {
+                        "$ref": "#/components/responses/Error"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/SignedOut"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/StaffRefused"
+                    }
+                },
+                "security": [
+                    {
+                        "customer": []
+                    }
+                ]
+            }
+        },
+        "/api/store/v1/{store}/admin/payments/{id}/rikhtam": {
+            "parameters": [
+                {
+                    "$ref": "#/components/parameters/Store"
+                },
+                {
+                    "$ref": "#/components/parameters/Id"
+                }
+            ],
+            "get": {
+                "x-staff": true,
+                "x-staff-recent": true,
+                "summary": "The deposits of the last 20 days no invoice took at Rikhtam (at most 40), to attach one to this card payment: the closest to its sum first. Offered (`actions.rikhtam`) for a payment that may be approved in a shop whose Rikhtam is connected; not connected, `connected` is false and the list empty.",
+                "description": "Refused as an approval is: a 422 on `status` for a payment that may not be approved, a 403 for an admin's own\npayment, and on the website's admin API for one without a receipt in review. A 422 on `status` when Rikhtam refuses\nthe shop's key (its own words); a 503 while Rikhtam cannot be asked.\n",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/PaymentRikhtamResponse"
+                                }
+                            }
+                        }
+                    },
+                    "default": {
+                        "$ref": "#/components/responses/Error"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/SignedOut"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/StaffRefused"
+                    }
+                },
+                "security": [
+                    {
+                        "customer": []
+                    }
+                ]
+            },
+            "post": {
+                "x-staff": true,
+                "x-staff-recent": true,
+                "summary": "Attach one of those deposits to this payment: Rikhtam sends it to the shop again, named for the payment, and it approves the payment when it covers its order's price — delivered, and the customer told, as by a bank SMS. The answer is the payment as it stands after, with Rikhtam's word (`message`) and its fee.",
+                "description": "Refused as `GET` is, before Rikhtam is asked. A 422 on `uid` for no deposit picked, Rikhtam not connected, or\nRikhtam's refusal in its own words (the deposit not found or confirmed already, the payment not taken, a billing or\nrate limit). Rikhtam's answer lost, or a refusal of its while the deposit did approve the payment (the shop's answer\nreached it too late), the shop's record decides: a 200, `message` saying so and `fee` null. A 503 while Rikhtam\ncannot be asked, or while the shop is still deciding that deposit: look at the payment again shortly.\n",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PaymentRikhtamRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Attached",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/PaymentRikhtamAttachResponse"
                                 }
                             }
                         }
@@ -19230,7 +19618,7 @@
                     },
                     "gateway": {
                         "type": "string",
-                        "description": "Driver key (\"manual\", \"wallet\", \"cubepay\", \"zarinpal\", \"atlaspay\", \"abangateway\", \"plisio\", \"aqayepardakht\", \"variza\", or \"outside\": money support took outside the shop for an order it made)."
+                        "description": "Driver key (\"manual\", \"wallet\", \"cubepay\", \"zarinpal\", \"atlaspay\", \"abangateway\", \"plisio\", \"aqayepardakht\", \"variza\", \"bluepal\", \"rialit\", \"rikhtam\", or \"outside\": money support took outside the shop for an order it made)."
                     },
                     "gateway_label": {
                         "type": "string",
@@ -19253,12 +19641,12 @@
                     "summary": {
                         "type": "string",
                         "nullable": true,
-                        "description": "What the customer was told to pay to: a card transfer's card, the one of its method's cards it was shown («6037 •••• •••• 1119 · holder · bank») — or «کارت در پیوی پشتیبانی داده شد» for one shown none, taken in support's private chat (`BotSettingsData.card_to_support`); for any other, its method's one line as it reads now (`PaymentMethodRow.summary`: a fee passed on to customers, a test mode, Plisio's dollar rate and coins, Variza's card); null when its method has none (the wallet, an online method with none of these)."
+                        "description": "What the customer was told to pay to: a card transfer's card, the one of its method's cards it was shown («6037 •••• •••• 1119 · holder · bank») — or «کارت در پیوی پشتیبانی داده شد» for one shown none, taken in support's private chat (`BotSettingsData.card_to_support`); for any other, its method's one line as it reads now (`PaymentMethodRow.summary`: a fee passed on to customers, a test mode, Plisio's dollar rate and coins, Variza's card, Rikhtam's coin); null when its method has none (the wallet, an online method with none of these)."
                     },
                     "reference": {
                         "type": "string",
                         "nullable": true,
-                        "description": "The gateway's own id for the payment: the wallet's ledger line, or an online gateway's — CubePay: a card payment's authority, from when it was opened (a crypto one's, if any, once paid); Zarinpal: its authority, then its reference once paid; AtlasPay: its tracking code; AbanGateway: its invoice's id; Plisio: its invoice's id (once paid, the paid invoice's, when the customer switched coins); AqayePardakht: its transaction's id; Variza: its payment link's slug. Null when it has none (a card transfer, an online payment its gateway would not open)."
+                        "description": "The gateway's own id for the payment: the wallet's ledger line, or an online gateway's — CubePay: a card payment's authority, from when it was opened (a crypto one's, if any, once paid); Zarinpal: its authority, then its reference once paid; AtlasPay: its tracking code; AbanGateway: its invoice's id; Plisio: its invoice's id (once paid, the paid invoice's, when the customer switched coins); AqayePardakht: its transaction's id; Variza: its payment link's slug; Bluepal: its track id; Rialit: its payment's token; Rikhtam: its crypto invoice's id. Null when it has none (a card transfer, an online payment its gateway would not open)."
                     },
                     "description": {
                         "type": "string",
@@ -19437,7 +19825,8 @@
                             "remind",
                             "retry",
                             "refund",
-                            "check"
+                            "check",
+                            "rikhtam"
                         ],
                         "properties": {
                             "approve": {
@@ -19461,6 +19850,10 @@
                             "check": {
                                 "type": "boolean",
                                 "description": "Ask its online gateway what came of it (`POST …/check`): an online payment opened on its gateway and not paid — pending, its page closed, or cancelled."
+                            },
+                            "rikhtam": {
+                                "type": "boolean",
+                                "description": "Attach a deposit Rikhtam holds to it (`GET`/`POST …/rikhtam`): a payment that may be approved, in a shop whose Rikhtam is connected. Refused as an approval is (on the website, a receipt in review first)."
                             }
                         }
                     }
@@ -19898,7 +20291,7 @@
                     },
                     "gateway": {
                         "type": "string",
-                        "description": "Driver key (\"manual\", \"wallet\", \"cubepay\", \"zarinpal\", \"atlaspay\", \"abangateway\", \"plisio\", \"aqayepardakht\", \"variza\", or \"outside\": money support took outside the shop for an order it made)."
+                        "description": "Driver key (\"manual\", \"wallet\", \"cubepay\", \"zarinpal\", \"atlaspay\", \"abangateway\", \"plisio\", \"aqayepardakht\", \"variza\", \"bluepal\", \"rialit\", \"rikhtam\", or \"outside\": money support took outside the shop for an order it made)."
                     },
                     "method": {
                         "type": "string",
@@ -20553,14 +20946,15 @@
                 ]
             },
             "TicketChannel": {
-                "description": "Where a ticket message was written. The customer writes on the website (`web`) or in the bot (`bot`); support in a panel (`panel`), the website's admin API (`staff`) or the report group (`group`).",
+                "description": "Where a ticket message was written. The customer writes on the website (`web`) or in the bot (`bot`); support in a panel (`panel`), the website's admin API (`staff`), the report group (`group`) or the bot's own management, from its private chat (`manage`).",
                 "type": "string",
                 "enum": [
                     "web",
                     "bot",
                     "panel",
                     "staff",
-                    "group"
+                    "group",
+                    "manage"
                 ]
             },
             "TicketAttachment": {
@@ -21321,7 +21715,9 @@
                         "type": "string"
                     },
                     "cpu_percent": {
-                        "type": "number"
+                        "type": "number",
+                        "nullable": true,
+                        "description": "Null when the panel reports no CPU load (Remnawave)."
                     },
                     "memory_used": {
                         "type": "integer"
@@ -21330,7 +21726,8 @@
                         "type": "integer"
                     },
                     "disk_used": {
-                        "type": "integer"
+                        "type": "integer",
+                        "description": "With disk_total, 0 when the panel reports no disk (Remnawave)."
                     },
                     "disk_total": {
                         "type": "integer"
@@ -21508,6 +21905,12 @@
                     },
                     {
                         "$ref": "#/components/schemas/ServerMarzbanRequest"
+                    },
+                    {
+                        "$ref": "#/components/schemas/ServerRebeccaRequest"
+                    },
+                    {
+                        "$ref": "#/components/schemas/ServerRemnawaveRequest"
                     }
                 ]
             },
@@ -21542,7 +21945,7 @@
                     },
                     "base_url": {
                         "type": "string",
-                        "description": "The panel's address, including its path: http(s), without credentials, query or fragment, and not one of the panel's own pages (3X-UI's /panel, PasarGuard's /dashboard, HMPanel's /api or /dashboard)."
+                        "description": "The panel's address, including its path: http(s), without credentials, query or fragment, and not one of the panel's own pages (3X-UI's /panel, PasarGuard's /dashboard, HMPanel's /api or /dashboard, Rebecca's /dashboard, /api or /docs, Remnawave's /api, /auth or /dashboard)."
                     },
                     "auth_mode": {
                         "type": "string",
@@ -21554,7 +21957,7 @@
                     },
                     "api_token": {
                         "type": "string",
-                        "description": "For `token`: the panel's API token (PasarGuard's whole `pg_key_…` key, HMPanel's whole `hmp_…` key). Left out or blank: the stored token stays."
+                        "description": "For `token`: the panel's API token (PasarGuard's whole `pg_key_…` key, HMPanel's whole `hmp_…` key, Rebecca's whole `rk_…` key, Remnawave's whole API token — a JWT, `eyJ…`, three parts joined by dots). Left out or blank: the stored token stays."
                     },
                     "clear_api_token": {
                         "type": "boolean",
@@ -21692,7 +22095,7 @@
                     },
                     "base_url": {
                         "type": "string",
-                        "description": "The panel's address, including its path: http(s), without credentials, query or fragment, and not one of the panel's own pages (3X-UI's /panel, PasarGuard's /dashboard, HMPanel's /api or /dashboard)."
+                        "description": "The panel's address, including its path: http(s), without credentials, query or fragment, and not one of the panel's own pages (3X-UI's /panel, PasarGuard's /dashboard, HMPanel's /api or /dashboard, Rebecca's /dashboard, /api or /docs, Remnawave's /api, /auth or /dashboard)."
                     },
                     "auth_mode": {
                         "type": "string",
@@ -21704,7 +22107,7 @@
                     },
                     "api_token": {
                         "type": "string",
-                        "description": "For `token`: the panel's API token (PasarGuard's whole `pg_key_…` key, HMPanel's whole `hmp_…` key). Left out or blank: the stored token stays."
+                        "description": "For `token`: the panel's API token (PasarGuard's whole `pg_key_…` key, HMPanel's whole `hmp_…` key, Rebecca's whole `rk_…` key, Remnawave's whole API token — a JWT, `eyJ…`, three parts joined by dots). Left out or blank: the stored token stays."
                     },
                     "clear_api_token": {
                         "type": "boolean",
@@ -21834,7 +22237,7 @@
                     },
                     "base_url": {
                         "type": "string",
-                        "description": "The panel's address, including its path: http(s), without credentials, query or fragment, and not one of the panel's own pages (3X-UI's /panel, PasarGuard's /dashboard, HMPanel's /api or /dashboard)."
+                        "description": "The panel's address, including its path: http(s), without credentials, query or fragment, and not one of the panel's own pages (3X-UI's /panel, PasarGuard's /dashboard, HMPanel's /api or /dashboard, Rebecca's /dashboard, /api or /docs, Remnawave's /api, /auth or /dashboard)."
                     },
                     "auth_mode": {
                         "type": "string",
@@ -21845,7 +22248,7 @@
                     },
                     "api_token": {
                         "type": "string",
-                        "description": "For `token`: the panel's API token (PasarGuard's whole `pg_key_…` key, HMPanel's whole `hmp_…` key). Left out or blank: the stored token stays."
+                        "description": "For `token`: the panel's API token (PasarGuard's whole `pg_key_…` key, HMPanel's whole `hmp_…` key, Rebecca's whole `rk_…` key, Remnawave's whole API token — a JWT, `eyJ…`, three parts joined by dots). Left out or blank: the stored token stays."
                     },
                     "clear_api_token": {
                         "type": "boolean",
@@ -21929,6 +22332,272 @@
                             "3"
                         ],
                         "description": "How many location buttons share its row in the bot. Left out: a row of its own."
+                    }
+                }
+            },
+            "ServerRebeccaRequest": {
+                "description": "A server on a Rebecca panel (1.0 and later): an admin's `rk_…` API key, the one way Rebecca asks bots in.",
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                    "driver",
+                    "name",
+                    "base_url",
+                    "auth_mode",
+                    "verify_tls",
+                    "timeout",
+                    "proxy_enabled",
+                    "is_active"
+                ],
+                "properties": {
+                    "driver": {
+                        "type": "string",
+                        "enum": [
+                            "rebecca"
+                        ]
+                    },
+                    "name": {
+                        "type": "string",
+                        "description": "The location's name, as customers see it in the bot; at most 100 characters. Never a premium emoji's tag: one is chosen in `emoji_id`."
+                    },
+                    "emoji_id": {
+                        "type": "string",
+                        "description": "The premium emoji the bot draws for the name's leading emoji (a custom emoji id, digits): on its location button as the icon, in its texts in the emoji's place. The name must start with an emoji while one is set. Blank or left out: none."
+                    },
+                    "base_url": {
+                        "type": "string",
+                        "description": "The panel's address, including its path: http(s), without credentials, query or fragment, and not one of the panel's own pages (3X-UI's /panel, PasarGuard's /dashboard, HMPanel's /api or /dashboard, Rebecca's /dashboard, /api or /docs, Remnawave's /api, /auth or /dashboard)."
+                    },
+                    "auth_mode": {
+                        "type": "string",
+                        "enum": [
+                            "token"
+                        ],
+                        "description": "How to sign in: an admin's Rebecca API key, the one way the shop takes."
+                    },
+                    "api_token": {
+                        "type": "string",
+                        "description": "For `token`: the panel's API token (PasarGuard's whole `pg_key_…` key, HMPanel's whole `hmp_…` key, Rebecca's whole `rk_…` key, Remnawave's whole API token — a JWT, `eyJ…`, three parts joined by dots). Left out or blank: the stored token stays."
+                    },
+                    "clear_api_token": {
+                        "type": "boolean",
+                        "description": "True empties the stored token."
+                    },
+                    "verify_tls": {
+                        "type": "boolean",
+                        "description": "Whether to verify the panel's TLS certificate; off for a self-signed one."
+                    },
+                    "timeout": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/WholeNumberInput"
+                            }
+                        ],
+                        "description": "Request timeout in seconds, 5 to 120."
+                    },
+                    "subscription_url": {
+                        "type": "string",
+                        "description": "A base address to use before the token in subscription links instead of the panel's own: a full address without credentials, query or fragment. Blank: the panel's."
+                    },
+                    "proxy_enabled": {
+                        "type": "boolean",
+                        "description": "Every request to the panel goes through a SOCKS5 proxy (the panel's name looked up by the proxy), for a panel the shop's host cannot reach directly. Off: straight to the panel, and the proxy's fields are emptied."
+                    },
+                    "proxy_host": {
+                        "type": "string",
+                        "description": "With `proxy_enabled`: the proxy's host name or IP address, without a scheme or a port (an IPv6 address may be in brackets); at most 255 characters."
+                    },
+                    "proxy_port": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/WholeNumberInput"
+                            }
+                        ],
+                        "description": "With `proxy_enabled`: the proxy's port, 1 to 65535."
+                    },
+                    "proxy_username": {
+                        "type": "string",
+                        "description": "With `proxy_enabled`: the proxy's username, at most 255 characters; blank for a proxy without a login."
+                    },
+                    "proxy_password": {
+                        "type": "string",
+                        "description": "With `proxy_enabled`: the proxy's password, only with a username. Left out or blank: the stored password stays while the proxy's host and port stay (after a change it must be typed again)."
+                    },
+                    "clear_proxy_password": {
+                        "type": "boolean",
+                        "description": "True empties the stored proxy password."
+                    },
+                    "capacity": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/WholeNumberInput"
+                            }
+                        ],
+                        "description": "How many active services it takes. Blank for no limit; 0 for full."
+                    },
+                    "notes": {
+                        "type": "string",
+                        "description": "The owner's notes, at most 1000 characters."
+                    },
+                    "is_active": {
+                        "type": "boolean",
+                        "description": "Off: no new service is placed on it."
+                    },
+                    "button_style": {
+                        "type": "string",
+                        "enum": [
+                            "",
+                            "primary",
+                            "success",
+                            "danger"
+                        ],
+                        "description": "The colour of its button among a plan's locations in the bot: blue, green or red. Blank or left out: the client's default."
+                    },
+                    "button_row": {
+                        "type": "string",
+                        "enum": [
+                            "1",
+                            "2",
+                            "3"
+                        ],
+                        "description": "How many location buttons share its row in the bot. Left out: a row of its own."
+                    }
+                }
+            },
+            "ServerRemnawaveRequest": {
+                "description": "A server on a Remnawave panel (2.1 and later): an API token made in the panel, the one way in — Remnawave refuses an admin's own sign-in for API calls —, and for a panel behind an auth portal (Caddy's, TinyAuth) the portal's key.",
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                    "driver",
+                    "name",
+                    "base_url",
+                    "auth_mode",
+                    "verify_tls",
+                    "timeout",
+                    "proxy_enabled",
+                    "is_active"
+                ],
+                "properties": {
+                    "driver": {
+                        "type": "string",
+                        "enum": [
+                            "remnawave"
+                        ]
+                    },
+                    "name": {
+                        "type": "string",
+                        "description": "The location's name, as customers see it in the bot; at most 100 characters. Never a premium emoji's tag: one is chosen in `emoji_id`."
+                    },
+                    "emoji_id": {
+                        "type": "string",
+                        "description": "The premium emoji the bot draws for the name's leading emoji (a custom emoji id, digits): on its location button as the icon, in its texts in the emoji's place. The name must start with an emoji while one is set. Blank or left out: none."
+                    },
+                    "base_url": {
+                        "type": "string",
+                        "description": "The panel's address, including its path: http(s), without credentials, query or fragment, and not one of the panel's own pages (3X-UI's /panel, PasarGuard's /dashboard, HMPanel's /api or /dashboard, Rebecca's /dashboard, /api or /docs, Remnawave's /api, /auth or /dashboard)."
+                    },
+                    "auth_mode": {
+                        "type": "string",
+                        "enum": [
+                            "token"
+                        ],
+                        "description": "How to sign in: an API token made in Remnawave, the one way its API takes."
+                    },
+                    "api_token": {
+                        "type": "string",
+                        "description": "For `token`: the panel's API token (PasarGuard's whole `pg_key_…` key, HMPanel's whole `hmp_…` key, Rebecca's whole `rk_…` key, Remnawave's whole API token — a JWT, `eyJ…`, three parts joined by dots). Left out or blank: the stored token stays."
+                    },
+                    "clear_api_token": {
+                        "type": "boolean",
+                        "description": "True empties the stored token."
+                    },
+                    "verify_tls": {
+                        "type": "boolean",
+                        "description": "Whether to verify the panel's TLS certificate; off for a self-signed one."
+                    },
+                    "timeout": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/WholeNumberInput"
+                            }
+                        ],
+                        "description": "Request timeout in seconds, 5 to 120."
+                    },
+                    "subscription_url": {
+                        "type": "string",
+                        "description": "A base address to use before the token in subscription links instead of the panel's own: a full address without credentials, query or fragment. Blank: the panel's."
+                    },
+                    "proxy_enabled": {
+                        "type": "boolean",
+                        "description": "Every request to the panel goes through a SOCKS5 proxy (the panel's name looked up by the proxy), for a panel the shop's host cannot reach directly. Off: straight to the panel, and the proxy's fields are emptied."
+                    },
+                    "proxy_host": {
+                        "type": "string",
+                        "description": "With `proxy_enabled`: the proxy's host name or IP address, without a scheme or a port (an IPv6 address may be in brackets); at most 255 characters."
+                    },
+                    "proxy_port": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/WholeNumberInput"
+                            }
+                        ],
+                        "description": "With `proxy_enabled`: the proxy's port, 1 to 65535."
+                    },
+                    "proxy_username": {
+                        "type": "string",
+                        "description": "With `proxy_enabled`: the proxy's username, at most 255 characters; blank for a proxy without a login."
+                    },
+                    "proxy_password": {
+                        "type": "string",
+                        "description": "With `proxy_enabled`: the proxy's password, only with a username. Left out or blank: the stored password stays while the proxy's host and port stay (after a change it must be typed again)."
+                    },
+                    "clear_proxy_password": {
+                        "type": "boolean",
+                        "description": "True empties the stored proxy password."
+                    },
+                    "capacity": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/WholeNumberInput"
+                            }
+                        ],
+                        "description": "How many active services it takes. Blank for no limit; 0 for full."
+                    },
+                    "notes": {
+                        "type": "string",
+                        "description": "The owner's notes, at most 1000 characters."
+                    },
+                    "is_active": {
+                        "type": "boolean",
+                        "description": "Off: no new service is placed on it."
+                    },
+                    "button_style": {
+                        "type": "string",
+                        "enum": [
+                            "",
+                            "primary",
+                            "success",
+                            "danger"
+                        ],
+                        "description": "The colour of its button among a plan's locations in the bot: blue, green or red. Blank or left out: the client's default."
+                    },
+                    "button_row": {
+                        "type": "string",
+                        "enum": [
+                            "1",
+                            "2",
+                            "3"
+                        ],
+                        "description": "How many location buttons share its row in the bot. Left out: a row of its own."
+                    },
+                    "gate_key": {
+                        "type": "string",
+                        "description": "The gate key: for a panel behind an auth portal, the portal's key (Caddy's API key, or TinyAuth's whole `Basic …` value), sent as it is in `X-Api-Key` with every call; printable ASCII, at most 512 characters. Kept encrypted. Left out or blank: the stored key stays while the panel's address stays on the same host (after a host change it must be typed again)."
+                    },
+                    "clear_gate_key": {
+                        "type": "boolean",
+                        "description": "True empties the stored gate key: a panel without a portal."
                     }
                 }
             },
@@ -22079,6 +22748,12 @@
                     },
                     {
                         "$ref": "#/components/schemas/ServerMarzbanTestRequest"
+                    },
+                    {
+                        "$ref": "#/components/schemas/ServerRebeccaTestRequest"
+                    },
+                    {
+                        "$ref": "#/components/schemas/ServerRemnawaveTestRequest"
                     }
                 ]
             },
@@ -22117,7 +22792,7 @@
                     },
                     "base_url": {
                         "type": "string",
-                        "description": "The panel's address, including its path: http(s), without credentials, query or fragment, and not one of the panel's own pages (3X-UI's /panel, PasarGuard's /dashboard, HMPanel's /api or /dashboard)."
+                        "description": "The panel's address, including its path: http(s), without credentials, query or fragment, and not one of the panel's own pages (3X-UI's /panel, PasarGuard's /dashboard, HMPanel's /api or /dashboard, Rebecca's /dashboard, /api or /docs, Remnawave's /api, /auth or /dashboard)."
                     },
                     "auth_mode": {
                         "type": "string",
@@ -22129,7 +22804,7 @@
                     },
                     "api_token": {
                         "type": "string",
-                        "description": "For `token`: the panel's API token (PasarGuard's whole `pg_key_…` key, HMPanel's whole `hmp_…` key). Left out or blank: the stored token stays."
+                        "description": "For `token`: the panel's API token (PasarGuard's whole `pg_key_…` key, HMPanel's whole `hmp_…` key, Rebecca's whole `rk_…` key, Remnawave's whole API token — a JWT, `eyJ…`, three parts joined by dots). Left out or blank: the stored token stays."
                     },
                     "clear_api_token": {
                         "type": "boolean",
@@ -22271,7 +22946,7 @@
                     },
                     "base_url": {
                         "type": "string",
-                        "description": "The panel's address, including its path: http(s), without credentials, query or fragment, and not one of the panel's own pages (3X-UI's /panel, PasarGuard's /dashboard, HMPanel's /api or /dashboard)."
+                        "description": "The panel's address, including its path: http(s), without credentials, query or fragment, and not one of the panel's own pages (3X-UI's /panel, PasarGuard's /dashboard, HMPanel's /api or /dashboard, Rebecca's /dashboard, /api or /docs, Remnawave's /api, /auth or /dashboard)."
                     },
                     "auth_mode": {
                         "type": "string",
@@ -22283,7 +22958,7 @@
                     },
                     "api_token": {
                         "type": "string",
-                        "description": "For `token`: the panel's API token (PasarGuard's whole `pg_key_…` key, HMPanel's whole `hmp_…` key). Left out or blank: the stored token stays."
+                        "description": "For `token`: the panel's API token (PasarGuard's whole `pg_key_…` key, HMPanel's whole `hmp_…` key, Rebecca's whole `rk_…` key, Remnawave's whole API token — a JWT, `eyJ…`, three parts joined by dots). Left out or blank: the stored token stays."
                     },
                     "clear_api_token": {
                         "type": "boolean",
@@ -22417,7 +23092,7 @@
                     },
                     "base_url": {
                         "type": "string",
-                        "description": "The panel's address, including its path: http(s), without credentials, query or fragment, and not one of the panel's own pages (3X-UI's /panel, PasarGuard's /dashboard, HMPanel's /api or /dashboard)."
+                        "description": "The panel's address, including its path: http(s), without credentials, query or fragment, and not one of the panel's own pages (3X-UI's /panel, PasarGuard's /dashboard, HMPanel's /api or /dashboard, Rebecca's /dashboard, /api or /docs, Remnawave's /api, /auth or /dashboard)."
                     },
                     "auth_mode": {
                         "type": "string",
@@ -22428,7 +23103,7 @@
                     },
                     "api_token": {
                         "type": "string",
-                        "description": "For `token`: the panel's API token (PasarGuard's whole `pg_key_…` key, HMPanel's whole `hmp_…` key). Left out or blank: the stored token stays."
+                        "description": "For `token`: the panel's API token (PasarGuard's whole `pg_key_…` key, HMPanel's whole `hmp_…` key, Rebecca's whole `rk_…` key, Remnawave's whole API token — a JWT, `eyJ…`, three parts joined by dots). Left out or blank: the stored token stays."
                     },
                     "clear_api_token": {
                         "type": "boolean",
@@ -22649,6 +23324,280 @@
                             "3"
                         ],
                         "description": "How many location buttons share its row in the bot. Left out: a row of its own."
+                    }
+                }
+            },
+            "ServerRebeccaTestRequest": {
+                "description": "A Rebecca server to test.",
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                    "driver",
+                    "name",
+                    "base_url",
+                    "auth_mode",
+                    "verify_tls",
+                    "timeout",
+                    "proxy_enabled",
+                    "is_active"
+                ],
+                "properties": {
+                    "id": {
+                        "type": "integer",
+                        "description": "The saved server this form belongs to."
+                    },
+                    "driver": {
+                        "type": "string",
+                        "enum": [
+                            "rebecca"
+                        ]
+                    },
+                    "name": {
+                        "type": "string",
+                        "description": "The location's name, as customers see it in the bot; at most 100 characters. Never a premium emoji's tag: one is chosen in `emoji_id`."
+                    },
+                    "emoji_id": {
+                        "type": "string",
+                        "description": "The premium emoji the bot draws for the name's leading emoji (a custom emoji id, digits): on its location button as the icon, in its texts in the emoji's place. The name must start with an emoji while one is set. Blank or left out: none."
+                    },
+                    "base_url": {
+                        "type": "string",
+                        "description": "The panel's address, including its path: http(s), without credentials, query or fragment, and not one of the panel's own pages (3X-UI's /panel, PasarGuard's /dashboard, HMPanel's /api or /dashboard, Rebecca's /dashboard, /api or /docs, Remnawave's /api, /auth or /dashboard)."
+                    },
+                    "auth_mode": {
+                        "type": "string",
+                        "enum": [
+                            "token"
+                        ],
+                        "description": "How to sign in: an admin's Rebecca API key, the one way the shop takes."
+                    },
+                    "api_token": {
+                        "type": "string",
+                        "description": "For `token`: the panel's API token (PasarGuard's whole `pg_key_…` key, HMPanel's whole `hmp_…` key, Rebecca's whole `rk_…` key, Remnawave's whole API token — a JWT, `eyJ…`, three parts joined by dots). Left out or blank: the stored token stays."
+                    },
+                    "clear_api_token": {
+                        "type": "boolean",
+                        "description": "True empties the stored token."
+                    },
+                    "verify_tls": {
+                        "type": "boolean",
+                        "description": "Whether to verify the panel's TLS certificate; off for a self-signed one."
+                    },
+                    "timeout": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/WholeNumberInput"
+                            }
+                        ],
+                        "description": "Request timeout in seconds, 5 to 120."
+                    },
+                    "subscription_url": {
+                        "type": "string",
+                        "description": "A base address to use before the token in subscription links instead of the panel's own: a full address without credentials, query or fragment. Blank: the panel's."
+                    },
+                    "proxy_enabled": {
+                        "type": "boolean",
+                        "description": "Every request to the panel goes through a SOCKS5 proxy (the panel's name looked up by the proxy), for a panel the shop's host cannot reach directly. Off: straight to the panel, and the proxy's fields are emptied."
+                    },
+                    "proxy_host": {
+                        "type": "string",
+                        "description": "With `proxy_enabled`: the proxy's host name or IP address, without a scheme or a port (an IPv6 address may be in brackets); at most 255 characters."
+                    },
+                    "proxy_port": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/WholeNumberInput"
+                            }
+                        ],
+                        "description": "With `proxy_enabled`: the proxy's port, 1 to 65535."
+                    },
+                    "proxy_username": {
+                        "type": "string",
+                        "description": "With `proxy_enabled`: the proxy's username, at most 255 characters; blank for a proxy without a login."
+                    },
+                    "proxy_password": {
+                        "type": "string",
+                        "description": "With `proxy_enabled`: the proxy's password, only with a username. Left out or blank: the stored password stays while the proxy's host and port stay (after a change it must be typed again)."
+                    },
+                    "clear_proxy_password": {
+                        "type": "boolean",
+                        "description": "True empties the stored proxy password."
+                    },
+                    "capacity": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/WholeNumberInput"
+                            }
+                        ],
+                        "description": "How many active services it takes. Blank for no limit; 0 for full."
+                    },
+                    "notes": {
+                        "type": "string",
+                        "description": "The owner's notes, at most 1000 characters."
+                    },
+                    "is_active": {
+                        "type": "boolean",
+                        "description": "Off: no new service is placed on it."
+                    },
+                    "button_style": {
+                        "type": "string",
+                        "enum": [
+                            "",
+                            "primary",
+                            "success",
+                            "danger"
+                        ],
+                        "description": "The colour of its button among a plan's locations in the bot: blue, green or red. Blank or left out: the client's default."
+                    },
+                    "button_row": {
+                        "type": "string",
+                        "enum": [
+                            "1",
+                            "2",
+                            "3"
+                        ],
+                        "description": "How many location buttons share its row in the bot. Left out: a row of its own."
+                    }
+                }
+            },
+            "ServerRemnawaveTestRequest": {
+                "description": "A Remnawave server to test.",
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                    "driver",
+                    "name",
+                    "base_url",
+                    "auth_mode",
+                    "verify_tls",
+                    "timeout",
+                    "proxy_enabled",
+                    "is_active"
+                ],
+                "properties": {
+                    "id": {
+                        "type": "integer",
+                        "description": "The saved server this form belongs to."
+                    },
+                    "driver": {
+                        "type": "string",
+                        "enum": [
+                            "remnawave"
+                        ]
+                    },
+                    "name": {
+                        "type": "string",
+                        "description": "The location's name, as customers see it in the bot; at most 100 characters. Never a premium emoji's tag: one is chosen in `emoji_id`."
+                    },
+                    "emoji_id": {
+                        "type": "string",
+                        "description": "The premium emoji the bot draws for the name's leading emoji (a custom emoji id, digits): on its location button as the icon, in its texts in the emoji's place. The name must start with an emoji while one is set. Blank or left out: none."
+                    },
+                    "base_url": {
+                        "type": "string",
+                        "description": "The panel's address, including its path: http(s), without credentials, query or fragment, and not one of the panel's own pages (3X-UI's /panel, PasarGuard's /dashboard, HMPanel's /api or /dashboard, Rebecca's /dashboard, /api or /docs, Remnawave's /api, /auth or /dashboard)."
+                    },
+                    "auth_mode": {
+                        "type": "string",
+                        "enum": [
+                            "token"
+                        ],
+                        "description": "How to sign in: an API token made in Remnawave, the one way its API takes."
+                    },
+                    "api_token": {
+                        "type": "string",
+                        "description": "For `token`: the panel's API token (PasarGuard's whole `pg_key_…` key, HMPanel's whole `hmp_…` key, Rebecca's whole `rk_…` key, Remnawave's whole API token — a JWT, `eyJ…`, three parts joined by dots). Left out or blank: the stored token stays."
+                    },
+                    "clear_api_token": {
+                        "type": "boolean",
+                        "description": "True empties the stored token."
+                    },
+                    "verify_tls": {
+                        "type": "boolean",
+                        "description": "Whether to verify the panel's TLS certificate; off for a self-signed one."
+                    },
+                    "timeout": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/WholeNumberInput"
+                            }
+                        ],
+                        "description": "Request timeout in seconds, 5 to 120."
+                    },
+                    "subscription_url": {
+                        "type": "string",
+                        "description": "A base address to use before the token in subscription links instead of the panel's own: a full address without credentials, query or fragment. Blank: the panel's."
+                    },
+                    "proxy_enabled": {
+                        "type": "boolean",
+                        "description": "Every request to the panel goes through a SOCKS5 proxy (the panel's name looked up by the proxy), for a panel the shop's host cannot reach directly. Off: straight to the panel, and the proxy's fields are emptied."
+                    },
+                    "proxy_host": {
+                        "type": "string",
+                        "description": "With `proxy_enabled`: the proxy's host name or IP address, without a scheme or a port (an IPv6 address may be in brackets); at most 255 characters."
+                    },
+                    "proxy_port": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/WholeNumberInput"
+                            }
+                        ],
+                        "description": "With `proxy_enabled`: the proxy's port, 1 to 65535."
+                    },
+                    "proxy_username": {
+                        "type": "string",
+                        "description": "With `proxy_enabled`: the proxy's username, at most 255 characters; blank for a proxy without a login."
+                    },
+                    "proxy_password": {
+                        "type": "string",
+                        "description": "With `proxy_enabled`: the proxy's password, only with a username. Left out or blank: the stored password stays while the proxy's host and port stay (after a change it must be typed again)."
+                    },
+                    "clear_proxy_password": {
+                        "type": "boolean",
+                        "description": "True empties the stored proxy password."
+                    },
+                    "capacity": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/WholeNumberInput"
+                            }
+                        ],
+                        "description": "How many active services it takes. Blank for no limit; 0 for full."
+                    },
+                    "notes": {
+                        "type": "string",
+                        "description": "The owner's notes, at most 1000 characters."
+                    },
+                    "is_active": {
+                        "type": "boolean",
+                        "description": "Off: no new service is placed on it."
+                    },
+                    "button_style": {
+                        "type": "string",
+                        "enum": [
+                            "",
+                            "primary",
+                            "success",
+                            "danger"
+                        ],
+                        "description": "The colour of its button among a plan's locations in the bot: blue, green or red. Blank or left out: the client's default."
+                    },
+                    "button_row": {
+                        "type": "string",
+                        "enum": [
+                            "1",
+                            "2",
+                            "3"
+                        ],
+                        "description": "How many location buttons share its row in the bot. Left out: a row of its own."
+                    },
+                    "gate_key": {
+                        "type": "string",
+                        "description": "The gate key: for a panel behind an auth portal, the portal's key (Caddy's API key, or TinyAuth's whole `Basic …` value), sent as it is in `X-Api-Key` with every call; printable ASCII, at most 512 characters. Kept encrypted. Left out or blank: the stored key stays while the panel's address stays on the same host (after a host change it must be typed again)."
+                    },
+                    "clear_gate_key": {
+                        "type": "boolean",
+                        "description": "True empties the stored gate key: a panel without a portal."
                     }
                 }
             },
@@ -24288,6 +25237,108 @@
                     }
                 }
             },
+            "OwnerTelegramAccount": {
+                "description": "A Telegram account that is the owner in the main bot, as the main bot knows it.",
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                    "telegram_id",
+                    "name",
+                    "username"
+                ],
+                "properties": {
+                    "telegram_id": {
+                        "type": "integer"
+                    },
+                    "name": {
+                        "type": "string",
+                        "nullable": true,
+                        "description": "Its name in the main bot; null while it has not written to it."
+                    },
+                    "username": {
+                        "type": "string",
+                        "nullable": true,
+                        "description": "Its @username, without the @; null for none."
+                    }
+                }
+            },
+            "OwnerTelegramResponse": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                    "accounts",
+                    "link_open_until"
+                ],
+                "properties": {
+                    "accounts": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/OwnerTelegramAccount"
+                        },
+                        "description": "Oldest first; five at most."
+                    },
+                    "link_open_until": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true,
+                        "description": "Until when the link made last may be opened; null with none open."
+                    }
+                }
+            },
+            "OwnerTelegramLinkRequest": {
+                "description": "A new owner link asked from the panel: the panel's password typed again, so a session alone makes no account the owner.",
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                    "current_password"
+                ],
+                "properties": {
+                    "current_password": {
+                        "type": "string",
+                        "description": "The owner's current panel password, as typed. Blank or wrong is a 422 on it, and nothing is made; a wrong one counts as a failed sign-in."
+                    }
+                }
+            },
+            "OwnerTelegramLinkResponse": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                    "link",
+                    "accounts",
+                    "link_open_until"
+                ],
+                "properties": {
+                    "link": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                            "url",
+                            "expires_at"
+                        ],
+                        "properties": {
+                            "url": {
+                                "type": "string",
+                                "description": "The one-time link to open from the account that is to be the owner. Shown once: it is kept as a hash alone."
+                            },
+                            "expires_at": {
+                                "type": "string",
+                                "format": "date-time"
+                            }
+                        }
+                    },
+                    "accounts": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/OwnerTelegramAccount"
+                        }
+                    },
+                    "link_open_until": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true
+                    }
+                }
+            },
             "BotIdentity": {
                 "type": "object",
                 "additionalProperties": false,
@@ -25502,6 +26553,96 @@
                     }
                 }
             },
+            "PlanPricesChangeRequest": {
+                "description": "A bulk change of several plans' prices as it is made: the change previewed (PlanPricesRequest) and, to make exactly the change the preview showed, each plan's prices as the preview showed them.",
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                    "plan_ids",
+                    "direction",
+                    "mode",
+                    "value",
+                    "round_to",
+                    "prices"
+                ],
+                "properties": {
+                    "plan_ids": {
+                        "type": "array",
+                        "maxItems": 1000,
+                        "items": {
+                            "type": "integer"
+                        },
+                        "description": "The plans to change; at least one."
+                    },
+                    "direction": {
+                        "type": "string",
+                        "enum": [
+                            "increase",
+                            "decrease"
+                        ]
+                    },
+                    "mode": {
+                        "type": "string",
+                        "enum": [
+                            "percent",
+                            "amount"
+                        ],
+                        "description": "A percent of each price (at most 1000, or 100 for a decrease), or a number of Toman."
+                    },
+                    "value": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/AmountInput"
+                            }
+                        ],
+                        "description": "The percent (decimals allowed) or whole Toman; above zero."
+                    },
+                    "round_to": {
+                        "type": "integer",
+                        "enum": [
+                            1,
+                            100,
+                            1000,
+                            10000
+                        ],
+                        "description": "Each new price is rounded to the nearest multiple of this; 1 means whole Toman."
+                    },
+                    "prices": {
+                        "type": "array",
+                        "minItems": 1,
+                        "items": {
+                            "type": "string",
+                            "enum": [
+                                "price",
+                                "first_purchase_price",
+                                "agent_price"
+                            ]
+                        },
+                        "description": "Which prices change: the price, the first-purchase price, the agent price."
+                    },
+                    "previewed": {
+                        "type": "array",
+                        "maxItems": 1000,
+                        "description": "Each plan's prices as the preview showed them: its `changes`' `id` and `before`. Sent, the change is the one previewed or none: a plan whose prices moved since (another change meanwhile, or this one sent again) is refused with a 422 on `plan_ids` naming it. Left out, the change is applied to the prices as they are.",
+                        "items": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                                "id",
+                                "before"
+                            ],
+                            "properties": {
+                                "id": {
+                                    "type": "integer"
+                                },
+                                "before": {
+                                    "$ref": "#/components/schemas/PlanPrices"
+                                }
+                            }
+                        }
+                    }
+                }
+            },
             "PlanPrices": {
                 "type": "object",
                 "additionalProperties": false,
@@ -25661,6 +26802,15 @@
                         "$ref": "#/components/schemas/VarizaMethodRow"
                     },
                     {
+                        "$ref": "#/components/schemas/BluepalMethodRow"
+                    },
+                    {
+                        "$ref": "#/components/schemas/RialitMethodRow"
+                    },
+                    {
+                        "$ref": "#/components/schemas/RikhtamMethodRow"
+                    },
+                    {
                         "$ref": "#/components/schemas/UnregisteredMethodRow"
                     }
                 ]
@@ -25675,6 +26825,7 @@
                     "driver_label",
                     "kind",
                     "builtin",
+                    "registers_webhook",
                     "label",
                     "summary",
                     "config",
@@ -25705,6 +26856,10 @@
                     "builtin": {
                         "type": "boolean"
                     },
+                    "registers_webhook": {
+                        "type": "boolean",
+                        "description": "Whether the shop registers its webhook address with the method's gateway itself (Rialit): its state and the offer to register or replace it are `GET`/`POST /payment-methods/{id}/webhook`'s. From the driver alone, nothing asked of the gateway; false for a driver no longer installed."
+                    },
                     "label": {
                         "type": "string",
                         "description": "The button text customers see, such as \"کارت به کارت (ملت)\"."
@@ -25712,7 +26867,7 @@
                     "summary": {
                         "type": "string",
                         "nullable": true,
-                        "description": "The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»); the test mode of Zarinpal (its sandbox), AbanGateway (a test key) or AqayePardakht (its sandbox pin) («حالت آزمایشی: پولی جابه‌جا نمی‌شود»); Plisio's dollar rate and coins («هر دلار ۹۵٬۰۰۰ تومان · USDT_TRX، TRX»), always; Variza's card («کارت مقصد: تصادفی»), always. Null when it has none: the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay always."
+                        "description": "The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»); the test mode of Zarinpal (its sandbox), AbanGateway (a test key) or AqayePardakht (its sandbox pin) («حالت آزمایشی: پولی جابه‌جا نمی‌شود»); Plisio's dollar rate and coins («هر دلار ۹۵٬۰۰۰ تومان · USDT_TRX، TRX»), always; Variza's card («کارت مقصد: تصادفی»), always; Rikhtam's coin («ارز: تتر روی شبکه TON»), always. Null when it has none: the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay and Rialit (whose fee is set in its own dashboard) always."
                     },
                     "config": {
                         "type": "object",
@@ -25770,6 +26925,7 @@
                     "driver_label",
                     "kind",
                     "builtin",
+                    "registers_webhook",
                     "label",
                     "summary",
                     "config",
@@ -25802,6 +26958,10 @@
                     "builtin": {
                         "type": "boolean"
                     },
+                    "registers_webhook": {
+                        "type": "boolean",
+                        "description": "Whether the shop registers its webhook address with the method's gateway itself (Rialit): its state and the offer to register or replace it are `GET`/`POST /payment-methods/{id}/webhook`'s. From the driver alone, nothing asked of the gateway; false for a driver no longer installed."
+                    },
                     "label": {
                         "type": "string",
                         "description": "The button text customers see, such as \"کارت به کارت (ملت)\"."
@@ -25809,7 +26969,7 @@
                     "summary": {
                         "type": "string",
                         "nullable": true,
-                        "description": "The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»); the test mode of Zarinpal (its sandbox), AbanGateway (a test key) or AqayePardakht (its sandbox pin) («حالت آزمایشی: پولی جابه‌جا نمی‌شود»); Plisio's dollar rate and coins («هر دلار ۹۵٬۰۰۰ تومان · USDT_TRX، TRX»), always; Variza's card («کارت مقصد: تصادفی»), always. Null when it has none: the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay always."
+                        "description": "The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»); the test mode of Zarinpal (its sandbox), AbanGateway (a test key) or AqayePardakht (its sandbox pin) («حالت آزمایشی: پولی جابه‌جا نمی‌شود»); Plisio's dollar rate and coins («هر دلار ۹۵٬۰۰۰ تومان · USDT_TRX، TRX»), always; Variza's card («کارت مقصد: تصادفی»), always; Rikhtam's coin («ارز: تتر روی شبکه TON»), always. Null when it has none: the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay and Rialit (whose fee is set in its own dashboard) always."
                     },
                     "config": {
                         "$ref": "#/components/schemas/ManualGatewayConfig"
@@ -25876,6 +27036,7 @@
                     "driver_label",
                     "kind",
                     "builtin",
+                    "registers_webhook",
                     "label",
                     "summary",
                     "config",
@@ -25906,6 +27067,10 @@
                     "builtin": {
                         "type": "boolean"
                     },
+                    "registers_webhook": {
+                        "type": "boolean",
+                        "description": "Whether the shop registers its webhook address with the method's gateway itself (Rialit): its state and the offer to register or replace it are `GET`/`POST /payment-methods/{id}/webhook`'s. From the driver alone, nothing asked of the gateway; false for a driver no longer installed."
+                    },
                     "label": {
                         "type": "string",
                         "description": "The button text customers see, such as \"کارت به کارت (ملت)\"."
@@ -25913,7 +27078,7 @@
                     "summary": {
                         "type": "string",
                         "nullable": true,
-                        "description": "The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»); the test mode of Zarinpal (its sandbox), AbanGateway (a test key) or AqayePardakht (its sandbox pin) («حالت آزمایشی: پولی جابه‌جا نمی‌شود»); Plisio's dollar rate and coins («هر دلار ۹۵٬۰۰۰ تومان · USDT_TRX، TRX»), always; Variza's card («کارت مقصد: تصادفی»), always. Null when it has none: the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay always."
+                        "description": "The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»); the test mode of Zarinpal (its sandbox), AbanGateway (a test key) or AqayePardakht (its sandbox pin) («حالت آزمایشی: پولی جابه‌جا نمی‌شود»); Plisio's dollar rate and coins («هر دلار ۹۵٬۰۰۰ تومان · USDT_TRX، TRX»), always; Variza's card («کارت مقصد: تصادفی»), always; Rikhtam's coin («ارز: تتر روی شبکه TON»), always. Null when it has none: the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay and Rialit (whose fee is set in its own dashboard) always."
                     },
                     "config": {
                         "$ref": "#/components/schemas/CubePayGatewayConfig"
@@ -25969,6 +27134,7 @@
                     "driver_label",
                     "kind",
                     "builtin",
+                    "registers_webhook",
                     "label",
                     "summary",
                     "config",
@@ -25999,6 +27165,10 @@
                     "builtin": {
                         "type": "boolean"
                     },
+                    "registers_webhook": {
+                        "type": "boolean",
+                        "description": "Whether the shop registers its webhook address with the method's gateway itself (Rialit): its state and the offer to register or replace it are `GET`/`POST /payment-methods/{id}/webhook`'s. From the driver alone, nothing asked of the gateway; false for a driver no longer installed."
+                    },
                     "label": {
                         "type": "string",
                         "description": "The button text customers see, such as \"کارت به کارت (ملت)\"."
@@ -26006,7 +27176,7 @@
                     "summary": {
                         "type": "string",
                         "nullable": true,
-                        "description": "The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»); the test mode of Zarinpal (its sandbox), AbanGateway (a test key) or AqayePardakht (its sandbox pin) («حالت آزمایشی: پولی جابه‌جا نمی‌شود»); Plisio's dollar rate and coins («هر دلار ۹۵٬۰۰۰ تومان · USDT_TRX، TRX»), always; Variza's card («کارت مقصد: تصادفی»), always. Null when it has none: the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay always."
+                        "description": "The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»); the test mode of Zarinpal (its sandbox), AbanGateway (a test key) or AqayePardakht (its sandbox pin) («حالت آزمایشی: پولی جابه‌جا نمی‌شود»); Plisio's dollar rate and coins («هر دلار ۹۵٬۰۰۰ تومان · USDT_TRX، TRX»), always; Variza's card («کارت مقصد: تصادفی»), always; Rikhtam's coin («ارز: تتر روی شبکه TON»), always. Null when it has none: the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay and Rialit (whose fee is set in its own dashboard) always."
                     },
                     "config": {
                         "$ref": "#/components/schemas/ZarinpalGatewayConfig"
@@ -26062,6 +27232,7 @@
                     "driver_label",
                     "kind",
                     "builtin",
+                    "registers_webhook",
                     "label",
                     "summary",
                     "config",
@@ -26092,6 +27263,10 @@
                     "builtin": {
                         "type": "boolean"
                     },
+                    "registers_webhook": {
+                        "type": "boolean",
+                        "description": "Whether the shop registers its webhook address with the method's gateway itself (Rialit): its state and the offer to register or replace it are `GET`/`POST /payment-methods/{id}/webhook`'s. From the driver alone, nothing asked of the gateway; false for a driver no longer installed."
+                    },
                     "label": {
                         "type": "string",
                         "description": "The button text customers see, such as \"کارت به کارت (ملت)\"."
@@ -26099,7 +27274,7 @@
                     "summary": {
                         "type": "string",
                         "nullable": true,
-                        "description": "The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»); the test mode of Zarinpal (its sandbox), AbanGateway (a test key) or AqayePardakht (its sandbox pin) («حالت آزمایشی: پولی جابه‌جا نمی‌شود»); Plisio's dollar rate and coins («هر دلار ۹۵٬۰۰۰ تومان · USDT_TRX، TRX»), always; Variza's card («کارت مقصد: تصادفی»), always. Null when it has none: the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay always."
+                        "description": "The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»); the test mode of Zarinpal (its sandbox), AbanGateway (a test key) or AqayePardakht (its sandbox pin) («حالت آزمایشی: پولی جابه‌جا نمی‌شود»); Plisio's dollar rate and coins («هر دلار ۹۵٬۰۰۰ تومان · USDT_TRX، TRX»), always; Variza's card («کارت مقصد: تصادفی»), always; Rikhtam's coin («ارز: تتر روی شبکه TON»), always. Null when it has none: the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay and Rialit (whose fee is set in its own dashboard) always."
                     },
                     "config": {
                         "$ref": "#/components/schemas/AtlasPayGatewayConfig"
@@ -26155,6 +27330,7 @@
                     "driver_label",
                     "kind",
                     "builtin",
+                    "registers_webhook",
                     "label",
                     "summary",
                     "config",
@@ -26185,6 +27361,10 @@
                     "builtin": {
                         "type": "boolean"
                     },
+                    "registers_webhook": {
+                        "type": "boolean",
+                        "description": "Whether the shop registers its webhook address with the method's gateway itself (Rialit): its state and the offer to register or replace it are `GET`/`POST /payment-methods/{id}/webhook`'s. From the driver alone, nothing asked of the gateway; false for a driver no longer installed."
+                    },
                     "label": {
                         "type": "string",
                         "description": "The button text customers see, such as \"کارت به کارت (ملت)\"."
@@ -26192,7 +27372,7 @@
                     "summary": {
                         "type": "string",
                         "nullable": true,
-                        "description": "The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»); the test mode of Zarinpal (its sandbox), AbanGateway (a test key) or AqayePardakht (its sandbox pin) («حالت آزمایشی: پولی جابه‌جا نمی‌شود»); Plisio's dollar rate and coins («هر دلار ۹۵٬۰۰۰ تومان · USDT_TRX، TRX»), always; Variza's card («کارت مقصد: تصادفی»), always. Null when it has none: the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay always."
+                        "description": "The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»); the test mode of Zarinpal (its sandbox), AbanGateway (a test key) or AqayePardakht (its sandbox pin) («حالت آزمایشی: پولی جابه‌جا نمی‌شود»); Plisio's dollar rate and coins («هر دلار ۹۵٬۰۰۰ تومان · USDT_TRX، TRX»), always; Variza's card («کارت مقصد: تصادفی»), always; Rikhtam's coin («ارز: تتر روی شبکه TON»), always. Null when it has none: the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay and Rialit (whose fee is set in its own dashboard) always."
                     },
                     "config": {
                         "$ref": "#/components/schemas/AbanGatewayConfig"
@@ -26248,6 +27428,7 @@
                     "driver_label",
                     "kind",
                     "builtin",
+                    "registers_webhook",
                     "label",
                     "summary",
                     "config",
@@ -26278,6 +27459,10 @@
                     "builtin": {
                         "type": "boolean"
                     },
+                    "registers_webhook": {
+                        "type": "boolean",
+                        "description": "Whether the shop registers its webhook address with the method's gateway itself (Rialit): its state and the offer to register or replace it are `GET`/`POST /payment-methods/{id}/webhook`'s. From the driver alone, nothing asked of the gateway; false for a driver no longer installed."
+                    },
                     "label": {
                         "type": "string",
                         "description": "The button text customers see, such as \"کارت به کارت (ملت)\"."
@@ -26285,7 +27470,7 @@
                     "summary": {
                         "type": "string",
                         "nullable": true,
-                        "description": "The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»); the test mode of Zarinpal (its sandbox), AbanGateway (a test key) or AqayePardakht (its sandbox pin) («حالت آزمایشی: پولی جابه‌جا نمی‌شود»); Plisio's dollar rate and coins («هر دلار ۹۵٬۰۰۰ تومان · USDT_TRX، TRX»), always; Variza's card («کارت مقصد: تصادفی»), always. Null when it has none: the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay always."
+                        "description": "The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»); the test mode of Zarinpal (its sandbox), AbanGateway (a test key) or AqayePardakht (its sandbox pin) («حالت آزمایشی: پولی جابه‌جا نمی‌شود»); Plisio's dollar rate and coins («هر دلار ۹۵٬۰۰۰ تومان · USDT_TRX، TRX»), always; Variza's card («کارت مقصد: تصادفی»), always; Rikhtam's coin («ارز: تتر روی شبکه TON»), always. Null when it has none: the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay and Rialit (whose fee is set in its own dashboard) always."
                     },
                     "config": {
                         "$ref": "#/components/schemas/PlisioGatewayConfig"
@@ -26341,6 +27526,7 @@
                     "driver_label",
                     "kind",
                     "builtin",
+                    "registers_webhook",
                     "label",
                     "summary",
                     "config",
@@ -26371,6 +27557,10 @@
                     "builtin": {
                         "type": "boolean"
                     },
+                    "registers_webhook": {
+                        "type": "boolean",
+                        "description": "Whether the shop registers its webhook address with the method's gateway itself (Rialit): its state and the offer to register or replace it are `GET`/`POST /payment-methods/{id}/webhook`'s. From the driver alone, nothing asked of the gateway; false for a driver no longer installed."
+                    },
                     "label": {
                         "type": "string",
                         "description": "The button text customers see, such as \"کارت به کارت (ملت)\"."
@@ -26378,7 +27568,7 @@
                     "summary": {
                         "type": "string",
                         "nullable": true,
-                        "description": "The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»); the test mode of Zarinpal (its sandbox), AbanGateway (a test key) or AqayePardakht (its sandbox pin) («حالت آزمایشی: پولی جابه‌جا نمی‌شود»); Plisio's dollar rate and coins («هر دلار ۹۵٬۰۰۰ تومان · USDT_TRX، TRX»), always; Variza's card («کارت مقصد: تصادفی»), always. Null when it has none: the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay always."
+                        "description": "The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»); the test mode of Zarinpal (its sandbox), AbanGateway (a test key) or AqayePardakht (its sandbox pin) («حالت آزمایشی: پولی جابه‌جا نمی‌شود»); Plisio's dollar rate and coins («هر دلار ۹۵٬۰۰۰ تومان · USDT_TRX، TRX»), always; Variza's card («کارت مقصد: تصادفی»), always; Rikhtam's coin («ارز: تتر روی شبکه TON»), always. Null when it has none: the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay and Rialit (whose fee is set in its own dashboard) always."
                     },
                     "config": {
                         "$ref": "#/components/schemas/AqayePardakhtGatewayConfig"
@@ -26434,6 +27624,7 @@
                     "driver_label",
                     "kind",
                     "builtin",
+                    "registers_webhook",
                     "label",
                     "summary",
                     "config",
@@ -26464,6 +27655,10 @@
                     "builtin": {
                         "type": "boolean"
                     },
+                    "registers_webhook": {
+                        "type": "boolean",
+                        "description": "Whether the shop registers its webhook address with the method's gateway itself (Rialit): its state and the offer to register or replace it are `GET`/`POST /payment-methods/{id}/webhook`'s. From the driver alone, nothing asked of the gateway; false for a driver no longer installed."
+                    },
                     "label": {
                         "type": "string",
                         "description": "The button text customers see, such as \"کارت به کارت (ملت)\"."
@@ -26471,10 +27666,304 @@
                     "summary": {
                         "type": "string",
                         "nullable": true,
-                        "description": "The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»); the test mode of Zarinpal (its sandbox), AbanGateway (a test key) or AqayePardakht (its sandbox pin) («حالت آزمایشی: پولی جابه‌جا نمی‌شود»); Plisio's dollar rate and coins («هر دلار ۹۵٬۰۰۰ تومان · USDT_TRX، TRX»), always; Variza's card («کارت مقصد: تصادفی»), always. Null when it has none: the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay always."
+                        "description": "The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»); the test mode of Zarinpal (its sandbox), AbanGateway (a test key) or AqayePardakht (its sandbox pin) («حالت آزمایشی: پولی جابه‌جا نمی‌شود»); Plisio's dollar rate and coins («هر دلار ۹۵٬۰۰۰ تومان · USDT_TRX، TRX»), always; Variza's card («کارت مقصد: تصادفی»), always; Rikhtam's coin («ارز: تتر روی شبکه TON»), always. Null when it has none: the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay and Rialit (whose fee is set in its own dashboard) always."
                     },
                     "config": {
                         "$ref": "#/components/schemas/VarizaGatewayConfig"
+                    },
+                    "min_amount": {
+                        "type": "string",
+                        "nullable": true,
+                        "description": "The least amount to pay it is offered for, in Toman; null for no least. Checkouts of less do not offer it."
+                    },
+                    "max_amount": {
+                        "type": "string",
+                        "nullable": true,
+                        "description": "The most amount to pay it is offered for, in Toman; null for no most."
+                    },
+                    "enabled": {
+                        "type": "boolean"
+                    },
+                    "sort": {
+                        "type": "integer"
+                    },
+                    "counts": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                            "payments"
+                        ],
+                        "properties": {
+                            "payments": {
+                                "type": "integer",
+                                "description": "The number of payments made with it. A method with payments cannot be deleted."
+                            }
+                        }
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true
+                    },
+                    "updated_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true
+                    }
+                }
+            },
+            "BluepalMethodRow": {
+                "description": "A Bluepal method (bluepal.ir), an online gateway: the customer pays with any bank card on the bank's page, reached from Bluepal's, and is sent back to the shop; Bluepal confirms it, with no receipt and no review.",
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                    "id",
+                    "driver",
+                    "driver_label",
+                    "kind",
+                    "builtin",
+                    "registers_webhook",
+                    "label",
+                    "summary",
+                    "config",
+                    "min_amount",
+                    "max_amount",
+                    "enabled",
+                    "sort",
+                    "counts",
+                    "created_at",
+                    "updated_at"
+                ],
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "driver": {
+                        "type": "string",
+                        "enum": [
+                            "bluepal"
+                        ]
+                    },
+                    "driver_label": {
+                        "type": "string"
+                    },
+                    "kind": {
+                        "$ref": "#/components/schemas/GatewayKind"
+                    },
+                    "builtin": {
+                        "type": "boolean"
+                    },
+                    "registers_webhook": {
+                        "type": "boolean",
+                        "description": "Whether the shop registers its webhook address with the method's gateway itself (Rialit): its state and the offer to register or replace it are `GET`/`POST /payment-methods/{id}/webhook`'s. From the driver alone, nothing asked of the gateway; false for a driver no longer installed."
+                    },
+                    "label": {
+                        "type": "string",
+                        "description": "The button text customers see, such as \"کارت به کارت (ملت)\"."
+                    },
+                    "summary": {
+                        "type": "string",
+                        "nullable": true,
+                        "description": "The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»); the test mode of Zarinpal (its sandbox), AbanGateway (a test key) or AqayePardakht (its sandbox pin) («حالت آزمایشی: پولی جابه‌جا نمی‌شود»); Plisio's dollar rate and coins («هر دلار ۹۵٬۰۰۰ تومان · USDT_TRX، TRX»), always; Variza's card («کارت مقصد: تصادفی»), always; Rikhtam's coin («ارز: تتر روی شبکه TON»), always. Null when it has none: the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay and Rialit (whose fee is set in its own dashboard) always."
+                    },
+                    "config": {
+                        "$ref": "#/components/schemas/BluepalGatewayConfig"
+                    },
+                    "min_amount": {
+                        "type": "string",
+                        "nullable": true,
+                        "description": "The least amount to pay it is offered for, in Toman; null for no least. Checkouts of less do not offer it."
+                    },
+                    "max_amount": {
+                        "type": "string",
+                        "nullable": true,
+                        "description": "The most amount to pay it is offered for, in Toman; null for no most."
+                    },
+                    "enabled": {
+                        "type": "boolean"
+                    },
+                    "sort": {
+                        "type": "integer"
+                    },
+                    "counts": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                            "payments"
+                        ],
+                        "properties": {
+                            "payments": {
+                                "type": "integer",
+                                "description": "The number of payments made with it. A method with payments cannot be deleted."
+                            }
+                        }
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true
+                    },
+                    "updated_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true
+                    }
+                }
+            },
+            "RialitMethodRow": {
+                "description": "A Rialit method (rialit.io), an online gateway: the customer pays on Rialit's page — the order's sum and any fee its merchant passes on to the payer in Rialit's dashboard —, and Rialit confirms it, with no receipt and no review. Its webhook, to the shop's address for it, only names a payment: the shop asks Rialit about it.",
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                    "id",
+                    "driver",
+                    "driver_label",
+                    "kind",
+                    "builtin",
+                    "registers_webhook",
+                    "label",
+                    "summary",
+                    "config",
+                    "min_amount",
+                    "max_amount",
+                    "enabled",
+                    "sort",
+                    "counts",
+                    "created_at",
+                    "updated_at"
+                ],
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "driver": {
+                        "type": "string",
+                        "enum": [
+                            "rialit"
+                        ]
+                    },
+                    "driver_label": {
+                        "type": "string"
+                    },
+                    "kind": {
+                        "$ref": "#/components/schemas/GatewayKind"
+                    },
+                    "builtin": {
+                        "type": "boolean"
+                    },
+                    "registers_webhook": {
+                        "type": "boolean",
+                        "description": "Whether the shop registers its webhook address with the method's gateway itself (Rialit): its state and the offer to register or replace it are `GET`/`POST /payment-methods/{id}/webhook`'s. From the driver alone, nothing asked of the gateway; false for a driver no longer installed."
+                    },
+                    "label": {
+                        "type": "string",
+                        "description": "The button text customers see, such as \"کارت به کارت (ملت)\"."
+                    },
+                    "summary": {
+                        "type": "string",
+                        "nullable": true,
+                        "description": "The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»); the test mode of Zarinpal (its sandbox), AbanGateway (a test key) or AqayePardakht (its sandbox pin) («حالت آزمایشی: پولی جابه‌جا نمی‌شود»); Plisio's dollar rate and coins («هر دلار ۹۵٬۰۰۰ تومان · USDT_TRX، TRX»), always; Variza's card («کارت مقصد: تصادفی»), always; Rikhtam's coin («ارز: تتر روی شبکه TON»), always. Null when it has none: the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay and Rialit (whose fee is set in its own dashboard) always."
+                    },
+                    "config": {
+                        "$ref": "#/components/schemas/RialitGatewayConfig"
+                    },
+                    "min_amount": {
+                        "type": "string",
+                        "nullable": true,
+                        "description": "The least amount to pay it is offered for, in Toman; null for no least. Checkouts of less do not offer it."
+                    },
+                    "max_amount": {
+                        "type": "string",
+                        "nullable": true,
+                        "description": "The most amount to pay it is offered for, in Toman; null for no most."
+                    },
+                    "enabled": {
+                        "type": "boolean"
+                    },
+                    "sort": {
+                        "type": "integer"
+                    },
+                    "counts": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                            "payments"
+                        ],
+                        "properties": {
+                            "payments": {
+                                "type": "integer",
+                                "description": "The number of payments made with it. A method with payments cannot be deleted."
+                            }
+                        }
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true
+                    },
+                    "updated_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true
+                    }
+                }
+            },
+            "RikhtamMethodRow": {
+                "description": "A Rikhtam crypto method (rikhtam.com), an online gateway for crypto: the customer pays on Rikhtam's page in the owner's coin, or one they pick there — TON's Gram, Tether on TON or on TRON, or TRX —, straight to the merchant's own wallet, and Rikhtam confirms it on its chain, with no receipt and no review. An order is asked of Rikhtam in Toman.",
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                    "id",
+                    "driver",
+                    "driver_label",
+                    "kind",
+                    "builtin",
+                    "registers_webhook",
+                    "label",
+                    "summary",
+                    "config",
+                    "min_amount",
+                    "max_amount",
+                    "enabled",
+                    "sort",
+                    "counts",
+                    "created_at",
+                    "updated_at"
+                ],
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "driver": {
+                        "type": "string",
+                        "enum": [
+                            "rikhtam"
+                        ]
+                    },
+                    "driver_label": {
+                        "type": "string"
+                    },
+                    "kind": {
+                        "$ref": "#/components/schemas/GatewayKind"
+                    },
+                    "builtin": {
+                        "type": "boolean"
+                    },
+                    "registers_webhook": {
+                        "type": "boolean",
+                        "description": "Whether the shop registers its webhook address with the method's gateway itself (Rialit): its state and the offer to register or replace it are `GET`/`POST /payment-methods/{id}/webhook`'s. From the driver alone, nothing asked of the gateway; false for a driver no longer installed."
+                    },
+                    "label": {
+                        "type": "string",
+                        "description": "The button text customers see, such as \"کارت به کارت (ملت)\"."
+                    },
+                    "summary": {
+                        "type": "string",
+                        "nullable": true,
+                        "description": "The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»); the test mode of Zarinpal (its sandbox), AbanGateway (a test key) or AqayePardakht (its sandbox pin) («حالت آزمایشی: پولی جابه‌جا نمی‌شود»); Plisio's dollar rate and coins («هر دلار ۹۵٬۰۰۰ تومان · USDT_TRX، TRX»), always; Variza's card («کارت مقصد: تصادفی»), always; Rikhtam's coin («ارز: تتر روی شبکه TON»), always. Null when it has none: the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay and Rialit (whose fee is set in its own dashboard) always."
+                    },
+                    "config": {
+                        "$ref": "#/components/schemas/RikhtamGatewayConfig"
                     },
                     "min_amount": {
                         "type": "string",
@@ -26527,6 +28016,7 @@
                     "driver_label",
                     "kind",
                     "builtin",
+                    "registers_webhook",
                     "label",
                     "summary",
                     "config",
@@ -26559,6 +28049,10 @@
                     "builtin": {
                         "type": "boolean"
                     },
+                    "registers_webhook": {
+                        "type": "boolean",
+                        "description": "Whether the shop registers its webhook address with the method's gateway itself (Rialit): its state and the offer to register or replace it are `GET`/`POST /payment-methods/{id}/webhook`'s. From the driver alone, nothing asked of the gateway; false for a driver no longer installed."
+                    },
                     "label": {
                         "type": "string",
                         "description": "The button text customers see, such as \"کارت به کارت (ملت)\"."
@@ -26566,7 +28060,7 @@
                     "summary": {
                         "type": "string",
                         "nullable": true,
-                        "description": "The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»); the test mode of Zarinpal (its sandbox), AbanGateway (a test key) or AqayePardakht (its sandbox pin) («حالت آزمایشی: پولی جابه‌جا نمی‌شود»); Plisio's dollar rate and coins («هر دلار ۹۵٬۰۰۰ تومان · USDT_TRX، TRX»), always; Variza's card («کارت مقصد: تصادفی»), always. Null when it has none: the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay always."
+                        "description": "The driver's one-line summary of the method from its settings, never a secret: CubePay's fee passed on to customers («کارمزد مشتری: ۳٪ + ۵۰۰ تومان»); the test mode of Zarinpal (its sandbox), AbanGateway (a test key) or AqayePardakht (its sandbox pin) («حالت آزمایشی: پولی جابه‌جا نمی‌شود»); Plisio's dollar rate and coins («هر دلار ۹۵٬۰۰۰ تومان · USDT_TRX، TRX»), always; Variza's card («کارت مقصد: تصادفی»), always; Rikhtam's coin («ارز: تتر روی شبکه TON»), always. Null when it has none: the wallet; a card method, whose cards are listed under `cards`; an online method with no fee passed on and no test mode, AtlasPay and Rialit (whose fee is set in its own dashboard) always."
                     },
                     "config": {
                         "type": "object",
@@ -26705,6 +28199,62 @@
                     "card": {
                         "type": "string",
                         "description": "`random` (the active card of the merchant's with fewest payments today), `variza` (Variza's cards, settled to a wallet and on in Tether), or the last four digits of one of the merchant's cards at Variza."
+                    }
+                }
+            },
+            "RikhtamGatewayConfig": {
+                "description": "A Rikhtam crypto method's settings (`RikhtamMethodRow.config`): the gateway's «کلید امنیتی», kept encrypted and never shown — only whether one is kept and a hint to recognise it —, and the coin its payments are made in.",
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                    "secret",
+                    "coin"
+                ],
+                "properties": {
+                    "secret": {
+                        "$ref": "#/components/schemas/SecretState"
+                    },
+                    "coin": {
+                        "type": "string",
+                        "enum": [
+                            "any",
+                            "gram",
+                            "usdt_ton",
+                            "usdt_trc20",
+                            "trx"
+                        ],
+                        "description": "`any` for the customer to pick on Rikhtam's page; else TON's Gram (`gram`), Tether on TON (`usdt_ton`) or on TRON (`usdt_trc20`), or TRX (`trx`)."
+                    }
+                }
+            },
+            "BluepalGatewayConfig": {
+                "description": "A Bluepal method's settings (`BluepalMethodRow.config`): the gateway's merchant id, and the merchant's API key, kept encrypted and never shown — only whether one is kept and a hint to recognise it.",
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                    "merchant_id",
+                    "api_key"
+                ],
+                "properties": {
+                    "merchant_id": {
+                        "type": "string",
+                        "description": "The gateway's merchant id as Bluepal's dashboard shows it."
+                    },
+                    "api_key": {
+                        "$ref": "#/components/schemas/SecretState"
+                    }
+                }
+            },
+            "RialitGatewayConfig": {
+                "description": "A Rialit method's settings (`RialitMethodRow.config`): the merchant's API key, kept encrypted and never shown — only whether one is kept and a hint to recognise it. The fee the payer pays is set in Rialit's dashboard, not here.",
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                    "api_key"
+                ],
+                "properties": {
+                    "api_key": {
+                        "$ref": "#/components/schemas/SecretState"
                     }
                 }
             },
@@ -26882,6 +28432,88 @@
                 "properties": {
                     "method": {
                         "$ref": "#/components/schemas/PaymentMethodRow"
+                    }
+                }
+            },
+            "PaymentMethodSavedResponse": {
+                "description": "A payment method as saved, and where its gateway sends its webhooks after the shop registered its own address where the gateway had none.",
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                    "method",
+                    "webhook"
+                ],
+                "properties": {
+                    "method": {
+                        "$ref": "#/components/schemas/PaymentMethodRow"
+                    },
+                    "webhook": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/GatewayWebhookState"
+                            }
+                        ],
+                        "nullable": true,
+                        "description": "For a method whose gateway takes its webhook address from the shop (`registers_webhook`: Rialit), the state after the save: the shop's address registered where the gateway had none (`ours`, with a message), another address left as it was (`elsewhere`), or why nothing could be done (`none` or `unknown`, with a message). Null for any other method."
+                    }
+                }
+            },
+            "PaymentMethodWebhookResponse": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                    "webhook"
+                ],
+                "properties": {
+                    "webhook": {
+                        "$ref": "#/components/schemas/GatewayWebhookState"
+                    }
+                }
+            },
+            "PaymentMethodWebhookRequest": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                    "replace": {
+                        "type": "boolean",
+                        "description": "Put the shop's address in place of another the gateway sends its webhooks to — only when the gateway's account is this shop's alone. Left out: false, another address left as it is."
+                    }
+                }
+            },
+            "GatewayWebhookState": {
+                "description": "Where a method's gateway sends its webhooks — one address for the merchant's whole account at the gateway (Rialit) — beside the shop's own address for them (the same for every shop and method of the installation).",
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                    "state",
+                    "url",
+                    "ours",
+                    "message"
+                ],
+                "properties": {
+                    "state": {
+                        "type": "string",
+                        "enum": [
+                            "ours",
+                            "none",
+                            "elsewhere",
+                            "unknown"
+                        ],
+                        "description": "`ours`: to the shop's address. `none`: nowhere (the gateway's webhooks off). `elsewhere`: to another address — another site of the merchant's, maybe —, which the shop replaces only when asked (`replace`). `unknown`: the gateway could not be asked (`message` says why: its key refused, the shop server's IP not among its allowed IPs, its account not active, too many requests, out of reach)."
+                    },
+                    "url": {
+                        "type": "string",
+                        "nullable": true,
+                        "description": "Where the gateway sends its webhooks now; null for `none` and `unknown`."
+                    },
+                    "ours": {
+                        "type": "string",
+                        "description": "The shop's address for the gateway's webhooks, to paste in the gateway's dashboard by hand as well."
+                    },
+                    "message": {
+                        "type": "string",
+                        "nullable": true,
+                        "description": "For the owner, in Persian, no emoji: what was done just now («آدرس وب‌هوک فروشگاه در ریالیت ثبت شد؛ …»); why it was not — another address there, the shop's address not https or refused, 20 security changes an hour at Rialit, its key or the server's IP refused —; or why the state is unknown. Null when there is nothing to say: the address already the shop's, or none read and nothing asked."
                     }
                 }
             },
@@ -27076,7 +28708,7 @@
                 }
             },
             "AtlasPayMethodRequest": {
-                "description": "An AtlasPay method's form: the label customers pick it by, its switch, the amounts it is offered for, and the merchant's API key from AtlasPay. It names `api_key` (blank keeps the kept one) or `clear_api_key`, as the panels' form does with every save: a body of the label, the switch and the bounds alone is the wallet's form.",
+                "description": "An AtlasPay or Rialit method's form — the two drivers' forms are alike —: the label customers pick it by, its switch, the amounts it is offered for (Rialit takes 50,000 to 10,000,000 Toman), and the merchant's API key from AtlasPay, or from Rialit's dashboard. It names `api_key` (blank keeps the kept one) or `clear_api_key`, as the panels' form does with every save: a body of the label, the switch and the bounds alone is the wallet's form.",
                 "type": "object",
                 "additionalProperties": false,
                 "not": {
@@ -27111,11 +28743,11 @@
                     },
                     "api_key": {
                         "type": "string",
-                        "description": "The API key as AtlasPay gives it: 8 to 255 Latin letters, digits and signs, no spaces. Kept encrypted, never shown back. Left blank or out: the kept one stays; a new method, or one with none kept, is refused without one (a 422 on `api_key`)."
+                        "description": "The API key as AtlasPay (or Rialit's dashboard) gives it: 8 to 255 Latin letters, digits and signs, no spaces. Kept encrypted, never shown back. Left blank or out: the kept one stays; a new method, or one with none kept, is refused without one (a 422 on `api_key`)."
                     },
                     "clear_api_key": {
                         "type": "boolean",
-                        "description": "True empties the kept key, which is refused: an AtlasPay method cannot go without one (type another instead)."
+                        "description": "True empties the kept key, which is refused: an AtlasPay or Rialit method cannot go without one (type another instead)."
                     }
                 }
             },
@@ -27172,6 +28804,109 @@
                     "card": {
                         "type": "string",
                         "description": "`random` (or «تصادفی»), `variza` (or «واریزا»), or the last four digits of one of the merchant's cards at Variza — any case, Persian digits taken; kept as `random`, `variza` or the digits."
+                    }
+                }
+            },
+            "RikhtamMethodRequest": {
+                "description": "A Rikhtam crypto method's form: the label customers pick it by, its switch, the amounts it is offered for, the gateway's «کلید امنیتی» from Rikhtam's panel («درگاه‌ها»), and the coin. It names `secret` (blank keeps the kept one) or `clear_secret`, as the panels' form does with every save.",
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                    "coin"
+                ],
+                "properties": {
+                    "label": {
+                        "type": "string",
+                        "description": "The checkout button's text, such as «کارت به کارت (ملت)». Left out on an update: unchanged."
+                    },
+                    "enabled": {
+                        "type": "boolean",
+                        "description": "Left out: on for a new method, unchanged for an existing one."
+                    },
+                    "min_amount": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/AmountInput"
+                            }
+                        ],
+                        "nullable": true,
+                        "description": "The least amount to pay it is offered for: whole Toman, blank or null for no least. Left out on an update: unchanged."
+                    },
+                    "max_amount": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/AmountInput"
+                            }
+                        ],
+                        "nullable": true,
+                        "description": "The most amount to pay it is offered for (not less than `min_amount`): whole Toman, blank or null for no most. Left out on an update: unchanged."
+                    },
+                    "secret": {
+                        "type": "string",
+                        "description": "The gateway's «کلید امنیتی» as Rikhtam's panel shows it: 8 to 255 Latin letters, digits and signs, no spaces — the same key the shop's Rikhtam deposits are heard with. Kept encrypted, never shown back. Left blank or out: the kept one stays; a new method, or one with none kept, is refused without one (a 422 on `secret`)."
+                    },
+                    "clear_secret": {
+                        "type": "boolean",
+                        "description": "True empties the kept key, which is refused: a Rikhtam method cannot go without one (type another instead)."
+                    },
+                    "coin": {
+                        "type": "string",
+                        "enum": [
+                            "any",
+                            "gram",
+                            "usdt_ton",
+                            "usdt_trc20",
+                            "trx"
+                        ],
+                        "description": "`any` for the customer to pick on Rikhtam's page; else TON's Gram (`gram`), Tether on TON (`usdt_ton`) or on TRON (`usdt_trc20`), or TRX (`trx`). Another word is a 422 on `coin`."
+                    }
+                }
+            },
+            "BluepalMethodRequest": {
+                "description": "A Bluepal method's form: the label customers pick it by, its switch, the amounts it is offered for, and the gateway's merchant id and API key from Bluepal's dashboard. It names `api_key` (blank keeps the kept one) or `clear_api_key`, as the panels' form does with every save.",
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                    "merchant_id"
+                ],
+                "properties": {
+                    "label": {
+                        "type": "string",
+                        "description": "The checkout button's text, such as «کارت به کارت (ملت)». Left out on an update: unchanged."
+                    },
+                    "enabled": {
+                        "type": "boolean",
+                        "description": "Left out: on for a new method, unchanged for an existing one."
+                    },
+                    "min_amount": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/AmountInput"
+                            }
+                        ],
+                        "nullable": true,
+                        "description": "The least amount to pay it is offered for: whole Toman, blank or null for no least. Left out on an update: unchanged."
+                    },
+                    "max_amount": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/AmountInput"
+                            }
+                        ],
+                        "nullable": true,
+                        "description": "The most amount to pay it is offered for (not less than `min_amount`): whole Toman, blank or null for no most. Left out on an update: unchanged."
+                    },
+                    "merchant_id": {
+                        "type": "string",
+                        "description": "The gateway's merchant id as Bluepal's dashboard shows it: 2 to 64 Latin letters, digits, `-` and `_` (Persian digits are taken). A 422 on `merchant_id` without one, or of another shape."
+                    },
+                    "api_key": {
+                        "type": "string",
+                        "description": "The API key as Bluepal's dashboard shows it (`sk_live_…`, or the key of the gateway's sandbox, where no money moves — a payment there still delivers its order): 8 to 255 Latin letters, digits and signs, no spaces. Kept encrypted, never shown back. Left blank or out: the kept one stays; a new method, or one with none kept, is refused without one (a 422 on `api_key`)."
+                    },
+                    "clear_api_key": {
+                        "type": "boolean",
+                        "description": "True empties the kept key, which is refused: a Bluepal method cannot go without one (type another instead)."
                     }
                 }
             },
@@ -27553,11 +29288,63 @@
                     },
                     "api_key": {
                         "type": "string",
-                        "description": "The API key as AtlasPay gives it: 8 to 255 Latin letters, digits and signs, no spaces. Kept encrypted, never shown back. Left blank or out: the kept one stays; a new method, or one with none kept, is refused without one (a 422 on `api_key`)."
+                        "description": "The API key as AtlasPay (or Rialit's dashboard) gives it: 8 to 255 Latin letters, digits and signs, no spaces. Kept encrypted, never shown back. Left blank or out: the kept one stays; a new method, or one with none kept, is refused without one (a 422 on `api_key`)."
                     },
                     "clear_api_key": {
                         "type": "boolean",
-                        "description": "True empties the kept key, which is refused: an AtlasPay method cannot go without one (type another instead)."
+                        "description": "True empties the kept key, which is refused: an AtlasPay or Rialit method cannot go without one (type another instead)."
+                    }
+                }
+            },
+            "RialitMethodCreateRequest": {
+                "description": "A new Rialit method: its driver and its form (the one AtlasPayMethodRequest describes), with the label and the API key required.",
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                    "driver",
+                    "label"
+                ],
+                "properties": {
+                    "driver": {
+                        "type": "string",
+                        "enum": [
+                            "rialit"
+                        ],
+                        "description": "A driver key (`DriverDescription.key`) from `GET /payment-methods/drivers`."
+                    },
+                    "label": {
+                        "type": "string",
+                        "description": "The checkout button's text, such as «کارت به کارت (ملت)». Left out on an update: unchanged."
+                    },
+                    "enabled": {
+                        "type": "boolean",
+                        "description": "Left out: on for a new method, unchanged for an existing one."
+                    },
+                    "min_amount": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/AmountInput"
+                            }
+                        ],
+                        "nullable": true,
+                        "description": "The least amount to pay it is offered for: whole Toman, blank or null for no least. Left out on an update: unchanged."
+                    },
+                    "max_amount": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/AmountInput"
+                            }
+                        ],
+                        "nullable": true,
+                        "description": "The most amount to pay it is offered for (not less than `min_amount`): whole Toman, blank or null for no most. Left out on an update: unchanged."
+                    },
+                    "api_key": {
+                        "type": "string",
+                        "description": "The API key as Rialit's dashboard shows it: 8 to 255 Latin letters, digits and signs, no spaces. Kept encrypted, never shown back. Required: a new method is refused without one (a 422 on `api_key`)."
+                    },
+                    "clear_api_key": {
+                        "type": "boolean",
+                        "description": "True empties the key, which is refused: a Rialit method cannot go without one."
                     }
                 }
             },
@@ -27623,6 +29410,63 @@
                     "card": {
                         "type": "string",
                         "description": "`random` (or «تصادفی»), `variza` (or «واریزا»), or the last four digits of one of the merchant's cards at Variza — any case, Persian digits taken; kept as `random`, `variza` or the digits."
+                    }
+                }
+            },
+            "BluepalMethodCreateRequest": {
+                "description": "A new Bluepal method: its driver and its form (BluepalMethodRequest), with the label, the merchant id and the API key required.",
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                    "driver",
+                    "label",
+                    "merchant_id"
+                ],
+                "properties": {
+                    "driver": {
+                        "type": "string",
+                        "enum": [
+                            "bluepal"
+                        ],
+                        "description": "A driver key (`DriverDescription.key`) from `GET /payment-methods/drivers`."
+                    },
+                    "label": {
+                        "type": "string",
+                        "description": "The checkout button's text, such as «کارت به کارت (ملت)». Left out on an update: unchanged."
+                    },
+                    "enabled": {
+                        "type": "boolean",
+                        "description": "Left out: on for a new method, unchanged for an existing one."
+                    },
+                    "min_amount": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/AmountInput"
+                            }
+                        ],
+                        "nullable": true,
+                        "description": "The least amount to pay it is offered for: whole Toman, blank or null for no least. Left out on an update: unchanged."
+                    },
+                    "max_amount": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/AmountInput"
+                            }
+                        ],
+                        "nullable": true,
+                        "description": "The most amount to pay it is offered for (not less than `min_amount`): whole Toman, blank or null for no most. Left out on an update: unchanged."
+                    },
+                    "merchant_id": {
+                        "type": "string",
+                        "description": "The gateway's merchant id as Bluepal's dashboard shows it: 2 to 64 Latin letters, digits, `-` and `_` (Persian digits are taken). A 422 on `merchant_id` without one, or of another shape."
+                    },
+                    "api_key": {
+                        "type": "string",
+                        "description": "The API key as Bluepal's dashboard shows it (`sk_live_…`, or the key of the gateway's sandbox, where no money moves — a payment there still delivers its order): 8 to 255 Latin letters, digits and signs, no spaces. Kept encrypted, never shown back. Left blank or out: the kept one stays; a new method, or one with none kept, is refused without one (a 422 on `api_key`)."
+                    },
+                    "clear_api_key": {
+                        "type": "boolean",
+                        "description": "True empties the kept key, which is refused: a Bluepal method cannot go without one (type another instead)."
                     }
                 }
             },
@@ -27743,6 +29587,70 @@
                     }
                 }
             },
+            "RikhtamMethodCreateRequest": {
+                "description": "A new Rikhtam crypto method: its driver and its form (RikhtamMethodRequest), with the label, the gateway's key and the coin required.",
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                    "driver",
+                    "label",
+                    "coin"
+                ],
+                "properties": {
+                    "driver": {
+                        "type": "string",
+                        "enum": [
+                            "rikhtam"
+                        ],
+                        "description": "A driver key (`DriverDescription.key`) from `GET /payment-methods/drivers`."
+                    },
+                    "label": {
+                        "type": "string",
+                        "description": "The checkout button's text, such as «کارت به کارت (ملت)». Left out on an update: unchanged."
+                    },
+                    "enabled": {
+                        "type": "boolean",
+                        "description": "Left out: on for a new method, unchanged for an existing one."
+                    },
+                    "min_amount": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/AmountInput"
+                            }
+                        ],
+                        "nullable": true,
+                        "description": "The least amount to pay it is offered for: whole Toman, blank or null for no least. Left out on an update: unchanged."
+                    },
+                    "max_amount": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/AmountInput"
+                            }
+                        ],
+                        "nullable": true,
+                        "description": "The most amount to pay it is offered for (not less than `min_amount`): whole Toman, blank or null for no most. Left out on an update: unchanged."
+                    },
+                    "secret": {
+                        "type": "string",
+                        "description": "The gateway's «کلید امنیتی» as Rikhtam's panel shows it: 8 to 255 Latin letters, digits and signs, no spaces — the same key the shop's Rikhtam deposits are heard with. Kept encrypted, never shown back. Left blank or out: the kept one stays; a new method, or one with none kept, is refused without one (a 422 on `secret`)."
+                    },
+                    "clear_secret": {
+                        "type": "boolean",
+                        "description": "True empties the kept key, which is refused: a Rikhtam method cannot go without one (type another instead)."
+                    },
+                    "coin": {
+                        "type": "string",
+                        "enum": [
+                            "any",
+                            "gram",
+                            "usdt_ton",
+                            "usdt_trc20",
+                            "trx"
+                        ],
+                        "description": "`any` for the customer to pick on Rikhtam's page; else TON's Gram (`gram`), Tether on TON (`usdt_ton`) or on TRON (`usdt_trc20`), or TRX (`trx`). Another word is a 422 on `coin`."
+                    }
+                }
+            },
             "AbanMethodCreateRequest": {
                 "description": "A new AbanGateway method: its driver and its form (AbanMethodRequest), with the label and the API key required.",
                 "type": "object",
@@ -27826,6 +29734,15 @@
                     },
                     {
                         "$ref": "#/components/schemas/VarizaMethodCreateRequest"
+                    },
+                    {
+                        "$ref": "#/components/schemas/RikhtamMethodCreateRequest"
+                    },
+                    {
+                        "$ref": "#/components/schemas/BluepalMethodCreateRequest"
+                    },
+                    {
+                        "$ref": "#/components/schemas/RialitMethodCreateRequest"
                     }
                 ]
             },
@@ -27858,6 +29775,12 @@
                     },
                     {
                         "$ref": "#/components/schemas/VarizaMethodRequest"
+                    },
+                    {
+                        "$ref": "#/components/schemas/RikhtamMethodRequest"
+                    },
+                    {
+                        "$ref": "#/components/schemas/BluepalMethodRequest"
                     }
                 ]
             },
@@ -28859,7 +30782,7 @@
                 }
             },
             "DepositStatus": {
-                "description": "What came of a forwarded bank SMS: `received` (being looked at), `matched` (it approved a card payment), `unmatched` (no open card payment asks its sum, or ForApp did not recognise it as a bank's deposit), `ambiguous` (more than one does; none approved), `ignored` (a withdrawal, no sum read in Rial, or older than three days), `test` (the app's test).",
+                "description": "What came of a bank deposit (a forwarded SMS, or Rikhtam's word): `received` (being looked at), `matched` (it approved a card payment — by its sum, or attached to it by hand at Rikhtam), `unmatched` (no open card payment asks its sum, its source could not vouch it was a bank's deposit — ForApp did not recognise the SMS —, or an attach by hand was refused: `note` says why), `ambiguous` (more than one does; none approved), `ignored` (a withdrawal, no sum read in Rial, or older than three days), `test` (the app's test).",
                 "type": "string",
                 "enum": [
                     "received",
@@ -28893,7 +30816,7 @@
                     },
                     "source": {
                         "type": "string",
-                        "description": "The phone app: `forapp`."
+                        "description": "Where it came from: `forapp` (the phone app), `rikhtam`."
                     },
                     "status": {
                         "$ref": "#/components/schemas/DepositStatus"
@@ -28919,12 +30842,12 @@
                     "body": {
                         "type": "string",
                         "nullable": true,
-                        "description": "The SMS as it came."
+                        "description": "The SMS as it came; for Rikhtam, which sends no SMS, a line made of what it sent (the sum, the account's last digits, the time)."
                     },
                     "note": {
                         "type": "string",
                         "nullable": true,
-                        "description": "Why it approved nothing."
+                        "description": "Why it approved nothing — or how it approved its payment when not by its sum alone."
                     },
                     "payment": {
                         "type": "object",
@@ -29001,7 +30924,8 @@
                     "sources",
                     "last_received_at",
                     "last_test_at",
-                    "waiting"
+                    "waiting",
+                    "rikhtam"
                 ],
                 "properties": {
                     "enabled": {
@@ -29014,7 +30938,7 @@
                     },
                     "sources": {
                         "type": "array",
-                        "description": "The phone apps the shop takes, each with the address its owner pastes in it.",
+                        "description": "The phone apps the shop takes, each with the address its owner pastes in it beside the shop's key (Rikhtam is apart: `rikhtam`).",
                         "items": {
                             "type": "object",
                             "additionalProperties": false,
@@ -29040,17 +30964,163 @@
                         "type": "string",
                         "format": "date-time",
                         "nullable": true,
-                        "description": "When the last SMS came (not a test)."
+                        "description": "When a phone app's last SMS came (not a test; Rikhtam's deposits not counted)."
                     },
                     "last_test_at": {
                         "type": "string",
                         "format": "date-time",
                         "nullable": true,
-                        "description": "When the app's last test came."
+                        "description": "When a phone app's last test came."
                     },
                     "waiting": {
                         "type": "integer",
                         "description": "SMS of the last seven days that approved nothing (unmatched or ambiguous): support to look at."
+                    },
+                    "rikhtam": {
+                        "$ref": "#/components/schemas/DepositRikhtam"
+                    }
+                }
+            },
+            "DepositRikhtam": {
+                "description": "Rikhtam (rikhtam.com, «ریختم»): connected by its gateway's «کلید امنیتی» (`PUT …/deposits/settings/rikhtam`), which Rikhtam makes and the owner pastes; the shop registers its own address with the gateway. Its deposits are taken while «تایید خودکار واریز» is on; one its owner attaches to a payment by hand, either way.",
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                    "connected",
+                    "domain",
+                    "project_id",
+                    "callback_url",
+                    "connected_at"
+                ],
+                "properties": {
+                    "connected": {
+                        "type": "boolean",
+                        "description": "The shop keeps a Rikhtam key."
+                    },
+                    "domain": {
+                        "type": "string",
+                        "nullable": true,
+                        "description": "The domain the Rikhtam gateway is for, as Rikhtam said when the address was last registered; null when not connected."
+                    },
+                    "project_id": {
+                        "type": "integer",
+                        "nullable": true,
+                        "description": "The gateway's id at Rikhtam; null when not connected."
+                    },
+                    "callback_url": {
+                        "type": "string",
+                        "description": "The shop's address for Rikhtam (its deposits and crypto payments): what the shop registers, or the owner puts in the gateway's «آدرس کال‌بک»."
+                    },
+                    "connected_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true,
+                        "description": "When the address was last registered; null when not connected."
+                    }
+                }
+            },
+            "RikhtamConnectRequest": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                    "secret"
+                ],
+                "properties": {
+                    "secret": {
+                        "type": "string",
+                        "description": "The Rikhtam gateway's «کلید امنیتی», from Rikhtam's panel."
+                    }
+                }
+            },
+            "PaymentRikhtamResponse": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                    "connected",
+                    "deposits"
+                ],
+                "properties": {
+                    "connected": {
+                        "type": "boolean",
+                        "description": "The shop's Rikhtam is connected; false: the list is empty, nothing asked."
+                    },
+                    "deposits": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/RikhtamDeposit"
+                        }
+                    }
+                }
+            },
+            "RikhtamDeposit": {
+                "description": "A deposit Rikhtam holds that no invoice took.",
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                    "uid",
+                    "amount",
+                    "received_at",
+                    "account",
+                    "covers"
+                ],
+                "properties": {
+                    "uid": {
+                        "type": "string",
+                        "description": "Rikhtam's id for it: what `POST …/rikhtam` attaches."
+                    },
+                    "amount": {
+                        "type": "string",
+                        "description": "Its sum, in Toman."
+                    },
+                    "received_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true
+                    },
+                    "account": {
+                        "type": "string",
+                        "nullable": true,
+                        "description": "The last four digits of the account it came into; null when Rikhtam gave none."
+                    },
+                    "covers": {
+                        "type": "boolean",
+                        "description": "Whether it covers the payment's order's own price — the only kind that pays it when attached (one short of it is refused)."
+                    }
+                }
+            },
+            "PaymentRikhtamRequest": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                    "uid"
+                ],
+                "properties": {
+                    "uid": {
+                        "type": "string",
+                        "description": "The deposit to attach, from `GET …/rikhtam`."
+                    }
+                }
+            },
+            "PaymentRikhtamAttachResponse": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                    "payment",
+                    "message",
+                    "fee"
+                ],
+                "properties": {
+                    "payment": {
+                        "$ref": "#/components/schemas/PaymentRow"
+                    },
+                    "message": {
+                        "type": "string",
+                        "description": "Rikhtam's word on it, to show — or the shop's, when Rikhtam's answer was lost or a refusal though the deposit did approve the payment."
+                    },
+                    "fee": {
+                        "type": "string",
+                        "nullable": true,
+                        "description": "Rikhtam's fee for it, in Toman; null when it gave none."
                     }
                 }
             },
@@ -30359,7 +32429,16 @@
                     "lottery_entries",
                     "lottery_exclude_agents",
                     "hold_minutes",
-                    "agents_without_perks"
+                    "agents_without_perks",
+                    "bot_admins_enabled",
+                    "bot_admins_grant_catalog",
+                    "bot_admins_grant_wallet",
+                    "bot_admins_grant_refunds",
+                    "bot_admins_grant_payments",
+                    "bot_admins_grant_extend",
+                    "bot_admins_grant_manual_orders",
+                    "bot_admins_grant_delete",
+                    "bot_admins_grant_account_security"
                 ],
                 "properties": {
                     "hold_minutes": {
@@ -30876,6 +32955,42 @@
                     "lottery_exclude_agents": {
                         "type": "boolean",
                         "description": "Leave agents out of the draw (bot admins and banned customers are always left out)."
+                    },
+                    "bot_admins_enabled": {
+                        "type": "boolean",
+                        "description": "«مدیران ربات»: the shop's admins (customers whose role is admin) manage it from its bot's private chat («⚙️ مدیریت», /admin): the daily work — payments, orders, services, customers, tickets, reviews, broadcasts, the dashboard and referrals — and what the grants below add. On by default. The owner's linked Telegram accounts (`/settings/owner-telegram`) and an agent in their own bot need none of it."
+                    },
+                    "bot_admins_grant_catalog": {
+                        "type": "boolean",
+                        "description": "«مدیران ربات» may also make, edit, reorder, switch and delete plans and categories, and the customer groups (a customer put in a «همکار» group too): StaffGrant `catalog`. Off by default."
+                    },
+                    "bot_admins_grant_wallet": {
+                        "type": "boolean",
+                        "description": "…credit or debit a customer's wallet: StaffGrant `wallet`. Off by default."
+                    },
+                    "bot_admins_grant_refunds": {
+                        "type": "boolean",
+                        "description": "…refund a payment: StaffGrant `refunds`. Off by default."
+                    },
+                    "bot_admins_grant_payments": {
+                        "type": "boolean",
+                        "description": "…reject the receipts waiting for review in bulk (one by one is always theirs): StaffGrant `payments`. Off by default."
+                    },
+                    "bot_admins_grant_extend": {
+                        "type": "boolean",
+                        "description": "…add days and traffic to a customer's service: StaffGrant `extend`. Off by default."
+                    },
+                    "bot_admins_grant_manual_orders": {
+                        "type": "boolean",
+                        "description": "…make an order for a customer by hand — free, from their wallet or paid outside the shop: StaffGrant `manual_orders`. Off by default."
+                    },
+                    "bot_admins_grant_delete": {
+                        "type": "boolean",
+                        "description": "…delete a customer's service for good, or hand it to another customer: StaffGrant `delete`. Off by default."
+                    },
+                    "bot_admins_grant_account_security": {
+                        "type": "boolean",
+                        "description": "…turn off a customer's two-factor sign-in on the website and sign them out of every device: StaffGrant `account_security`. Off by default."
                     }
                 }
             },
@@ -30945,7 +33060,8 @@
                     "cashback",
                     "lottery",
                     "discounts",
-                    "agent_perks"
+                    "agent_perks",
+                    "bot_admins"
                 ]
             },
             "BotSettingsResponse": {
@@ -31461,8 +33577,56 @@
                     },
                     {
                         "$ref": "#/components/schemas/BotAgentPerksSettingsRequest"
+                    },
+                    {
+                        "$ref": "#/components/schemas/BotBotAdminsSettingsRequest"
                     }
                 ]
+            },
+            "BotBotAdminsSettingsRequest": {
+                "description": "«مدیران ربات»: whether the shop's admins manage it from the bot, and a switch per grant beyond the daily work (`BotSettingsData.bot_admins_*`).",
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                    "bot_admins_enabled",
+                    "bot_admins_grant_catalog",
+                    "bot_admins_grant_wallet",
+                    "bot_admins_grant_refunds",
+                    "bot_admins_grant_payments",
+                    "bot_admins_grant_extend",
+                    "bot_admins_grant_manual_orders",
+                    "bot_admins_grant_delete",
+                    "bot_admins_grant_account_security"
+                ],
+                "properties": {
+                    "bot_admins_enabled": {
+                        "type": "boolean"
+                    },
+                    "bot_admins_grant_catalog": {
+                        "type": "boolean"
+                    },
+                    "bot_admins_grant_wallet": {
+                        "type": "boolean"
+                    },
+                    "bot_admins_grant_refunds": {
+                        "type": "boolean"
+                    },
+                    "bot_admins_grant_payments": {
+                        "type": "boolean"
+                    },
+                    "bot_admins_grant_extend": {
+                        "type": "boolean"
+                    },
+                    "bot_admins_grant_manual_orders": {
+                        "type": "boolean"
+                    },
+                    "bot_admins_grant_delete": {
+                        "type": "boolean"
+                    },
+                    "bot_admins_grant_account_security": {
+                        "type": "boolean"
+                    }
+                }
             },
             "BotDiscountsSettingsRequest": {
                 "type": "object",
@@ -39360,7 +41524,7 @@
                     },
                     "amount": {
                         "type": "string",
-                        "description": "The sum to pay, in Toman: the payment's own, or more when the gateway adds a few Toman to tell transfers apart (CubePay, AbanGateway) or the customer pays the gateway's fee (`fee`). Show this one as what to pay. A page may still ask it otherwise: Variza's asks a few Toman more of its own, and Plisio's the same in a coin the customer picks there (at the shop's dollar rate)."
+                        "description": "The sum to pay, in Toman: the payment's own, or more when the gateway adds a few Toman to tell transfers apart (CubePay, AbanGateway) or the customer pays the gateway's fee (`fee`). Show this one as what to pay. A page may still ask it otherwise: Variza's asks a few Toman more of its own, and Plisio's the same in a coin the customer picks there (at the shop's dollar rate), Rikhtam's in the coin set or picked there (at Rikhtam's rate)."
                     },
                     "amount_rial": {
                         "type": "string",
@@ -39369,7 +41533,7 @@
                     "fee": {
                         "type": "string",
                         "nullable": true,
-                        "description": "Of `amount`, the gateway's fee the customer pays: the one the shop passes on (CubePay), Zarinpal's when its merchant set the payer to pay it, or what AtlasPay puts on the order's amount; null for none. The order is still paid, delivered and credited at its own amount."
+                        "description": "Of `amount`, the gateway's fee the customer pays: the one the shop passes on (CubePay), Zarinpal's or Rialit's when its merchant set the payer to pay it, or what AtlasPay puts on the order's amount; null for none. The order is still paid, delivered and credited at its own amount."
                     },
                     "card": {
                         "type": "object",

@@ -220,7 +220,8 @@ export const BROADCAST_MESSAGES: NavSection<'messages'> = { value: 'messages', t
  * The bot settings' sections — a subject each (the renewal one holds two groups: its rule and «تمدید خودکار»); services
  * added by their link («افزودن سرویس با لینک») are the main shop's alone. The gift codes' switch, the lucky wheel's rules,
  * cashback's switch, the nightly draw's rules, the discounts' two (on «کدهای تخفیف» › «تنظیمات») and the test accounts'
- * rules are groups of the bot settings too, set on their own pages.
+ * rules are groups of the bot settings too, set on their own pages. Last, the shop's admins managing it from the bot
+ * («مدیران ربات»).
  */
 export type BotSettingsSection = Exclude<BotSettingsGroup, 'auto_renew' | 'gift_codes' | 'wheel' | 'cashback' | 'lottery' | 'discounts' | 'agent_perks' | 'test_accounts' | 'custom_services'>
 
@@ -240,6 +241,7 @@ export const BOT_SETTINGS_SECTIONS: NavSection<BotSettingsSection>[] = [
   { value: 'referral', title: 'زیرمجموعه‌گیری', to: '/bot-settings/referral' },
   { value: 'reports', title: 'گروه گزارش‌ها', to: '/bot-settings/reports' },
   { value: 'qr', title: 'کد QR', to: '/bot-settings/qr' },
+  { value: 'bot_admins', title: 'مدیران ربات', to: '/bot-settings/bot-admins' },
 ]
 
 /** The bot's settings in the settings' column — every panel's first group there. */

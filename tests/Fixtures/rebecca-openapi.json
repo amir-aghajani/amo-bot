@@ -1,0 +1,483 @@
+{
+  "x-trimmed-from": "Rebecca v1.9.1 (https://github.com/rebeccapanel/Rebecca/tree/v1.9.1, commit 410b42f498626f4a5c921236b28a1faba7f3a398): internal/app/api/openapi/openapi.json, which the panel serves at /openapi.json. Only the operations the AmoBot connector (app/Modules/Providers/Drivers/Rebecca) calls are kept — their methods, parameters, request bodies, responses and security —; descriptions and every other route are dropped. Rebecca describes routes only, no body schemas. GET /api/users/onlines, which the panel serves but its description leaves out, is added from its source (x-not-in-upstream).",
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Rebecca API",
+    "version": "0.3.0"
+  },
+  "servers": [
+    {
+      "url": "/",
+      "description": "Current Rebecca panel origin"
+    }
+  ],
+  "security": [
+    {
+      "cookieAuth": []
+    },
+    {
+      "bearerAuth": []
+    }
+  ],
+  "paths": {
+    "/api/admin": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Get current admin",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/JSON"
+          }
+        },
+        "operationId": "getAdmin"
+      }
+    },
+    "/api/system": {
+      "get": {
+        "tags": [
+          "System"
+        ],
+        "summary": "System statistics",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/JSON"
+          }
+        },
+        "operationId": "getSystem"
+      }
+    },
+    "/api/user": {
+      "post": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "Create user",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/JSON"
+        },
+        "responses": {
+          "201": {
+            "$ref": "#/components/responses/JSON"
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "operationId": "postUser"
+      }
+    },
+    "/api/user/{username}": {
+      "get": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "Get user",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Username"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/JSON"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "operationId": "getUserUsername"
+      },
+      "put": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "Update user",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Username"
+          }
+        ],
+        "requestBody": {
+          "$ref": "#/components/requestBodies/JSON"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/JSON"
+          }
+        },
+        "operationId": "putUserUsername"
+      },
+      "delete": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "Delete user",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Username"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/JSON"
+          }
+        },
+        "operationId": "deleteUserUsername"
+      }
+    },
+    "/api/user/{username}/reset": {
+      "post": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "Reset user usage",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Username"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/JSON"
+          }
+        },
+        "operationId": "postUserUsernameReset"
+      }
+    },
+    "/api/user/{username}/revoke_sub": {
+      "post": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "Revoke subscription",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Username"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/JSON"
+          }
+        },
+        "operationId": "postUserUsernameRevokeSub"
+      }
+    },
+    "/api/users": {
+      "get": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "List users",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Offset"
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "name": "username",
+            "in": "query",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "style": "form",
+            "explode": true
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "owner",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "filter",
+            "in": "query",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "style": "form",
+            "explode": true
+          },
+          {
+            "name": "service_id",
+            "in": "query",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "links",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/JSON"
+          }
+        },
+        "operationId": "getUsers"
+      }
+    },
+    "/api/users/onlines": {
+      "get": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "Online usernames",
+        "operationId": "getUsersOnlines",
+        "x-not-in-upstream": "Not in Rebecca v1.9.1's openapi.json; written from internal/app/api/routes.go (r.HandleFunc(\"/users/onlines\", s.requireAdmin(s.handleOnlineUsers))) and internal/app/api/users.go (handleOnlineUsers: the comma-separated `usernames`, at most 500 read, and `details`; answers the online ones among them as a JSON list of strings).",
+        "parameters": [
+          {
+            "name": "usernames",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Comma-separated usernames to ask about (at most 500 read)."
+          },
+          {
+            "name": "details",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            },
+            "description": "true answers {users, speeds} instead of the plain list."
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/JSON"
+          }
+        }
+      }
+    },
+    "/api/v2/services": {
+      "get": {
+        "tags": [
+          "Services"
+        ],
+        "summary": "List services",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Offset"
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/JSON"
+          }
+        },
+        "operationId": "getV2Services"
+      }
+    },
+    "/sub/{identifier}/info": {
+      "get": {
+        "tags": [
+          "Subscriptions"
+        ],
+        "summary": "Subscription info",
+        "security": [],
+        "parameters": [
+          {
+            "name": "identifier",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Subscription info",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getSubIdentifierInfo"
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "Rebecca admin API key or legacy JWT",
+        "description": "Use a personal rk_ API key for bots and third-party integrations. Legacy JWTs from /admin/token remain accepted for older Marzban-compatible clients."
+      },
+      "cookieAuth": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "rebecca_session",
+        "description": "Opaque HttpOnly dashboard session cookie issued by POST /api/auth/login. It is managed by the browser and is not readable by dashboard JavaScript."
+      }
+    },
+    "parameters": {
+      "Username": {
+        "name": "username",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        },
+        "description": "Rebecca username. Matching is case-insensitive in most user lookup paths."
+      },
+      "Offset": {
+        "name": "offset",
+        "in": "query",
+        "schema": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "description": "Zero-based row offset used for paginated list endpoints."
+      },
+      "Limit": {
+        "name": "limit",
+        "in": "query",
+        "schema": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "description": "Maximum number of rows to return. Large values may be capped by server-side settings."
+      }
+    },
+    "requestBodies": {
+      "JSON": {
+        "required": false,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Object"
+            },
+            "example": {
+              "name": "example",
+              "status": "active",
+              "settings": {}
+            }
+          }
+        },
+        "description": "Generic JSON request body. See each operation description for required business fields and side effects."
+      }
+    },
+    "responses": {
+      "JSON": {
+        "description": "JSON response. Exact object fields follow the dashboard-compatible Rebecca API response for the route.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/AnyValue"
+            },
+            "example": {
+              "id": 1,
+              "status": "ok",
+              "detail": "Operation completed"
+            }
+          }
+        }
+      },
+      "Error": {
+        "description": "Error response. Most handlers return `{ \"detail\": \"...\" }`; some compatibility routes may return a plain text body when handled by net/http helpers.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "Object": {
+        "type": "object",
+        "additionalProperties": true,
+        "example": {
+          "name": "example",
+          "status": "active",
+          "settings": {}
+        }
+      },
+      "AnyValue": {
+        "nullable": true,
+        "example": {
+          "id": 1,
+          "status": "ok"
+        },
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": true
+          },
+          {
+            "type": "array",
+            "items": {}
+          },
+          {
+            "type": "string"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "integer"
+          },
+          {
+            "type": "boolean"
+          }
+        ]
+      },
+      "Error": {
+        "type": "object",
+        "properties": {
+          "detail": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

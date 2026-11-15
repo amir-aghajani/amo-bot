@@ -2,7 +2,7 @@ import { fireEvent, render, within } from '@testing-library/react'
 import { toast } from 'sonner'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AddMethodModal } from '@/components/payments/add-method-modal'
-import type { DriverDescription, PaymentMethodResponse } from '@/lib/api-types'
+import type { DriverDescription, PaymentMethodSavedResponse } from '@/lib/api-types'
 import { providers, until } from '@/test/render'
 import { cardDriverRow, cardMethodRow, cubePayDriverRow, cubePayMethodRow } from '@/test/rows'
 import { json, refusal, server } from '@/test/server'
@@ -65,13 +65,13 @@ describe('adding a payment method', () => {
   })
 
   it('draws the driver’s form from its description, a card to fill in, and sends it as a new method of that driver', async () => {
-    server().on('POST', '/api/admin/payment-methods', json({ method: cardMethodRow() } satisfies PaymentMethodResponse, 201))
+    server().on('POST', '/api/admin/payment-methods', json({ method: cardMethodRow(), webhook: null } satisfies PaymentMethodSavedResponse, 201))
     const onCreated = open()
 
     // As it is printed: its digits sent alone.
     await addCard('۶۰۳۷-۹۹۷۷-۰۰۰۰-۱۱۱۹')
 
-    await until(() => expect(onCreated).toHaveBeenCalledWith(cardMethodRow()))
+    await until(() => expect(onCreated).toHaveBeenCalledWith(cardMethodRow(), false))
     expect(toast.success).toHaveBeenCalledWith('روش پرداخت اضافه شد')
     expect(server().sent('POST', '/api/admin/payment-methods')[0]?.body).toEqual({
       driver: 'manual',
@@ -86,7 +86,7 @@ describe('adding a payment method', () => {
   })
 
   it('draws CubePay’s form — its token a secret, typed left to right — and sends it as a new method of that driver', async () => {
-    server().on('POST', '/api/admin/payment-methods', json({ method: cubePayMethodRow() } satisfies PaymentMethodResponse, 201))
+    server().on('POST', '/api/admin/payment-methods', json({ method: cubePayMethodRow(), webhook: null } satisfies PaymentMethodSavedResponse, 201))
     const onCreated = open()
 
     const card = await dialog().findByRole('button', { name: /CubePay/ })
@@ -101,7 +101,7 @@ describe('adding a payment method', () => {
     type('توکن API', 'cp-test-token-1234')
     fireEvent.click(dialog().getByRole('button', { name: 'افزودن روش' }))
 
-    await until(() => expect(onCreated).toHaveBeenCalledWith(cubePayMethodRow()))
+    await until(() => expect(onCreated).toHaveBeenCalledWith(cubePayMethodRow(), false))
     expect(server().sent('POST', '/api/admin/payment-methods')[0]?.body).toEqual({
       driver: 'cubepay',
       label: 'پرداخت آنلاین',

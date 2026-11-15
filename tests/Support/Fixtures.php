@@ -35,8 +35,12 @@ use App\Modules\Orders\Services\OrderService;
 use App\Modules\Payments\Drivers\Aban\AbanGateway;
 use App\Modules\Payments\Drivers\AqayePardakht\AqayePardakhtGateway;
 use App\Modules\Payments\Drivers\AtlasPay\AtlasPayGateway;
+use App\Modules\Payments\Drivers\Bluepal\BluepalGateway;
 use App\Modules\Payments\Drivers\CubePay\CubePayGateway;
 use App\Modules\Payments\Drivers\Plisio\PlisioGateway;
+use App\Modules\Payments\Drivers\Rialit\RialitGateway;
+use App\Modules\Payments\Drivers\Rikhtam\RikhtamDriver;
+use App\Modules\Payments\Drivers\Rikhtam\RikhtamGateway;
 use App\Modules\Payments\Drivers\Variza\VarizaGateway;
 use App\Modules\Payments\Drivers\Zarinpal\ZarinpalGateway;
 use App\Modules\Payments\DTO\CheckoutResult;
@@ -425,6 +429,39 @@ trait Fixtures
     protected function varizaMethod(string $label = 'واریزا', string $key = FakeVariza::KEY, string $secret = FakeVariza::SECRET, string $card = VarizaGateway::RANDOM, array $overrides = []): PaymentMethod
     {
         return $this->gatewayMethod(VarizaGateway::key(), $label, ['api_key' => $key, 'webhook_secret' => $secret, 'card' => $card], $overrides);
+    }
+
+    /**
+     * A Bluepal method (an online gateway), switched on, with the merchant id and API key FakeBluepal knows, kept as its
+     * form keeps them — the key encrypted (MethodSettings).
+     *
+     * @param array<string, mixed> $overrides
+     */
+    protected function bluepalMethod(string $label = 'بلو پال', string $merchant = FakeBluepal::MERCHANT, string $key = FakeBluepal::KEY, array $overrides = []): PaymentMethod
+    {
+        return $this->gatewayMethod(BluepalGateway::key(), $label, ['merchant_id' => $merchant, 'api_key' => $key], $overrides);
+    }
+
+    /**
+     * A Rialit method (an online gateway), switched on, with the API key FakeRialit knows kept as its form keeps it —
+     * encrypted (MethodSettings).
+     *
+     * @param array<string, mixed> $overrides
+     */
+    protected function rialitMethod(string $label = 'ریالیت', string $key = FakeRialit::KEY, array $overrides = []): PaymentMethod
+    {
+        return $this->gatewayMethod(RialitGateway::key(), $label, ['api_key' => $key], $overrides);
+    }
+
+    /**
+     * A Rikhtam crypto method (an online gateway), switched on, with the gateway key FakeRikhtam knows kept as its form
+     * keeps it — encrypted (MethodSettings) —, the coin the customer's to pick unless `$coin`.
+     *
+     * @param array<string, mixed> $overrides
+     */
+    protected function rikhtamMethod(string $label = 'ریختم (ارز دیجیتال)', string $key = FakeRikhtam::KEY, string $coin = RikhtamDriver::ANY_COIN, array $overrides = []): PaymentMethod
+    {
+        return $this->gatewayMethod(RikhtamGateway::key(), $label, ['secret' => $key, 'coin' => $coin], $overrides);
     }
 
     /**

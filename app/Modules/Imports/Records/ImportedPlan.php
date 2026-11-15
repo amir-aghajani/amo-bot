@@ -32,5 +32,7 @@ final class ImportedPlan
         public readonly ?array $panelKeys = null,
         /** A plan only the other bot's agents saw: imported switched off whatever the owner says, and named in the report. */
         public readonly bool $agentsOnly = false,
+        /** The other bot still sold it: one it had stopped selling («ناموجود») comes switched off whatever the owner says. */
+        public readonly bool $selling = true,
     ) {}
 }

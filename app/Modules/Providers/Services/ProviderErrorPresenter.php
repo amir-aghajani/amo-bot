@@ -27,7 +27,7 @@ final class ProviderErrorPresenter
     public static function explain(ProviderException $e): array
     {
         [$message, $detail] = match (true) {
-            $e instanceof ConnectionException => [self::connection($e->failure), $e->detail],
+            $e instanceof ConnectionException => [self::withHint(self::connection($e->failure), $e->hint), $e->detail],
             $e instanceof AuthenticationException => [self::withHint(self::authentication($e->failure), $e->hint), $e->panelMessage],
             $e instanceof UnexpectedResponseException => [self::withHint(self::unexpected($e), $e->hint), $e->isRedirect() ? '' : $e->excerpt],
             $e instanceof NotFoundException => ['موردی که خواسته شد روی پنل پیدا نشد.', $e->getMessage()],

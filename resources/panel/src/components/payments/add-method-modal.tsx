@@ -9,7 +9,8 @@ import { paymentDriversQuery } from '@/lib/queries'
 interface AddMethodModalProps {
   open: boolean
   onClose: () => void
-  onCreated: (method: PaymentMethodRow) => void
+  /** Added: the method, and whether its gateway's webhook goes to another site's address (MethodForm's `onSaved`). */
+  onCreated: (method: PaymentMethodRow, webhookElsewhere: boolean) => void
 }
 
 /**

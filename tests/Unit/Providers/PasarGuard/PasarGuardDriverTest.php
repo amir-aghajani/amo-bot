@@ -29,6 +29,11 @@ final class PasarGuardDriverTest extends TestCase
         self::assertSame(['pasarguard', 'PasarGuard'], [$card['key'], $card['label']]);
         self::assertNotEmpty(array_filter($card['notes'], static fn(string $note): bool => str_contains($note, 'API Keys')));
         self::assertNotEmpty(array_filter($card['notes'], static fn(string $note): bool => str_contains($note, '3.1')), 'the versions it needs');
+        self::assertNotEmpty(array_filter($card['notes'], static fn(string $note): bool => str_contains($note, 'operator') && str_contains($note, '«همه»')), 'an admin that sees only its own users cannot bring another bot\'s services: which roles see them all');
+        self::assertNotEmpty(array_filter($card['notes'], static fn(string $note): bool => str_contains($note, 'گزارش') && str_contains($note, 'کلید API')), 'every sign-in is reported to the panel\'s admins; a key is not');
+        foreach ($card['notes'] as $note) {
+            self::assertDoesNotMatchRegularExpression('/[\x{064B}-\x{0652}\x{0654}\x{0670}]/u', $note, 'plain Persian: no diacritics');
+        }
         self::assertEquals((object) ['mark' => 'PG', 'vendor' => 'PasarGuard', 'docs_url' => 'https://github.com/PasarGuard/panel', 'inbounds' => true, 'link_rotation' => true], $card['traits']);
         self::assertSame(['base_url', 'auth_mode', 'api_token', 'username', 'password', 'verify_tls', 'timeout', 'subscription_url', 'proxy_enabled', 'proxy_host', 'proxy_port', 'proxy_username', 'proxy_password'], array_column($card['fields'], 'name'), 'no two-factor secret of its own');
         self::assertSame(['token' => 'کلید API', 'password' => 'نام کاربری و رمز'], array_column(array_column($card['fields'], null, 'name')['auth_mode']['options'], 'label', 'value'));

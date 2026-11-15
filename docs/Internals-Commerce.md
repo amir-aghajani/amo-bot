@@ -234,12 +234,15 @@ upgrade).
 ## Payments
 
 A payment method is a row: a gateway driver (`Payments\Drivers\*`, registered in `payment.drivers`) with its settings
-and a label. Ten drivers ship: the wallet (built in, one row per shop, settles at once), the outside row (built in
+and a label. Thirteen drivers ship: the wallet (built in, one row per shop, settles at once), the outside row (built in
 too, support's alone, above), card-to-card (a manual gateway: shows a card, waits for a receipt), and CubePay,
-Zarinpal, AtlasPay, AbanGateway, Plisio, AqayePardakht and Variza (online gateways: the customer pays on their page,
-and they are asked what came of it — Variza, which answers no question, tells it by a signed webhook —
+Zarinpal, AtlasPay, AbanGateway, Plisio, AqayePardakht, Variza, Bluepal, Rialit and Rikhtam's crypto payments (online
+gateways: the customer pays on their page, and they are asked what came of it — Variza, which answers no question,
+tells it by a signed webhook; Rialit's unsigned webhook and Rikhtam's crypto word only make the shop ask —
 [Drivers](Drivers.md#an-online-gateway)). Adding a gateway is a driver class, its registration and its request
-shapes — see [Drivers](Drivers.md#a-payment-gateway).
+shapes — see [Drivers](Drivers.md#a-payment-gateway). A card payment may also be approved by a bank deposit
+(«تایید خودکار واریز»: `Payments\Deposits`, its sources ForApp and Rikhtam —
+[Payment methods](Payment-Methods.md#confirmed-by-the-banks-sms)).
 
 Every method has bounds (`min_amount`, `max_amount`): `PaymentMethods::forOrder($type, $amount, $customer)` and
 `payable()` offer only a method that takes the amount (`takes()`: within `within()`, and a card method with a card that

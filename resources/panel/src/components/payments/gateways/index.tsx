@@ -1,5 +1,5 @@
 import type { ComponentType, ReactNode } from 'react'
-import { BadgeCheck, Bitcoin, Box, CreditCard, Globe, HandCoins, Landmark, MessageSquareText, TimerReset, Wallet, WalletCards, type LucideIcon } from 'lucide-react'
+import { BadgeCheck, Banknote, Bitcoin, Box, Coins, CreditCard, Globe, HandCoins, Landmark, MessageSquareText, ReceiptText, TimerReset, Wallet, WalletCards, type LucideIcon } from 'lucide-react'
 import { KIND_LABELS } from '@/components/payments/kinds'
 import type { DriverDescription, GatewayKind, PaymentMethodRow, UnregisteredMethodRow } from '@/lib/api-types'
 import { formatMinutes } from '@/lib/format'
@@ -12,7 +12,7 @@ import { formatMinutes } from '@/lib/format'
 
 /**
  * A method of a driver the panel knows, by its driver: a card's (`manual`), the wallet, CubePay's, Zarinpal's,
- * AtlasPay's, AbanGateway's, Plisio's, AqayePardakht's, Variza's.
+ * AtlasPay's, AbanGateway's, Plisio's, AqayePardakht's, Variza's, Bluepal's, Rialit's, Rikhtam's (crypto).
  */
 type Registered = Exclude<PaymentMethodRow, UnregisteredMethodRow>
 type DriverKey = Registered['driver']
@@ -34,6 +34,9 @@ const GATEWAYS: { [Key in DriverKey]: GatewayUi<MethodOf<Key>> } = {
   plisio: { icon: Bitcoin, Note: ConfirmedByGateway },
   aqayepardakht: { icon: WalletCards, Note: ConfirmedByGateway },
   variza: { icon: HandCoins, Note: ConfirmedByGateway },
+  bluepal: { icon: Banknote, Note: ConfirmedByGateway },
+  rialit: { icon: ReceiptText, Note: ConfirmedByGateway },
+  rikhtam: { icon: Coins, Note: ConfirmedByGateway },
 }
 
 const isKnown = (key: string): key is DriverKey => Object.hasOwn(GATEWAYS, key)
@@ -80,7 +83,7 @@ function AutoApproval({ method }: { method: MethodOf<'manual'> }) {
 }
 
 /** An online gateway's payments: paid on its page and confirmed by it — no receipt, nothing to review. */
-function ConfirmedByGateway({ method }: { method: MethodOf<'cubepay' | 'zarinpal' | 'atlaspay' | 'abangateway' | 'plisio' | 'aqayepardakht' | 'variza'> }) {
+function ConfirmedByGateway({ method }: { method: MethodOf<Exclude<DriverKey, 'wallet' | 'manual'>> }) {
   return (
     <span className="flex items-center gap-1 text-muted-foreground">
       <BadgeCheck className="size-3" aria-hidden />

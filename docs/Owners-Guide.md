@@ -12,6 +12,10 @@ alone: the servers, the agents, the mass gift («هدیه همگانی»), custo
 installation's settings («تنظیمات پنل» — an agent's has «ظاهر» and their own shop's «پشتیبان‌گیری») with the import from
 another bot among them.
 
+Away from a computer, the same shop is run from the bot's private chat: link your Telegram account once, and
+«⚙️ مدیریت» opens the panel's sections as the bot's menus — for an agent in their own bot, and for the shop's admins the
+daily work you let them do ([Managing the shop from the bot](Bot-Management.md)).
+
 ## Setting a shop up
 
 A new shop sells once it has a bot, a server, a plan and a way to pay. In order:
@@ -25,9 +29,11 @@ A new shop sells once it has a bot, a server, a plan and a way to pay. In order:
    tested, then saved; then mark which of its inbounds the shop sells on ([Servers](Servers.md)).
 3. **A plan** — «فروشگاه › پلن‌ها» › «افزودن پلن»: its name, price, traffic, days and devices, and the server it is sold
    on ([Plans](Plans.md)). Categories are optional.
-4. **A way to pay** — the wallet is built in; for card-to-card payments add your card in «فروشگاه › روش‌های پرداخت»,
-   and for payments confirmed without a receipt an online gateway — CubePay, Zarinpal, AtlasPay, AbanGateway, Plisio,
-   AqayePardakht or Variza ([Payment methods](Payment-Methods.md)).
+4. **A way to pay** — the wallet is built in; for card-to-card payments add your card in «فروشگاه › روش‌های پرداخت»
+   (confirmed by the bank's SMS with no receipt, if you wish, through ForApp or Rikhtam:
+   [«تایید خودکار واریز»](Payment-Methods.md#confirmed-by-the-banks-sms)), and for payments confirmed without a receipt
+   an online gateway — CubePay, Zarinpal, AtlasPay, AbanGateway, Plisio, AqayePardakht, Variza, Bluepal, Rialit or
+   Rikhtam's crypto payments ([Payment methods](Payment-Methods.md)).
 5. **The bot's rules and words** — the support contact, required channels, top-ups, renewals, the prices of extra
    traffic and time, reminders and the removal of ended services in «تنظیمات ربات» ([Bot settings](Bot-Settings.md));
    the welcome, the texts and the menu in «ربات › متن‌های ربات» and «ربات › کیبوردها»
@@ -74,6 +80,7 @@ live: there is no need to reload.
 | Page | What it covers |
 |---|---|
 | [The panels](Panels.md) | Signing in, the shop on screen, the menu, the dashboard, lists, live updates, failures |
+| [Managing the shop from the bot](Bot-Management.md) | «⚙️ مدیریت» in the bot's private chat: your Telegram account linked, an agent's, the shop's admins and their grants, the menus, typed answers |
 | [Servers](Servers.md) | The VPN panels the shop sells on: adding one, its inbounds, its health, days and traffic for its services, moving them all to another server |
 | [Plans](Plans.md) | Plans, the servers they are sold on, and their categories |
 | [Payment methods](Payment-Methods.md) | The wallet, card-to-card, the automatic approval of receipts, and the online gateways |

@@ -58,6 +58,41 @@ variables), and the call through `BotTexts`. Then `php scripts/docs.php` brings 
 [bot texts reference](Bot-Texts-Reference.md) up to date. A screen the main menu opens is an action of
 `Keyboard\MainMenu`.
 
+## A screen of the bot's management
+
+The shop's management in the bot's private chat ([how it works](Internals-Telegram-Bot.md#the-shops-management)) is a
+panel page as the bot's screens. A new one is a class in `app/Modules/Telegram/Admin/Sections/<Area>/` that implements
+`Ui\Screen` — mostly by extending `Ui\ListScreen` (a panel list), `Ui\Settings\SettingsScreen` (a settings card) or
+`Ui\BaseScreen` (a row's page, a form) —, registered by a short id of its area's letters (`plv`, `pyx`; each part
+`[A-Za-z0-9_.-]`, unique) in that area's `<Area>Screens::SCREENS`, and given an entry in `Ui\Screens` — the home's or a
+hub's — when a menu opens it.
+
+1. **Read and write through the panels' API alone**: `$admin->api->get('/plans')`, `->post('/payments/12/approve')`,
+   `->put()`, `->patch()`, `->delete()`, `->upload()`, `->file()` — the panels' paths, without `/api/admin`. Never call a
+   service for a change, nor write a rule again: let an `ApiRefusal` out of `act()` and `input()`, and the handler shows
+   it. What the panels have no route for is a panel feature first ([above](#a-panel-screen-and-its-api)), and reaches
+   the bot through its route group.
+2. **Permissions mirror the route**: `allows()` is every seat over `$operations`, `$seat->configures()` over
+   `$configuration`, `$seat->isOwner()` over the owner's own groups (and `$seat->shop()->isMain()` where the panel's page
+   is the main shop's); a button whose route names a grant shows only while `$seat->holds(StaffGrant::…)`. The door
+   refuses the rest anyway.
+3. **The panel's words**: the labels, hints, choices and warnings of the panel's page, copied — plain Persian, no
+   diacritics —; whatever came from a person or the panel through `Fmt::e()`, Latin in a Persian line through
+   `Fmt::ltr()` or `Fmt::code()`.
+4. **One window**: every view ends with `back()` to its parent. What a screen keeps — a page, a filter, a draft, any
+   text — goes in `$admin->remember()`; a button's `Nav::to()` takes ids and short words alone (64 bytes, or it throws).
+5. **Changes**: what cannot be undone behind `$admin->confirm()` with the panel's warning; after the API answers,
+   `$admin->notice('✅ …')` and the row as the panel answers it now. A change of money, or an answer, sends an
+   `Idempotency-Key` kept in the draft until it succeeds, so a retry never repeats it.
+6. **Typed values**: `$admin->ask(new Prompt($question, $screen, $action, $args, hint: …))`, the current value in the
+   hint and quick choices for the common ones; `input()` reads the `Answer` (`amount(Unit::Toman)` takes «۵۰ هزار
+   تومان»). `anyText: true` only where any words may be the answer (a button's label, a bot text): elsewhere a menu
+   button leaves the question, so its label never reaches a customer as an answer. A form keeps its draft in
+   `remember()`, asks field by field, sums up with «✏️» per field, and saves once. A switch's button carries the value it
+   sets, so a second tap changes nothing.
+7. **Tests**: `tests/Feature/BotAdmin/<Area>*Test.php` on `BotTestCase` — the main path (list, row, action, the API's
+   effect), a seat without the grant (no button, and the door refusing a forged tap), a typed answer.
+
 ## A Store API endpoint
 
 The controller in `app/Modules/Store/Api`, its route in the Store API's group of `routes/api.php` (public, a customer's

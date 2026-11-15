@@ -16,7 +16,8 @@ right to left, as Persian does: the first one is on the right.
 3. **The phone**, when the shop asks it — «📱 ارسال شماره موبایل», their own Telegram number, once.
 4. **The channels**, when the shop asks them — a button per channel to join, then «✅ عضو شدم».
 
-The bot's admins pass 2 to 4. A first `/start` from an invite link makes the newcomer the link owner's referral, before
+The bot's admins pass 2 to 4, and so does whoever manages the shop from the bot (your linked Telegram account, an agent
+in their own bot), and the `/start` of your open owner's link. A first `/start` from an invite link makes the newcomer the link owner's referral, before
 any of these ([Referrals](Referrals.md)). A `/start` from the test link (`?start=usertest`) that 2 to 4 hold back waits
 in the chat for an hour: the test screen opens once the customer gets through — the number sent, «✅ عضو شدم», or a
 `/start` or `/menu` in that hour ([a free test](#a-free-test)).
@@ -131,8 +132,9 @@ theirs waits for review, another receipt or another card payment is refused with
 
 An online gateway ([CubePay](Payment-Methods.md#cubepay), [Zarinpal](Payment-Methods.md#zarinpal),
 [AtlasPay](Payment-Methods.md#atlaspay), [AbanGateway](Payment-Methods.md#abangateway), [Plisio](Payment-Methods.md#plisio),
-[AqayePardakht](Payment-Methods.md#aqayepardakht), [Variza](Payment-Methods.md#variza)) shows its page in place of the
-checkout:
+[AqayePardakht](Payment-Methods.md#aqayepardakht), [Variza](Payment-Methods.md#variza),
+[Bluepal](Payment-Methods.md#bluepal), [Rialit](Payment-Methods.md#rialit),
+[Rikhtam's crypto](Payment-Methods.md#rikhtams-crypto-payments)) shows its page in place of the checkout:
 
 - **«💳 پرداخت آنلاین سفارش #…»** — the exact sum the page asks (a gateway may add a few Toman to the order's, to tell
   transfers apart; the fee you pass on to customers is said apart: «(شامل … کارمزد درگاه)»), until when the page takes
@@ -147,8 +149,9 @@ checkout:
 **No receipt is sent, and none is taken.** The order is delivered once the gateway says it was paid — when it calls the
 shop back, when the customer taps «🔄 بررسی پرداخت», or when the shop asks it, every few minutes by default; Variza's word comes by
 the webhook it signs. The customer gets the delivery as any approved payment's notice. Zarinpal, AbanGateway, Plisio,
-AqayePardakht and Variza send the customer's browser back to a page of the shop's saying what came of it, with
-«بازگشت به ربات».
+AqayePardakht, Variza and Bluepal — and Rikhtam's crypto payments, on a shop at an `https://` address — send the
+customer's browser back to a page of the shop's saying what came of it, with «بازگشت به ربات»; from Rialit's page the
+customer comes back to the bot themselves.
 
 **«🔄 بررسی پرداخت»** answers in a popup — the gateway is asked once in five seconds per payment, and a tap sooner is told
 nothing came yet:
@@ -489,11 +492,16 @@ blocked — goes by email when the shop's email is set up ([Store API: notificat
 ## For the bot's admins
 
 A bot admin is a customer you (or the agent) made one — «کاربران», the row's menu «مدیر ربات کردن»; an agent is their
-own bot's admin by itself ([Customers](Customers.md#the-bots-admins)). They pass the bot's switch, phone and channels —
-not a ban —, and have what answers nobody else at all:
+own bot's admin by itself, and so is your own Telegram account once you link it from the panel
+([Customers](Customers.md#the-bots-admins)). They pass the bot's switch, phone and channels — not a ban —, and have what
+answers nobody else at all:
 
+- **«⚙️ مدیریت»** under the menu, or `/admin` — the shop managed from the private chat, the panel's sections as the
+  bot's menus: for you every section in any shop, for an agent their panel's, for the shop's admins the daily work and
+  what «مدیران ربات» grants them, while it lets them in ([Managing the shop from the bot](Bot-Management.md)).
 - **`/broadcast`** — a message to many customers, composed in the bot: the message, then a draft card — how it goes, to
   whom, pinned or not, link buttons —, then the run's progress with its controls ([Broadcasts](Broadcasts.md)).
+  «⚙️ مدیریت › 🤖 ربات › 📣 ارسال همگانی» starts the same, and follows every run.
 - **`/emoji`** — premium emoji for the bot's texts and buttons: a message with them, written the way a customer should see
   it; the bot keeps their ids for the panel's picker, sends the message back as itself — whether they stay premium says
   whether the bot may use them —, and answers with a template to paste into a text ([Bot texts and

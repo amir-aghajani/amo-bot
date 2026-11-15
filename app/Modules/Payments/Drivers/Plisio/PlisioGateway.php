@@ -39,8 +39,8 @@ final class PlisioGateway implements OnlineGateway
     /** The fiat currency invoices are asked in. */
     public const CURRENCY = 'USD';
 
-    /** A page Plisio sends a customer to: on its own host, over https. */
-    private const PAGE = '~^https://([a-z0-9-]+\.)*plisio\.net/[\x21-\x7e]*$~D';
+    /** Its own host, which a page it sends a customer to is on (GatewayHttp::page()). */
+    private const HOST = 'plisio.net';
 
     /** An operation's id at Plisio (24 hexadecimal digits in its examples). */
     private const ID = '/^[A-Za-z0-9]{6,64}$/D';
@@ -101,8 +101,8 @@ final class PlisioGateway implements OnlineGateway
             throw new GatewayUnavailableException(self::refusal('would not open an invoice', $status, $answer));
         }
         $id = $data['txn_id'] ?? null;
-        $url = $data['invoice_url'] ?? null;
-        if (!is_string($id) || preg_match(self::ID, $id) !== 1 || !is_string($url) || preg_match(self::PAGE, $url) !== 1) {
+        $url = GatewayHttp::page($data['invoice_url'] ?? null, self::HOST);
+        if (!is_string($id) || preg_match(self::ID, $id) !== 1 || $url === null) {
             throw new GatewayUnavailableException(self::refusal('opened an invoice it did not describe', $status, $answer));
         }
         $expires = $data['expire_utc'] ?? null;

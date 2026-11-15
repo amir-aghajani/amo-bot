@@ -1,21 +1,23 @@
 import { useState } from 'react'
-import { Ban, BellRing, Check, ChevronRight, RotateCcw, SearchCheck, Undo2, X } from 'lucide-react'
+import { Ban, BellRing, Check, ChevronRight, Paperclip, RotateCcw, SearchCheck, Undo2, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { ApiPicture, PictureNote } from '@/components/api-picture'
 import { DetailFooter, DetailModal } from '@/components/detail-modal'
 import { Fact, FactList } from '@/components/fact-list'
+import { useHeld } from '@/components/modal'
 import { LEDGER_NOTE_MAX } from '@/components/note-input'
 import { OperationsSection, useOperations, type OperationSpec } from '@/components/operations'
 import { DiscountFact } from '@/components/orders/order-discounts'
 import { orderBrings } from '@/components/orders/order-subject'
 import { MethodSummary } from '@/components/payments/method-summary'
 import { DecidedBy } from '@/components/payments/payment-status-cell'
+import { RikhtamAttach } from '@/components/payments/rikhtam-attach'
 import { StatusBadge } from '@/components/status-badge'
 import { searchLink, TextLink } from '@/components/text-link'
 import { Button } from '@/components/ui/button'
 import { CustomerFacts } from '@/components/user-identity'
 import { api } from '@/lib/api'
-import type { OnlineState, OrderType, PaymentRow } from '@/lib/api-types'
+import type { OnlineState, OrderType, PaymentRikhtamAttachResponse, PaymentRow } from '@/lib/api-types'
 import { idLabel } from '@/lib/direction'
 import { formatDate, formatMoney, timeAgo } from '@/lib/format'
 import { queryKeys } from '@/lib/query-keys'
@@ -27,6 +29,14 @@ type Action = keyof PaymentRow['actions']
 /** What each operation is called, what it does, and whether it asks first. */
 const ACTIONS: Record<Action, OperationSpec> = {
   approve: { label: 'تایید و تحویل', icon: Check, tone: 'primary', done: 'تایید شد و تحویل داده شد' },
+  // An open card payment's while Rikhtam is connected: its strip is a form (RikhtamAttach), a deposit of Rikhtam's picked.
+  rikhtam: {
+    label: 'پیوست واریز ریختم',
+    icon: Paperclip,
+    tone: 'neutral',
+    confirm: 'پرداختی که مشتری مبلغش را گرد کرده خودکار تایید نمی‌شود: واریزش را از میان واریزهای ریختم که به پرداختی وصل نشده‌اند انتخاب کنید تا این پرداخت با آن تایید شود.',
+    form: true,
+  },
   // An online payment's, in place of an approval: its outcome — and its toast — is the gateway's word (checked()), not the admin's.
   check: { label: 'استعلام از درگاه', icon: SearchCheck, tone: 'primary' },
   reject: { label: 'رد کردن', icon: X, tone: 'danger', done: 'رد شد', note: { label: 'دلیل رد کردن', placeholder: 'مثلا: مبلغ رسید با سفارش نمی‌خواند — مشتری این متن را می‌بیند' } },
@@ -190,6 +200,9 @@ interface ReviewBodyProps {
 /** Reads a payment's operation changes besides the payment: orders, services, the dashboard and the customer's page and wallet. */
 const CHANGES = [queryKeys.orders, queryKeys.subscriptions, queryKeys.dashboards, queryKeys.everyUser, queryKeys.everyUserWallet]
 
+/** A Rikhtam deposit attached changes the deposits too: their list, and the week's count that approved nothing. */
+const ATTACH_CHANGES = [...CHANGES, queryKeys.deposits, queryKeys.depositSettings]
+
 function ReviewBody({ payment, onClose, onReviewed, onDecided, onStale, next, focusNext }: ReviewBodyProps) {
   const specs = { ...ACTIONS, approve: approveOf(payment), refund: refundOf(payment) }
   const ops = useOperations({
@@ -224,8 +237,32 @@ function ReviewBody({ payment, onClose, onReviewed, onDecided, onStale, next, fo
     },
     onStale,
   })
-  // Not while an operation runs: its answer belongs to this payment.
-  const onward = next.available && ops.running === null
+  // A Rikhtam deposit attached (RikhtamAttach's own form): said as an approval is, with Rikhtam's words and its fee.
+  const attached = ({ payment: reviewed, message, fee }: PaymentRikhtamAttachResponse) => {
+    onReviewed(reviewed)
+    // Rikhtam took it, but the payment is not paid by it (a deposit short of its order, or not decided yet): said as it
+    // stands, the dialog kept on it.
+    if (reviewed.status !== 'paid') {
+      toast.warning(`پرداخت ${idLabel(reviewed.id)} هنوز تایید نشده است`, { description: message || undefined })
+      ops.close()
+      return
+    }
+    // Approved: a delivery that failed keeps the dialog, its retry right there.
+    if (reviewed.order.status === 'failed') {
+      toast.error(`پرداخت ${idLabel(reviewed.id)} تایید شد ولی تحویل انجام نشد`, { description: reviewed.order.notes ?? undefined })
+      ops.close()
+      return
+    }
+    const charged = fee === null ? null : `کارمزد ریختم: ${formatMoney(fee)}`
+    toast.success(`پرداخت ${idLabel(reviewed.id)} با واریز ریختم تایید شد و ${BRINGS[reviewed.order.type].done}`, {
+      description: [message, charged].filter((line) => line !== null && line !== '').join(' · ') || undefined,
+    })
+    onDecided()
+  }
+  // Not while an operation runs — one of the operations', or a strip's own form (a Rikhtam deposit attached), which
+  // holds the dialog open: its answer belongs to this payment.
+  const held = useHeld()
+  const onward = next.available && ops.running === null && !held
 
   return (
     <div className="grid gap-5">
@@ -234,7 +271,13 @@ function ReviewBody({ payment, onClose, onReviewed, onDecided, onStale, next, fo
         <Facts payment={payment} />
       </div>
       {/* The review is the dialog's business: on a phone, its decisions stay at the sheet's foot under a tall receipt. */}
-      <OperationsSection ops={ops} specs={specs} subject="این پرداخت" foot />
+      <OperationsSection
+        ops={ops}
+        specs={specs}
+        subject="این پرداخت"
+        foot
+        form={() => <RikhtamAttach payment={payment} invalidates={ATTACH_CHANGES} onCancel={ops.close} onAttached={attached} onStale={onStale} />}
+      />
       <DetailFooter user={payment.user} busy={ops.running !== null} onClose={onClose}>
         {/* Held (aria-disabled), not disabled: with no next payment it keeps the focus it was given, and a press does nothing. */}
         <Button variant="secondary" size="sm" busy={next.busy} aria-disabled={!onward} autoFocus={focusNext} onClick={next.go} className="max-md:h-11">

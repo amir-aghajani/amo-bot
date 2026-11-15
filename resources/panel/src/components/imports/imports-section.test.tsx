@@ -87,6 +87,23 @@ describe('with no import under way', () => {
     expect(screen.getByText(/هنوز انتقالی انجام نشده است/)).toBeTruthy()
   })
 
+  it("tells, for the bot picked, where its own backup is, and uploads the backup as that bot's", async () => {
+    server().on('POST', URL_, json({ import: importState({ migrator: 'mirzabot' }) }, 201))
+    server().hold('POST', CONTINUE)
+    const mirzabot = { ...migratorRow(), key: 'mirzabot', label: 'MirzaBot', notes: ['همه نسخه‌ها'], traits: { mark: 'MB', vendor: 'https://github.com/mahdiMGF2/mirzabot' } }
+    await show({ migrators: [migratorRow(), mirzabot] })
+
+    fireEvent.click(await screen.findByRole('radio', { name: 'MirzaBot' }))
+    expect(screen.getByRole('radio', { name: 'MirzaBot' }).getAttribute('aria-checked')).toBe('true')
+    expect(screen.getByText(/به کانال گزارش‌هایش می‌فرستد/).textContent).toContain('backup_تاریخ.sql')
+    fireEvent.change(screen.getByLabelText('انتخاب فایل پشتیبان ربات قبلی'), { target: { files: [new File(['SET NAMES utf8mb4;'], 'backup_2026-11-14.sql')] } })
+    fireEvent.click(screen.getByRole('button', { name: 'بارگذاری و خواندن' }))
+
+    await until(() => expect(server().sent('POST', URL_)).toHaveLength(1))
+    const sent = server().sent('POST', URL_)[0]?.body as FormData
+    expect(sent.get('migrator')).toBe('mirzabot')
+  })
+
   it('uploads the picked backup with the bot it is of, and reads it from then on', async () => {
     server().on('POST', URL_, json({ import: importState() }, 201))
     const stepping = server().hold('POST', CONTINUE)

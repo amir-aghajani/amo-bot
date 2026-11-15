@@ -9,7 +9,7 @@ use App\Modules\Auth\ActorKind;
 
 /**
  * Where a ticket's message was written (`ticket_messages.channel`): the website or the bot (the customer's), or a panel,
- * the website's admin API or the report group (support's).
+ * the website's admin API, the report group or the bot's management (support's).
  */
 enum TicketChannel: string
 {
@@ -22,15 +22,20 @@ enum TicketChannel: string
     case Staff = 'staff';
 
     case Group = 'group';
+    case Manage = 'manage';
 
     /**
      * Where support wrote, by who wrote it: a panel's principal on the panel, a shop admin on the website or in the
-     * report group.
+     * report group — anyone who manages the shop from the bot's private chat (Actor::$inBot) there.
      *
      * @throws \LogicException for the shop itself, which writes no ticket's message, and a customer, who writes as one
      */
     public static function of(Actor $actor): self
     {
+        if ($actor->inBot) {
+            return self::Manage;
+        }
+
         return match ($actor->kind) {
             ActorKind::Owner, ActorKind::Agent => self::Panel,
             ActorKind::Staff => self::Staff,
@@ -49,6 +54,7 @@ enum TicketChannel: string
             self::Panel => 'از پنل',
             self::Staff => 'از مدیریت وب‌سایت',
             self::Group => 'از گروه گزارش‌ها',
+            self::Manage => 'از مدیریت ربات',
         };
     }
 }

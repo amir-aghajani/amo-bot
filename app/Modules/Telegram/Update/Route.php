@@ -7,8 +7,9 @@ namespace App\Modules\Telegram\Update;
 use App\Modules\Telegram\Handler;
 
 /**
- * One registered route: its handler, whether reaching it is navigation (the flow in progress is left), and whether only
- * the bot's admins reach it.
+ * One registered route: its handler, whether reaching it is navigation (the flow in progress is left), whether only
+ * the bot's admins reach it, and — for a step — whether it takes every message sent at it, a reply-keyboard label's
+ * words too (a question whose answer may be any text).
  */
 final readonly class Route
 {
@@ -17,5 +18,6 @@ final readonly class Route
         public string $handler,
         public bool $navigation = false,
         public bool $adminOnly = false,
+        public bool $captures = false,
     ) {}
 }

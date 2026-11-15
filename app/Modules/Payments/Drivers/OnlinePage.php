@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Payments\Drivers;
 
 use App\Modules\Payments\DTO\CardTransfer;
+use App\Modules\Payments\DTO\OnlineVerdict;
 use App\Modules\Payments\DTO\PayLink;
 use App\Modules\Payments\DTO\PaymentInitiation;
 use App\Modules\Payments\DTO\PaymentResult;
@@ -14,7 +15,8 @@ use App\Modules\Payments\Models\Payment;
  * What every online gateway (Contracts\OnlineGateway) does alike with what its open() kept on a payment (Services\
  * OnlineInvoices): initiate() shows that page — at the payment's own sum, unless the gateway's details say the page asks
  * another —, nothing to pay on for a payment the gateway would not open; and settle() answers yes with the payment's
- * reference, the gateway having said it was paid before it runs (Services\OnlinePayments).
+ * reference, the gateway having said it was paid before it runs (Services\OnlinePayments). A payment the gateway says
+ * is not paid yet waits while that page takes money (whilePageOpen()).
  */
 trait OnlinePage
 {
@@ -28,6 +30,12 @@ trait OnlinePage
     public function settle(Payment $payment): PaymentResult
     {
         return PaymentResult::success($payment->reference);
+    }
+
+    /** Not paid — maybe not yet, the customer still on its page: waiting while the page takes money, closed after. */
+    private static function whilePageOpen(Payment $payment): OnlineVerdict
+    {
+        return $payment->link_expires_at !== null && $payment->link_expires_at->isFuture() ? OnlineVerdict::waiting() : OnlineVerdict::closed();
     }
 
     /**

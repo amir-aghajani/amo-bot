@@ -11,6 +11,7 @@
 - Owner's guide
   - [Overview](Owners-Guide.md)
   - [The panels](Panels.md)
+  - [Managing the shop from the bot](Bot-Management.md)
   - [Servers](Servers.md)
   - [Plans](Plans.md)
   - [Payment methods](Payment-Methods.md)

@@ -14,6 +14,7 @@ import type {
   DriverDescription,
   DriverValues,
   FieldDescription,
+  GatewayWebhookState,
   GiftCodeRow,
   ImportChoices,
   ImportState,
@@ -27,6 +28,7 @@ import type {
   PlanRow,
   QrBackgroundInfo,
   ReviewRow,
+  RialitMethodRow,
   SaleRow,
   ServerMigrationRow,
   ServerRow,
@@ -174,6 +176,15 @@ export function botSettingsRow(overrides: Partial<BotSettingsData> = {}): BotSet
     lottery_exclude_agents: true,
     hold_minutes: 60,
     agents_without_perks: false,
+    bot_admins_enabled: true,
+    bot_admins_grant_catalog: false,
+    bot_admins_grant_wallet: false,
+    bot_admins_grant_refunds: false,
+    bot_admins_grant_payments: false,
+    bot_admins_grant_extend: false,
+    bot_admins_grant_manual_orders: false,
+    bot_admins_grant_delete: false,
+    bot_admins_grant_account_security: false,
     ...overrides,
   }
 }
@@ -275,7 +286,7 @@ export function paymentRow(overrides: Partial<PaymentRow> = {}): PaymentRow {
     to_wallet: false,
     held: false,
     created_at: '2026-10-06T08:55:00Z',
-    actions: { approve: true, reject: true, cancel: true, remind: false, retry: false, refund: false, check: false },
+    actions: { approve: true, reject: true, cancel: true, remind: false, retry: false, refund: false, check: false, rikhtam: false },
     ...overrides,
   }
 }
@@ -295,14 +306,14 @@ export function onlinePaymentRow(overrides: Partial<PaymentRow> = {}): PaymentRo
     reference: 'A1b2C3d4E5f6',
     receipt: null,
     link_expires_at: '2026-10-06T09:25:00Z',
-    actions: { approve: false, reject: false, cancel: true, remind: false, retry: false, refund: false, check: true },
+    actions: { approve: false, reject: false, cancel: true, remind: false, retry: false, refund: false, check: true, rikhtam: false },
     ...overrides,
   })
 }
 
 /**
  * «تایید خودکار واریز» on, as its page reads it: the key ForApp sends, its one address, a test 5 minutes before
- * 2026-10-06 09:00 and no bank SMS yet, none of the week waiting on support.
+ * 2026-10-06 09:00 and no bank SMS yet, none of the week waiting on support; Rikhtam not connected.
  */
 export function depositSettingsRow(overrides: Partial<DepositSettingsResponse> = {}): DepositSettingsResponse {
   return {
@@ -312,6 +323,7 @@ export function depositSettingsRow(overrides: Partial<DepositSettingsResponse> =
     last_received_at: null,
     last_test_at: '2026-10-06T08:55:00Z',
     waiting: 0,
+    rikhtam: { connected: false, domain: null, project_id: null, callback_url: 'https://shop.example/webhooks/rikhtam/1', connected_at: null },
     ...overrides,
   }
 }
@@ -701,6 +713,7 @@ export function cardMethodRow(overrides: Partial<ManualMethodRow> = {}): ManualM
     updated_at: '2026-10-06T09:00:00Z',
     cards: [paymentCardRow()],
     to_support: false,
+    registers_webhook: false,
     ...overrides,
   }
 }
@@ -723,8 +736,56 @@ export function cubePayMethodRow(overrides: Partial<CubePayMethodRow> = {}): Cub
     counts: { payments: 0 },
     created_at: '2026-10-15T10:00:00Z',
     updated_at: '2026-10-15T10:00:00Z',
+    registers_webhook: false,
     ...overrides,
   }
+}
+
+/**
+ * Rialit method 7, an online gateway for any amount: its API key kept (never shown), no payment made with it yet; the
+ * shop registers its webhook address with Rialit itself (`registers_webhook`).
+ */
+export function rialitMethodRow(overrides: Partial<RialitMethodRow> = {}): RialitMethodRow {
+  return {
+    id: 7,
+    driver: 'rialit',
+    driver_label: 'ریالیت',
+    kind: 'online',
+    builtin: false,
+    label: 'پرداخت با ریالیت',
+    summary: null,
+    config: { api_key: { set: true, hint: '••••••5678' } },
+    min_amount: null,
+    max_amount: null,
+    enabled: true,
+    sort: 4,
+    counts: { payments: 0 },
+    created_at: '2026-11-15T10:00:00Z',
+    updated_at: '2026-11-15T10:00:00Z',
+    registers_webhook: true,
+    ...overrides,
+  }
+}
+
+/** The Rialit driver as GET /payment-methods/drivers describes it (Payments\Drivers\Rialit\RialitDriver): its API key, a secret. */
+export function rialitDriverRow(): DriverDescription {
+  return {
+    key: 'rialit',
+    label: 'ریالیت',
+    description: 'پرداخت آنلاین با تایید خودکار ریالیت.',
+    notes: ['در داشبورد ریالیت، بخش Webhook، آدرس https://shop.example/payments/webhooks/rialit را بگذارید'],
+    traits: { kind: 'online', builtin: false },
+    fields: [serverField('api_key', { type: 'secret', label: 'کلید API', required: true, secret: true, ltr: true, default: null })],
+  }
+}
+
+/**
+ * Where Rialit sends its webhook, as `GET /payment-methods/{id}/webhook` answers: to the shop's own address
+ * (https://shop.example/payments/webhooks/rialit), nothing to say.
+ */
+export function webhookState(overrides: Partial<GatewayWebhookState> = {}): GatewayWebhookState {
+  const ours = 'https://shop.example/payments/webhooks/rialit'
+  return { state: 'ours', url: ours, ours, message: null, ...overrides }
 }
 
 /**

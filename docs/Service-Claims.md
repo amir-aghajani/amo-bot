@@ -26,7 +26,9 @@ They send the link to the bot — anywhere the bot waits for nothing else —, o
 - a **subscription link** — `https://…/sub/…` as the panel gives it, through another domain or path too: the part of
   it that names the client is what counts;
 - a **config** — `vless://`, `vmess://`, `trojan://`, `ss://`, `hysteria2://` (`hy2://`) or `tuic://`: its id or
-  password is what counts.
+  password is what counts. On a Rebecca server only a VLESS or VMess config does: its Trojan and Shadowsocks passwords
+  are hashes the panel looks nothing up by, so send the subscription link there. On a Remnawave server a VLESS, Trojan
+  or Shadowsocks config does ([Servers](Servers.md#the-connectors)).
 
 A message may hold the link among other words, or several of a service's configs: its links are read together, five
 at most, so an unrelated address beside them does no harm.

@@ -22,6 +22,16 @@ class PanelApiException extends ProviderException
         parent::__construct($message, $httpStatus, $previous);
     }
 
+    /**
+     * Whether the panel refused to show a client because another admin holds it — on a panel where the shop's admin sees
+     * only its own users —, so its name is taken all the same (ProvisioningService::taken()). Any 403 by default; a
+     * connector whose panel also says 403 for a permission its admin lacks tells its own words apart.
+     */
+    public function hidesAnothersClient(): bool
+    {
+        return $this->httpStatus === 403;
+    }
+
     /** The log's message for a refused call: "<panel> <method> <path> failed: <reason>". */
     protected static function callFailed(string $panel, string $method, string $path, int $httpStatus, string $panelMessage): string
     {

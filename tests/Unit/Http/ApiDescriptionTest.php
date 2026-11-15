@@ -12,6 +12,7 @@ use App\Modules\Reviews\Services\Reviews;
 use App\Modules\Store\Http\MiniAppOnlyMiddleware;
 use App\Modules\Store\Http\StaffMiddleware;
 use App\Modules\Store\Http\WebsiteOnlyMiddleware;
+use App\Modules\Telegram\Admin\Door\BotAdminDoor;
 use cebe\openapi\spec\MediaType;
 use cebe\openapi\spec\OpenApi;
 use cebe\openapi\spec\Parameter;
@@ -102,7 +103,8 @@ final class ApiDescriptionTest extends TestCase
         $routes = [];
         foreach ($this->app()->http()->getRouteCollector()->getRoutes() as $route) {
             $pattern = $route->getPattern();
-            if (!str_starts_with($pattern, '/api/') && $pattern !== '/health') {
+            // The bot's own door (BotAdminDoor) is reached in-process alone — a 404 from outside —: the panels' routes again.
+            if ((!str_starts_with($pattern, '/api/') && $pattern !== '/health') || str_starts_with($pattern, BotAdminDoor::PATH . '/')) {
                 continue;
             }
             // Slim's placeholders carry their pattern ({id:[0-9]+}); OpenAPI's are bare ({id}).

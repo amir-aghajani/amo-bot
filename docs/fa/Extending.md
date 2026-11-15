@@ -62,6 +62,45 @@
 [مرجع متن‌های ربات (انگلیسی)](../Bot-Texts-Reference.md) را به‌روز می‌کند. صفحه‌ای که منوی اصلی باز می‌کند یک action از
 `Keyboard\MainMenu` است.
 
+## صفحه مدیریت ربات
+
+مدیریت فروشگاه در چت خصوصی ربات ([اینکه چطور کار می‌کند](Internals-Telegram-Bot.md#مدیریت-فروشگاه)) همان صفحه‌های پنل
+است به شکل صفحه‌های ربات. صفحه تازه یک کلاس در <code dir="ltr">app/Modules/Telegram/Admin/Sections/&lt;Area&gt;/</code> است
+که `Ui\Screen` را پیاده می‌کند (بیشتر با گسترش `Ui\ListScreen` برای یک فهرست پنل، `Ui\Settings\SettingsScreen` برای یک
+کارت تنظیمات، یا `Ui\BaseScreen` برای صفحه یک ردیف یا یک فرم)، با یک شناسه کوتاه از حرف‌های بخش خودش (`plv`، `pyx`؛ هر
+بخشش <code dir="ltr">[A-Za-z0-9_.-]</code> و یکتا) در <code dir="ltr">&lt;Area&gt;Screens::SCREENS</code> همان بخش ثبت می‌شود، و وقتی از یک منو باز
+می‌شود ورودی‌ای در `Ui\Screens` می‌گیرد (در صفحه اصلی یا یکی از منوها).
+
+1. **خواندن و نوشتن فقط از راه API پنل‌ها**: <code dir="ltr">$admin->api->get('/plans')</code>،
+   <code dir="ltr">->post('/payments/12/approve')</code>، <code dir="ltr">->put()</code>، <code dir="ltr">->patch()</code>،
+   <code dir="ltr">->delete()</code>، <code dir="ltr">->upload()</code>، <code dir="ltr">->file()</code>، با همان مسیرهای پنل‌ها
+   و بدون <code dir="ltr">/api/admin</code>. هرگز برای یک تغییر سرویسی را صدا نزنید و قاعده‌ای را دوباره ننویسید: بگذارید
+   `ApiRefusal` از <code dir="ltr">act()</code> و <code dir="ltr">input()</code> بیرون برود، و هندلر نشانش می‌دهد. چیزی که پنل‌ها
+   مسیری برایش ندارند اول یک قابلیت پنل است ([بالاتر](#صفحه-پنل-و-api-آن))، و از راه گروه مسیرش به ربات می‌رسد.
+2. **دسترسی‌ها آینه مسیرند**: <code dir="ltr">allows()</code> روی <code dir="ltr">$operations</code> برای همه جایگاه‌هاست، روی
+   <code dir="ltr">$configuration</code> همان <code dir="ltr">$seat->configures()</code>، روی گروه‌های خود مالک
+   <code dir="ltr">$seat->isOwner()</code> (و <code dir="ltr">$seat->shop()->isMain()</code> جایی که صفحه پنل مال فروشگاه
+   اصلی است)؛ دکمه‌ای که مسیرش یک مجوز را نام می‌برد فقط تا وقتی نشان داده می‌شود که
+   <code dir="ltr">$seat->holds(StaffGrant::…)</code> باشد. ورودی بقیه را در هر حال رد می‌کند.
+3. **کلمه‌های پنل**: برچسب‌ها، راهنماها، گزینه‌ها و هشدارهای صفحه پنل، کپی‌شده، به فارسی ساده و بدون اعراب؛ هر چه از یک
+   آدم یا از پنل آمده از راه <code dir="ltr">Fmt::e()</code>، و متن لاتین در یک خط فارسی از راه
+   <code dir="ltr">Fmt::ltr()</code> یا <code dir="ltr">Fmt::code()</code>.
+4. **یک پنجره**: هر نما با <code dir="ltr">back()</code> به صفحه بالاتر تمام می‌شود. آنچه صفحه نگه می‌دارد (صفحه فهرست،
+   فیلتر، پیش‌نویس، هر متنی) در <code dir="ltr">$admin->remember()</code> می‌رود؛ <code dir="ltr">Nav::to()</code> یک دکمه
+   فقط شناسه‌ها و کلمه‌های کوتاه می‌گیرد (۶۴ بایت، وگرنه استثنا پرتاب می‌کند).
+5. **تغییرها**: آنچه برگشت ندارد پشت <code dir="ltr">$admin->confirm()</code> با هشدار خود پنل؛ بعد از پاسخ API،
+   <code dir="ltr">$admin->notice('✅ …')</code> و ردیف همان‌طور که پنل حالا جواب می‌دهد. تغییر پول یا یک پاسخ،
+   کلید `Idempotency-Key` را می‌فرستد که تا موفق شدن در پیش‌نویس می‌ماند، پس تلاش دوباره هرگز آن را تکرار نمی‌کند.
+6. **مقدارهای نوشتنی**: <code dir="ltr">$admin->ask(new Prompt($question, $screen, $action, $args, hint: …))</code>، با مقدار
+   فعلی در راهنما و گزینه‌های آماده برای مقدارهای رایج؛ <code dir="ltr">input()</code> یک `Answer` را می‌خواند
+   (<code dir="ltr">amount(Unit::Toman)</code> «۵۰ هزار تومان» را می‌فهمد). گزینه
+   <code dir="ltr">anyText: true</code> فقط جایی که پاسخ می‌تواند هر کلمه‌ای باشد (برچسب یک دکمه، یک متن ربات): جای دیگر
+   دکمه منو سوال را رها می‌کند، پس برچسبش هرگز به عنوان پاسخ به یک کاربر نمی‌رسد. یک فرم پیش‌نویسش را در
+   <code dir="ltr">remember()</code> نگه می‌دارد، فیلد به فیلد می‌پرسد، با «✏️» برای هر فیلد خلاصه می‌کند، و یک بار ذخیره
+   می‌کند. دکمه یک کلید مقداری را که می‌گذارد با خودش دارد، پس لمس دوم چیزی را عوض نمی‌کند.
+7. **تست‌ها**: <code dir="ltr">tests/Feature/BotAdmin/&lt;Area&gt;*Test.php</code> روی `BotTestCase`: مسیر اصلی (فهرست، ردیف،
+   کار، اثرش در API)، جایگاهی بدون مجوز (بدون دکمه، و رد شدن ضربه جعلی در ورودی)، و یک پاسخ نوشتنی.
+
 ## اندپوینت Store API
 
 کنترلر در `app/Modules/Store/Api`، مسیرش در گروه Store API در `routes/api.php` (عمومی، مال خود کاربر پشت توکن Bearer

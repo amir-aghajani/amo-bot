@@ -15,6 +15,8 @@ How the cards work:
   is held while the switch is off — unless you changed it: then it stays open, since the save still checks it.
 - **Leaving a card with unsaved changes asks first**, and a card saved elsewhere meanwhile keeps your changes and says so
   ([The panels](Panels.md#live-and-safe-to-leave)).
+- **The same cards are in the bot**, for you and an agent: «⚙️ مدیریت › ⚙️ تنظیمات › 🤖 تنظیمات ربات», each field saved
+  as it is changed ([Managing the shop from the bot](Bot-Management.md#settings)).
 
 Some programs keep their part of these settings on their own pages: discount codes ([Discounts](Discounts.md)),
 cashback and the nightly draw ([Loyalty, cashback and draws](Loyalty-Cashback-And-Draws.md)), gift codes and the lucky
@@ -27,7 +29,8 @@ wheel ([Gift codes and the lucky wheel](Gift-Codes-And-Lucky-Wheel.md)), and fre
 
 - **«ربات فعال باشد»** (on) — off, every customer gets «ربات خاموش» (`⛔️ ربات فعلا غیرفعال است. …`, a text you may reword)
   to whatever they send, the menu taken away, **and the shop's website and mini app take no orders** (a purchase, a
-  renewal, a top-up, a receipt — «فروشگاه فعلا سفارش نمی‌گیرد؛ …»). The bot's admins still pass, to try it. The page says the bot is
+  renewal, a top-up, a receipt — «فروشگاه فعلا سفارش نمی‌گیرد؛ …»). The bot's admins still pass, to try it, and so does
+  whoever manages the shop from the bot. In the bot's management, switching it off asks first. The page says the bot is
   off above every section. For a pause, or when the servers are down.
 - **«تایید شماره موبایل»** (off) — on, a customer must send their own Telegram number — one tap of «📱 ارسال شماره موبایل»
   — before anything else: a number typed, or someone else's card, is refused. Asked once; the number shows on their
@@ -96,11 +99,16 @@ How names are given:
   100 in a row at most: past that the delivery fails, saying to check the pattern. One a client made on the panel by
   hand has gives way once the panel refuses it — a customer's own name, and the name a service
   [moved to another server](Services.md#moving-services) keeps, too —, 10 in a row at most: past that the delivery (or
-  the move) fails for you to retry.
+  the move) fails for you to retry. One another admin's user holds, on a panel where the shop's admin sees only its own
+  users (Marzban's admins but sudo, Rebecca's standard and reseller ones, PasarGuard's limited to their own), is taken
+  too, and gives way to the next — also when the panel refuses it as taken but will not show that user (PasarGuard 5).
 - **A name fits its panel.** A username too long for the 64 characters a name may have is shortened, never the part
   that tells the names apart. On PasarGuard, two of `_ - . @` side by side become the first alone, and a name under 3
   characters gets leading zeros (`{n}` gives `001`). On Marzban a name is 3 to 32 letters, digits and `_`: `-`, `.` and
-  `@` are dropped, a long username gives way within 32 characters, and a name under 3 gets leading zeros.
+  `@` are dropped, a long username gives way within 32 characters, and a name under 3 gets leading zeros. On Rebecca a
+  name is 3 to 32 letters, digits and `_ . @ -`: a long username gives way within 32 characters, and a name under 3 gets
+  leading zeros. On Remnawave a name is 3 to 36 letters, digits, `_` and `-`: `.` and `@` are dropped, a long username
+  gives way within 36 characters, and a name under 3 gets leading zeros.
 - **`{n}` is each shop's own count**, so two shops selling on the same servers with one pattern of `{n}` would name
   alike, the one behind skipping the other's names: give each its own letters (`a{n}`, `b{n}`).
 - **A name is never changed.** A new pattern names new services; those made before keep their names. So does a service
@@ -312,7 +320,7 @@ What counts as a change is what the save would keep: an empty row, the rows' ord
 Traffic is offered for a service with a quota, days for one with a term — neither for one switched off by support, nor
 for one ended on both counts, which a renewal is for, nor for a free test ([Test accounts](Test-Accounts.md)). Devices
 are offered for a service with a device limit (an unlimited one takes none) whose time and traffic have not run out (a
-renewal of one ended would replace their period at once), on a server whose panel enforces the limit — 3X-UI does; PasarGuard and Marzban have no IP limit, so their services are offered none. In an
+renewal of one ended would replace their period at once), on a server whose panel enforces the limit — 3X-UI, HMPanel and Rebecca do, and Remnawave by its HWID device limit; PasarGuard and Marzban have no IP limit, so their services are offered none. In an
 agent's shop the extra traffic its customers buy comes out of the agent's traffic, and no more is offered than is left
 ([Agency](Agency.md)); extra days and devices cost it nothing.
 
@@ -427,10 +435,32 @@ payment, a renewal's own share, «فقط اولین پرداخت هر زیرمج
 - the background cannot be read, or the card would be larger than Telegram takes as a photo;
 - Telegram refuses the picture: the text follows in its place.
 
+## The bot's admins
+
+«مدیران ربات», card «مدیریت فروشگاه از ربات» — whether the shop's admins (its customers whose role is admin, «کاربران ›
+نقش › مدیران ربات») manage it from the bot's private chat, with «⚙️ مدیریت» or `/admin`, and what beyond the daily work.
+You and an agent, each in your own bot, always have every section of your panel there, whatever these say
+([Managing the shop from the bot](Bot-Management.md)).
+
+- **«کار مدیران از ربات»** (on) — the daily work with the bot's menus: the dashboard, receipts and payments, orders,
+  services, customers, tickets, reviews, referrals and broadcasts. The shop's settings, its payment methods, the bot,
+  and who is an admin are never theirs. Off, they have no «⚙️ مدیریت» and the bot takes no management from them but
+  `/broadcast` and `/emoji`, theirs as before; their work in the report group is as before.
+- **«کارهای بیشتر»** — a switch per grant, all off by default, the website's «مدیران سایت» list with switches of their
+  own: «پلن‌ها و دسته‌بندی‌ها» (and the customer groups, and a customer put in a «همکار» group), «کیف پول مشتری»,
+  «بازپرداخت», «رد یکجای رسیدها», «افزایش زمان و حجم سرویس», «افزودن سفارش برای مشتری», «حذف یا انتقال سرویس» and
+  «امنیت حساب مشتری» ([what each opens](Bot-Management.md#the-shops-admins)).
+
+The bot asks these on each message, so a change holds at once. Each admin is held on their own account alone — their own
+payment, wallet, service and review are another admin's, and an admin's or an agent's account is never theirs —, but two
+admins can do those things for each other: give the role only to people you trust. The same card is in the bot,
+«⚙️ تنظیمات › 🛡 مدیران ربات».
+
 ## Watch out for
 
 - **The bot's admins are customers given the role** on «کاربران» ([Customers](Customers.md#the-bots-admins)) — your panel
-  login is not one of them.
+  login is not one of them; your own Telegram account is made one when you link it from «مدیریت از ربات»
+  ([Managing the shop from the bot](Bot-Management.md#your-own-telegram-account)).
 - **Reminders, automatic renewals, the removal of ended services and approvals by themselves need the scheduler**
   running — the host's cron job (or the poller, where one runs:
   [Running in production](Running-In-Production.md#the-scheduler)).

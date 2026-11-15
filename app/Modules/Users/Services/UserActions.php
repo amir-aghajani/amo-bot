@@ -12,8 +12,10 @@ use App\Modules\Accounts\Services\CustomerSessions;
 use App\Modules\Accounts\Services\TwoFactor;
 use App\Modules\Auth\Actor;
 use App\Modules\Auth\Exceptions\ActorRefusedException;
+use App\Modules\Bots\Models\Bot;
 use App\Modules\Notifications\Enums\Delivery;
 use App\Modules\Notifications\Services\CustomerNotifier;
+use App\Modules\Telegram\Admin\OwnerLinks;
 use App\Modules\Telegram\Api\Limits;
 use App\Modules\Users\Enums\UserRole;
 use App\Modules\Users\Enums\UserStatus;
@@ -50,6 +52,7 @@ final class UserActions
         private readonly CustomerGroups $groups,
         private readonly CustomerNotifier $notifier,
         private readonly LoggerInterface $logger,
+        private readonly OwnerLinks $owners,
     ) {}
 
     /**
@@ -146,6 +149,10 @@ final class UserActions
         }
 
         $user->forceFill(['role' => $role])->save();
+        // Set by hand: the owner's choice, which unlinking an owner account no longer takes back.
+        if ((int) $user->bot_id === Bot::MAIN && $user->telegram_id !== null) {
+            $this->owners->chosen((int) $user->telegram_id);
+        }
         $this->logger->info('Customer #{customer} made {role} by {reviewer}', ['customer' => $user->id, 'role' => $role->value, 'reviewer' => $actor->reviewer]);
 
         return $user;

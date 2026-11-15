@@ -11,6 +11,10 @@ use App\Modules\Referrals\Services\ReferralSettings;
 use App\Modules\Rewards\Services\GiftCodeSettings;
 use App\Modules\Rewards\Services\WheelSettings;
 use App\Modules\Subscriptions\Services\TestAccountSettings;
+use App\Modules\Telegram\Admin\AdminSeats;
+use App\Modules\Telegram\Admin\Ui\AdminHandler;
+use App\Modules\Telegram\Admin\Ui\Nav;
+use App\Modules\Telegram\Admin\Ui\Screens;
 use App\Modules\Telegram\Context;
 use App\Modules\Telegram\Contracts\MiniAppAddress;
 use App\Modules\Telegram\Messages;
@@ -75,6 +79,7 @@ final class MainMenu
         private readonly MiniAppAddress $miniApp,
         private readonly Buttons $buttons,
         private readonly BotTexts $texts,
+        private readonly AdminSeats $seats,
     ) {}
 
     /**
@@ -214,8 +219,27 @@ final class MainMenu
         ]));
         $layout = $this->layout();
         $shown = $layout->without(...$off);
+        $markup = ($shown->rows === [] ? self::builtIn($layout)->without(...$off) : $shown)->markup($app === null ? [] : ['app' => $app]);
 
-        return ($shown->rows === [] ? self::builtIn($layout)->without(...$off) : $shown)->markup($app === null ? [] : ['app' => $app]);
+        return $this->seats->of($user) === null ? $markup : self::withManagement($markup);
+    }
+
+    /**
+     * The menu with «⚙️ مدیریت» under it, for whoever manages the shop from the bot (AdminSeats): a label on a reply
+     * keyboard, a button of the management's own on an inline one.
+     *
+     * @param array<string, mixed> $markup
+     * @return array<string, mixed>
+     */
+    private static function withManagement(array $markup): array
+    {
+        if (isset($markup['inline_keyboard']) && is_array($markup['inline_keyboard'])) {
+            $markup['inline_keyboard'][] = [['text' => AdminHandler::LABEL, 'callback_data' => Nav::to(Screens::HOME)]];
+        } elseif (isset($markup['keyboard']) && is_array($markup['keyboard'])) {
+            $markup['keyboard'][] = [['text' => AdminHandler::LABEL]];
+        }
+
+        return $markup;
     }
 
     /** @return list<string> The reply-keyboard labels to route as messages. */

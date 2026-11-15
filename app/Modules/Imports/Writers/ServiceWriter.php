@@ -174,14 +174,22 @@ final class ServiceWriter
         if ($read instanceof ProviderException) {
             throw $read;
         }
-        if ($read['clients'] !== null) {
-            return [$read['clients'][$name] ?? null, $read['observed']];
+        // The listing's client — unless it leaves the device limit unsaid (Rebecca's) on a panel that keeps one: that one is
+        // read on its own, so it comes with the limit it has.
+        $listed = $read['clients'] === null ? null : $read['clients'][$name] ?? null;
+        if ($read['clients'] !== null && ($listed === null || $listed->ipLimit !== null || !$this->providers->capabilities($server->driver)->ipLimit)) {
+            return [$listed, $read['observed']];
         }
 
         $observed = now();
         try {
             $client = $this->providers->forServer($server)->findClient($name);
         } catch (ProviderException $e) {
+            // The listing answered for the client this step: a read of its device limit that fails leaves it as listed —
+            // never a silence, which the next step's listing would clear, the same read failing again for good.
+            if ($listed !== null) {
+                return [$listed, $read['observed']];
+            }
             $this->health->contacted($server, $e);
             if ($e->unavailable()) {
                 $this->silent($run, $server, $e);
@@ -191,6 +199,8 @@ final class ServiceWriter
             throw $e;
         }
         $this->health->contacted($server, null);
+        // It answered: its silences in a row are over, as a listing's answer ends them (list()).
+        $run->silent($server->id, answered: true);
 
         return [$client, $observed];
     }

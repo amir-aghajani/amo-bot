@@ -14,6 +14,7 @@ use App\Modules\Providers\DTO\Expiry;
 use App\Modules\Providers\Enums\CoreState;
 use App\Modules\Providers\Exceptions\NotFoundException;
 use App\Modules\Providers\Exceptions\ProviderException;
+use App\Modules\Providers\Exceptions\UnexpectedResponseException;
 use App\Modules\Providers\Exceptions\UnsupportedOperationException;
 use App\Modules\Providers\Models\Server;
 use App\Modules\Providers\Support\PanelHttp;
@@ -63,7 +64,7 @@ final class MarzbanProviderTest extends TestCase
         ));
 
         self::assertSame(['GET /api/inbounds', 'POST /api/user'], $this->sent());
-        self::assertSame('{"username":"amir_1","proxies":{"vless":{},"vmess":{}},"inbounds":{"vless":["VLESS TCP REALITY"],"vmess":["VMess WS"]},"data_limit":32212254720,"data_limit_reset_strategy":"no_reset","status":"on_hold","expire":0,"on_hold_expire_duration":2592000,"note":"42 | amir"}', (string) $this->call(1)->getBody(), 'settings left for the panel to mint, each protocol an object; no IP limit (the panel has none)');
+        self::assertSame('{"username":"amir_1","proxies":{"vless":{},"vmess":{}},"inbounds":{"vless":["VLESS TCP REALITY"],"vmess":["VMess WS"]},"data_limit":32212254720,"data_limit_reset_strategy":"no_reset","auto_delete_in_days":-1,"status":"on_hold","expire":0,"on_hold_expire_duration":2592000,"note":"42 | amir"}', (string) $this->call(1)->getBody(), 'settings left for the panel to mint, each protocol an object; never deleted by the panel\'s own clean-up; no IP limit (the panel has none)');
 
         self::assertSame('amir_1', $client->name);
         self::assertTrue($client->enabled);
@@ -108,6 +109,7 @@ final class MarzbanProviderTest extends TestCase
         self::assertSame(0, $this->body(3)['expire']);
         self::assertArrayNotHasKey('note', $this->body(3), 'nothing to say leaves the note alone');
         self::assertSame([null, null], [$never->expiry->deadline(), $never->expiry->pendingSeconds()]);
+        self::assertSame([-1, -1], [$this->body(1)['auto_delete_in_days'], $this->body(3)['auto_delete_in_days']], 'never removed by the panel\'s own clean-up of ended users (crud.autodelete_expired_users skips negatives): the shop removes them itself');
     }
 
     public function testANoteIsCutToWhatMarzbanKeeps(): void
@@ -172,10 +174,60 @@ final class MarzbanProviderTest extends TestCase
         $provider->updateClient(new ClientSpec('amir_1'));
 
         self::assertSame(['GET /api/user/amir_1', 'PUT /api/user/amir_1', 'GET /api/user/amir_1', 'PUT /api/user/amir_1'], $this->sent());
-        self::assertSame(['data_limit' => 60 * 1024 ** 3, 'status' => 'on_hold', 'expire' => 0, 'on_hold_expire_duration' => 2 * self::MONTH, 'note' => '42 | amir'], $this->body(1), 'proxies and inbounds left alone');
+        self::assertSame(['data_limit' => 60 * 1024 ** 3, 'data_limit_reset_strategy' => 'no_reset', 'status' => 'on_hold', 'expire' => 0, 'on_hold_expire_duration' => 2 * self::MONTH, 'note' => '42 | amir'], $this->body(1), 'proxies and inbounds left alone');
         self::assertSame(60 * 1024 ** 3, $client->totalBytes);
-        // Unlimited and endless: 0 for each; no comment leaves the panel's note alone.
-        self::assertSame(['data_limit' => 0, 'status' => 'active', 'expire' => 0], $this->body(3));
+        // Unlimited and endless: 0 for each, the month it was waiting for overwritten; no comment leaves the note alone.
+        self::assertSame(['data_limit' => 0, 'data_limit_reset_strategy' => 'no_reset', 'status' => 'active', 'expire' => 0, 'on_hold_expire_duration' => -1], $this->body(3));
+    }
+
+    public function testAnUpdateDropsAResetScheduleThePanelKept(): void
+    {
+        // An adopted user, its quota reset every month by the panel: the shop's quota is once a term.
+        $monthly = self::user(['status' => 'active', 'expire' => 1893456000, 'on_hold_expire_duration' => null, 'data_limit_reset_strategy' => 'month']);
+        $provider = $this->provider([self::json(200, $monthly), self::json(200, ['data_limit_reset_strategy' => 'no_reset'] + $monthly)]);
+
+        $provider->updateClient(new ClientSpec('amir_1', 10, Expiry::at(new \DateTimeImmutable('@1893456000'))));
+
+        self::assertSame(['data_limit' => 10, 'data_limit_reset_strategy' => 'no_reset', 'status' => 'active', 'expire' => 1893456000], $this->body(1), 'the panel\'s monthly reset replaced by none');
+    }
+
+    /**
+     * Marzban's API cannot clear a duration (its validator reads 0 as "no change"), and its share and review code skip a
+     * negative one: a term not waiting overwrites a duration the read user has with -1 — and only then. A term waiting
+     * sends its own; a user with none, or one overwritten already, is sent none.
+     */
+    public function testATermNotWaitingOverwritesTheDurationTheUserHadWithMinusOne(): void
+    {
+        $deadline = Expiry::at(new \DateTimeImmutable('@1893456000'));
+        foreach ([
+            'a deadline, a month left from a term on hold' => [self::user(['status' => 'on_hold']), $deadline, -1],
+            'endless, a month left on a user switched off' => [self::user(['status' => 'disabled']), Expiry::never(), -1],
+            'a deadline, the user active with a leftover' => [self::user(['status' => 'active', 'expire' => 1890000000]), $deadline, -1],
+            'a term waiting sends its own' => [self::user(['status' => 'active', 'expire' => 1890000000]), Expiry::afterFirstUse(2 * self::MONTH), 2 * self::MONTH],
+            'no duration on the user' => [self::user(['status' => 'active', 'expire' => 1890000000, 'on_hold_expire_duration' => null]), $deadline, null],
+            'a duration of 0 is none' => [self::user(['status' => 'active', 'expire' => 1890000000, 'on_hold_expire_duration' => 0]), $deadline, null],
+            'overwritten already' => [self::user(['status' => 'active', 'expire' => 1890000000, 'on_hold_expire_duration' => -1]), $deadline, null],
+        ] as $case => [$before, $expiry, $sent]) {
+            $provider = $this->provider([self::json(200, $before), self::json(200, $before)]);
+
+            $provider->updateClient(new ClientSpec('amir_1', 10, $expiry));
+
+            self::assertSame(['GET /api/user/amir_1', 'PUT /api/user/amir_1'], $this->sent(), $case);
+            self::assertSame($sent, $this->body(1)['on_hold_expire_duration'] ?? null, $case);
+        }
+    }
+
+    public function testADurationOverwrittenWithMinusOneIsNoTermAndNeverPutBackOnHold(): void
+    {
+        $overwritten = self::user(['status' => 'disabled', 'expire' => null, 'on_hold_expire_duration' => -1, 'data_limit' => null]);
+        $provider = $this->provider([self::json(200, $overwritten), self::json(200, $overwritten), self::json(200, ['status' => 'active'] + $overwritten)]);
+
+        $client = $provider->findClient('amir_1');
+        self::assertSame([null, null], [$client?->expiry->pendingSeconds(), $client?->expiry->deadline()], 'switched off, endless: no term waiting (waitingTerm() counts only a positive duration)');
+        $provider->setClientEnabled('amir_1', true);
+
+        self::assertSame(['GET /api/user/amir_1', 'GET /api/user/amir_1', 'PUT /api/user/amir_1'], $this->sent());
+        self::assertSame(['status' => 'active', 'data_limit' => 0, 'expire' => 0], $this->body(2), 'active, unlimited and endless: never "on hold" with -1');
     }
 
     public function testEveryUpdateSendsBackTheNextPlanMarzbanWouldOtherwiseDrop(): void
@@ -207,10 +259,11 @@ final class MarzbanProviderTest extends TestCase
         $provider->updateClient(new ClientSpec('amir_1', 10, Expiry::at(new \DateTimeImmutable('2026-11-01 00:00:00', new \DateTimeZone('UTC'))), enabled: false));
 
         // A term still waiting keeps its duration, for the switch to put it back on hold.
-        self::assertSame(['data_limit' => 10, 'status' => 'disabled', 'expire' => 0, 'on_hold_expire_duration' => self::MONTH], $this->body(1));
+        self::assertSame(['data_limit' => 10, 'data_limit_reset_strategy' => 'no_reset', 'status' => 'disabled', 'expire' => 0, 'on_hold_expire_duration' => self::MONTH], $this->body(1));
         self::assertFalse($client->enabled);
         self::assertSame(self::MONTH, $client->expiry->pendingSeconds());
-        self::assertSame(['data_limit' => 10, 'status' => 'disabled', 'expire' => 1793491200], $this->body(3));
+        // A deadline: the month the user was waiting for is overwritten.
+        self::assertSame(['data_limit' => 10, 'data_limit_reset_strategy' => 'no_reset', 'status' => 'disabled', 'expire' => 1793491200, 'on_hold_expire_duration' => -1], $this->body(3));
     }
 
     public function testUpdatingAUserThePanelDoesNotHaveIsNotFound(): void
@@ -539,9 +592,9 @@ final class MarzbanProviderTest extends TestCase
         $provider->setClientEnabled('amir_1', true);
         self::assertSame(['status' => 'on_hold', 'on_hold_expire_duration' => self::MONTH], $this->body(3));
 
-        // Its clock had started.
+        // Its clock had started: active with its own limit and deadline, for the panel to judge at once.
         $provider->setClientEnabled('amir_1', true);
-        self::assertSame(['status' => 'active'], $this->body(5));
+        self::assertSame(['status' => 'active', 'data_limit' => 30 * 1024 ** 3, 'expire' => 1793491200], $this->body(5));
 
         // As asked already, on or off: nothing to write.
         $provider->setClientEnabled('amir_1', true);
@@ -560,9 +613,34 @@ final class MarzbanProviderTest extends TestCase
 
         $client = $provider->updateClient(new ClientSpec('amir_1', 0, Expiry::never()));
 
-        self::assertSame(['data_limit' => 0, 'status' => 'active', 'expire' => 0], $this->body(1), 'Marzban takes "active" as asked');
+        self::assertSame(['data_limit' => 0, 'data_limit_reset_strategy' => 'no_reset', 'status' => 'active', 'expire' => 0, 'on_hold_expire_duration' => -1], $this->body(1), 'Marzban takes "active" as asked; the leftover overwritten');
         self::assertTrue($client->enabled);
         self::assertSame([null, null], [$client->expiry->deadline(), $client->expiry->pendingSeconds()], 'no end at all, the leftover no term');
+    }
+
+    /**
+     * Marzban's update_user judges a user limited or expired only by the fields sent: one switched back on is sent its own
+     * limit and deadline with "active", so a service used up or ended while it was off is limited or expired at once —
+     * not at the panel's next review, connected meanwhile. None is 0; its next plan goes back with them.
+     */
+    public function testSwitchingOnSendsTheUsersOwnLimitAndDeadlineForThePanelToJudge(): void
+    {
+        $plan = ['data_limit' => 5, 'expire' => 86_400, 'add_remaining_traffic' => false, 'fire_on_either' => true];
+        foreach ([
+            'used up while off' => [['used_traffic' => 30 * 1024 ** 3, 'expire' => 1893456000], ['status' => 'active', 'data_limit' => 30 * 1024 ** 3, 'expire' => 1893456000]],
+            'ended while off' => [['expire' => 1790812800], ['status' => 'active', 'data_limit' => 30 * 1024 ** 3, 'expire' => 1790812800]],
+            'unlimited and endless' => [['data_limit' => null, 'expire' => null], ['status' => 'active', 'data_limit' => 0, 'expire' => 0]],
+            'a deadline of 0 is none' => [['data_limit' => 0, 'expire' => 0], ['status' => 'active', 'data_limit' => 0, 'expire' => 0]],
+            'its next plan sent back' => [['expire' => 1893456000, 'next_plan' => $plan + ['id' => 1, 'user_id' => 7]], ['status' => 'active', 'data_limit' => 30 * 1024 ** 3, 'expire' => 1893456000, 'next_plan' => $plan]],
+        ] as $case => [$user, $sent]) {
+            $off = self::user($user + ['status' => 'disabled', 'on_hold_expire_duration' => null]);
+            $provider = $this->provider([self::json(200, $off), self::json(200, ['status' => 'active'] + $off)]);
+
+            $provider->setClientEnabled('amir_1', true);
+
+            self::assertSame(['GET /api/user/amir_1', 'PUT /api/user/amir_1'], $this->sent(), $case);
+            self::assertSame($sent, $this->body(1), $case);
+        }
     }
 
     public function testARenewedServiceSwitchedOffBeforeItReconnectedGoesBackOnHold(): void
@@ -578,15 +656,147 @@ final class MarzbanProviderTest extends TestCase
         self::assertSame(['status' => 'on_hold', 'on_hold_expire_duration' => self::MONTH], $this->body(1), 'an old connection is no start of its term');
     }
 
-    public function testDeleteAddressesTheUserByName(): void
+    public function testDeleteReadsTheUserThenDeletesItByName(): void
     {
-        $provider = $this->provider([self::json(200, ['detail' => 'User successfully deleted']), self::json(404, ['detail' => 'User not found'])]);
+        $provider = $this->provider([self::json(200, self::user(['status' => 'active'])), self::json(200, ['detail' => 'User successfully deleted']), self::json(404, ['detail' => 'User not found'])]);
 
         $provider->deleteClient('amir_1');
-        self::assertSame(['DELETE /api/user/amir_1'], $this->sent());
+        self::assertSame(['GET /api/user/amir_1', 'DELETE /api/user/amir_1'], $this->sent(), 'a user an admin owns: deleted at once');
+        self::assertSame('', (string) $this->call(1)->getBody(), 'the delete takes no body');
 
-        $this->expectException(NotFoundException::class);
+        try {
+            $provider->deleteClient('amir_1');
+            self::fail('the user is gone');
+        } catch (NotFoundException $e) {
+            self::assertStringContainsString('User not found', $e->getMessage(), 'the contract\'s "not found"');
+        }
+        self::assertSame(['GET /api/user/amir_1', 'DELETE /api/user/amir_1', 'GET /api/user/amir_1'], $this->sent(), 'a user the panel does not have: nothing deleted');
+    }
+
+    /**
+     * Marzban 0.8.2–0.8.4 deletes a user no admin owns (`admin: null`: made by the `.env` sudo admin, or its admin removed)
+     * from its database, then fails the request (routers/user.py: `Admin.model_validate(dbuser.admin)`, its issue #1634)
+     * before taking it off Xray. Such a user is switched off first — which takes it off Xray —, its next plan sent back in
+     * case the delete fails; one switched off already is deleted at once.
+     */
+    public function testAUserNoAdminOwnsIsSwitchedOffBeforeItIsDeleted(): void
+    {
+        $plan = ['data_limit' => 1, 'expire' => 2, 'add_remaining_traffic' => false, 'fire_on_either' => true];
+        foreach (['active', 'on_hold', 'limited', 'expired'] as $status) {
+            $ownerless = self::user(['status' => $status, 'admin' => null, 'next_plan' => $plan + ['id' => 3, 'user_id' => 7]]);
+            $provider = $this->provider([self::json(200, $ownerless), self::json(200, ['status' => 'disabled'] + $ownerless), self::json(200, ['detail' => 'User successfully deleted'])]);
+
+            $provider->deleteClient('amir_1');
+
+            self::assertSame(['GET /api/user/amir_1', 'PUT /api/user/amir_1', 'DELETE /api/user/amir_1'], $this->sent(), $status);
+            self::assertSame(['status' => 'disabled', 'next_plan' => $plan], $this->body(1), $status);
+        }
+
+        $provider = $this->provider([self::json(200, self::user(['status' => 'disabled', 'admin' => null])), self::plainError(), self::json(404, ['detail' => 'User not found'])]);
+
         $provider->deleteClient('amir_1');
+
+        self::assertSame(['GET /api/user/amir_1', 'DELETE /api/user/amir_1', 'GET /api/user/amir_1'], $this->sent(), 'switched off already: off Xray, nothing to switch');
+    }
+
+    /** Marzban's own 500 is the framework's plain text: after it, a user the panel no longer has is deleted. */
+    public function testAServerErrorAfterWhichTheUserIsGoneIsTheDeleteDone(): void
+    {
+        $ownerless = self::user(['status' => 'active', 'admin' => null]);
+        $provider = $this->provider([self::json(200, $ownerless), self::json(200, ['status' => 'disabled'] + $ownerless), self::plainError(), self::json(404, ['detail' => 'User not found'])]);
+
+        $provider->deleteClient('amir_1');
+
+        self::assertSame(['GET /api/user/amir_1', 'PUT /api/user/amir_1', 'DELETE /api/user/amir_1', 'GET /api/user/amir_1'], $this->sent());
+    }
+
+    public function testAServerErrorAfterWhichTheUserIsStillThereFailsAsItCame(): void
+    {
+        foreach ([
+            'the panel\'s own' => self::plainError(),
+            'a proxy\'s page' => new Response(502, ['Content-Type' => 'text/html'], '<html><body><h1>502 Bad Gateway</h1></body></html>'),
+        ] as $case => $error) {
+            $owned = self::user(['status' => 'active']);
+            $provider = $this->provider([self::json(200, $owned), $error, self::json(200, $owned)]);
+
+            try {
+                $provider->deleteClient('amir_1');
+                self::fail("{$case}: the user is still there");
+            } catch (UnexpectedResponseException $e) {
+                self::assertSame($error->getStatusCode(), $e->httpStatus, $case);
+                self::assertTrue($e->mayHaveBeenDone(), "{$case}: as it came");
+            }
+            self::assertSame(['GET /api/user/amir_1', 'DELETE /api/user/amir_1', 'GET /api/user/amir_1'], $this->sent(), $case);
+        }
+    }
+
+    /**
+     * KNOWN DEFECT (MarzbanProvider::deleteClient(), the look after a 5xx): a look that fails otherwise than "User not
+     * found" — the panel restarting after its 500, its port refusing — is thrown in place of the delete's 5xx, and a
+     * connection never made says the delete was not done (ConnectionException::mayHaveBeenDone()), though the DELETE's
+     * answer said it may have been: ProvisioningService::move() would then take the new client back while the old may be
+     * gone. The delete's 5xx is what goes on.
+     */
+    public function testALookThatCannotReachThePanelAfterAServerErrorStillSaysTheDeleteMayHaveBeenDone(): void
+    {
+        $ownerless = self::user(['status' => 'active', 'admin' => null]);
+        $provider = $this->provider([self::json(200, $ownerless), self::json(200, ['status' => 'disabled'] + $ownerless), self::plainError()]);
+        $this->panel->refuse(new ConnectException('cURL error 7: Failed to connect to mz.example port 8000 after 0 ms: Connection refused', new Request('GET', 'https://mz.example:8000/api/user/amir_1')));
+
+        try {
+            $provider->deleteClient('amir_1');
+            self::fail('nobody could say whether the user is gone');
+        } catch (ProviderException $e) {
+            self::assertSame(['GET /api/user/amir_1', 'PUT /api/user/amir_1', 'DELETE /api/user/amir_1', 'GET /api/user/amir_1'], $this->sent());
+            self::assertInstanceOf(UnexpectedResponseException::class, $e, 'the delete\'s own answer');
+            self::assertTrue($e->mayHaveBeenDone());
+        }
+    }
+
+    public function testARefusedDeleteFailsWithoutAskingAgain(): void
+    {
+        foreach ([
+            'the panel\'s refusal' => [self::json(403, ['detail' => "You're not allowed"]), MarzbanApiException::class],
+            'something in front of the panel refusing the method' => [new Response(405, ['Content-Type' => 'text/html'], '<html><body>405 Not Allowed</body></html>'), UnexpectedResponseException::class],
+        ] as $case => [$refusal, $type]) {
+            $provider = $this->provider([self::json(200, self::user(['status' => 'active'])), $refusal]);
+
+            try {
+                $provider->deleteClient('amir_1');
+                self::fail("{$case}: refused");
+            } catch (ProviderException $e) {
+                self::assertInstanceOf($type, $e, $case);
+                self::assertFalse($e->mayHaveBeenDone(), "{$case}: a 4xx is no delete");
+            }
+            self::assertSame(['GET /api/user/amir_1', 'DELETE /api/user/amir_1'], $this->sent(), $case);
+        }
+    }
+
+    public function testAnotherAdminsUserIsRefusedAsItIsReadAndNothingIsDeleted(): void
+    {
+        $provider = $this->provider([self::json(403, ['detail' => "You're not allowed"])]);
+
+        try {
+            $provider->deleteClient('amir_1');
+            self::fail('a non-sudo admin sees only its own users');
+        } catch (MarzbanApiException $e) {
+            self::assertSame(403, $e->httpStatus);
+            self::assertStringContainsString('sudo', $e->hint);
+        }
+        self::assertSame(['GET /api/user/amir_1'], $this->sent());
+    }
+
+    public function testAUserThePanelWillNotSwitchOffIsNotDeleted(): void
+    {
+        $provider = $this->provider([self::json(200, self::user(['status' => 'active', 'admin' => null])), self::plainError()]);
+
+        try {
+            $provider->deleteClient('amir_1');
+            self::fail('the switch failed');
+        } catch (UnexpectedResponseException $e) {
+            self::assertSame(500, $e->httpStatus);
+        }
+        self::assertSame(['GET /api/user/amir_1', 'PUT /api/user/amir_1'], $this->sent(), 'still on Xray: not deleted from under it');
     }
 
     /**
@@ -770,7 +980,8 @@ final class MarzbanProviderTest extends TestCase
     }
 
     /**
-     * A user as Marzban answers one: on hold for a month, never connected, its link a path.
+     * A user as Marzban answers one: on hold for a month, never connected, its link a path, owned by the sudo admin (an
+     * ownerless one's `admin` is null).
      *
      * @param array<string, mixed> $overrides
      * @return array<string, mixed>
@@ -812,6 +1023,12 @@ final class MarzbanProviderTest extends TestCase
     private static function json(int $status, mixed $body): Response
     {
         return new Response($status, ['Content-Type' => 'application/json'], (string) json_encode($body));
+    }
+
+    /** Marzban's own 500: no JSON, the framework's plain text (Starlette's ServerErrorMiddleware). */
+    private static function plainError(): Response
+    {
+        return new Response(500, ['Content-Type' => 'text/plain; charset=utf-8'], 'Internal Server Error');
     }
 
     private static function link(string $text): ClientLink

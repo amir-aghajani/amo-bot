@@ -100,7 +100,7 @@ final class AqayePardakhtGateway implements OnlineGateway
         return match (true) {
             in_array($code, self::PAID, true) => OnlineVerdict::paid($id),
             // Not paid: maybe not yet — the customer may still be on the bank's page.
-            $code === self::NOT_PAID => $payment->link_expires_at !== null && $payment->link_expires_at->isFuture() ? OnlineVerdict::waiting() : OnlineVerdict::closed(),
+            $code === self::NOT_PAID => self::whilePageOpen($payment),
             $code === self::OTHER_AMOUNT => throw new GatewayUnavailableException(self::refusal("would not verify transaction {$id} for payment #{$payment->id}'s amount", $status, $answer), held: true),
             default => throw new GatewayUnavailableException(self::refusal("did not say what came of transaction {$id}", $status, $answer)),
         };

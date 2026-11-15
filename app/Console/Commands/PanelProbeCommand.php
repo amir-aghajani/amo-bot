@@ -94,9 +94,9 @@ final class PanelProbeCommand extends Command
         $io->section('Server');
         $io->definitionList(...($status === null ? [['Status' => 'not reported']] : [
             ['Core' => trim(($status['core_name'] ?? 'core') . ' ' . $status['core_state'] . ' ' . $status['core_version'])],
-            ['CPU' => sprintf('%.1f%%', $status['cpu_percent'])],
+            ['CPU' => $status['cpu_percent'] === null ? 'not reported' : sprintf('%.1f%%', $status['cpu_percent'])],
             ['Memory' => Helper::formatMemory((int) $status['memory_used']) . ' / ' . Helper::formatMemory((int) $status['memory_total'])],
-            ['Disk' => Helper::formatMemory((int) $status['disk_used']) . ' / ' . Helper::formatMemory((int) $status['disk_total'])],
+            ['Disk' => (int) $status['disk_total'] === 0 && (int) $status['disk_used'] === 0 ? 'not reported' : Helper::formatMemory((int) $status['disk_used']) . ' / ' . Helper::formatMemory((int) $status['disk_total'])],
         ]));
 
         $io->section('Inbounds');

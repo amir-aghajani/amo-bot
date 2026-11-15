@@ -91,6 +91,20 @@ as the plans do; and two accounts merged never bring a «همکار» group into
 change they ask for is logged with them on the line. These guards are each admin's own — two admins can
 act for each other —, so the role is for people the owner trusts. The shop's configuration is the panels' alone.
 
+### Managing from the bot
+
+The shop's management in its bot's private chat ([Managing the shop from the bot](Bot-Management.md)) is the panels'
+own API, handled inside the application: its door answers nothing from outside — every address of it is a 404 to a
+request from the internet —, and a request gets in only with the seat the bot gave it, asked again on every message (the
+owner's linked account, an agent in their own bot, or one of the shop's admins while the shop lets them in). An admin
+there holds the daily work and only the grants the bot's own switches give, under the same guards as on the website.
+The owner's account is linked by a link that works once, for ten minutes, from the main bot alone, whose code the shop
+keeps only as a hash; the panel asks its password before it makes one — a wrong one counts as a failed sign-in —, so a
+session alone links no account, and a new panel login (changed, or recovered with the key) lets every linked account
+go, with the admin roles their links gave, and ends a link not opened yet. An answer typed into the chat — a token, a password, a card number — is deleted once read, and a
+secret typed into a half-made form waits encrypted with `APP_KEY` until it is saved. Every change asked from the bot is
+logged with who asked it.
+
 ### Secrets
 
 - Secrets at rest — the servers' panel credentials and their SOCKS5 proxies' passwords, the agents' bots' tokens, the
@@ -131,12 +145,32 @@ act for each other —, so the role is for people the owner trusts. The shop's c
   raw body with the method's webhook secret (kept encrypted), compared in constant time. A webhook no method signs is
   refused and changes nothing; one signed for another sum than the payment's is held for support. The webhook's address
   answers `404` for a gateway that takes no webhook.
+- A gateway whose webhook nothing signs (Rialit) is never believed at all: its webhook only names a payment, by the
+  gateway's id for it, and makes the shop ask the gateway — only about an unpaid payment of one of that driver's
+  methods, six times a minute at most for one payment, so a flood of forged webhooks asks the gateway nothing. A body
+  not in the gateway's shape — its JSON event, and the `X-Rialit-Event` and `X-Rialit-Delivery` headers saying the
+  same — is refused with `400`; anything else is answered `200` and changes nothing by itself.
+  The shop sets Rialit's webhook address itself only where the merchant's account has none: the account has one address,
+  which another site may be using, so another address is replaced only when the owner asks for it — warned that the
+  other site loses Rialit's webhooks —, never by a save; and Rialit tells the account's owner of every change.
 - The bank SMS a phone app forwards («تایید خودکار واریز») are taken only with the shop's own key in `X-API-Key`: one
   per shop, 32 random bytes, kept encrypted under `APP_KEY`, compared in constant time (`hash_equals`) and made anew
   from the panel on request — the old one stops working at once. A wrong key, or a shop that is none, answers `401`;
   only the right key hears that a shop is not listening (`403`).
   An SMS approves a card payment only when exactly one of the shop's open card payments asks its sum; the same SMS
   sent again is answered by what came of it the first time.
+- Rikhtam's deposits and crypto word come to an address of the shop's own (`/webhooks/rikhtam/{bot}`, the shop's
+  number, no secret in it), which the shop registers with Rikhtam itself, only over `https://`. Each must carry the
+  Rikhtam gateway's «کلید امنیتی» — the key the owner pasted in «تایید خودکار واریز» or in a Rikhtam crypto method,
+  kept encrypted and compared in constant time; a wrong key, or a shop that is none, answers `403` before anything else
+  is said, Rikhtam's health test (`test=1`) included, which with the right key changes nothing. A crypto word only
+  makes the shop ask Rikhtam about the invoice it names, among the payments of the methods that key opens. A deposit
+  is matched by its sum alone, as an SMS is — the one thing Rikhtam vouches for —, approves at most one payment, and is
+  kept once by Rikhtam's id for it; one attached by hand names its payment and is held to it being an open card payment
+  of the shop whose order's price it covers — one support approved already it only confirms, never delivering twice.
+  A key another shop of the same installation has connected is refused: Rikhtam sends a gateway's word to one address,
+  and registering it again would take that shop's deposits. Attaching from the panels asks for a recent sign-in, as an approval does,
+  and its list of Rikhtam's deposits likewise. Forgetting the key refuses Rikhtam's word from then on.
 
 ### Telegram, uploads and outgoing calls
 

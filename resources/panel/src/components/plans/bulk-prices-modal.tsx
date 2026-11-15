@@ -141,9 +141,11 @@ function BulkPricesForm({ plans, invalidates, onClose, onSaved }: Omit<BulkPrice
     throw failure
   }
 
+  // The change goes with the prices the preview showed: the server makes it on those or refuses (sent twice, the second).
   const apply = handleSubmit(async () => {
     if (!ready) return
-    const data = await submit(() => api.post('/plans/prices', shown.body).catch(refused), { invalidates })
+    const previewed = shown.changes.map(({ id, before }) => ({ id, before }))
+    const data = await submit(() => api.post('/plans/prices', { ...shown.body, previewed }).catch(refused), { invalidates })
     if (data) {
       toast.success(`قیمت ${formatNumber(changed)} پلن تغییر کرد`)
       onSaved(data.plans)

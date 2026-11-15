@@ -33,6 +33,8 @@ final class Principal
          * @var list<string>|null
          */
         public readonly ?array $grants = null,
+        /** Whether they work from the bot's private chat (Telegram\Admin): where their decisions are said to be made. */
+        public readonly bool $inBot = false,
     ) {}
 
     /** The principal a guard put on the request. */

@@ -21,10 +21,11 @@ use Psr\Http\Message\ResponseInterface;
  * (ProviderRegistry), so the panel — which costs a bcrypt and notifies its admins on each sign-in — is not signed in to
  * on every call. A kept token the panel refuses (expired, password changed) is renewed once.
  *
- * Failures are typed: ConnectionException (nothing answered), AuthenticationException (credentials refused),
- * NotFoundException (only PasarGuard's own "User not found" 404), UnexpectedResponseException (an unknown route, a
- * redirect, a web page: a wrong address or a panel too old) and PasarGuardApiException (the panel said no, in its
- * `detail`). No secret reaches a message or a log line: the key, token and password travel in headers and the sign-in
+ * Failures are typed: ConnectionException (nothing answered), AuthenticationException (credentials refused: a key
+ * unknown or unusable, a key without the right, a sign-in refused, an admin switched off), NotFoundException (only
+ * PasarGuard's own "User not found" 404), UnexpectedResponseException (an unknown route, a redirect, a web page: a wrong
+ * address or a panel too old) and PasarGuardApiException (the panel said no, in its `detail`: PasarGuardApiException::
+ * refused()). No secret reaches a message or a log line: the key, token and password travel in headers and the sign-in
  * form only, and a sign-in answer is never quoted.
  */
 final class PasarGuardClient
@@ -35,9 +36,19 @@ final class PasarGuardClient
     /** The `detail` of the framework's 404 for a route the panel does not have. */
     private const ROUTE_NOT_FOUND = 'Not Found';
 
-    /** What to do about a refused API key, in PasarGuard's own terms — appended to the generic explanation. */
-    private const HINT_KEY = 'کلید API پیدا نشد یا منقضی یا لغو شده است؛ از بخش API Keys پنل کلید تازه‌ای بسازید. کلید API از نسخه 5.1 پنل به بعد کار می‌کند؛ در نسخه‌های قدیمی‌تر با نام کاربری و رمز وصل شوید.';
-    private const HINT_KEY_SCOPE = 'کلید را با دسترسی کامل به کاربران و دسترسی خواندن گروه‌ها و سیستم بسازید (یا دسترسی‌های ادمین صاحب کلید را به آن بدهید).';
+    /** The `detail` of PasarGuard's 403 for an admin switched off — at sign-in, or on a token it signed before. */
+    private const DISABLED = 'your account has been disabled';
+
+    /** How PasarGuard's roles begin the 403 for an action the admin (or its key) may not take: "Permission denied: users.create". */
+    private const DENIED = 'Permission denied';
+
+    /**
+     * What to do about a refused API key, in PasarGuard's own terms — appended to the generic explanation. The panel
+     * answers 401 for a key it does not know and for one it no longer takes: revoked or switched off, past its date, out
+     * of requests, or of an admin switched off or removed.
+     */
+    private const HINT_KEY = 'کلید API پیدا نشد، منقضی یا لغو شده، به سقف درخواست‌هایش (Max Requests) رسیده، یا ادمینی که کلید به نام اوست غیرفعال شده است؛ از بخش API Keys پنل کلید تازه‌ای بسازید (بدون تاریخ انقضا و سقف درخواست) یا آن ادمین را فعال کنید. کلید API از نسخه 5.1 پنل به بعد کار می‌کند؛ در نسخه‌های قدیمی‌تر با نام کاربری و رمز وصل شوید.';
+    private const HINT_KEY_SCOPE = 'کلید را با گزینه «ارث‌بری مجوزهای مدیر» (Inherit admin permissions) بسازید، یا به آن دسترسی کاربرها (ایجاد، مشاهده، ویرایش، حذف، بازنشانی مصرف و لغو اشتراک)، مشاهده گروه‌ها (فهرست ساده هم کافی است) و مشاهده سیستم بدهید.';
     private const HINT_DISABLED = 'حساب این ادمین در PasarGuard غیرفعال است؛ آن را در بخش Admins پنل فعال کنید.';
     private const HINT_ENV_ADMIN = 'ادمینی که در فایل env پنل تعریف شده (SUDO_USERNAME) بیرون از حالت Debug وارد نمی‌شود؛ در داشبورد یک ادمین بسازید و با آن وصل شوید.';
     private const HINT_ADDRESS = "آدرس پنل همان آدرس داشبورد بدون \u{2068}/dashboard\u{2069} است (مثل https://panel.example.com:8000) و نسخه پنل باید 3.1 یا بالاتر باشد.";
@@ -92,20 +103,15 @@ final class PasarGuardClient
     }
 
     /**
-     * GET one of the panel's public subscription routes — `$path` under the panel's address, without the API's
-     * credentials, as a client app asks it with a link's token. Its JSON object, or null for any other answer: a token it
-     * did not sign or revoked, a page, an error. Such an answer is no failure of the panel's API, and the path — which
-     * holds a customer's token — goes into no message.
+     * GET one of the panel's public subscription routes, without the API's credentials: its JSON object, or null for any
+     * other answer (PanelHttp::anonymous()).
      *
      * @return array<string, mixed>|null
      * @throws ProviderException when nothing answered
      */
     public function anonymous(string $path): ?array
     {
-        $response = $this->send('GET', $path, []);
-        $body = $response->getStatusCode() === 200 ? json_decode((string) $response->getBody(), true) : null;
-
-        return is_array($body) && $body !== [] && !array_is_list($body) ? $body : null;
+        return $this->http->anonymous($this->connection, $path);
     }
 
     /**
@@ -205,12 +211,15 @@ final class PasarGuardClient
 
         $detail = self::detail($body);
 
+        // A 403 is a key without the right only when the panel says "Permission denied"; its other 403s — an admin out of
+        // traffic, a role's rule, another admin's user on a panel before 5.0 — are refusals of the call, either way in.
         throw match (true) {
             $status === 401 => AuthenticationException::rejectedToken($status, self::HINT_KEY),
-            $status === 403 && $this->credentials->usesToken() => AuthenticationException::insufficientScope($detail, self::HINT_KEY_SCOPE),
+            $status === 403 && $detail === self::DISABLED => AuthenticationException::loginFailed($detail, false, self::HINT_DISABLED),
+            $status === 403 && $this->credentials->usesToken() && str_starts_with($detail, self::DENIED) => AuthenticationException::insufficientScope($detail, self::HINT_KEY_SCOPE),
             $status === 404 && $detail === self::USER_NOT_FOUND => new NotFoundException("PasarGuard {$method} {$path}: {$detail}"),
             $status === 404 && $detail === self::ROUTE_NOT_FOUND => self::notTheApi($response),
-            default => new PasarGuardApiException($method, $path, $status, $detail),
+            default => PasarGuardApiException::refused($method, $path, $status, $detail),
         };
     }
 

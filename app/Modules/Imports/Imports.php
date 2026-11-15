@@ -22,6 +22,7 @@ use App\Modules\Imports\Models\ImportProblem;
 use App\Modules\Imports\Models\ImportRow;
 use App\Modules\Imports\Sources\RowWriter;
 use App\Modules\Imports\Sources\Stager;
+use App\Modules\Imports\Staging\Schema;
 use App\Modules\Imports\Writers\Run;
 use App\Modules\Imports\Writers\ServerWriter;
 use App\Support\Text;
@@ -404,8 +405,10 @@ final class Imports
             return;
         }
         try {
-            $recognition = $migrator->recognize($this->stager->schema($import));
+            $schema = $this->stager->schema($import);
+            $recognition = $migrator->recognize($schema);
             $survey = $recognition->ok ? $migrator->survey($this->stager->staged($import, $migrator)) : null;
+            $instead = $survey === null ? $this->recognizedBy($schema, $migrator) : null;
         } catch (\Throwable $e) {
             $this->broken($import, $e);
 
@@ -414,9 +417,13 @@ final class Imports
         if ($survey === null) {
             // A data-only export lacks what tells its tables apart: said as that, not as another bot's data.
             $unmapped = array_values(array_filter((array) ($import->reading['unmapped'] ?? []), 'is_string'));
-            $this->fail($import, $unmapped !== []
-                ? sprintf(ImportRefusedException::NO_STRUCTURE, self::named($unmapped))
-                : sprintf(ImportRefusedException::NOT_THIS_BOT, Run::isolate($migrator->describe()->label), self::named($recognition->missing)));
+            $label = Run::isolate($migrator->describe()->label);
+            $this->fail($import, match (true) {
+                $unmapped !== [] => sprintf(ImportRefusedException::NO_STRUCTURE, self::named($unmapped)),
+                $instead !== null => sprintf(ImportRefusedException::ANOTHER_BOT, Run::isolate($instead), $label),
+                $recognition->missing === [] => sprintf(ImportRefusedException::NOT_ITS, $label),
+                default => sprintf(ImportRefusedException::NOT_THIS_BOT, $label, self::named($recognition->missing)),
+            });
 
             return;
         }
@@ -499,6 +506,21 @@ final class Imports
     private static function named(array $names): string
     {
         return implode('، ', array_map(Run::isolate(...), array_slice($names, 0, self::FEW))) . (count($names) > self::FEW ? '، …' : '');
+    }
+
+    /**
+     * The bot whose data the import read, when the one picked does not take it: another migrator's that does (Faoxima's
+     * database told from MirzaBot's, its ancestor's, say); null for none.
+     */
+    private function recognizedBy(Schema $schema, Migrator $picked): ?string
+    {
+        foreach ($this->migrators->all() as $migrator) {
+            if ($migrator->key() !== $picked->key() && $migrator->recognize($schema)->ok) {
+                return $migrator->describe()->label;
+            }
+        }
+
+        return null;
     }
 
     /** The import failed, in the owner's words — unless it left reading or importing meanwhile (cancelled). */

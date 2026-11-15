@@ -153,8 +153,11 @@ final class AgentAuth implements PanelAuth
         return !$bot->isMain() && $bot->status() === BotStatus::Active;
     }
 
-    /** "@agent_bot" — or the agent's own handle while their bot has no @username yet. */
-    private static function name(Bot $bot): string
+    /**
+     * The name an agent's decisions keep: "@agent_bot" — or the agent's own handle while their bot has no @username yet.
+     * Their panel and their bot's private chat (Telegram\Admin\AdminSeats) name them the same.
+     */
+    public static function name(Bot $bot): string
     {
         if (($bot->username ?? '') !== '') {
             return '@' . $bot->username;

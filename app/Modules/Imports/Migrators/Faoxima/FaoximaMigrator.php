@@ -7,9 +7,10 @@ namespace App\Modules\Imports\Migrators\Faoxima;
 use App\Core\Drivers\Descriptor;
 use App\Core\Forms\Form;
 use App\Modules\Imports\Contracts\Migrator;
-use App\Modules\Imports\Records\ImportedCard;
-use App\Modules\Imports\Records\ImportedChannel;
-use App\Modules\Imports\Records\ImportedCustomer;
+use App\Modules\Imports\Migrators\MirzaBot\Cell;
+use App\Modules\Imports\Migrators\MirzaBot\Line;
+use App\Modules\Imports\Migrators\MirzaBot\Notes;
+use App\Modules\Imports\Migrators\MirzaBot\People;
 use App\Modules\Imports\Records\ImportedDiscountCode;
 use App\Modules\Imports\Records\ImportedGiftCode;
 use App\Modules\Imports\Records\ImportedService;
@@ -19,14 +20,9 @@ use App\Modules\Imports\Staging\Table;
 use App\Modules\Imports\Survey\LeftBehind;
 use App\Modules\Imports\Survey\Recognition;
 use App\Modules\Imports\Survey\Survey;
-use App\Modules\Imports\Survey\SurveyAdmin;
-use App\Modules\Imports\Survey\SurveyGroup;
 use App\Modules\Orders\Enums\OrderType;
-use App\Support\BankCard;
-use App\Support\Input;
 use App\Support\Money;
 use App\Support\Persian;
-use Illuminate\Support\Carbon;
 
 /**
  * Faoxima (https://github.com/Mmd-Amir/Faoxima), a Telegram VPN shop of PHP and MySQL descended from MirzaBot, read from
@@ -38,15 +34,9 @@ final class FaoximaMigrator implements Migrator
 {
     private const KEY = 'faoxima';
 
-    /** The tables and columns every Faoxima database has — and MirzaBot's, its ancestor's, too. */
-    private const CORE = [
-        'user' => ['id', 'Balance', 'User_Status', 'agent'],
-        'invoice' => ['id_invoice', 'id_user', 'username', 'Service_location', 'Status'],
-        'marzban_panel' => ['name_panel', 'type', 'url_panel'],
-    ];
-
-    /** A table only Faoxima has: what tells it from MirzaBot (as do its panels' sign-in modes). */
+    /** What only Faoxima has, never MirzaBot, its ancestor: a table of its own, and its panels' sign-in modes. */
     private const ITS_OWN = 'wallet_ledger';
+    private const SIGN_IN_MODES = ['pasarguard_auth_mode', 'xui_api_mode'];
 
     /** A service whose client is on its panel (`invoice.Status`); every other is unpaid, removed or gone from its panel. */
     private const LIVE = ['active', 'end_of_time', 'end_of_volume', 'sendedwarn', 'send_on_hold', 'disabled', 'disablebyadmin'];
@@ -68,24 +58,6 @@ final class FaoximaMigrator implements Migrator
     /** The product name Faoxima gives a free test account. */
     private const TEST = 'سرویس تست';
 
-    /** What Faoxima writes for a customer its admin excused from giving a phone (its spelling, and the right one). */
-    private const PHONE_EXCUSED = ['confrim number by admin', 'confirm number by admin'];
-
-    /** What Faoxima writes for a phone it has not got. */
-    private const NO_PHONE = ['none', ...self::PHONE_EXCUSED];
-
-    /** What Faoxima writes for a Telegram account without a @username. */
-    private const NO_USERNAME = ['none', 'null', 'not_username'];
-
-    /** Faoxima's full admins (`admin.rule`); its Seller and support staff are listed, never made admins here. */
-    private const ADMINISTRATOR = 'administrator';
-
-    /** A customer Faoxima's admins blocked (`User_Status`). */
-    private const BLOCKED = 'block';
-
-    /** Faoxima's agent levels (`user.agent`) and the customer groups, paying agent prices, they join. */
-    private const GROUPS = ['n' => 'نماینده عادی', 'n2' => 'نماینده پیشرفته'];
-
     /** Who a discount code is for (`DiscountSell.agent`): everyone, by these words or by naming every audience. */
     private const EVERYONE = ['allusers', 'all'];
 
@@ -105,21 +77,10 @@ final class FaoximaMigrator implements Migrator
     private const TOP_UP_ONLY = 'فقط برای شارژ کیف پول بود.';
     private const TOP_UP_TOO = 'برای شارژ کیف پول هم بود.';
 
-    /** A reseller bot a customer belongs to that Faoxima no longer has. */
-    private const GONE_RESELLER = 'ربات نماینده حذف‌شده';
-
-    private const DEBTORS = '%s مشتری در ربات قبلی بدهکار بودند (جمعا %s)؛ کیف پولشان اینجا هم منفی می‌آید.';
-    private const STAFF = '%s نفر از ادمین‌های ربات قبلی پشتیبان یا فروشنده بودند؛ در فهرست هستند ولی اینجا ادمین نمی‌شوند.';
     private const CREDIT = 'سقف خرید اعتباری %s نماینده (خرید با موجودی منفی) منتقل نمی‌شود.';
-    private const AGENCY_ENDS = '%s نماینده در ربات قبلی تاریخ پایان نمایندگی داشتند؛ این تاریخ منتقل نمی‌شود و اینجا نماینده می‌مانند تا خودتان عوضشان کنید.';
     private const PERSONAL = '%s مشتری تخفیف شخصی دارند؛ ربات قبلی کد تخفیف را از آن‌ها نمی‌پذیرفت، ولی اینجا کدهای تخفیف برایشان هم کار می‌کند.';
     private const PLANLESS = '%s سرویس به هیچ پلنی وصل نشد (محصولش در ربات قبلی تغییر نام داده یا حذف شده بود)؛ بدون پلن می‌آید و با تمدید، پلن می‌گیرد.';
-    private const AWAITING_PAYMENTS = '%s پرداخت در ربات قبلی هنوز منتظر تایید است؛ اول آن‌ها را آنجا تایید کنید و بعد پشتیبان تازه بگیرید، وگرنه این مبلغ‌ها به کیف پول آن مشتری‌ها نمی‌رسد.';
     private const LIMITED_CARDS = '%s کارت در ربات قبلی فقط به مشتری‌های انتخاب‌شده نشان داده می‌شد؛ اینجا هر کارت روشن به همه نشان داده می‌شود، پس پیش از روشن کردنشان دقت کنید.';
-    private const OLD_THREE_XUI = "پنل %s با روش قدیمی (نام کاربری و رمز) به ربات قبلی وصل بود؛ کانکتور \u{2068}3X-UI\u{2069} این فروشگاه نسخه 3 به بعد را می‌خواهد و سرویس‌های پنل قدیمی‌تر منتقل نمی‌شوند.";
-    private const SENIOR_PRICES = 'قیمت‌های جدای «نماینده پیشرفته» منتقل نمی‌شود: هر پلن اینجا یک قیمت نمایندگی دارد، همان قیمت «نماینده عادی» و اگر نبود، پیشرفته.';
-    private const LINKS_THROUGH_BOT = 'لینک اشتراک مشتری‌های پنل %s از دامنه ربات قبلی می‌گذشت؛ با خاموش شدن آن ربات این لینک‌ها کار نمی‌کنند و مشتری‌ها باید لینک تازه را از این ربات بگیرند.';
-    private const UNCHECKED_TLS = 'ربات قبلی گواهی TLS پنل‌ها را بررسی نمی‌کرد، ولی این فروشگاه بررسی می‌کند: پنلی با گواهی خودامضا یا منقضی به‌عنوان سرور تازه اضافه نمی‌شود؛ آن را در «سرورها» با «بررسی گواهی TLS» خاموش اضافه کنید و همان را برایش انتخاب کنید.';
 
     public function key(): string
     {
@@ -136,7 +97,7 @@ final class FaoximaMigrator implements Migrator
             notes: [
                 'نسخه 1 به بعد Faoxima خوانده می‌شود؛ Faoxima نسخه‌اش را در دیتابیس نگه نمی‌دارد.',
                 'فایل پشتیبان همان backup.zip است که ربات قبلی هر چند ساعت به کانال گزارشش می‌فرستد؛ خروجی phpMyAdmin هم پذیرفته می‌شود.',
-                "سرویس‌های پنل‌های \u{2068}Marzban\u{2069}، \u{2068}PasarGuard\u{2069} و \u{2068}3X-UI\u{2069} منتقل می‌شوند؛ \u{2068}Rebecca\u{2069}، \u{2068}Remnawave\u{2069}، \u{2068}Guard\u{2069} و \u{2068}WGDashboard\u{2069} هنوز نه.",
+                "سرویس‌های پنل‌های \u{2068}Marzban\u{2069}، \u{2068}PasarGuard\u{2069}، \u{2068}3X-UI\u{2069}، \u{2068}Rebecca\u{2069} و \u{2068}Remnawave\u{2069} منتقل می‌شوند؛ \u{2068}Guard\u{2069} و \u{2068}WGDashboard\u{2069} هنوز نه.",
                 'تاریخچه پرداخت‌ها و کیف پول، تیکت‌ها، ربات‌های نمایندگی و تنظیمات و متن‌های ربات منتقل نمی‌شوند.',
             ],
             traits: [self::MARK => 'FX', self::VENDOR => 'https://github.com/Mmd-Amir/Faoxima'],
@@ -155,9 +116,9 @@ final class FaoximaMigrator implements Migrator
             'marzban_panel' => new Table(
                 [
                     'name_panel', 'code_panel', 'type', 'status', 'url_panel', 'username_panel', 'password_panel', 'api_key', 'pasarguard_auth_mode', 'xui_api_token', 'xui_api_mode',
-                    'linksubx', 'version_panel', 'subvip', 'limit_panel', 'priceextravolume', 'priceextratime', 'pricecustomvolume', 'pricecustomtime',
+                    'remna_api_token', 'linksubx', 'version_panel', 'subvip', 'limit_panel', 'priceextravolume', 'priceextratime', 'pricecustomvolume', 'pricecustomtime',
                 ],
-                secrets: ['password_panel', 'api_key', 'xui_api_token'],
+                secrets: ['password_panel', 'api_key', 'xui_api_token', 'remna_api_token'],
             ),
             'product' => new Table(['id', 'code_product', 'name_product', 'price_product', 'Volume_constraint', 'Service_time', 'Location', 'agent', 'category', 'note', 'ip_limit', 'position', 'hwid_limit', 'one_buy_status', 'data_limit_reset']),
             'admin' => new Table(['id_admin', 'rule']),
@@ -167,7 +128,7 @@ final class FaoximaMigrator implements Migrator
             'card_number' => new Table(['id', 'cardnumber', 'namecard']),
             'card_whitelist' => new Table(['card_id']),
             'botsaz' => new Table(['id', 'id_user', 'username', 'bot_token'], secrets: ['bot_token']),
-            'Payment_report' => new Table(['id', 'payment_Status']),
+            'Payment_report' => new Table(['id', 'payment_Status', 'bottype'], secrets: ['bottype']),
             'support_message' => new Table(['id', 'Tracking']),
             'wallet_ledger' => new Table(['id']),
             'service_other' => new Table(['id']),
@@ -175,27 +136,24 @@ final class FaoximaMigrator implements Migrator
         ];
     }
 
-    /** Faoxima's core tables, and a mark of Faoxima's own: a MirzaBot database has the first and not the second. */
+    /** The line's core tables (Line::missing()), and Faoxima's marks: a MirzaBot database has the first and not the second. */
     public function recognize(Schema $schema): Recognition
     {
-        $missing = [];
-        foreach (self::CORE as $table => $columns) {
-            if (!$schema->has($table)) {
-                $missing[] = $table;
-
-                continue;
-            }
-            foreach ($columns as $column) {
-                if (!$schema->hasColumns($table, $column)) {
-                    $missing[] = "{$table}.{$column}";
-                }
-            }
-        }
-        if (!$schema->has(self::ITS_OWN) && !$schema->hasColumns('marzban_panel', 'pasarguard_auth_mode') && !$schema->hasColumns('marzban_panel', 'xui_api_mode')) {
+        $missing = Line::missing($schema);
+        if (!self::marked($schema)) {
             $missing[] = self::ITS_OWN;
         }
 
         return $missing === [] ? Recognition::yes() : Recognition::no($missing);
+    }
+
+    /**
+     * Whether a database bears a mark of Faoxima's own — its own table, or its panels' sign-in modes —, which tells it
+     * from MirzaBot's (whose recognize() asks this too).
+     */
+    public static function marked(Schema $schema): bool
+    {
+        return $schema->has(self::ITS_OWN) || array_filter(self::SIGN_IN_MODES, static fn(string $column): bool => $schema->hasColumns('marzban_panel', $column)) !== [];
     }
 
     /**
@@ -206,48 +164,9 @@ final class FaoximaMigrator implements Migrator
     {
         $panels = Panels::of($staged);
         $catalog = Catalog::of($staged, $panels);
-        $admins = self::admins($staged);
-        $resellers = self::resellers($staged);
-        $buyers = self::buyers($staged);
-        $counts = array_fill_keys(Survey::KINDS, 0);
-
-        $balanceTotal = '0';
-        $debtors = 0;
-        $debt = '0';
-        $groups = array_fill_keys(self::GROUPS, 0);
-        $credit = 0;
-        $agencyEnds = 0;
-        $personal = 0;
-        /** @var array<string, ImportedCustomer> $staff Faoxima's admins of every role who are customers too */
-        $staff = [];
-        foreach ($staged->rows('user') as $row) {
-            $customer = self::customer($row, $admins, $resellers, $buyers);
-            $counts['customers']++;
-            if (array_key_exists($customer->key, $admins)) {
-                $staff[$customer->key] = $customer;
-            }
-            if ($customer->reseller !== null) {
-                $counts['resellers']++;
-
-                continue;
-            }
-            if (Money::compare($customer->balance, 0) !== 0) {
-                $counts['balances']++;
-                $balanceTotal = Money::add($balanceTotal, $customer->balance);
-            }
-            if (Money::compare($customer->balance, 0) < 0) {
-                $debtors++;
-                $debt = Money::subtract($debt, $customer->balance);
-            }
-            if ($customer->group !== null) {
-                $groups[$customer->group]++;
-                // An agency whose end has not come yet (one past it is a customer's: no group).
-                $agencyEnds += Cell::moment($row['expire'] ?? null) !== null ? 1 : 0;
-            }
-            // Only advanced agents buy on credit, down to `maxbuyagent` below zero.
-            $credit += $customer->group === self::GROUPS['n2'] && Cell::whole($row['maxbuyagent'] ?? null) > 0 ? 1 : 0;
-            $personal += $customer->discountPercent > 0 ? 1 : 0;
-        }
+        $people = People::of($staged, self::bought(...));
+        $census = $people->census();
+        $counts = array_replace(array_fill_keys(Survey::KINDS, 0), ['customers' => $census->customers, 'resellers' => $census->resellers, 'balances' => $census->balances]);
 
         $onPanels = [];
         $stock = 0;
@@ -261,96 +180,68 @@ final class FaoximaMigrator implements Migrator
             } elseif ($standing === self::GONE) {
                 $gone++;
             } elseif ($standing === self::ON_PANEL) {
-                $service = self::service($row, $catalog, $resellers);
+                $service = self::service($row, $catalog, $people);
                 $counts[$service->test ? 'tests' : 'services']++;
                 $onPanels[$service->panelKey] = ($onPanels[$service->panelKey] ?? 0) + 1;
                 $stranded += $panels->hasConnector($service->panelKey) ? 0 : 1;
                 $planless += !$service->test && $service->planKey === null ? 1 : 0;
             }
         }
+        // The bot's own payments awaiting approval: a reseller bot's (`bottype`) credit the wallets in its files.
         $awaiting = 0;
         foreach ($staged->rows('Payment_report') as $row) {
-            $awaiting += in_array(strtolower(trim((string) ($row['payment_Status'] ?? ''))), self::AWAITING, true) ? 1 : 0;
+            $awaiting += in_array(strtolower(trim((string) ($row['payment_Status'] ?? ''))), self::AWAITING, true) && $people->reseller($row['bottype'] ?? null) === null ? 1 : 0;
         }
 
         $counts['plans'] = $catalog->count();
-        $counts['discount_codes'] = iterator_count($this->discountCodes($staged));
+        $codes = iterator_to_array($this->discountCodes($staged), false);
+        $counts['discount_codes'] = count($codes);
         $counts['gift_codes'] = iterator_count($this->giftCodes($staged));
         $counts['channels'] = iterator_count($this->channels($staged));
         $counts['cards'] = iterator_count($this->cards($staged));
 
         $imported = $panels->imported($onPanels);
-        $warnings = [];
-        if ($debtors > 0) {
-            $warnings[] = sprintf(self::DEBTORS, Persian::number($debtors), Money::format($debt));
-        }
-        $helpers = count(array_filter($staff, static fn(ImportedCustomer $customer): bool => !$customer->admin));
-        if ($helpers > 0) {
-            $warnings[] = sprintf(self::STAFF, Persian::number($helpers));
-        }
-        if ($credit > 0) {
-            $warnings[] = sprintf(self::CREDIT, Persian::number($credit));
-        }
-        if ($agencyEnds > 0) {
-            $warnings[] = sprintf(self::AGENCY_ENDS, Persian::number($agencyEnds));
-        }
-        // Faoxima took no discount code from a customer with a percent of their own (DiscountSupport::hasEligible()).
-        if ($personal > 0 && $counts['discount_codes'] > 0) {
-            $warnings[] = sprintf(self::PERSONAL, Persian::number($personal));
-        }
-        if ($catalog->seniorPrices) {
-            $warnings[] = self::SENIOR_PRICES;
-        }
-        if ($planless > 0) {
-            $warnings[] = sprintf(self::PLANLESS, Persian::number($planless));
-        }
-        if ($awaiting > 0) {
-            $warnings[] = sprintf(self::AWAITING_PAYMENTS, Persian::number($awaiting));
-        }
-        $throughBot = array_filter($panels->linkedThroughBot(), static fn(string $name): bool => isset($onPanels[$name]));
-        if ($throughBot !== []) {
-            $warnings[] = sprintf(self::LINKS_THROUGH_BOT, self::names($throughBot));
-        }
-        $oldThreeXui = $panels->oldThreeXui();
-        if ($oldThreeXui !== []) {
-            $warnings[] = sprintf(self::OLD_THREE_XUI, self::names($oldThreeXui));
-        }
-        foreach ($imported as $panel) {
-            if ($panel->addable() && str_starts_with(strtolower((string) $panel->url), 'https://')) {
-                $warnings[] = self::UNCHECKED_TLS;
-
-                break;
-            }
-        }
+        // Only advanced agents buy on credit, down to `maxbuyagent` below zero; a limit is what does not come.
+        // Faoxima took no discount code from a customer with a percent of their own (DiscountSupport::hasEligible()): told
+        // when a code that comes would work for them here.
+        $coming = array_filter($codes, static fn(ImportedDiscountCode $code): bool => !$code->usedUp() && !$code->ended());
         $limited = self::limitedCards($staged);
-        if ($limited > 0) {
-            $warnings[] = sprintf(self::LIMITED_CARDS, Persian::number($limited));
-        }
+        $warnings = [
+            ...$census->warnings(
+                $census->creditCaps > 0 ? sprintf(self::CREDIT, Persian::number($census->creditCaps)) : null,
+                $census->personal > 0 && $coming !== [] ? sprintf(self::PERSONAL, Persian::number($census->personal)) : null,
+            ),
+            ...array_filter([
+                $catalog->seniorPrices ? Notes::SENIOR_PRICES : null,
+                $planless > 0 ? sprintf(self::PLANLESS, Persian::number($planless)) : null,
+                Notes::awaiting($awaiting),
+            ]),
+            ...Notes::panels($panels->linkedThroughBot(), $panels->oldThreeXui(), $imported),
+            ...($limited > 0 ? [sprintf(self::LIMITED_CARDS, Persian::number($limited))] : []),
+        ];
 
         return new Survey(
             version: null,
             counts: $counts,
-            balanceTotal: $balanceTotal,
+            balanceTotal: $census->balanceTotal,
             panels: $imported,
-            groups: array_values(array_map(static fn(string $name, int $customers): SurveyGroup => new SurveyGroup($name, true, $customers), array_keys(array_filter($groups)), array_filter($groups))),
+            groups: $census->surveyGroups(),
             // Those the owner's «مدیرها» would make admins here — Faoxima's administrators alone; its Seller and support
             // staff are only a warning.
-            admins: array_values(array_map(
-                static fn(ImportedCustomer $customer): SurveyAdmin => new SurveyAdmin($customer->key, $customer->telegramId, $customer->username, $admins[$customer->key]),
-                array_filter($staff, static fn(ImportedCustomer $customer): bool => $customer->admin),
-            )),
+            admins: $census->admins,
             left: array_values(array_filter([
                 new LeftBehind('تاریخچه پرداخت‌ها', $staged->count('Payment_report')),
-                new LeftBehind('تیکت‌های پشتیبانی', self::threads($staged)),
+                new LeftBehind('تیکت‌های پشتیبانی', Notes::threads($staged)),
                 new LeftBehind('تاریخچه کیف پول', $staged->count('wallet_ledger')),
                 new LeftBehind('تاریخچه تمدیدها و خریدهای اضافه سرویس‌ها', $staged->count('service_other')),
                 new LeftBehind('ربات‌های نمایندگی', $staged->count('botsaz')),
+                new LeftBehind('کیف پول مشتری‌های ربات‌های نمایندگی (در فایل‌های ربات قبلی است، نه دیتابیسش)', $census->resellers),
                 new LeftBehind('کانفیگ‌های انبار و فروش دستی', $stock),
                 new LeftBehind('سرویس‌های پنل‌هایی که این فروشگاه کانکتورشان را ندارد', $stranded),
                 new LeftBehind('سرویس‌های پنل‌هایی که در ربات قبلی حذف شده بودند', $gone),
                 new LeftBehind('قیمت‌های حجم و زمان اضافه و سرویس دلخواه پنل‌ها', $panels->withExtraPrices()),
                 new LeftBehind('تنظیمات محصول‌ها (محدودیت دستگاه، خرید یک‌باره، ریست دوره‌ای حجم)', $catalog->withOptions),
-                new LeftBehind('تاریخچه استفاده از کدهای تخفیف و هدیه', $staged->count('Giftcodeconsumed')),
+                new LeftBehind('تاریخچه استفاده از کدهای تخفیف و هدیه (سقف استفاده هر مشتری از نو شمرده می‌شود)', $staged->count('Giftcodeconsumed')),
             ], static fn(LeftBehind $left): bool => $left->count > 0)),
             warnings: $warnings,
         );
@@ -358,12 +249,7 @@ final class FaoximaMigrator implements Migrator
 
     public function customers(Staged $staged, int $after = 0): iterable
     {
-        $admins = self::admins($staged);
-        $resellers = self::resellers($staged);
-        $buyers = self::buyers($staged);
-        foreach ($staged->rows('user', $after) as $seq => $row) {
-            yield $seq => self::customer($row, $admins, $resellers, $buyers);
-        }
+        return People::of($staged, self::bought(...))->customers($after);
     }
 
     /** In Faoxima's own order (Catalog::plans()). */
@@ -377,10 +263,10 @@ final class FaoximaMigrator implements Migrator
     {
         $panels = Panels::of($staged);
         $catalog = Catalog::of($staged, $panels);
-        $resellers = self::resellers($staged);
+        $people = People::of($staged);
         foreach ($staged->rows('invoice', $after) as $seq => $row) {
             if (self::standing($row, $panels) === self::ON_PANEL) {
-                yield $seq => self::service($row, $catalog, $resellers);
+                yield $seq => self::service($row, $catalog, $people);
             }
         }
     }
@@ -418,95 +304,29 @@ final class FaoximaMigrator implements Migrator
         }
     }
 
-    /** Each by the chat Faoxima checked membership in (chat()): one it could not tell comes as it was kept. */
+    /** Each by the chat Faoxima checked membership in (Line::channels()). */
     public function channels(Staged $staged, int $after = 0): iterable
     {
-        foreach ($staged->rows('channels', $after) as $seq => $row) {
-            $link = Cell::text($row['link'] ?? null);
-            if ($link === null) {
-                continue;
-            }
-            $link = self::chat($link) ?? $link;
-            $invite = Cell::text($row['linkjoin'] ?? null);
-            yield $seq => new ImportedChannel(
-                key: $link,
-                link: $link,
-                title: Cell::text($row['remark'] ?? null),
-                inviteLink: $invite !== null && preg_match('#^https?://#i', $invite) === 1 ? $invite : null,
-            );
-        }
+        return Line::channels($staged, $after);
     }
 
-    /** Each card by its digits — every one comes switched off here, whatever Faoxima showed (ImportedCard). */
+    /** Each card by its digits (Line::cards()). */
     public function cards(Staged $staged, int $after = 0): iterable
     {
-        foreach ($staged->rows('card_number', $after) as $seq => $row) {
-            $number = BankCard::normalize((string) ($row['cardnumber'] ?? ''));
-            if ($number === '') {
-                continue;
-            }
-            yield $seq => new ImportedCard(
-                key: $number,
-                number: $number,
-                holder: Cell::text($row['namecard'] ?? null) ?? '',
-            );
-        }
+        return Line::cards($staged, $after);
     }
 
     /**
-     * A customer: their Telegram id is their key (text that is no id comes with id 0, for the core to name), the agent
-     * level their group, `affiliates` who brought them, `bottype` the reseller bot they came by. An admin only when
-     * Faoxima's full admin (`administrator`): its Seller and support staff are no admins here. An agency whose end
-     * (`expire`) has come is a customer's.
+     * Whether an invoice made its customer one who had bought in Faoxima: one that is no test, of a price above 0, that
+     * Faoxima delivered (any state but unpaid and unsuccessful).
      *
      * @param array<string, ?string> $row
-     * @param array<string, ?string> $admins
-     * @param array<string, string> $resellers
-     * @param array<string, true> $buyers buyers()
      */
-    private static function customer(array $row, array $admins, array $resellers, array $buyers): ImportedCustomer
+    private static function bought(array $row): bool
     {
-        $key = trim((string) ($row['id'] ?? ''));
-        $referrer = Cell::text($row['affiliates'] ?? null);
-        $username = ltrim(trim((string) ($row['username'] ?? '')), '@');
-        $phone = trim((string) ($row['number'] ?? ''));
-        $agencyEnds = Cell::moment($row['expire'] ?? null);
+        $status = strtolower(trim((string) ($row['Status'] ?? '')));
 
-        return new ImportedCustomer(
-            key: $key,
-            telegramId: Input::telegramIdOf($key) ?? 0,
-            username: preg_match('/^\w{1,64}$/', $username) === 1 && !in_array(strtolower($username), self::NO_USERNAME, true) ? $username : null,
-            phone: preg_match('/\d/', $phone) === 1 && !in_array(strtolower($phone), self::NO_PHONE, true) ? $phone : null,
-            banned: strtolower(trim((string) ($row['User_Status'] ?? ''))) === self::BLOCKED,
-            balance: Cell::amount($row['Balance'] ?? null),
-            discountPercent: min(100, max(0, Cell::whole($row['pricediscount'] ?? null))),
-            referrerKey: $referrer !== null && $referrer !== '0' && $referrer !== $key ? $referrer : null,
-            group: $agencyEnds !== null && $agencyEnds <= Carbon::now() ? null : self::GROUPS[strtolower(trim((string) ($row['agent'] ?? '')))] ?? null,
-            admin: strtolower((string) ($admins[$key] ?? '')) === self::ADMINISTRATOR,
-            joinedAt: Cell::moment($row['register'] ?? null),
-            reseller: self::resellerOf($row['bottype'] ?? null, $resellers),
-            boughtBefore: isset($buyers[$key]),
-            phoneExempt: in_array(strtolower($phone), self::PHONE_EXCUSED, true),
-        );
-    }
-
-    /**
-     * The customers who bought in Faoxima, by key: an invoice that is no test, of a price above 0, that Faoxima
-     * delivered (any state but unpaid and unsuccessful).
-     *
-     * @return array<string, true>
-     */
-    private static function buyers(Staged $staged): array
-    {
-        $buyers = [];
-        foreach ($staged->rows('invoice') as $row) {
-            $status = strtolower(trim((string) ($row['Status'] ?? '')));
-            if ($status !== '' && !in_array($status, self::UNDELIVERED, true) && Cell::text($row['name_product'] ?? null) !== self::TEST && Money::isPositive(Cell::amount($row['price_product'] ?? null))) {
-                $buyers[trim((string) ($row['id_user'] ?? ''))] = true;
-            }
-        }
-
-        return $buyers;
+        return $status !== '' && !in_array($status, self::UNDELIVERED, true) && Cell::text($row['name_product'] ?? null) !== self::TEST && Money::isPositive(Cell::amount($row['price_product'] ?? null));
     }
 
     /**
@@ -536,13 +356,12 @@ final class FaoximaMigrator implements Migrator
 
     /**
      * A live service on a panel (standing() ON_PANEL): its client's name there is the invoice's `username` (3x-ui's
-     * client email), its plan the product of its name — or, under a name Faoxima no longer has, the one plan of its
-     * traffic and days on its panel (Catalog::planLike()) —, its label the customer's own note.
+     * client email), its plan the one it was sold under (Sold::planOf()) — none for a test —, its label the customer's own
+     * note.
      *
      * @param array<string, ?string> $row
-     * @param array<string, string> $resellers
      */
-    private static function service(array $row, Catalog $catalog, array $resellers): ImportedService
+    private static function service(array $row, Catalog $catalog, People $people): ImportedService
     {
         $product = Cell::text($row['name_product'] ?? null);
         $test = $product === self::TEST;
@@ -553,10 +372,10 @@ final class FaoximaMigrator implements Migrator
             customerKey: trim((string) ($row['id_user'] ?? '')),
             panelKey: $panel,
             remoteName: (string) Cell::text($row['username'] ?? null),
-            planKey: $test ? null : $catalog->planNamed($product) ?? $catalog->planLike($row['Volume'] ?? null, $row['Service_time'] ?? null, $panel),
+            planKey: $test ? null : $catalog->sold->planOf($product, $row['Volume'] ?? null, $row['Service_time'] ?? null, $panel),
             label: Cell::text($row['note'] ?? null),
             test: $test,
-            reseller: self::resellerOf($row['bottype'] ?? null, $resellers),
+            reseller: $people->reseller($row['bottype'] ?? null),
         );
     }
 
@@ -664,7 +483,7 @@ final class FaoximaMigrator implements Migrator
         if ($code === null || in_array(strtolower($code), ['all', '0'], true)) {
             return null;
         }
-        $plan = $catalog->planOfProduct($code);
+        $plan = $catalog->sold->planOfProduct($code);
 
         return $plan === null ? [] : [$plan];
     }
@@ -683,69 +502,6 @@ final class FaoximaMigrator implements Migrator
         return $target === null || $target === '0' ? null : $target;
     }
 
-    /**
-     * The reseller bot a token (`bottype`) is of, by its name; null for the bot itself (no token, or «0»).
-     *
-     * @param array<string, string> $resellers
-     */
-    private static function resellerOf(?string $token, array $resellers): ?string
-    {
-        $token = Cell::text($token);
-
-        return $token === null || $token === '0' ? null : $resellers[$token] ?? self::GONE_RESELLER;
-    }
-
-    /**
-     * Faoxima's reseller bots (`botsaz`) by their token: each named by its @username, else its owner's id.
-     *
-     * @return array<string, string>
-     */
-    private static function resellers(Staged $staged): array
-    {
-        $names = [];
-        foreach ($staged->all('botsaz') as $row) {
-            $token = Cell::text($row['bot_token'] ?? null);
-            if ($token !== null) {
-                $username = Cell::text($row['username'] ?? null);
-                $names[$token] = $username !== null ? '@' . ltrim($username, '@') : trim('ربات نماینده ' . Cell::text($row['id_user'] ?? null));
-            }
-        }
-
-        return $names;
-    }
-
-    /**
-     * Faoxima's admins by Telegram id (`id_admin`), each with their role (`rule`: administrator, Seller, support).
-     *
-     * @return array<string, ?string>
-     */
-    private static function admins(Staged $staged): array
-    {
-        $admins = [];
-        foreach ($staged->all('admin') as $row) {
-            $key = trim((string) ($row['id_admin'] ?? ''));
-            if ($key !== '') {
-                $admins[$key] = Cell::text($row['rule'] ?? null);
-            }
-        }
-
-        return $admins;
-    }
-
-    /**
-     * A channel as Faoxima checks membership in it (rx_normalize_channel_chat_id()): a -100… chat id, or an @username —
-     * kept with its @, bare, or in a t.me link; null for none of those (an invite link).
-     */
-    private static function chat(string $link): ?string
-    {
-        return match (true) {
-            preg_match('/^-\d{5,}$/', $link) === 1, preg_match('/^@[A-Za-z][A-Za-z0-9_]{3,31}$/', $link) === 1 => $link,
-            preg_match('~^(?:https?://)?(?:www\.)?(?:t\.me|telegram\.me|telegram\.dog)/(?:s/)?([A-Za-z][A-Za-z0-9_]{3,31})/?(?:\?.*)?$~i', $link, $match) === 1 && strtolower($match[1]) !== 'joinchat' => '@' . $match[1],
-            preg_match('/^[A-Za-z][A-Za-z0-9_]{3,31}$/', $link) === 1 => '@' . $link,
-            default => null,
-        };
-    }
-
     /** How many of Faoxima's cards it showed only to the customers listed for them (`card_whitelist`). */
     private static function limitedCards(Staged $staged): int
     {
@@ -755,26 +511,5 @@ final class FaoximaMigrator implements Migrator
         }
 
         return count(array_filter($staged->all('card_number'), static fn(array $row): bool => isset($limited[(string) Cell::text($row['id'] ?? null)])));
-    }
-
-    /**
-     * Panel names for a warning, each set apart: «آلمان»، «Rebecca».
-     *
-     * @param list<string> $names
-     */
-    private static function names(array $names): string
-    {
-        return implode('، ', array_map(static fn(string $name): string => "«\u{2068}{$name}\u{2069}»", $names));
-    }
-
-    /** Faoxima's tickets: its support messages, one thread a tracking code. */
-    private static function threads(Staged $staged): int
-    {
-        $threads = [];
-        foreach ($staged->rows('support_message') as $seq => $row) {
-            $threads[Cell::text($row['Tracking'] ?? null) ?? "#{$seq}"] = true;
-        }
-
-        return count($threads);
     }
 }

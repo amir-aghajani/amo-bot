@@ -11,7 +11,356 @@ While a version is being made its changes collect under **Unreleased**; releasin
 
 ## Unreleased
 
-Nothing yet.
+## Version 0.10.0
+
+### Added
+
+- **The shop managed from its bot** («⚙️ مدیریت» under the menu, or `/admin`) — the whole panel in the bot's private
+  chat, as the bot's own menus, with no web page: the dashboard; tickets and reviews; payments with their receipts, one
+  after another or rejected in bulk; orders; customers — their wallet, groups, website account, a message, an order made
+  by hand —; services, extended, moved, handed on or deleted; referrals and the bank texts; plans with their whole form
+  and bulk prices, categories, customer groups, test accounts, custom services and payment methods; the discounts and
+  rewards; broadcasts (composed from there too), mass gifts, the bot's texts (rewritten by sending them as they should
+  read), keyboards, channels, the report group and every card of «تنظیمات ربات»; the servers — added through their
+  connector's own form and tested —, their grants and moves, and the agency; the website, the mini app and the panel's
+  own settings. Every screen reads, and every change goes through, the panel's own API: the same rules, refusals and
+  notices to customers, and a log line for each change from the bot
+  ([Managing the shop from the bot](Bot-Management.md)).
+  - **Who manages**: you, from your own Telegram account linked in «تنظیمات پنل › ورود به پنل», card «مدیریت از ربات» —
+    a link that works once, for 10 minutes, up to five accounts —, every section in any shop («🏪 فروشگاه» switches
+    it); an agent, in their own bot, their panel's sections and «💼 حساب نمایندگی», their account with the main bot; and
+    the shop's admins while «تنظیمات ربات › مدیران ربات» lets them in — the daily work, and the grants it gives, the
+    website's «مدیران سایت» list with switches of its own, all off by default. Whoever manages passes the bot's off
+    switch, phone and channels. No admin decides about their own account, nor touches an admin's or an agent's.
+  - **Your accounts stay yours**: «ساخت لینک» asks the panel's password first — a wrong one counts as a failed sign-in
+    —, so a panel session alone links no account; and changing the panel's username or password, or recovering it with
+    the key, lets every linked account go, with the admin roles their links gave, and ends a link not opened yet.
+  - **How it reads**: one message is the window, changed in place, every screen with «⬅️ بازگشت» and «🏠 مدیریت»;
+    lists of 8 a page with the panel's tabs, a search and pages; a value asked as a question — its answer deleted once
+    read, so a token or a password does not stay in the chat —, amounts as they are said («۵۰ هزار تومان»), a refused
+    answer asking the question again with the reason; a menu button leaves a question rather than answering it; longer
+    forms field by field with a summary to edit before one save; what cannot be undone asked first, in the panel's
+    words, and a decision that may carry a note offered «✍️ با توضیح» or «⏭ بدون توضیح»; a switch's button sets the
+    value it shows, so a second tap changes nothing; two taps at once run one after the other.
+  - **Not from the bot**: the panel's username and password, and a file larger than Telegram carries (20 MB to the bot,
+    50 MB from it) — a larger backup or import goes through the panel.
+- **«مدیران ربات»** in «تنظیمات ربات» (both panels): whether the shop's admins manage it from the bot, and what beyond
+  the daily work; and **«مدیریت از ربات»** in «تنظیمات پنل › ورود به پنل» (the owner's): the Telegram accounts linked,
+  a new link, an account let go ([Bot settings](Bot-Settings.md#the-bots-admins),
+  [Panel settings](Panel-Settings.md#the-panels-login)).
+- **A bulk price change applies exactly what its preview showed** («تغییر گروهی قیمت»): a plan whose prices moved since
+  the preview — another change meanwhile, or the same one applied twice — refuses the whole change, naming the plan, and
+  the preview is to be made again ([Plans](Plans.md#changing-several-prices-at-once)). Its API takes the preview back as
+  `previewed`.
+- **MirzaBot, a second bot to move from** («انتقال از ربات دیگر», «تنظیمات پنل», the owner's, in the main shop) — the
+  bot Faoxima grew out of, any version from its old 5.x line to 0.9.3 and later, brought over as Faoxima is: read once,
+  reviewed before anything is written, with nothing changed on the VPN panels or in the old bot and nobody told
+  ([Importing from another bot](Importing.md)).
+  - **From its own backup, or its database**: the `backup_<date>.sql` MirzaBot sends its report group every 5 hours, in
+    the topic «🤖 بکاپ ربات» — or an export of its database, or a read-only connection to it. A MirzaBot before 0.1.6
+    sent its backup as a zip behind a password: open it first, and upload the `.sql` inside.
+  - **What comes**: its customers with their wallet balances (a debt as a debt, «موجودی منتقل‌شده از MirzaBot»), bans,
+    mobile numbers — and the excuse its admin gave some from giving one —, own discounts and referrers, and whether they
+    bought there (any purchase but a free test: no newcomer here); its two agent levels as the groups «نماینده عادی» and
+    «نماینده پیشرفته», paying agent prices; its full admins, if you choose; their services on its Marzban, PasarGuard,
+    3X-UI and Rebecca panels, as they stand — a 3X-UI or Rebecca panel added from the API token or key MirzaBot keeps, a
+    service the customer built coming without a plan —; its products as plans in their categories — an agents'
+    product paired with its customers' twin as that plan's agent price, one hidden from some panels sold on the others,
+    one it marked «ناموجود» switched off —; its discount codes, a percent off a purchase, a renewal or both, with their uses, uses each and end
+    (one it could never take switched off); its gift codes with the uses they have left; its required channels, and its
+    bank cards, switched off.
+  - **What stays behind**, counted in the review: the payment history, tickets, resellers' bots and their customers'
+    wallets, hand-sold configs, services on panels the shop has no connector for (Marzneshin, Hiddify, WGDashboard and
+    the rest), the panels' own prices for extras, the products' newcomers-only and traffic-reset options, the codes'
+    history of uses (a limit for each customer counts afresh), and the bot's settings and texts. And the
+    warnings worth reading first: every advanced agent bought on credit there, below zero, which the shop does not do; a
+    3X-UI panel an older MirzaBot (before 0.1.9) reached by its admin's login, the way of a panel before v3, whose
+    services do not come; products it marked sold out; services that found no plan; the bot's own payments still
+    waiting for approval; customers it excused from the required channels, or showed no card-to-card; panels it showed
+    to one audience alone, or hid from some customers; and more.
+  - **Its card in «ربات قبلی»** says which versions are read, where its backup is and which panels' services come, and
+    the upload tab says where to download its backup.
+- **Rebecca, a fifth VPN panel** («Rebecca» in «افزودن سرور», version 1.0 and later — Marzban's descendant, rewritten in
+  Go) — reached through an admin's API key, the whole `rk_…` key made in its «حساب من ← کلیدهای API», the one way in:
+  no password is typed. Give a full access or sudo admin's key; another admin sees only its own users (its server is
+  then read service by service), and one not full access needs the permissions to make, delete, reset and revoke its
+  users, make them on hold, and give unlimited traffic, unlimited time and IP limits — a refusal says which. **Its
+  services are what a plan sells**: a Rebecca user belongs to one service, so a plan on a Rebecca server picks one, and a
+  service without an active host takes no user. The plan's devices are its IP limit, and «کاربر اضافه» is sold on it;
+  «تغییر لینک» revokes the link; a term from the first connection is its *on hold*, cleared whenever it is replaced; its
+  status shows CPU, RAM, disk and uptime and Xray's state. A link a customer claims is a subscription link, or a VLESS or
+  VMess config — a Trojan or Shadowsocks one is found by no one. An admin whose traffic mode is «حجم ساخته‌شده» with
+  its users' traffic hidden sees every usage as zero: give the key of one who sees it
+  ([Servers](Servers.md#the-connectors)).
+- **Rebecca panels come in «انتقال از ربات دیگر»** too: the services on a Faoxima's or MirzaBot's Rebecca panels come,
+  the panel added as a new server from the `rk_…` key the old bot kept, each service read on its own for the device
+  limit Rebecca's user list leaves out ([Importing from another bot](Importing.md#the-panels)).
+- **Remnawave, a sixth VPN panel** («Remnawave» in «افزودن سرور», version 2.1 and later, 3.x included) — reached through
+  an API token made in its *Remnawave Settings → API Tokens* (with `users:*`, `internal-squads:read` and `system:read`;
+  `*` works too, but opens the whole panel), the one way in: no password is typed. **Through its HTTPS reverse proxy**:
+  Remnawave answers nothing else, so give the panel's https domain. Its own port over plain http works only on the
+  shop's own host or its private network, where the shop adds what such a proxy would; across the internet the token
+  and customers' data would travel unencrypted, so the shop adds nothing there. A panel behind an auth portal (Caddy's or TinyAuth) takes the portal's key as «کلید دروازه», under «تنظیمات پیشرفته».
+  **Its internal squads are what a plan sells**, several together; a squad with no inbound cannot be sold. It has no
+  term from the first connection — a service's time runs from the sale. **A plan's devices are its HWID device
+  limit**, and «کاربر اضافه» is sold on it: held while «HWID Device Limit» is on in the panel's subscription settings,
+  counting the apps that send a device id (Happ, v2RayTun and a few more). «تغییر لینک» revokes the subscription; a link a customer claims is a
+  subscription link, or a VLESS, Trojan or Shadowsocks config; its status shows RAM and uptime
+  ([Servers](Servers.md#the-connectors)).
+- **Faoxima's Remnawave panels come in «انتقال از ربات دیگر»** too: their services come, the panel added as a new
+  server from the API token Faoxima kept; one behind an auth portal is added in «سرورها» with its gate key, and chosen
+  ([Importing from another bot](Importing.md#the-panels)).
+- **Bluepal** («افزودن روش پرداخت» › «بلو پال», in both panels) — online payment with any Iranian bank card: the customer
+  goes from Bluepal's page to the bank's and comes back to a page of what came of it
+  ([Payment methods](Payment-Methods.md#bluepal)). Its settings are the gateway's merchant id and API key from Bluepal's
+  dashboard (the key kept encrypted); there is nothing to paste back there. The shop believes only Bluepal's verify, and
+  a payment verified for another amount is held for you. The gateway's sandbox key moves no money, but a payment there
+  still delivers its order.
+- **Rialit** («افزودن روش پرداخت» › «ریالیت») — online payment on Rialit's page, 50,000 to 10,000,000 Toman a payment
+  ([Payment methods](Payment-Methods.md#rialit)). Its one setting is your API key (kept encrypted). **The shop
+  registers its own webhook address with Rialit** when the method is saved, where the account has none (Rialit tells the
+  account's owner on Telegram and by email); Rialit keeps one address an account, so another site's is never
+  overwritten by itself — the method's dialog («وب‌هوک ریالیت») and its screen in the bot («🔗 وب‌هوک ریالیت») say where
+  the webhooks go and offer to register the shop's address, to replace another one (asked first) or to try again, with
+  the address to paste in Rialit's Webhook tab by hand meanwhile. In the dashboard you choose whether the customer pays
+  Rialit's fee — the bot and the website then show the sum with the fee apart, and the order is still paid at its own
+  price. Rialit's webhook is not signed, so the shop never believes it: it only makes the
+  shop ask Rialit about an unpaid payment of its own, a few times a minute at most. A payment Rialit approves late is
+  settled all the same. Rialit knows its payers by Telegram: a customer with no Telegram account (signed in to the
+  website by SMS) is not offered it, and picks another method. The driver follows Rialit's own OpenAPI description, which is open only to its
+  merchants — pay a small order with it before switching it on.
+- **Rikhtam's crypto payments** («افزودن روش پرداخت» › «ریختم (ارز دیجیتال)») — the customer pays on Rikhtam's page in
+  Gram, Tether on TON or on TRON, or TRX, straight to your own wallet, and the order is delivered once Rikhtam sees it on
+  its chain ([Payment methods](Payment-Methods.md#rikhtams-crypto-payments)). Its settings are the Rikhtam gateway's
+  «کلید امنیتی» (kept encrypted) and the coin — or the customer's pick on the page. The invoice is asked in Toman, and
+  Rikhtam prices the coin; a transfer short of it, or late, is never confirmed by itself.
+- **Rikhtam in «تایید خودکار واریز»** — a second way your bank's deposits reach the shop, beside ForApp: Rikhtam's app
+  reads the bank's SMS on your phone and Rikhtam reports each deposit ([Payment methods](Payment-Methods.md#through-rikhtam)).
+  - **Connecting**: paste the Rikhtam gateway's «کلید امنیتی» in the card «اتصال ریختم» and press «اتصال»; the shop
+    registers its own address with Rikhtam — nothing to paste back there — and switches the automatic approval on. The
+    shop's address must begin with `https://`, on the domain the gateway was made for, and a key another shop of the
+    same site has connected is refused (a Rikhtam gateway sends to one address: each shop needs its own); a refusal says
+    which. «ثبت دوباره آدرس» registers it again after a move — a refusal says why —, «تعویض کلید» takes the gateway's new
+    key while connected and registers the address with it, and «قطع اتصال» forgets the key; the bot's management has the
+    same («🔁 ثبت دوباره آدرس در ریختم», «🔑 تعویض کلید ریختم», «✂️ قطع اتصال ریختم»).
+  - **Matching**: a deposit approves the one open card payment asking its sum, as an SMS does; one that pays none or
+    several is handed back to Rikhtam, which offers it to the account's next gateway. Rikhtam's health test is answered,
+    and a wrong key refused. With ForApp beside it, a transfer both report approves its payment once: the second word
+    only confirms it — never another payment that asks the same sum since — and support hears nothing of it.
+  - **Attaching by hand** a deposit that matched nothing — a sum the customer rounded —: from Rikhtam's app by the
+    payment's number, or from the payment's review, «پیوست واریز ریختم» (in the bot's management «📎 پیوست واریز ریختم»):
+    the deposits of the last 20 days no payment took, the closest sum first, one short of the order's own price marked
+    («کمتر از مبلغ سفارش», «⚠️») and never attached. It approves the payment when the deposit covers the order's own price,
+    even while the automatic approval is off; a payment you or the review window approved already it only confirms, as a
+    deposit of that sum would by itself — nothing is delivered twice; only a payment another deposit paid refuses it.
+    Should Rikhtam's answer be lost after the shop did approve the payment, the notice says so, and the screen reads the
+    payment again.
+  - Rikhtam confirms no card payment under 10,000 Toman, and charges a fee for every deposit it confirms.
+  - The ForApp card's last message and last test count ForApp's alone.
+
+### Changed
+
+- **An owner's link makes the Telegram account that opens it the bot's admin**, as an agent is in their own bot: the
+  report group's buttons answer it. The link works while the main bot is switched off, or asks for the phone or the
+  channels. Letting the account go — or a sixth account linked, which ends the oldest one's link — takes back the role
+  the link gave; an account that was the bot's admin before keeps it.
+- **Whoever manages the shop passes the bot's conditions** — its off switch, the phone, the channels —: the bot's admins
+  as before, and now the owner's linked accounts and an agent in their own bot even without the admin role.
+- **A ticket answered from the bot's management** shows where it was written as «مدیریت ربات» in the panels and «از
+  مدیریت ربات» in the report group; the customer reads «🎧 پشتیبانی», as always
+  ([Support tickets](Support-Tickets.md#a-tickets-page)).
+- **`/broadcast` and `/emoji`** answer whoever manages the shop from the bot, as well as the bot's admins.
+- **The wrong bot picked is named**: Faoxima's and MirzaBot's databases look much alike, and the data of one imported
+  as the other's now fails saying whose it is — «این داده‌های … است، نه …؛ …» —: start again with «انتقال تازه»,
+  picking that bot. Before, it said the tables it looked for were not found
+  ([Importing from another bot](Importing.md#when-it-is-refused-or-fails)).
+- **A backup zip behind a password** is refused as that — «این فایل zip رمز دارد؛ …» —, with what to do: open it with
+  its password and upload the `.sql` inside, or export the database from phpMyAdmin. Before, it was refused as no
+  database backup at all.
+- **Marzban: a service switched back on is judged at once** — limited or expired when its traffic or time is over —,
+  where it had a few seconds' access until the panel's next review.
+- **Marzban: the quota is once a term.** Every change of a service sets the user's traffic reset to none, so a user
+  taken over from the panel with a reset of its own (each day, week or month) no longer gets its quota back every
+  period; Rebecca's and PasarGuard's services likewise.
+- **Marzban's card says more** («افزودن سرور»): prefer a sudo admin made in the panel's database to the `SUDO_USERNAME`
+  of its `.env` file, and a failed sign-in is reported to the panel's Telegram admins with the password that was sent
+  — `NOTIFY_LOGIN=false` silences every report ([Servers](Servers.md#the-connectors)).
+- **PasarGuard's card says more**: an admin limited to its own users — not sudo before 5.0, a role such as *operator*
+  from 5.0 — finds none of the services other admins hold, an import's among them: give one that sees every user; and
+  signed in with a username and password, every sign-in of the shop's is reported to the panel's Telegram or Discord
+  admins, a failed one with the password that was sent — an API key's calls are not. The key's hint suggests one
+  without an expiry or a request cap ([Servers](Servers.md#the-connectors)).
+- **PasarGuard's refusals say what to change on the panel**: a permission the admin's role lacks (naming those the
+  shop needs), an admin out of traffic, a role that makes users from templates only, a role's limits on traffic, term
+  or user count, a role's demand of an on-hold timeout or a HWID limit, a group gone; and a refused API key names every
+  cause — unknown, expired, revoked, out of its *Max Requests*, or of an admin switched off. Before, with an API key
+  every such refusal read as the key lacking a permission. An admin out of traffic whose role blocks all its access
+  («Admin is limited — all access blocked») now puts the whole server out of use: recorded on the server, reported as
+  not answering, and left alone a while, as a panel out of reach is; one whose role blocks only its writes is still
+  refused call by call ([Servers](Servers.md#the-connectors)).
+- **A dropped connection can carry its connector's hint**: a request Remnawave drops — it answers only what comes
+  through an HTTPS reverse proxy — is said as nothing having answered, with what to give as «آدرس پنل».
+
+### Fixed
+
+- **A customer of the old bot itself counted as a reseller bot's** (Faoxima, and MirzaBot alike): the old bot marks a
+  customer with the reseller bot they last opened and never clears it, so one who had merely opened a reseller bot —
+  though they had a wallet in the old bot, an agent's level, an admin's role, a reseller bot of their own or purchases
+  in the bot itself — was left out with their wallet and services unless «مشتری‌های ربات‌های نماینده» was on. Now only
+  a reseller bot's own customers, whom nothing ties to the bot itself, are kept apart; their wallets, which the reseller
+  bots keep in their own files and not in the database, never come, and the review counts them under «آنچه منتقل
+  نمی‌شود» ([Importing from another bot](Importing.md#customers)). An import that left such customers out brings them,
+  with their wallets and services, when it is run again.
+- **An imported service took another panel's plan** (Faoxima, and MirzaBot alike): a service was given the plan of its
+  product's name wherever that product was sold, so where the old bot sold a product of the same name on each panel —
+  as it often does —, a service on one panel came with the plan of another, renewed at that plan's price. Now it is the
+  product of its name sold on its own panel, as the old bot renews it, else the one plan of its traffic and days there,
+  else none ([Importing from another bot](Importing.md#services)). A service already brought keeps the plan it came with.
+- **Marzban 0.8.2 to 0.8.4: a deleted service went on working.** A user no admin owns — every one made by the
+  `SUDO_USERNAME` admin of the panel's `.env` file, or one whose admin was removed — Marzban deleted from its database
+  and then failed (an error 500, its issue #1634) before taking it off Xray: the customer's config kept working until
+  the core restarted, while the shop took the panel for down, and a refund, a move or a removal failed. Such a user is
+  now switched off first, which takes it off Xray, and a failure after which the user is gone counts as the delete
+  done.
+- **Marzban deleted the shop's ended services by itself**: its clean-up of ended users (`USERS_AUTODELETE_DAYS`)
+  removed them before the shop's renewal window was over and before its own removal of ended services. The users the
+  shop makes now are exempt. Marzban's API cannot exempt those made before: on a panel with `USERS_AUTODELETE_DAYS` set,
+  unset it or make it negative to keep them ([Servers](Servers.md#the-connectors)).
+- **Marzban: an old waiting term came back.** A service whose term from the first connection was replaced — by
+  unlimited time, say — before that connection, then switched off and on, went back on hold with its old term:
+  Marzban's API cannot clear a duration. An update now leaves none behind.
+- **A name another admin's user holds failed the sale** on a panel where the shop's admin sees only its own users (a
+  Marzban admin who is not sudo, a Rebecca admin who is standard or a reseller), with a misleading hint to sign in as a
+  sudo admin. Such a name counts as taken now — when the panel's refusal says the user is another admin's —: the next
+  one is tried, on every panel. A refusal for a permission the shop's admin lacks still fails the sale at once, saying
+  what to give.
+- **A name PasarGuard 5 refuses as taken but will not show failed the sale**: an admin limited to its own users is told
+  another admin's user is not found, yet may not take its name. A panel's refusal of a name as taken (HTTP 409) now
+  gives way to the next name at once, without asking the panel.
+- **PasarGuard deleted the shop's ended services by itself**: its clean-up of ended users (5.6's *Expired accounts*
+  retention, `USERS_AUTODELETE_DAYS` before) removed them before the shop's renewal window was over and before its own
+  removal of ended services. The users the shop makes now are exempt. PasarGuard's API cannot exempt those made before
+  (below) ([Servers](Servers.md#the-connectors)).
+- **PasarGuard 5: a server whose admin's role reads only the groups' simple list had no inbounds** — the built-in
+  *operator*'s: the panel refused the full list, so the shop read none and had nothing to sell there. Its groups now
+  come from that list, by name alone. A group switched off on the panel cannot be seen with such a role and shows
+  switched on: remove it from this server's plans too, or a service on it is made without configs — the card's notes
+  say so ([Servers](Servers.md#the-connectors)).
+- **PasarGuard: a subscription link was found by no one** on a panel whose subscription path has several folders; the
+  path is now found whole.
+- **A panel that reports no CPU load or no disk showed 0** in a check's status card: it shows «—» now (Remnawave's CPU
+  and disk, Marzban's disk).
+- **A bank page that sent the customer back by posting a form showed them the shop's raw answer**, not the page of what
+  came of their payment: only a link back was taken for a browser. Any request that asks for a page now gets it — by a
+  link or a posted form alike —; the payment was asked about and settled all the same
+  ([Payment methods](Payment-Methods.md#every-online-gateway)).
+
+### Upgrading
+
+- **Update from «تنظیمات پنل › به‌روزرسانی»**: nothing else to do, and the database does not change. On a Marzban
+  panel with `USERS_AUTODELETE_DAYS` set, the services made before this version are still the panel's to delete: unset
+  it, or make it negative. Likewise on a PasarGuard panel that deletes ended users — the users made before this version
+  keep no protection from it, which its API cannot give them later: turn its rule for expired accounts off (*Cleanup →
+  Automatic retention → Expired accounts*, *Keep forever*, in 5.6), or before 5.6 unset `USERS_AUTODELETE_DAYS` or make
+  it negative.
+- **The bot's admins get «⚙️ مدیریت» at once**: «کار مدیران از ربات» is on by default, giving them the daily work they
+  already do in the report group and on the website — turn it off in «تنظیمات ربات › مدیران ربات» if they should not
+  have it in the bot. No grant is on until you give it. To manage the shop from the bot yourself, link your Telegram
+  account in «تنظیمات پنل › ورود به پنل › مدیریت از ربات»; an agent needs nothing.
+- **The new gateways ask a few things of their own side**: Rialit's webhook goes to
+  `https://<the shop's address>/payments/webhooks/rialit` — the shop registers it when you save the method, where the
+  account has none; an account another site uses keeps its address until you replace it —, and with allowed IPs set
+  there, the outgoing IP of the shop's server must be among them; Bluepal's «دامنه‌های مجاز» and IP whitelist, when set, must hold the shop's domain and that
+  IP; Rikhtam reaches only a shop whose address begins with `https://`, on the domain its gateway was made for — and
+  confirms no card payment under 10,000 Toman, so set your card methods' «کمترین مبلغ» to that or more when you connect
+  it. Nothing changes for a shop that adds none of them.
+- New on the panels' API: the owner's `GET /settings/owner-telegram` (`OwnerTelegramResponse`: the
+  accounts linked and `link_open_until`), `POST /settings/owner-telegram/link` (`{current_password}`,
+  `OwnerTelegramLinkRequest`: blank or wrong is a `422` under `current_password`, a wrong one a failed sign-in;
+  `OwnerTelegramLinkResponse`, with the link's `url` and `expires_at`; a `422` under `link` while the main bot's
+  username is not known) and `DELETE /settings/owner-telegram/{telegram_id}` — `PUT /auth/credentials` and
+  `POST /auth/recovery` now let every linked account go —; the bot settings group `bot_admins` (`PUT /bot/settings/bot_admins`,
+  `BotBotAdminsSettingsRequest`) and its fields `bot_admins_enabled` and `bot_admins_grant_<grant>` in
+  `BotSettingsData`; and a ticket message's `channel` may be `manage` — in the panels' API and the website's admin API
+  alike: a client that names the channels should take it.
+- **A website's admin area, and tools on the panels' API, that change several plans' prices** (`POST /plans/prices`,
+  `POST /admin/plans/prices` under the store): send the preview back as `previewed` — each plan's `id` and `before`
+  from the preview's `changes` (`PlanPricesChangeRequest`) — to apply the change previewed or none: a plan whose prices
+  moved since is a `422` on `plan_ids` naming it. Left out, the change applies to the prices as they are, as before;
+  the panels send it ([Store API: the shop's admins](Store-API-Admins.md#grants)).
+- For developers: the management is `app/Modules/Telegram/Admin` — its door `/api/bot-admin/{owner,agent,staff}` over
+  the panels' own route groups (`routes/api.php` now names `$system`, `$everywhere`, `$main` and `$agentAccount` beside
+  `$operations` and `$configuration`), `PanelBridge` calling them in-process, and the screens' framework
+  ([Internals: Telegram bot](Internals-Telegram-Bot.md#the-shops-management),
+  [Extending](Extending.md#a-screen-of-the-bots-management)). A principal and an actor say whether they work from the
+  bot (`Principal::$inBot`, `Actor::$inBot`: a ticket's answer is then `TicketChannel::Manage`); a conversation step
+  may capture any message, a keyboard's label too (`Dispatcher::state(…, captures: true)`); `/broadcast` and `/emoji`
+  are no longer admin-only routes — their handlers ask, a role admin or a seat —, and the gates let every seat through
+  (`AdminSeats::exempt()`), with the `/start` of the owner's open link (`AdminSeats::passGates()`).
+- Tools of your own on the panels' API: `GET /imports` lists `mirzabot` beside `faoxima` (`ImportsResponse.migrators`),
+  and `POST /imports` and `POST /imports/database` take it as `migrator`; `POST /imports` refuses a zip whose dump has a
+  password with a `422` under `file`. A server's request and its test take `driver: rebecca` (`ServerRebeccaRequest`:
+  `auth_mode: token` alone, the `rk_…` key as `api_token`, no username or password) and `driver: remnawave`
+  (`ServerRemnawaveRequest`: `auth_mode: token` alone, the API token as `api_token`, and the optional `gate_key` with
+  its `clear_gate_key`). A probe's status (`PanelStatusInfo`) has `cpu_percent` null, and `disk_used` and `disk_total`
+  0, for a panel that reports none.
+- A migrator of another fork of MirzaBot can reuse what MirzaBot's and Faoxima's now share in `Migrators/MirzaBot` —
+  `Cell`, `Line`, `People` with its `Census`, `Twins`, `Sold`, `LinePanels` and `Notes` —, and an imported plan says
+  whether the other bot still sold it (`ImportedPlan::$selling`: one it did not comes switched off)
+  ([Drivers](Drivers.md#a-migrator)). A connector's
+  `findClient()` refused as another admin's user is a name taken to the shop — `PanelApiException::hidesAnothersClient()`,
+  any 403 by default: override it when your panel also answers 403 for a permission its admin lacks, as PasarGuard's and
+  Rebecca's do —, and a panel's listing may leave
+  a client's device limit unsaid (`ClientInfo::$ipLimit` null), which an import then reads client by client
+  ([Drivers](Drivers.md#a-vpn-panel-connector)). A connector's `createClient()` refused with a 409 is a name taken too,
+  without a look at the panel; a `ConnectionException` may carry the connector's own `hint` (`withHint()`); and
+  `PanelStatus::$cpuPercent` is null for a panel that reports no CPU load.
+- Tools of your own that write through the panels' API: a payment method's request may be a Bluepal one
+  (`BluepalMethodRequest`: `merchant_id`, `api_key`), a Rialit one (the AtlasPay form, `api_key`) or a Rikhtam one
+  (`RikhtamMethodRequest`: `secret`, `coin` — `any`, `gram`, `usdt_ton`, `usdt_trc20` or `trx`), and a row never returns
+  a key; a payment row's `gateway` may be `bluepal`, `rialit` or `rikhtam`, and its `actions` gain `rikhtam`. **Adding
+  or saving a payment method (`POST /payment-methods`, `PUT /payment-methods/{id}`) answers
+  `PaymentMethodSavedResponse`** — the method under `method`, as before, and beside it `webhook`: what came of the
+  shop's webhook address for a gateway that takes it from the shop (`GatewayWebhookState`: `state` `ours`, `none`,
+  `elsewhere` or `unknown`, `url`, `ours`, `message`), else `null`; generated types name it anew. A method row
+  gains `registers_webhook` (Rialit's), and `GET` and `POST /payment-methods/{id}/webhook` (`replace` to put the shop's
+  address in place of another; a `422` on `driver` for a gateway that takes none) read and register it. New:
+  `GET` and `POST /payments/{id}/rikhtam` (`PaymentRikhtamResponse`, each deposit a `RikhtamDeposit` whose `covers`
+  says whether it covers the order's own price — only such a one may be attached —; `PaymentRikhtamRequest` with the
+  deposit's `uid`, answered `PaymentRikhtamAttachResponse`, whose `message` is the shop's own when Rikhtam's answer was
+  lost though the deposit approved the payment), asking a recent sign-in as an approval does — on the website's admin
+  API too, under `/admin` —; `PUT /deposits/settings/rikhtam` (`RikhtamConnectRequest`: `secret`), `POST
+  /deposits/settings/rikhtam/hook` and `DELETE /deposits/settings/rikhtam`; `GET /deposits/settings` gains `rikhtam`
+  (`DepositRikhtam`: `connected`, `domain`, `project_id`, `callback_url`, `connected_at`), and a deposit's `source` may
+  be `rikhtam`. The database does not change: Rikhtam's key and registration are settings.
+- A gateway whose webhook only names a payment implements `Payments\Contracts\NamingWebhook` (`reference()`): its
+  webhook, at `/payments/webhooks/{driver}` beside the signed ones, only makes the shop check the unpaid payment it names
+  ([Drivers](Drivers.md#an-online-gateway)). One whose webhook address the shop sets through its API implements
+  `Payments\Contracts\RegistersWebhook` (`webhook()`, `hook()`, refusals as `Enums\GatewayRefusal`), and
+  `Services\GatewayWebhooks` reads, registers and never silently replaces it. One whose payer is a Telegram account
+  implements `Payments\Contracts\TelegramPayer`: it is never offered to a customer without one, and paying with it
+  anyway is refused before the gateway is called. Rikhtam's one address is `Drivers\Rikhtam\RikhtamApi`, its webhook
+  `/webhooks/rikhtam/{bot}` (`Urls::rikhtamWebhook()`); a deposit source says why it cannot vouch for a deposit as
+  `IncomingDeposit::$doubt`, `Deposits::attach()` takes a deposit attached by hand to the payment it names, and
+  `DepositSources::find()` and `all()` list only the apps the shared deposit webhook takes (ForApp). New fakes:
+  `FakeBluepal`, `FakeRialit` and `FakeRikhtam` ([Testing](Testing.md#fakes)).
+
+### For website developers
+
+- **Three more online gateways at checkout**: Bluepal, Rialit and Rikhtam's crypto, offered as `kind: "online"` and paid
+  on their own page through the checkout's `link`, as the others are. Rialit's fee, where its merchant puts it on the
+  payer, is `link.fee`, within `link.amount`; Rikhtam's page asks the sum in the coin set or picked there; and Rialit
+  sends the customer back nowhere — your page, behind, is where they return
+  ([Store API: buying](Store-API-Buying.md#paying-online)).
+- **Rialit's payer is a Telegram account**: `GET /payment-methods` never lists it for a customer without one (signed in
+  by SMS alone), and paying with it anyway is a `422` on `method_id`, nothing ordered
+  ([Store API: buying](Store-API-Buying.md#ways-to-pay)).
+- **The admin API**: `GET` and `POST /admin/payments/{id}/rikhtam` list the Rikhtam deposits no payment took and attach
+  the one picked (`uid`) to a card payment, signed in recently as for an approval, while the shop's Rikhtam is
+  connected; a payment row's `gateway` may be `bluepal`, `rialit` or `rikhtam`, and its `actions` gain `rikhtam`; a
+  deposit's `source` in `GET /admin/deposits` may be `rikhtam`; a ticket message's `channel` may be `manage` (answered
+  from the bot's management); and `POST /admin/plans/prices` takes the preview back as `previewed`, applying the change
+  previewed or none ([Store API: the shop's admins](Store-API-Admins.md#grants)).
 
 ## Version 0.9.0
 

@@ -53,12 +53,16 @@ export const queryKeys = {
   serverDrivers: ['server-drivers'] as const,
   paymentMethods: ['payment-methods'] as const,
   paymentDrivers: ['payment-drivers'] as const,
+  /** Where a method's gateway sends its webhook now, as the gateway answers (Rialit's, `GET /payment-methods/{id}/webhook`). */
+  paymentMethodWebhook: (id: number) => ['payment-method-webhook', id] as const,
   orders: ['orders'] as const,
   order: (id: number) => ['order', id] as const,
   everyOrder: ['order'] as const,
   payments: ['payments'] as const,
   payment: (id: number) => ['payment', id] as const,
   everyPayment: ['payment'] as const,
+  /** The deposits Rikhtam holds that matched no payment, to attach one to card payment `id` (asked of Rikhtam each time). */
+  paymentRikhtam: (id: number) => ['payment-rikhtam', id] as const,
   /** «تایید خودکار واریز»: its switch, where the phone app posts and with which key, whether SMS have been coming. */
   depositSettings: ['deposit-settings'] as const,
   /** The bank SMS the phone app forwarded, each with what came of it («واریزهای پیامکی»). */
@@ -137,6 +141,8 @@ export const queryKeys = {
   configSettings: ['config-settings'] as const,
   /** The SMS account's credit, asked of its provider with the key as saved («تنظیمات پنل › پیامک»): a save or a test send reads it again. */
   smsCredit: ['sms-credit'] as const,
+  /** The Telegram accounts that are the owner in the main bot («تنظیمات پنل › ورود به پنل › مدیریت از ربات»): a link made and an account let go answer them in place. */
+  ownerTelegram: ['owner-telegram'] as const,
   /** What the panel's user keeps for themselves on every device: their favorites in the settings search (components/settings-search). */
   preferences: ['preferences'] as const,
 }

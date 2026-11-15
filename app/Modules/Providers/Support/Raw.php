@@ -133,4 +133,24 @@ final class Raw
     {
         return $millis > 0 ? new \DateTimeImmutable('@' . intdiv($millis, 1000)) : null;
     }
+
+    /** Unix seconds as a moment; 0 or less is none. */
+    public static function seconds(int $seconds): ?\DateTimeImmutable
+    {
+        return $seconds > 0 ? new \DateTimeImmutable('@' . $seconds) : null;
+    }
+
+    /** A moment a panel wrote (ISO 8601; one without a zone is UTC), in UTC; null for none or one unreadable. */
+    public static function moment(mixed $value): ?\DateTimeImmutable
+    {
+        if (!is_string($value) || $value === '') {
+            return null;
+        }
+
+        try {
+            return (new \DateTimeImmutable($value, new \DateTimeZone('UTC')))->setTimezone(new \DateTimeZone('UTC'));
+        } catch (\Exception) {
+            return null;
+        }
+    }
 }

@@ -12,9 +12,11 @@ use App\Modules\Providers\Enums\CoreState;
 final class PanelStatus
 {
     public function __construct(
-        public readonly float $cpuPercent,
+        /** Null when the panel reports no CPU load (Remnawave). */
+        public readonly ?float $cpuPercent,
         public readonly int $memoryUsedBytes,
         public readonly int $memoryTotalBytes,
+        /** Both 0 when the panel reports no disk (Remnawave). */
         public readonly int $diskUsedBytes,
         public readonly int $diskTotalBytes,
         public readonly CoreState $coreState,

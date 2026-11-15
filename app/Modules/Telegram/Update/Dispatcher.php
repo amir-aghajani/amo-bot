@@ -27,7 +27,8 @@ use Psr\Log\LoggerInterface;
  *   2. reply-keyboard label (navigation)
  *   3. contact card         (its handler leaves the flow when it opens the menu)
  *   4. callback prefix      (longest prefix wins; navigation where registered so; an unknown one goes to the fallback)
- *   5. conversation state   (longest prefix: "topup" takes "topup.amount")
+ *   5. conversation state   (longest prefix: "topup" takes "topup.amount"; a capturing step comes before 2, a label's
+ *                            words being its answer)
  *   6. text pattern         (a text message one matches — a link sent outside any step: navigation)
  *   7. fallback             (the menu: navigation)
  * Navigation leaves the flow in progress. An admin-only route answers anyone else nothing. A tap the handler left
@@ -125,10 +126,12 @@ final class Dispatcher
     /**
      * @param class-string<Handler> $handler
      * @param bool $adminOnly A step of an admin's flow: anyone else's message there goes to the fallback
+     * @param bool $captures A question whose answer may be any text: a message there is its answer even when its words
+     *                       are a reply-keyboard label (a button renamed «کیف پول»); a command still leaves it
      */
-    public function state(string $prefix, string $handler, bool $adminOnly = false): self
+    public function state(string $prefix, string $handler, bool $adminOnly = false, bool $captures = false): self
     {
-        $this->states[$prefix] = new Route($handler, adminOnly: $adminOnly);
+        $this->states[$prefix] = new Route($handler, adminOnly: $adminOnly, captures: $captures);
 
         return $this;
     }
@@ -392,6 +395,12 @@ final class Dispatcher
             return $command === null ? $this->fallback : $allowed($command);
         }
 
+        // A question that takes any text keeps its answer from the reply keyboard's labels.
+        $step = $state === null ? null : $allowed(self::longestPrefix($this->states, $state));
+        if ($update->isMessage() && $step !== null && $step->captures) {
+            return $step;
+        }
+
         if ($update->isMessage()) {
             $label = $this->labelRoute(trim((string) $update->text()));
             if ($label !== null) {
@@ -409,11 +418,8 @@ final class Dispatcher
             return $button === null ? $this->fallback : $allowed($button);
         }
 
-        if ($state !== null) {
-            $step = $allowed(self::longestPrefix($this->states, $state));
-            if ($step !== null) {
-                return $step;
-            }
+        if ($step !== null) {
+            return $step;
         }
 
         if ($update->isMessage()) {

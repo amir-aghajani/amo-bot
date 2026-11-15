@@ -20,7 +20,8 @@ use PHPUnit\Framework\Attributes\DataProvider;
  * A backup file staged: mysqldump's, Faoxima's own PHP writer's and phpMyAdmin's dumps, uploaded plain, zipped (as
  * Faoxima sends it) or gzipped and told by their bytes; only the tables and columns the migrator reads, under its
  * names whatever their case, secrets encrypted at rest; every row staged once however the steps fall, even after a
- * step that died; what is no dump, or a broken one, refused under `file`; the import's files and rows discarded.
+ * step that died; what is no dump, a broken one or one behind a password, refused under `file`; the import's files and
+ * rows discarded.
  */
 final class BackupStagingTest extends StagingTestCase
 {
@@ -154,6 +155,25 @@ final class BackupStagingTest extends StagingTestCase
         $import = $this->import();
 
         self::assertSame(['file' => [$refusal]], $this->refusedWith(fn() => $this->stager()->keepUpload($import, self::upload($bytes, $name))));
+        self::assertDirectoryDoesNotExist($this->folder . '/' . $import->id);
+        self::assertNull($import->reading);
+    }
+
+    public function testRefusesAZipWhoseDumpIsBehindAPassword(): void
+    {
+        if (!\ZipArchive::isEncryptionMethodSupported(\ZipArchive::EM_AES_256, true)) {
+            self::markTestSkipped("This host's libzip cannot write an AES-encrypted entry.");
+        }
+        // MirzaBot's own backup before 0.1.6: backup_<date>.sql alone in a zip, AES-256 behind a password.
+        $path = $this->scratchDir() . '/backup_2026-05-20.zip';
+        $zip = new \ZipArchive();
+        self::assertTrue($zip->open($path, \ZipArchive::CREATE));
+        $zip->addFromString('backup_2026-05-20.sql', self::fixture('mysqldump.sql'));
+        self::assertTrue($zip->setEncryptionName('backup_2026-05-20.sql', \ZipArchive::EM_AES_256, 'not-the-password'));
+        $zip->close();
+        $import = $this->import();
+
+        self::assertSame(['file' => [ImportRefusedException::ENCRYPTED_ZIP]], $this->refusedWith(fn() => $this->stager()->keepUpload($import, self::upload((string) file_get_contents($path), 'backup_2026-05-20.zip'))), 'the owner opens it: the shop never guesses');
         self::assertDirectoryDoesNotExist($this->folder . '/' . $import->id);
         self::assertNull($import->reading);
     }

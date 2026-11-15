@@ -134,6 +134,18 @@ final class ChatSession
         return is_string($link) ? $link : null;
     }
 
+    /**
+     * Read the chat's row again, as another update of the chat left it while this one waited for its turn (the shop's
+     * management, AdminHandler): what that one saved is what this one sees. Changes not saved yet are dropped.
+     */
+    public function reload(): void
+    {
+        if ($this->model->exists) {
+            $this->model->refresh();
+        }
+        $this->dirty = false;
+    }
+
     /** Write what the update changed (Eloquent skips values that are as they were). */
     public function save(): void
     {

@@ -61,6 +61,8 @@ final class PlanService
     /** The steps a changed price is rounded to (1: whole Toman). */
     private const ROUNDINGS = [1, 100, 1000, 10000];
     private const PERCENT_MAX = 1000;
+    /** A change's `previewed` prices that cannot be read. */
+    private const PREVIEWED_REFUSED = 'پیش‌نمایش همراه درخواست خوانده نشد؛ دوباره پیش‌نمایش بگیرید.';
 
     private const PRICE_WORDS = ['price' => 'قیمت', 'first_purchase_price' => 'قیمت خرید اول', 'agent_price' => 'قیمت نماینده'];
     private const MAX_DAYS = 3650;
@@ -504,18 +506,31 @@ final class PlanService
 
     /**
      * Applies priceChanges() to every plan in one transaction — or to none while any plan has a problem (each refused
-     * under `plan_ids`).
+     * under `plan_ids`). With `previewed` — each plan's prices as the preview showed them ({id, before}) — it is the
+     * previewed change or none: a plan whose prices moved since (another change meanwhile, this one sent again) is
+     * refused the same way. The plans are read locked, so two changes at once go one after the other.
      *
      * @param array<string, mixed> $input
      * @throws ValidationException
      */
     public function changePrices(array $input): void
     {
-        $changes = $this->priceChanges($input);
-        $problems = array_values(array_filter(array_map(static fn(array $change): ?string => $change['problem'] === null ? null : "پلن «{$change['plan']->name}»: {$change['problem']}", $changes)));
-        ValidationException::ifAny($problems === [] ? [] : ['plan_ids' => $problems]);
+        $this->db->transaction(function () use ($input): void {
+            $changes = $this->priceChanges($input, lock: true);
+            $seen = self::previewed($input);
+            $problems = [];
+            foreach ($changes as $change) {
+                $problem = match (true) {
+                    $seen !== null && !isset($seen[$change['plan']->id]) => 'در پیش‌نمایش نبود؛ دوباره پیش‌نمایش بگیرید.',
+                    $seen !== null && $seen[$change['plan']->id] !== $change['before'] => 'قیمتش بعد از پیش‌نمایش تغییر کرده است؛ دوباره پیش‌نمایش بگیرید.',
+                    default => $change['problem'],
+                };
+                if ($problem !== null) {
+                    $problems[] = "پلن «{$change['plan']->name}»: {$problem}";
+                }
+            }
+            ValidationException::ifAny($problems === [] ? [] : ['plan_ids' => $problems]);
 
-        $this->db->transaction(static function () use ($changes): void {
             foreach ($changes as $change) {
                 $change['plan']->forceFill($change['after'])->save();
             }
@@ -523,17 +538,54 @@ final class PlanService
     }
 
     /**
+     * The prices a change's preview showed, by plan id, each in priceChanges()' form of `before`; null when the request
+     * sent none (a client made before it did).
+     *
+     * @param array<string, mixed> $input
+     * @return array<int, array<string, string|null>>|null
+     * @throws ValidationException 422 on `previewed`: not a list of {id, before} with the three prices
+     */
+    private static function previewed(array $input): ?array
+    {
+        if (!isset($input['previewed'])) {
+            return null;
+        }
+        if (!is_array($input['previewed']) || !array_is_list($input['previewed']) || count($input['previewed']) > Sorting::MAX_IDS) {
+            throw ValidationException::on('previewed', self::PREVIEWED_REFUSED);
+        }
+        $seen = [];
+        foreach ($input['previewed'] as $entry) {
+            $id = is_array($entry) ? Input::integerOf($entry['id'] ?? null) : null;
+            $before = is_array($entry) ? ($entry['before'] ?? null) : null;
+            if ($id === null || !is_array($before)) {
+                throw ValidationException::on('previewed', self::PREVIEWED_REFUSED);
+            }
+            foreach (self::PRICES as $field) {
+                $amount = $before[$field] ?? null;
+                $number = $amount === null ? null : Input::decimalOf($amount);
+                if (($field === 'price' || $amount !== null) && $number === null) {
+                    throw ValidationException::on('previewed', self::PREVIEWED_REFUSED);
+                }
+                $seen[$id][$field] = $number === null ? null : Money::normalize($number);
+            }
+        }
+
+        return $seen;
+    }
+
+    /**
      * A change of several plans' prices, saving nothing: each plan's prices before and after, and the problem that keeps
      * it from the change (a price below zero or too large, a special price no longer below the price). The change is
-     * `direction` by `mode` (percent or whole Toman) of `value`, rounded to `round_to`, on the `prices` named.
+     * `direction` by `mode` (percent or whole Toman) of `value`, rounded to `round_to`, on the `prices` named; the plans
+     * read locked for the change made (`$lock`, inside its transaction).
      *
      * @param array<string, mixed> $input
      * @return list<array{plan: Plan, before: array<string, string|null>, after: array<string, string|null>, problem: string|null}>
      * @throws ValidationException every refusal of the change at once
      */
-    private function priceChanges(array $input): array
+    private function priceChanges(array $input, bool $lock = false): array
     {
-        ['plans' => $plans, 'change' => $change, 'prices' => $prices] = self::priceChange($input);
+        ['plans' => $plans, 'change' => $change, 'prices' => $prices] = self::priceChange($input, $lock);
 
         $changes = [];
         foreach ($plans as $plan) {
@@ -562,7 +614,7 @@ final class PlanService
      * @return array{plans: list<Plan>, change: \Closure(string): string, prices: list<string>}
      * @throws ValidationException
      */
-    private static function priceChange(array $input): array
+    private static function priceChange(array $input, bool $lock): array
     {
         $errors = [];
 
@@ -573,7 +625,7 @@ final class PlanService
         } elseif (count($ids) > Sorting::MAX_IDS || in_array(0, $ids, true)) {
             $errors['plan_ids'][] = 'یکی از پلن‌ها پیدا نشد؛ صفحه را دوباره باز کنید.';
         } else {
-            $plans = Plan::query()->whereIn('id', $ids)->oldest('sort')->oldest('id')->get()->all();
+            $plans = Plan::query()->whereIn('id', $ids)->oldest('sort')->oldest('id')->when($lock, static fn(Builder $query): Builder => $query->lockForUpdate())->get()->all();
             if (count($plans) !== count($ids)) {
                 $errors['plan_ids'][] = 'یکی از پلن‌ها پیدا نشد؛ صفحه را دوباره باز کنید.';
             }

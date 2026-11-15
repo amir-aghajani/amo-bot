@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { PowerOff } from 'lucide-react'
+import { BotAdminsSection } from '@/components/bot/settings/bot-admins-section'
 import { ChannelsSection } from '@/components/bot/settings/channels-section'
 import { ClientNamesSection } from '@/components/bot/settings/client-names-section'
 import { ExpiredServicesSection } from '@/components/bot/settings/expired-services-section'
@@ -75,6 +76,7 @@ const EMPTY = {
   referral: null,
   reports: null,
   qr: null,
+  bot_admins: null,
 }
 
 function sectionsOf(data: BotSettingsResponse) {
@@ -95,5 +97,6 @@ function sectionsOf(data: BotSettingsResponse) {
     referral: <ReferralSection settings={settings} />,
     reports: <ReportsSection settings={settings} />,
     qr: <QrSection data={data} />,
+    bot_admins: <BotAdminsSection settings={settings} />,
   }
 }

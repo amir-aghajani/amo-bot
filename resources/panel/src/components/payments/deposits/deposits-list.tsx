@@ -41,8 +41,22 @@ const NONE: Record<DepositStatus, string> = {
 const arrived = (deposit: DepositRow) => deposit.received_at ?? deposit.created_at
 
 /**
- * «واریزهای پیامکی»: the bank SMS the phone app forwarded, newest first, by what came of each (the tabs) or searched by
- * sum or words — the card payment each approved and its customer, or why none; a row opens with the SMS as it came.
+ * How a deposit is spoken of by where it came from: ForApp forwards the bank's SMS as it came; Rikhtam sends no SMS, only
+ * what it read of one (the sum, the account, the time), which the shop keeps as a line in its place.
+ */
+const FORAPP = { said: 'پیامک واریز بانک، همان‌طور که فوراپ فرستاد.', body: 'متن پیامک', open: 'پیامک' }
+const SOURCES: Partial<Record<string, typeof FORAPP>> = {
+  forapp: FORAPP,
+  rikhtam: { said: 'واریزی که ریختم از پیامک بانک خبر داد؛ ریختم خود پیامک را نمی‌فرستد.', body: 'آنچه ریختم فرستاد', open: 'جزئیات' },
+}
+
+/** How `deposit` is spoken of: its source's words, ForApp's for a source the panel does not know. */
+const sourceOf = (deposit: DepositRow) => SOURCES[deposit.source] ?? FORAPP
+
+/**
+ * «واریزهای پیامکی»: the bank deposits the phone app forwarded or Rikhtam told, newest first, by what came of each (the
+ * tabs) or searched by sum or words — the card payment each approved and its customer, or why none; a row opens with the
+ * SMS as it came (Rikhtam's: what it sent).
  */
 export function DepositsList() {
   const tabs = useId()
@@ -67,7 +81,7 @@ export function DepositsList() {
           noun="واریزها"
           unit="واریز"
           skeletonRows={6}
-          empty={<EmptyState framed icon={MessageSquareText} title="هنوز پیامکی نرسیده است" description="وقتی تایید خودکار واریز روشن و فوراپ وصل باشد، هر پیامک واریز بانک این‌جا می‌آید." />}
+          empty={<EmptyState framed icon={MessageSquareText} title="هنوز پیامکی نرسیده است" description="وقتی تایید خودکار واریز روشن و فوراپ یا ریختم وصل باشد، هر پیامک واریز بانک این‌جا می‌آید." />}
           noMatch={<EmptyState framed icon={Search} title="واریزی پیدا نشد" description={list.narrowed || list.filter === '' ? 'با این جستجو چیزی نیست.' : NONE[list.filter]} />}
         >
           <Table>
@@ -113,7 +127,7 @@ export function DepositsList() {
                   <TableCell>
                     <div className="flex justify-end">
                       <Button size="sm" variant="secondary" onClick={() => setOpen(deposit)}>
-                        پیامک
+                        {sourceOf(deposit).open}
                       </Button>
                     </div>
                   </TableCell>
@@ -124,12 +138,12 @@ export function DepositsList() {
         </ListView>
       </div>
 
-      <DetailModal subject={open} title={(deposit) => <Amount deposit={deposit} />} description={() => 'پیامک واریز بانک، همان‌طور که فوراپ فرستاد.'} onClose={() => setOpen(null)}>
+      <DetailModal subject={open} title={(deposit) => <Amount deposit={deposit} />} description={(deposit) => sourceOf(deposit).said} onClose={() => setOpen(null)}>
         {(deposit) => (
           <div className="grid gap-5">
             <DepositFacts deposit={deposit} />
             <div className="grid gap-1.5">
-              <span className="text-footnote text-muted-foreground">متن پیامک</span>
+              <span className="text-footnote text-muted-foreground">{sourceOf(deposit).body}</span>
               {deposit.body ? (
                 <p dir="auto" className="rounded-lg border border-border bg-fill px-3 py-2.5 text-body wrap-anywhere whitespace-pre-wrap">
                   {deposit.body}

@@ -3,6 +3,9 @@
 declare(strict_types=1);
 
 use App\Modules\Providers\DTO\ClientLink;
+use App\Modules\Telegram\Admin\Ui\Admin;
+use App\Modules\Telegram\Admin\Ui\AdminHandler;
+use App\Modules\Telegram\Admin\Ui\Nav;
 use App\Modules\Telegram\Channels\JoinPrompt;
 use App\Modules\Telegram\Gates\ChannelGate;
 use App\Modules\Telegram\Gates\MaintenanceGate;
@@ -121,14 +124,24 @@ return static function (Dispatcher $bot): void {
     $bot->state(ServiceClaimHandler::STATE, ServiceClaimHandler::class);
     $bot->pattern(ClientLink::PATTERN, ServiceClaimHandler::class);
 
-    // Bot admins only (anyone else gets no answer): /broadcast.
-    $bot->command(BroadcastHandler::COMMAND, BroadcastHandler::class, adminOnly: true);
-    $bot->callback(BroadcastHandler::CALLBACK, BroadcastHandler::class, adminOnly: true);
-    $bot->state(BroadcastHandler::STATE, BroadcastHandler::class, adminOnly: true);
+    // The bot's admins and whoever manages the shop from it (each handler asks AdminSeats; anyone else gets no answer, and
+    // a message at their step is one at no step): /broadcast — also «➕ پیام همگانی تازه» in the management —, and /emoji,
+    // premium emoji for the texts.
+    $bot->command(BroadcastHandler::COMMAND, BroadcastHandler::class);
+    $bot->callback(BroadcastHandler::CALLBACK, BroadcastHandler::class);
+    $bot->state(BroadcastHandler::STATE, BroadcastHandler::class);
+    $bot->command(CustomEmojiHandler::COMMAND, CustomEmojiHandler::class);
+    $bot->state(CustomEmojiHandler::STATE, CustomEmojiHandler::class);
 
-    // Bot admins only: /emoji, premium emoji for the texts.
-    $bot->command(CustomEmojiHandler::COMMAND, CustomEmojiHandler::class, adminOnly: true);
-    $bot->state(CustomEmojiHandler::STATE, CustomEmojiHandler::class, adminOnly: true);
+    // The shop's management from the bot (Telegram\Admin): /admin and /panel, the «⚙️ مدیریت» button, its screens' buttons
+    // (navigation: a flow in progress is left) and the answers to its questions — for whoever manages the shop
+    // (AdminSeats); anyone else is answered as an unknown command or button is.
+    $bot->command('admin', AdminHandler::class);
+    $bot->command('panel', AdminHandler::class);
+    $bot->text(static fn(): array => [AdminHandler::LABEL], AdminHandler::class);
+    $bot->callback(Nav::PREFIX, AdminHandler::class, navigation: true);
+    $bot->state(Admin::INPUT, AdminHandler::class);
+    $bot->state(Admin::INPUT_ANY, AdminHandler::class, captures: true);
 
     $bot->fallback(FallbackHandler::class);
 

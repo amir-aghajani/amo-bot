@@ -58,16 +58,20 @@ use App\Modules\Catalog\Services\CustomServiceSettings;
 use App\Modules\Discounts\Services\DiscountSettings;
 use App\Modules\Imports\Imports;
 use App\Modules\Imports\Migrators\Faoxima\FaoximaMigrator;
+use App\Modules\Imports\Migrators\MirzaBot\MirzaBotMigrator;
 use App\Modules\Imports\Sources\Stager;
 use App\Modules\Installer\Services\InstallKey;
 use App\Modules\Payments\Contracts\RefundedOrders;
 use App\Modules\Payments\Drivers\Aban\AbanDriver;
 use App\Modules\Payments\Drivers\AqayePardakht\AqayePardakhtDriver;
 use App\Modules\Payments\Drivers\AtlasPay\AtlasPayDriver;
+use App\Modules\Payments\Drivers\Bluepal\BluepalDriver;
 use App\Modules\Payments\Drivers\CubePay\CubePayDriver;
 use App\Modules\Payments\Drivers\Manual\ManualDriver;
 use App\Modules\Payments\Drivers\Outside\OutsideDriver;
 use App\Modules\Payments\Drivers\Plisio\PlisioDriver;
+use App\Modules\Payments\Drivers\Rialit\RialitDriver;
+use App\Modules\Payments\Drivers\Rikhtam\RikhtamDriver;
 use App\Modules\Payments\Drivers\Variza\VarizaDriver;
 use App\Modules\Payments\Drivers\Wallet\WalletDriver;
 use App\Modules\Payments\Drivers\Zarinpal\ZarinpalDriver;
@@ -78,6 +82,8 @@ use App\Modules\Providers\Drivers\HmPanel\HmPanelDriver;
 use App\Modules\Providers\Drivers\Marzban\MarzbanDriver;
 use App\Modules\Providers\Drivers\Marzban\MarzbanTokens;
 use App\Modules\Providers\Drivers\PasarGuard\PasarGuardDriver;
+use App\Modules\Providers\Drivers\Rebecca\RebeccaDriver;
+use App\Modules\Providers\Drivers\Remnawave\RemnawaveDriver;
 use App\Modules\Providers\Drivers\ThreeXui\ThreeXuiDriver;
 use App\Modules\Providers\ProviderRegistry;
 use App\Modules\Providers\Support\PanelHttp;
@@ -103,6 +109,8 @@ use App\Modules\Subscriptions\Services\RenewalSettings;
 use App\Modules\Subscriptions\Services\ServiceClaimSettings;
 use App\Modules\Subscriptions\Services\ServiceTransferSettings;
 use App\Modules\Subscriptions\Services\TestAccountSettings;
+use App\Modules\Telegram\Admin\BotAdminSettings;
+use App\Modules\Telegram\Admin\Ui\AdminHandler;
 use App\Modules\Telegram\Api\BotApi;
 use App\Modules\Telegram\BotSettings;
 use App\Modules\Telegram\Contracts\MiniAppAddress;
@@ -214,10 +222,13 @@ return [
     // Sign-in attempts, counted in files (shared hosting has no cache server).
     'throttle.path' => factory(fn(Application $app) => $app->storagePath('cache/throttle')),
     RateLimiter::class => autowire()->constructorParameter('directory', get('throttle.path')),
-    // What another service hands over and would hand over again unchanged — a picture Telegram keeps — kept a short while.
     // The turns asks about an online payment take (Payments\Services\OnlinePayments), a lock file each.
     'payments.turns' => factory(fn(Application $app) => $app->storagePath('cache/payment-turns')),
     OnlinePayments::class => autowire()->constructorParameter('turns', get('payments.turns')),
+    // The turns a chat's updates to the shop's management take (Telegram\Admin\Ui\AdminHandler), a lock file a chat.
+    'bot_admin.turns' => factory(fn(Application $app) => $app->storagePath('cache/bot-admin-turns')),
+    AdminHandler::class => autowire()->constructorParameter('turns', get('bot_admin.turns')),
+    // What another service hands over and would hand over again unchanged — a picture Telegram keeps — kept a short while.
     'files.cache' => factory(fn(Application $app) => $app->storagePath('cache/files')),
     FileCache::class => autowire()->constructorParameter('directory', get('files.cache')),
     // The OpenID providers' signing keys a website's sign-in is checked with, kept a while rather than read every time.
@@ -306,7 +317,7 @@ return [
     // --- Domain registries: register additional drivers here ---------------------------------
     // The panel connectors, by what servers.driver holds (Providers\Drivers) — and, on them, the client of each
     // server's panel, kept a while (ProviderRegistry).
-    'panel.drivers' => factory(static fn(ContainerInterface $c): Registry => new Registry([$c->get(ThreeXuiDriver::class), $c->get(PasarGuardDriver::class), $c->get(HmPanelDriver::class), $c->get(MarzbanDriver::class)])),
+    'panel.drivers' => factory(static fn(ContainerInterface $c): Registry => new Registry([$c->get(ThreeXuiDriver::class), $c->get(PasarGuardDriver::class), $c->get(HmPanelDriver::class), $c->get(MarzbanDriver::class), $c->get(RebeccaDriver::class), $c->get(RemnawaveDriver::class)])),
     // The bearer tokens a panel signed in with gives, kept encrypted across requests (Marzban's: MarzbanTokens).
     'panel.tokens' => factory(fn(Application $app) => $app->storagePath('cache/panel-tokens')),
     MarzbanTokens::class => autowire()->constructorParameter('directory', get('panel.tokens')),
@@ -320,10 +331,10 @@ return [
     }),
 
     // The ways the shop takes money, by what payment_methods.driver holds (Payments\Drivers).
-    'payment.drivers' => factory(static fn(ContainerInterface $c): Registry => new Registry([$c->get(WalletDriver::class), $c->get(OutsideDriver::class), $c->get(ManualDriver::class), $c->get(CubePayDriver::class), $c->get(ZarinpalDriver::class), $c->get(AtlasPayDriver::class), $c->get(AbanDriver::class), $c->get(PlisioDriver::class), $c->get(AqayePardakhtDriver::class), $c->get(VarizaDriver::class)])),
+    'payment.drivers' => factory(static fn(ContainerInterface $c): Registry => new Registry([$c->get(WalletDriver::class), $c->get(OutsideDriver::class), $c->get(ManualDriver::class), $c->get(CubePayDriver::class), $c->get(ZarinpalDriver::class), $c->get(AtlasPayDriver::class), $c->get(AbanDriver::class), $c->get(PlisioDriver::class), $c->get(AqayePardakhtDriver::class), $c->get(VarizaDriver::class), $c->get(BluepalDriver::class), $c->get(RialitDriver::class), $c->get(RikhtamDriver::class)])),
     GatewayRegistry::class => autowire()->constructorParameter('drivers', get('payment.drivers')),
     // The other bots an import reads, by what imports.migrator holds (Imports\Migrators).
-    'import.migrators' => factory(static fn(ContainerInterface $c): Registry => new Registry([$c->get(FaoximaMigrator::class)])),
+    'import.migrators' => factory(static fn(ContainerInterface $c): Registry => new Registry([$c->get(FaoximaMigrator::class), $c->get(MirzaBotMigrator::class)])),
     // The pictures the shop is sent, each kind in a folder of its own (Users\Enums\PictureFolder): the receipts customers
     // upload from the shops' websites, the support tickets' — one sent in the bot stays Telegram's file.
     'receipts.path' => factory(fn(Application $app) => $app->storagePath('uploads/receipts')),
@@ -355,6 +366,7 @@ return [
         $c->get(WheelSettings::class),
         $c->get(CashbackSettings::class),
         $c->get(LotterySettings::class),
+        $c->get(BotAdminSettings::class),
     ])),
 
     // The shop's configuration: config.php beside the app, as WordPress keeps wp-config.php — written by the

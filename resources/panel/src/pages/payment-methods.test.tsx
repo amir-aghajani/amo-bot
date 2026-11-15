@@ -1,10 +1,19 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { toast } from 'sonner'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { DriverDescription, FieldDescription, PaymentMethodResponse, PaymentMethodsResponse, UnregisteredMethodRow, WalletMethodRow } from '@/lib/api-types'
+import type {
+  DriverDescription,
+  FieldDescription,
+  GatewayWebhookState,
+  PaymentMethodSavedResponse,
+  PaymentMethodsResponse,
+  PaymentMethodWebhookResponse,
+  UnregisteredMethodRow,
+  WalletMethodRow,
+} from '@/lib/api-types'
 import { PaymentMethodsPage } from '@/pages/payment-methods'
 import { providers, until } from '@/test/render'
-import { cardMethodRow, cubePayDriverRow, cubePayMethodRow, depositSettingsRow, paymentCardRow } from '@/test/rows'
+import { cardMethodRow, cubePayDriverRow, cubePayMethodRow, depositSettingsRow, paymentCardRow, rialitDriverRow, rialitMethodRow, webhookState } from '@/test/rows'
 import { json, refusal, server } from '@/test/server'
 
 /*
@@ -15,8 +24,10 @@ import { json, refusal, server } from '@/test/server'
  * request; the wallet opens in its form too (its label, bounds and switch); a CubePay method says its gateway confirms
  * its payments, and its form keeps its token unless another is typed; one whose driver is no longer installed
  * says no customer is offered it, a card method no card is shown while card payments go to support's private chat (its
- * caps then beside the point); a method payments were made with is not offered a delete it would be refused; and the
- * page counts its methods once their list was read — never a zero it does not know.
+ * caps then beside the point); a method payments were made with is not offered a delete it would be refused; a Rialit
+ * method's save says what came of its webhook — registered just now, why it was not, or Rialit sending it to another
+ * site's address, which opens (or keeps) the method's view where it is replaced —; and the page counts its methods once
+ * their list was read — never a zero it does not know.
  */
 
 const WALLET: WalletMethodRow = {
@@ -35,6 +46,7 @@ const WALLET: WalletMethodRow = {
   counts: { payments: 3 },
   created_at: '2026-09-01T10:00:00Z',
   updated_at: '2026-10-06T09:00:00Z',
+  registers_webhook: false,
 }
 
 function field(name: string, overrides: Partial<FieldDescription>): FieldDescription {
@@ -85,6 +97,7 @@ const openDialog = () => within(document.querySelector<HTMLElement>('dialog[open
 
 beforeEach(() => {
   vi.spyOn(toast, 'success')
+  vi.spyOn(toast, 'warning')
   // «تایید خودکار واریز» under the list, off (components/payments/deposits has its own tests).
   server().on('GET', '/api/admin/deposits/settings', json(depositSettingsRow({ enabled: false, key: null, last_test_at: null })))
 })
@@ -140,7 +153,7 @@ describe('the payment methods', () => {
   it('save a card method’s form as its driver’s own request: label, switch, bounds, settings and its cards in their order', async () => {
     server()
       .on('GET', '/api/admin/payment-methods/drivers', json({ drivers: [MANUAL] }))
-      .on('PUT', '/api/admin/payment-methods/5', json({ method: cardMethodRow({ cards: [paymentCardRow({ holder: 'سارا احمدی' })] }) } satisfies PaymentMethodResponse))
+      .on('PUT', '/api/admin/payment-methods/5', json({ method: cardMethodRow({ cards: [paymentCardRow({ holder: 'سارا احمدی' })] }), webhook: null } satisfies PaymentMethodSavedResponse))
     showMethods([WALLET, cardMethodRow()])
 
     fireEvent.click(await screen.findByRole('button', { name: 'کارت به کارت (ملت)' }))
@@ -183,7 +196,7 @@ describe('the payment methods', () => {
   it('open the wallet in its form — its label, bounds and switch — and save them', async () => {
     server()
       .on('GET', '/api/admin/payment-methods/drivers', json({ drivers: [WALLET_DRIVER, MANUAL] }))
-      .on('PUT', '/api/admin/payment-methods/1', json({ method: { ...WALLET, max_amount: '2000000.00' } } satisfies PaymentMethodResponse))
+      .on('PUT', '/api/admin/payment-methods/1', json({ method: { ...WALLET, max_amount: '2000000.00' }, webhook: null } satisfies PaymentMethodSavedResponse))
     showMethods([WALLET])
 
     fireEvent.click(await screen.findByRole('button', { name: 'کیف پول' }))
@@ -204,7 +217,7 @@ describe('the payment methods', () => {
   it('open a CubePay method in its form: the token kept, never shown nor emptied, and left blank it is kept', async () => {
     server()
       .on('GET', '/api/admin/payment-methods/drivers', json({ drivers: [WALLET_DRIVER, MANUAL, cubePayDriverRow()] }))
-      .on('PUT', '/api/admin/payment-methods/6', json({ method: cubePayMethodRow({ label: 'درگاه CubePay' }) } satisfies PaymentMethodResponse))
+      .on('PUT', '/api/admin/payment-methods/6', json({ method: cubePayMethodRow({ label: 'درگاه CubePay' }), webhook: null } satisfies PaymentMethodSavedResponse))
     showMethods([WALLET, cubePayMethodRow()])
 
     fireEvent.click(await screen.findByRole('button', { name: 'پرداخت آنلاین' }))
@@ -264,6 +277,105 @@ describe('the payment methods', () => {
 
     expect(await openDialog().findByText(/۹ پرداخت ثبت شده و برای حفظ تاریخچه حذف نمی‌شود/)).toBeTruthy()
     expect(openDialog().queryByRole('button', { name: 'حذف' })).toBeNull()
+  })
+})
+
+const WEBHOOK = '/api/admin/payment-methods/7/webhook'
+const OTHER = 'https://old-bot.example/rialit/hook'
+const RIALIT_DRIVERS = { drivers: [WALLET_DRIVER, MANUAL, rialitDriverRow()] }
+
+/** A new Rialit method added from the picker, its key typed, the save answering `webhook`. */
+async function addRialit(webhook: GatewayWebhookState) {
+  server()
+    .on('GET', '/api/admin/payment-methods/drivers', json(RIALIT_DRIVERS))
+    .on('POST', '/api/admin/payment-methods', json({ method: rialitMethodRow(), webhook } satisfies PaymentMethodSavedResponse, 201))
+  showMethods([WALLET])
+  fireEvent.click(await screen.findByRole('button', { name: 'افزودن روش پرداخت' }))
+  fireEvent.click(await openDialog().findByRole('button', { name: /ریالیت/ }))
+  fireEvent.change(openDialog().getByLabelText('کلید API'), { target: { value: 'rl-test-key-12345678' } })
+  fireEvent.click(openDialog().getByRole('button', { name: 'افزودن روش' }))
+}
+
+/** Rialit method 7's view, Rialit's webhook read as `read`, the save answering `saved`. */
+async function editRialit(read: GatewayWebhookState, saved: GatewayWebhookState) {
+  server()
+    .on('GET', '/api/admin/payment-methods/drivers', json(RIALIT_DRIVERS))
+    .on('GET', WEBHOOK, json({ webhook: read } satisfies PaymentMethodWebhookResponse))
+    .on('PUT', '/api/admin/payment-methods/7', json({ method: rialitMethodRow({ label: 'ریالیت' }), webhook: saved } satisfies PaymentMethodSavedResponse))
+  showMethods([WALLET, rialitMethodRow()])
+  fireEvent.click(await screen.findByRole('button', { name: 'پرداخت با ریالیت' }))
+  await openDialog().findByRole('region', { name: 'وب‌هوک ریالیت' })
+  await until(() => expect(webhookBlock().getByText(read.state === 'ours' ? 'آدرس فروشگاه ثبت است' : 'به آدرس دیگری می‌رود')).toBeTruthy())
+  fireEvent.change(openDialog().getByLabelText('نام روش'), { target: { value: 'ریالیت' } })
+  fireEvent.click(openDialog().getByRole('button', { name: 'ذخیره تغییرات' }))
+}
+
+const webhookBlock = () => within(openDialog().getByRole('region', { name: 'وب‌هوک ریالیت' }))
+const dialogOpen = () => document.querySelector('dialog[open]') !== null
+
+describe('a Rialit method’s save', () => {
+  it('says the shop’s address registered just now under it', async () => {
+    const registered = 'آدرس وب‌هوک فروشگاه در ریالیت ثبت شد؛ ریالیت به صاحب حساب خبر داد.'
+    await addRialit(webhookState({ message: registered }))
+
+    await until(() => expect(toast.success).toHaveBeenCalledWith('روش پرداخت اضافه شد', { description: registered }))
+    expect(dialogOpen()).toBe(false)
+  })
+
+  it('opens the new method’s view on its webhook when Rialit sends it to another site’s address', async () => {
+    await addRialit(webhookState({ state: 'elsewhere', url: OTHER }))
+
+    await until(() => expect(screen.getByRole('heading', { name: 'ویرایش «پرداخت با ریالیت»' })).toBeTruthy())
+    expect(webhookBlock().getByText('به آدرس دیگری می‌رود')).toBeTruthy()
+    expect(webhookBlock().getByText(OTHER)).toBeTruthy()
+    expect(webhookBlock().getByRole('button', { name: 'جایگزین کردن با آدرس فروشگاه' })).toBeTruthy()
+    expect(document.activeElement).toBe(openDialog().getByRole('region', { name: 'وب‌هوک ریالیت' }))
+    expect(toast.warning).toHaveBeenCalledWith('روش پرداخت اضافه شد، ولی وب‌هوک ریالیت به آدرس دیگری می‌رود', { description: 'در همین پنجره می‌توانید آن را با آدرس فروشگاه جایگزین کنید.' })
+    // What the save said is what the view shows: Rialit is not asked again.
+    expect(server().sent('GET', WEBHOOK)).toHaveLength(0)
+  })
+
+  it('says why the shop’s address was not registered', async () => {
+    const refused = 'ریالیت در هر ساعت حداکثر ۲۰ تغییر امنیتی می‌پذیرد؛ کمی بعد دوباره امتحان کنید.'
+    await addRialit(webhookState({ state: 'none', url: null, message: refused }))
+
+    await until(() => expect(toast.warning).toHaveBeenCalledWith('روش پرداخت اضافه شد، ولی آدرس فروشگاه در ریالیت ثبت نشد', { description: refused }))
+    expect(toast.success).not.toHaveBeenCalled()
+    expect(dialogOpen()).toBe(false)
+  })
+
+  it('says why Rialit’s webhook could not be read', async () => {
+    const unreachable = 'کلید API را ریالیت نپذیرفت.'
+    await addRialit(webhookState({ state: 'unknown', url: null, message: unreachable }))
+
+    await until(() => expect(toast.warning).toHaveBeenCalledWith('روش پرداخت اضافه شد، ولی وضعیت وب‌هوک ریالیت معلوم نشد', { description: unreachable }))
+    expect(dialogOpen()).toBe(false)
+  })
+
+  it('keeps the view open on its webhook when it finds Rialit sending it to another address than the view showed', async () => {
+    await editRialit(webhookState(), webhookState({ state: 'elsewhere', url: OTHER }))
+
+    await until(() => expect(webhookBlock().getByText('به آدرس دیگری می‌رود')).toBeTruthy())
+    expect(dialogOpen()).toBe(true)
+    expect(document.activeElement).toBe(openDialog().getByRole('region', { name: 'وب‌هوک ریالیت' }))
+    expect(toast.warning).toHaveBeenCalledWith('روش پرداخت ذخیره شد، ولی وب‌هوک ریالیت به آدرس دیگری می‌رود', { description: 'در همین پنجره می‌توانید آن را با آدرس فروشگاه جایگزین کنید.' })
+    // Saved: nothing left unsaved.
+    expect(openDialog().getByRole('button', { name: 'ذخیره تغییرات' }).getAttribute('aria-disabled')).toBe('true')
+  })
+
+  it('closes as ever when Rialit sends it to the address the view showed: the owner knows', async () => {
+    await editRialit(webhookState({ state: 'elsewhere', url: OTHER }), webhookState({ state: 'elsewhere', url: OTHER }))
+
+    await until(() => expect(toast.success).toHaveBeenCalledWith('روش پرداخت ذخیره شد'))
+    expect(toast.warning).not.toHaveBeenCalled()
+    await until(() => expect(dialogOpen()).toBe(false))
+  })
+
+  it('closes with the save alone when the address was the shop’s already', async () => {
+    await editRialit(webhookState(), webhookState())
+
+    await until(() => expect(toast.success).toHaveBeenCalledWith('روش پرداخت ذخیره شد'))
+    await until(() => expect(dialogOpen()).toBe(false))
   })
 })
 

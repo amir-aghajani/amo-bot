@@ -21,7 +21,8 @@ use Illuminate\Database\ConnectionInterface;
 /**
  * The plans stage: each plan of the other bot made through the plans' own form (PlanService), sold on every inbound of
  * the servers its panels map to, in the category of its name — the shop's of that name as it is, or one made for it —,
- * switched on only when the owner says so and it has a server to sell on, never a plan only the other bot's agents saw.
+ * switched on only when the owner says so and it has a server to sell on, never a plan only the other bot's agents saw
+ * nor one it had stopped selling.
  * A category an import made is switched on once a plan of it comes in switched on. A plan none of whose panels came over
  * is made all the same, without a server, its own fields held to the form's bounds; the report names it. The plan, its
  * category and their links are written together, the category only once the plan's form took it.
@@ -61,7 +62,7 @@ final class PlanWriter
         $price = self::whole($plan->price, self::PRICE_MAX);
         $agentPrice = $plan->agentPrice === null ? null : self::whole($plan->agentPrice, self::PRICE_MAX);
         $note = trim((string) $plan->note);
-        $active = $run->choices->on('plans_on') && !$plan->agentsOnly && $servers !== [];
+        $active = $run->choices->on('plans_on') && !$plan->agentsOnly && $plan->selling && $servers !== [];
         $values = [
             'name' => $name,
             'price' => $price,

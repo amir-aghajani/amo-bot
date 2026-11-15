@@ -1,11 +1,13 @@
 # AmoBot
 
+[![Telegram group](https://img.shields.io/badge/Telegram-group-26A5E4?logo=telegram&logoColor=white)](https://t.me/AmoBot_Community)
+[![Telegram channel](https://img.shields.io/badge/Telegram-channel-26A5E4?logo=telegram&logoColor=white)](https://t.me/AmoBot_Official)
 [![CI](https://github.com/amir-aghajani/amo-bot/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/amir-aghajani/amo-bot/actions/workflows/ci.yml)
 
 AmoBot is an open-source shop for selling VPN subscriptions. Customers buy, pay for and manage their services in a
 Telegram bot; the owner runs the shop from a web panel; and AmoBot makes each service on the owner's own VPN panels
-(3X-UI, PasarGuard, HMPanel or Marzban). It is a PHP application built for ordinary shared hosting: you upload a
-release zip and set it up in the browser, with no shell.
+(3X-UI, PasarGuard, HMPanel, Marzban, Rebecca or Remnawave). It is a PHP application built for ordinary shared
+hosting: you upload a release zip and set it up in the browser, with no shell.
 
 Everything a customer, an agent or a shop owner sees is Persian and right to left, by design: prices in Toman, dates in
 the Jalali calendar. The code is English; the documentation is English and Persian.
@@ -31,8 +33,8 @@ the Jalali calendar. The code is English; the documentation is English and Persi
 
 ## Who it is for
 
-- **Shop owners** who sell VPN services through Telegram, run their own 3X-UI, PasarGuard, HMPanel or Marzban servers,
-  and want the shop on an ordinary shared host — those moving from another bot too.
+- **Shop owners** who sell VPN services through Telegram, run their own 3X-UI, PasarGuard, HMPanel, Marzban, Rebecca or
+  Remnawave servers, and want the shop on an ordinary shared host — those moving from another bot too.
 - **Agents** — a shop's resellers. The owner approves them, and each gets a bot, a shop and a panel of their own on the
   same installation: they install nothing.
 - **Website developers** who build a shop's own website on the Store API.
@@ -68,8 +70,9 @@ address: every shop has its own, each agent's too, and the panel shows it as a c
 - **The wallet**, and **card-to-card** with a receipt: several cards per method, each with a daily cap; buttons that
   copy the card number and the sum; receipts approved in the panel or from the report group — or by themselves after a
   review window you set, for a receipt sent in the bot or by a customer whose account is linked to Telegram. With
-  «تایید خودکار واریز» and ForApp, a phone app that forwards your bank's deposit SMS, a card payment is approved the
-  moment its exact sum comes in, with no receipt at all.
+  «تایید خودکار واریز» and ForApp, a phone app that forwards your bank's deposit SMS — or Rikhtam (0.10.0 and later),
+  whose app reads them and reports each deposit —, a card payment is approved the moment its exact sum comes in, with no
+  receipt at all.
 - **Online gateways**, which confirm a payment by themselves — no receipt to review:
 
   | Gateway | How the customer pays |
@@ -81,6 +84,9 @@ address: every shop has its own, each agent's too, and the panel shows it as a c
   | Plisio (0.7.0 and later) | A coin of the customer's choice, the order priced in US dollars at your rate |
   | AqayePardakht (0.7.0 and later) | Any Iranian bank card, through Shaparak |
   | Variza (0.7.0 and later) | Card-to-card, confirmed from your bank's text message and reported by a signed webhook |
+  | Bluepal (0.10.0 and later) | Any Iranian bank card, on the bank's page |
+  | Rialit (0.10.0 and later) | On Rialit's page, its fee passed on to the customer if you wish |
+  | Rikhtam (0.10.0 and later) | Crypto — Gram, Tether on TON or TRON, TRX — straight to your own wallet |
 
 - Every method — the wallet too — has a least and a most amount. An online payment that does not match its order is
   held for support, never settled by itself.
@@ -103,11 +109,15 @@ address: every shop has its own, each agent's too, and the panel shows it as a c
 - **«زمان‌بندی کارها»**: how often each scheduled task runs, and the times they decide by.
 - **Moving from another bot** («انتقال از ربات دیگر»): its customers, wallet balances and services — still on the same
   VPN panels, the same links —, its plans, codes, channels and cards brought into the shop from its backup or its
-  database, reviewed before anything is written, with nothing changed on the panels and nobody told; Faoxima first
-  ([Importing from another bot](docs/Importing.md)).
+  database, reviewed before anything is written, with nothing changed on the panels and nobody told; from Faoxima or
+  MirzaBot ([Importing from another bot](docs/Importing.md)).
 - **A report group**: sales, receipts with approve and reject buttons, failed deliveries, free tests, deleted services,
   agency requests, support tickets and the daily backup, each in its topic of a Telegram group, acted on from there —
   and a customer's card (`/manage`) to manage their services, wallet and account from the group.
+- **The shop managed from its bot** («⚙️ مدیریت», `/admin`): every section of the panel as the bot's own menus in its
+  private chat, on a phone — the owner from their own Telegram account, linked once, in any shop; an agent in their own
+  bot; the shop's admins with the daily work and the grants the owner gives them. Every change goes through the panel's
+  own API and rules ([Managing the shop from the bot](docs/Bot-Management.md)).
 - **One-press updates** from the panel, which installs only a signed release (where the host allows it; otherwise the
   shop is updated by hand).
 
@@ -137,7 +147,9 @@ its daily work there too, once the owner lets them in. Every operation is descri
 ### VPN panels and drivers
 
 - **3X-UI** (v3 and later, MHSanaei's), **PasarGuard** (3.1 and later), **HMPanel** (2.5 and later, through its API
-  key: the inbounds of the 3X-UI panels beneath it) and **Marzban** (0.8 and later).
+  key: the inbounds of the 3X-UI panels beneath it), **Marzban** (0.8 and later), **Rebecca** (1.0 and later, through
+  its API key: its services are what a plan sells) and **Remnawave** (2.1 and later, through its API token: its
+  internal squads are what a plan sells).
 - Each VPN panel, payment gateway, database, mail service, captcha and bot to import from is a driver: a new one is a
   class and its registration ([Drivers](docs/Drivers.md)). Other panels — Hiddify among them — are on the
   [Roadmap](docs/Roadmap.md).

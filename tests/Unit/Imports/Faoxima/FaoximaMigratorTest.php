@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Unit\Imports\Faoxima;
 
+use App\Core\Exceptions\ValidationException;
 use App\Modules\Imports\Migrators\Faoxima\FaoximaMigrator;
 use App\Modules\Imports\Records\ImportedCard;
 use App\Modules\Imports\Records\ImportedChannel;
@@ -20,6 +21,7 @@ use App\Modules\Imports\Survey\SurveyAdmin;
 use App\Modules\Imports\Survey\SurveyGroup;
 use App\Modules\Orders\Enums\OrderType;
 use App\Modules\Providers\ProviderRegistry;
+use Illuminate\Support\Carbon;
 use Tests\Fakes\ArrayStaged;
 use Tests\TestCase;
 
@@ -33,6 +35,12 @@ final class FaoximaMigratorTest extends TestCase
 {
     private const PG_KEY = 'pg_key_6f1c2a3b-4d5e-4f60-8a1b-2c3d4e5f6a7b';
 
+    /** A Rebecca admin's API key as the panel makes it: `rk_` and 43 base64url characters. */
+    private const REBECCA_KEY = 'rk_AbCdEfGhIjKlMnOpQrStUvWxYz0123456789-_AbCdE';
+
+    /** A made-up Remnawave API token: an HS256 JWT whose claims say `role: API`. */
+    private const REMNAWAVE_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1dWlkIjoiYzFkMmUzZjQtYTViNi00YzdkLThlOWYtMGExYjJjM2Q0ZTVmIiwidXNlcm5hbWUiOm51bGwsInJvbGUiOiJBUEkiLCJpYXQiOjE3NjAwMDAwMDAsImV4cCI6MTc5MTUzNjAwMH0.MZ985n4d3z1NRrmtTkueEhptffC6m3FLNRh8PcrEOmM';
+
     public function testItsCardNamesTheBotAndAsksNothing(): void
     {
         $card = (new FaoximaMigrator())->describe()->toArray();
@@ -40,6 +48,17 @@ final class FaoximaMigratorTest extends TestCase
         self::assertSame(['faoxima', 'Faoxima', []], [$card['key'], $card['label'], $card['fields']]);
         self::assertEquals((object) ['mark' => 'FX', 'vendor' => 'https://github.com/Mmd-Amir/Faoxima'], $card['traits']);
         self::assertNotEmpty(array_filter($card['notes'], static fn(string $note): bool => str_contains($note, 'backup.zip')), 'where its backup is');
+        $panels = array_values(array_filter($card['notes'], static fn(string $note): bool => str_contains($note, 'منتقل می‌شوند؛')));
+        self::assertCount(1, $panels, 'which panels\' services come');
+        [$come, $notYet] = explode('؛', $panels[0], 2);
+        foreach (['Marzban', 'PasarGuard', '3X-UI', 'Rebecca', 'Remnawave'] as $kind) {
+            self::assertStringContainsString("\u{2068}{$kind}\u{2069}", $come, "{$kind}'s come");
+        }
+        foreach (['Guard', 'WGDashboard'] as $kind) {
+            self::assertStringContainsString("\u{2068}{$kind}\u{2069}", $notYet, "{$kind}'s not yet");
+        }
+        self::assertStringNotContainsString('Rebecca', $notYet);
+        self::assertStringNotContainsString('Remnawave', $notYet);
         self::assertDoesNotMatchRegularExpression('/[\x{064B}-\x{0652}\x{0654}]/u', $card['description'] . implode('', $card['notes']), 'no diacritics');
     }
 
@@ -47,12 +66,13 @@ final class FaoximaMigratorTest extends TestCase
     {
         $tables = (new FaoximaMigrator())->tables();
 
-        self::assertSame(['password_panel', 'api_key', 'xui_api_token'], $tables['marzban_panel']->secrets);
+        self::assertSame(['password_panel', 'api_key', 'xui_api_token', 'remna_api_token'], $tables['marzban_panel']->secrets, 'Remnawave\'s API token among them');
         self::assertSame(['bottype'], $tables['user']->secrets, 'a reseller bot\'s token');
         self::assertSame(['bottype'], $tables['invoice']->secrets);
         self::assertSame(['bot_token'], $tables['botsaz']->secrets);
         self::assertSame(['id_admin', 'rule'], $tables['admin']->columns, 'never an admin\'s web password');
-        self::assertSame(['id', 'payment_Status'], $tables['Payment_report']->columns, 'history is counted, not read: only whether a payment still awaits approval');
+        self::assertSame(['id', 'payment_Status', 'bottype'], $tables['Payment_report']->columns, 'history is counted, not read: only whether a payment of the bot itself still awaits approval');
+        self::assertSame(['bottype'], $tables['Payment_report']->secrets, 'a reseller bot\'s token');
         self::assertArrayNotHasKey('textbot', $tables, 'its texts say nothing to the owner');
         self::assertArrayHasKey('DiscountSell', $tables, 'Faoxima\'s mixed-case names, as they are');
     }
@@ -106,7 +126,7 @@ final class FaoximaMigratorTest extends TestCase
         self::assertSame([true, 'banned_guy', '989351112233', 'نماینده عادی'], [$banned->banned, $banned->username, $banned->phone, $banned->group], 'an agency whose end is still to come');
         self::assertNull($customers['666666666']->group, 'an agency past its end: a customer');
 
-        self::assertSame('@agent_shop_bot', $customers['444444444']->reseller, 'a reseller bot by its @username');
+        self::assertSame(['@agent_shop_bot', '0.00'], [$customers['444444444']->reseller, $customers['444444444']->balance], 'a reseller bot\'s customer, by its @username: nothing ties them to the bot itself');
         self::assertSame('ربات نماینده حذف‌شده', $customers['555555555']->reseller, 'a token of a reseller bot Faoxima no longer has');
         self::assertSame(0, $customers['abc']->telegramId, 'no Telegram id: the core names it');
 
@@ -173,12 +193,13 @@ final class FaoximaMigratorTest extends TestCase
     {
         $services = self::byKey((new FaoximaMigrator())->services(self::staged()));
 
-        self::assertSame(['inv1', 'inv2', 'inv3', 'inv8', 'inv9', 'inv11', 'inv13', 'inv14'], array_keys($services), 'not removed, unpaid, a test whose time is up, from stock, sold by hand or on a panel Faoxima no longer has');
+        self::assertSame(['inv1', 'inv2', 'inv3', 'inv8', 'inv9', 'inv11', 'inv13', 'inv14', 'inv15'], array_keys($services), 'not removed, unpaid, a test whose time is up, from stock, sold by hand or on a panel Faoxima no longer has');
         self::assertEquals(new ImportedService(key: 'inv1', customerKey: '111111111', panelKey: 'آلمان ۱', remoteName: 'ali_1', planKey: 'p1', label: 'گوشی'), $services['inv1']);
         self::assertSame('p1', $services['inv2']->planKey, 'bought under the agents\' twin: its plan');
         self::assertSame([true, null], [$services['inv3']->test, $services['inv3']->planKey]);
-        self::assertSame(['@agent_shop_bot', 'p2'], [$services['inv8']->reseller, $services['inv8']->planKey]);
-        self::assertSame('ربکا', $services['inv9']->panelKey, 'on a panel no connector speaks to: the core leaves it, by its panel');
+        self::assertSame(['@agent_shop_bot', 'p4'], [$services['inv8']->reseller, $services['inv8']->planKey]);
+        self::assertSame('ربکا', $services['inv9']->panelKey, 'on Rebecca, like any other');
+        self::assertSame(['رمن', 'p1'], [$services['inv15']->panelKey, $services['inv15']->planKey], 'on a panel no connector speaks to: the core leaves it, by its panel');
         self::assertNull($services['inv11']->planKey, 'a custom service of no product');
         self::assertSame('p1', $services['inv13']->planKey, 'a renamed product: the one plan of its traffic and days on its panel (the agents\' twins are that plan)');
         self::assertNull($services['inv14']->planKey, 'no product of its traffic and days');
@@ -255,7 +276,7 @@ final class FaoximaMigratorTest extends TestCase
 
         self::assertNull($survey->version);
         self::assertSame(
-            ['customers' => 9, 'balances' => 3, 'services' => 7, 'tests' => 1, 'plans' => 4, 'discount_codes' => 8, 'gift_codes' => 5, 'channels' => 5, 'cards' => 3, 'resellers' => 2],
+            ['customers' => 9, 'balances' => 3, 'services' => 8, 'tests' => 1, 'plans' => 4, 'discount_codes' => 8, 'gift_codes' => 5, 'channels' => 5, 'cards' => 3, 'resellers' => 2],
             $survey->counts,
         );
         self::assertSame('21000.00', $survey->balanceTotal, 'a debt taken off; reseller bots\' customers left out');
@@ -266,18 +287,18 @@ final class FaoximaMigratorTest extends TestCase
             'only the administrators, whom the owner\'s switch would make admins (support staff are a warning); an admin who never started the bot is no customer to make one',
         );
         self::assertEquals([
-            new LeftBehind('تاریخچه پرداخت‌ها', 3),
+            new LeftBehind('تاریخچه پرداخت‌ها', 5),
             new LeftBehind('تیکت‌های پشتیبانی', 3),
             new LeftBehind('تاریخچه کیف پول', 2),
             new LeftBehind('تاریخچه تمدیدها و خریدهای اضافه سرویس‌ها', 1),
             new LeftBehind('ربات‌های نمایندگی', 1),
+            new LeftBehind('کیف پول مشتری‌های ربات‌های نمایندگی (در فایل‌های ربات قبلی است، نه دیتابیسش)', 2),
             new LeftBehind('کانفیگ‌های انبار و فروش دستی', 2),
-            new LeftBehind('سرویس‌های پنل‌هایی که این فروشگاه کانکتورشان را ندارد', 1),
             new LeftBehind('سرویس‌های پنل‌هایی که در ربات قبلی حذف شده بودند', 1),
             new LeftBehind('قیمت‌های حجم و زمان اضافه و سرویس دلخواه پنل‌ها', 2),
             new LeftBehind('تنظیمات محصول‌ها (محدودیت دستگاه، خرید یک‌باره، ریست دوره‌ای حجم)', 2),
-            new LeftBehind('تاریخچه استفاده از کدهای تخفیف و هدیه', 2),
-        ], $survey->left);
+            new LeftBehind('تاریخچه استفاده از کدهای تخفیف و هدیه (سقف استفاده هر مشتری از نو شمرده می‌شود)', 2),
+        ], $survey->left, 'the reseller bots\' customers\' wallets, in its files');
 
         self::assertSame([
             '۱ مشتری در ربات قبلی بدهکار بودند (جمعا ۳۰٬۰۰۰ تومان)؛ کیف پولشان اینجا هم منفی می‌آید.',
@@ -288,7 +309,7 @@ final class FaoximaMigratorTest extends TestCase
             'قیمت‌های جدای «نماینده پیشرفته» منتقل نمی‌شود: هر پلن اینجا یک قیمت نمایندگی دارد، همان قیمت «نماینده عادی» و اگر نبود، پیشرفته.',
             '۲ سرویس به هیچ پلنی وصل نشد (محصولش در ربات قبلی تغییر نام داده یا حذف شده بود)؛ بدون پلن می‌آید و با تمدید، پلن می‌گیرد.',
             '۲ پرداخت در ربات قبلی هنوز منتظر تایید است؛ اول آن‌ها را آنجا تایید کنید و بعد پشتیبان تازه بگیرید، وگرنه این مبلغ‌ها به کیف پول آن مشتری‌ها نمی‌رسد.',
-        ], array_slice($survey->warnings, 0, 8), 'a still-running agency; personal discounts with codes coming; a custom service and a deleted product\'s; a payment waiting and one pending');
+        ], array_slice($survey->warnings, 0, 8), 'a still-running agency; personal discounts with codes coming (last of the customers\' words); a custom service and a deleted product\'s; the bot\'s own payment waiting and one pending (a reseller bot\'s are not)');
         self::assertCount(12, $survey->warnings);
         self::assertStringContainsString("«\u{2068}فرانسه\u{2069}»", $survey->warnings[8], 'links through the old bot, on a panel with services');
         self::assertStringContainsString("«\u{2068}فرانسه\u{2069}»", $survey->warnings[9], 'a 3x-ui panel on its admin\'s login: v3 or later to bring its services');
@@ -307,11 +328,11 @@ final class FaoximaMigratorTest extends TestCase
 
         self::assertSame(['آلمان ۱', 'هلند', 'فرانسه', 'PG', 'PG2', 'مرزبان جدید', 'ربکا', 'رمن', 'بی‌رمز'], array_keys($panels), 'no «فروش دستی» one');
         self::assertSame(
-            ['marzban', '3x-ui', '3x-ui', 'pasarguard', 'pasarguard', 'pasarguard', null, null, 'marzban'],
+            ['marzban', '3x-ui', '3x-ui', 'pasarguard', 'pasarguard', 'pasarguard', 'rebecca', 'remnawave', 'marzban'],
             array_values(array_map(static fn(ImportedPanel $panel): ?string => $panel->driver, $panels)),
             'a Marzban panel on PasarGuard\'s API (its version 1) is PasarGuard',
         );
-        self::assertSame([1, 3, 1, 1, 1, 0, 1, 0, 0], array_values(array_map(static fn(ImportedPanel $panel): int => $panel->services, $panels)));
+        self::assertSame([1, 3, 1, 1, 1, 0, 1, 1, 0], array_values(array_map(static fn(ImportedPanel $panel): int => $panel->services, $panels)));
         self::assertSame(['مرزبان جدید'], array_keys(array_filter($panels, static fn(ImportedPanel $panel): bool => !$panel->active)), 'closed to new sales in Faoxima');
         self::assertSame(['PG' => 200], array_filter(array_map(static fn(ImportedPanel $panel): ?int => $panel->capacity, $panels), static fn(?int $capacity): bool => $capacity !== null), 'its sales limit; «unlimted» is none');
 
@@ -327,7 +348,8 @@ final class FaoximaMigratorTest extends TestCase
         self::assertSame(['auth_mode' => 'password', 'username' => 'root', 'password' => 'secret'], array_intersect_key($panels['PG2']->connection, ['auth_mode' => 1, 'username' => 1, 'password' => 1]), 'the old spelling, signed in with a login');
         self::assertSame('password', $panels['مرزبان جدید']->connection['auth_mode']);
 
-        self::assertSame([[], 'این فروشگاه هنوز کانکتوری برای این نوع پنل ندارد.', false], [$panels['ربکا']->connection, $panels['ربکا']->unsupported, $panels['ربکا']->addable()]);
+        self::assertSame(['base_url' => 'https://rb.example.com', 'auth_mode' => 'token', 'api_token' => self::REBECCA_KEY] + $options, $panels['ربکا']->connection, 'Rebecca on the `rk_…` API key Faoxima kept (`api_key`)');
+        self::assertSame([[], null, false], [$panels['رمن']->connection, $panels['رمن']->unsupported, $panels['رمن']->addable()], 'Remnawave without a token kept: mapped to a server, never added');
         self::assertSame([[], null, false], [$panels['بی‌رمز']->connection, $panels['بی‌رمز']->unsupported, $panels['بی‌رمز']->addable()], 'a connector, nothing to sign in with: mapped to a server, never added');
 
         // Every connection is what its connector's own form takes, as the servers screen would send it.
@@ -338,6 +360,98 @@ final class FaoximaMigratorTest extends TestCase
             $kept = $form->check($panel->connection, static fn(): mixed => null);
             self::assertSame($panel->connection['base_url'], $kept['base_url'], $panel->key);
         }
+    }
+
+    public function testARebeccaPanelIsAddedOnTheKeyFaoximaKeptAndTheFormJudgesThatKey(): void
+    {
+        $rebecca = static fn(string $name, ?string $key, ?string $username = 'null', ?string $password = 'null'): array => ['name_panel' => $name, 'type' => 'rebecca', 'url_panel' => 'https://rb.example.com', 'username_panel' => $username, 'password_panel' => $password, 'api_key' => $key];
+        $survey = (new FaoximaMigrator())->survey(new ArrayStaged([
+            'marzban_panel' => [
+                $rebecca('کلید', self::REBECCA_KEY),
+                $rebecca('ناقص', 'rb-token'),
+                $rebecca('رمز', null, 'admin', 'pw'),
+                $rebecca('خالی', 'null'),
+            ],
+        ]));
+        $panels = [];
+        foreach ($survey->panels as $panel) {
+            $panels[$panel->key] = $panel;
+        }
+
+        self::assertSame(['کلید' => true, 'ناقص' => true, 'رمز' => false, 'خالی' => false], array_map(static fn(ImportedPanel $panel): bool => $panel->addable(), $panels), 'whatever key Faoxima kept; an admin\'s login is no way into Rebecca, nor is nothing at all');
+        self::assertSame(['token', 'rb-token'], [$panels['ناقص']->connection['auth_mode'], $panels['ناقص']->connection['api_token']]);
+        self::assertSame([], $panels['رمز']->connection, 'mapped to a server of the owner\'s, never added on a login');
+
+        $form = $this->service(ProviderRegistry::class)->find('rebecca')?->describe()->form;
+        self::assertNotNull($form);
+        self::assertSame(self::REBECCA_KEY, $form->check($panels['کلید']->connection, static fn(): mixed => null)['api_token']);
+        try {
+            $form->check($panels['ناقص']->connection, static fn(): mixed => null);
+            self::fail('a key that is no `rk_…` key is refused');
+        } catch (ValidationException $e) {
+            self::assertArrayHasKey('api_token', $e->errors(), 'the server it would add is refused (the core reports it not added)');
+        }
+    }
+
+    /** Remnawave on the API token Faoxima signed in with (`remna_api_token`, RemnawaveManager.php); a panel of a kind with no connector stays behind. */
+    public function testARemnawavePanelIsAddedOnTheTokenFaoximaKeptAndTheFormJudgesThatToken(): void
+    {
+        $remnawave = static fn(string $name, ?string $token, ?string $username = 'null', ?string $password = 'null'): array => ['name_panel' => $name, 'type' => 'remnawave', 'url_panel' => 'https://rw.example.com/', 'username_panel' => $username, 'password_panel' => $password, 'remna_api_token' => $token, 'remna_squad' => 'a1b2c3d4-5e6f-4a7b-8c9d-0e1f2a3b4c5d'];
+        $old = $remnawave('قدیمی', null);
+        unset($old['remna_api_token']);
+        $invoice = static fn(string $key, string $panel): array => ['id_invoice' => $key, 'id_user' => '111111111', 'username' => "c{$key}", 'Service_location' => $panel, 'name_product' => 'یک ماهه', 'Status' => 'active'];
+        $staged = new ArrayStaged([
+            'marzban_panel' => [
+                $remnawave('توکن', self::REMNAWAVE_TOKEN),
+                $remnawave('ناقص', 'rw-token'),
+                $remnawave('رمز', null, 'admin', 'pw'),
+                $remnawave('خالی', 'null'),
+                $old,
+                ['name_panel' => 'گارد', 'type' => 'guard', 'url_panel' => 'https://guard.example.com', 'username_panel' => 'admin', 'password_panel' => 'pw'],
+            ],
+            'invoice' => [$invoice('1', 'توکن'), $invoice('2', 'گارد')],
+        ]);
+        $migrator = new FaoximaMigrator();
+        $survey = $migrator->survey($staged);
+        $panels = [];
+        foreach ($survey->panels as $panel) {
+            $panels[$panel->key] = $panel;
+        }
+
+        self::assertSame(['توکن' => true, 'ناقص' => true, 'رمز' => false, 'خالی' => false, 'قدیمی' => false, 'گارد' => false], array_map(static fn(ImportedPanel $panel): bool => $panel->addable(), $panels), 'whatever token Faoxima kept; an admin\'s login is no way into Remnawave, nor is nothing at all');
+        self::assertSame(['remnawave', 'remnawave', 'remnawave', 'remnawave', 'remnawave', null], array_values(array_map(static fn(ImportedPanel $panel): ?string => $panel->driver, $panels)));
+        self::assertSame(['base_url' => 'https://rw.example.com', 'auth_mode' => 'token', 'api_token' => self::REMNAWAVE_TOKEN, 'verify_tls' => true, 'timeout' => 30, 'subscription_url' => '', 'proxy_enabled' => false], $panels['توکن']->connection, 'its address without the trailing slash; no gate key Faoxima never had');
+        self::assertSame([[], [], null], [$panels['رمز']->connection, $panels['قدیمی']->connection, $panels['قدیمی']->unsupported], 'mapped to a server of the owner\'s, never added on a login nor on nothing');
+        self::assertSame('این فروشگاه هنوز کانکتوری برای این نوع پنل ندارد.', $panels['گارد']->unsupported);
+
+        // Its services come; those of a panel without a connector stay behind, counted.
+        self::assertSame([1, 1], [$panels['توکن']->services, $panels['گارد']->services]);
+        self::assertContainsEquals(new LeftBehind('سرویس‌های پنل‌هایی که این فروشگاه کانکتورشان را ندارد', 1), $survey->left, 'the Guard panel\'s alone');
+
+        $form = $this->service(ProviderRegistry::class)->find('remnawave')?->describe()->form;
+        self::assertNotNull($form);
+        self::assertSame(self::REMNAWAVE_TOKEN, $form->check($panels['توکن']->connection, static fn(): mixed => null)['api_token']);
+        try {
+            $form->check($panels['ناقص']->connection, static fn(): mixed => null);
+            self::fail('a token that is no whole JWT is refused');
+        } catch (ValidationException $e) {
+            self::assertArrayHasKey('api_token', $e->errors(), 'the server it would add is refused (the core reports it not added)');
+        }
+    }
+
+    public function testAServicesPlanIsTheProductOfItsNameSoldOnItsPanel(): void
+    {
+        $panel = static fn(string $name, string $host): array => ['name_panel' => $name, 'type' => 'marzban', 'url_panel' => "https://{$host}.example.com", 'username_panel' => 'admin', 'password_panel' => 'pw', 'version_panel' => '0'];
+        $product = static fn(string $code, string $location, string $price, string $volume = '30'): array => ['id' => $code, 'code_product' => $code, 'name_product' => 'یک ماهه', 'price_product' => $price, 'Volume_constraint' => $volume, 'Service_time' => '30', 'Location' => $location, 'agent' => 'f', 'position' => $code];
+        $invoice = static fn(string $key, string $panel, string $volume = '30'): array => ['id_invoice' => $key, 'id_user' => '111111111', 'username' => "c{$key}", 'Service_location' => $panel, 'name_product' => 'یک ماهه', 'price_product' => '1000', 'Volume' => $volume, 'Service_time' => '30', 'Status' => 'active'];
+        $staged = new ArrayStaged([
+            'marzban_panel' => [$panel('آلمان', 'de'), $panel('هلند', 'nl'), $panel('فرانسه', 'fr'), $panel('ترکیه', 'tr')],
+            'product' => [$product('1', 'آلمان', '100000'), $product('2', 'هلند,فرانسه', '120000'), $product('3', 'آلمان', '90000', '40')],
+            'invoice' => [$invoice('de', 'آلمان'), $invoice('nl', 'هلند'), $invoice('fr', 'فرانسه'), $invoice('tr', 'ترکیه')],
+        ]);
+
+        $plans = array_map(static fn(ImportedService $service): ?string => $service->planKey, self::byKey((new FaoximaMigrator())->services($staged)));
+        self::assertSame(['de' => '1', 'nl' => '2', 'fr' => '2', 'tr' => null], $plans, 'one name, a product for some panels each: the one sold on the service\'s own panel — never another panel\'s, at its price; none sold there of its name, traffic and days: no plan');
     }
 
     public function testAPanelNamedByDigitsAloneIsStillAName(): void
@@ -352,6 +466,95 @@ final class FaoximaMigratorTest extends TestCase
         self::assertSame(['1', 1], [$survey->panels[0]->key, $survey->panels[0]->services]);
         self::assertCount(2, array_filter($survey->warnings, static fn(string $warning): bool => str_contains($warning, "«\u{2068}1\u{2069}»")), 'its links through the old bot, and its old 3x-ui');
         self::assertSame('1', array_values(iterator_to_array($migrator->services($staged)))[0]->panelKey);
+    }
+
+    public function testEachTieToTheBotItselfMakesAResellerBotsCustomerItsOwn(): void
+    {
+        $user = static fn(string $id, array $row = []): array => $row + ['id' => $id, 'username' => "u{$id}", 'number' => 'none', 'Balance' => '0', 'User_Status' => 'Active', 'agent' => 'f', 'affiliates' => '0', 'bottype' => 'AGENT_TOKEN_1'];
+        $invoice = static fn(string $key, string $user, ?string $bot, string $status = 'active'): array => ['id_invoice' => $key, 'id_user' => $user, 'username' => "c{$key}", 'Service_location' => 'آلمان', 'name_product' => 'یک ماهه', 'price_product' => '1000', 'Status' => $status, 'bottype' => $bot];
+        $staged = new ArrayStaged([
+            'marzban_panel' => [['name_panel' => 'آلمان', 'code_panel' => 'a1', 'type' => 'marzban', 'url_panel' => 'https://de.example.com', 'username_panel' => 'admin', 'password_panel' => 'pw', 'version_panel' => '0']],
+            'botsaz' => [['id' => '1', 'id_user' => '500000006', 'username' => 'agent_shop_bot', 'bot_token' => 'AGENT_TOKEN_1']],
+            'admin' => [['id_admin' => '500000007', 'rule' => 'support']],
+            'user' => [
+                $user('500000001'),
+                $user('500000002', ['Balance' => '1000']),
+                $user('500000003', ['Balance' => '-500']),
+                $user('500000004', ['agent' => 'n']),
+                $user('500000005', ['agent' => 'n2']),
+                $user('500000006'),
+                $user('500000007'),
+                $user('500000008'),
+                $user('500000009'),
+                $user('500000010'),
+                $user('500000011', ['bottype' => 'GONE_TOKEN']),
+                $user('500000012', ['bottype' => '0']),
+            ],
+            'invoice' => [
+                $invoice('i1', '500000001', 'AGENT_TOKEN_1'),
+                $invoice('i2', '500000002', 'AGENT_TOKEN_1'),
+                $invoice('i3', '500000008', null),
+                $invoice('i4', '500000009', ''),
+                $invoice('i5', '500000010', '0', 'Unpaid'),
+                $invoice('i6', '500000011', 'GONE_TOKEN', 'Unpaid'),
+            ],
+        ]);
+        $migrator = new FaoximaMigrator();
+
+        $resellers = array_map(static fn(ImportedCustomer $customer): ?string => $customer->reseller, self::byKey($migrator->customers($staged)));
+        self::assertSame([
+            500000001 => '@agent_shop_bot',
+            500000002 => null,
+            500000003 => null,
+            500000004 => null,
+            500000005 => null,
+            500000006 => null,
+            500000007 => null,
+            500000008 => null,
+            500000009 => null,
+            500000010 => null,
+            500000011 => 'ربات نماینده حذف‌شده',
+            500000012 => null,
+        ], $resellers, '`bottype` is only the reseller bot they last opened: a wallet here, in credit or debt, either agents\' level, a reseller bot of their own, an admin\'s role, a purchase in the bot itself (none, «0» or blank, unpaid too) make them its own; a reseller bot\'s purchase does not');
+
+        $survey = $migrator->survey($staged);
+        self::assertSame([12, 2, 2, '500.00'], [$survey->counts['customers'], $survey->counts['resellers'], $survey->counts['balances'], $survey->balanceTotal]);
+        self::assertContainsEquals(new LeftBehind('کیف پول مشتری‌های ربات‌های نمایندگی (در فایل‌های ربات قبلی است، نه دیتابیسش)', 2), $survey->left, 'their wallets stay in the reseller bot\'s files');
+
+        $services = self::byKey($migrator->services($staged));
+        self::assertSame(['@agent_shop_bot', '@agent_shop_bot', null], [$services['i1']->reseller, $services['i2']->reseller, $services['i3']->reseller], 'a service by its own invoice: bought in the reseller bot by a customer of the bot itself too');
+    }
+
+    public function testADiscountCodeUsedUpOrPastItsEndIsNoneThatComes(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-11-15 12:00:00', 'UTC'));
+        $code = static fn(?int $usesLeft = null, ?string $endsAt = null): ImportedDiscountCode => new ImportedDiscountCode('C', 'C', 'percent', '10', usesLeft: $usesLeft, endsAt: $endsAt === null ? null : new \DateTimeImmutable($endsAt));
+
+        self::assertSame([false, false, true, true], [$code()->usedUp(), $code(1)->usedUp(), $code(0)->usedUp(), $code(-1)->usedUp()], 'no limit, a use left; none, or fewer');
+        self::assertSame(
+            [false, false, true, true],
+            [$code()->ended(), $code(endsAt: '2026-11-15 12:00:01 UTC')->ended(), $code(endsAt: '2026-11-15 12:00:00 UTC')->ended(), $code(endsAt: '2026-11-15 11:59:59 UTC')->ended()],
+            'no end, one still to come; its very moment, or before',
+        );
+    }
+
+    public function testAPersonalDiscountIsAWordOnlyWhenACodeThatComesWouldWorkForThem(): void
+    {
+        $ends = (string) Carbon::parse('2026-12-01 00:00:00', 'UTC')->getTimestamp();
+        $staged = new ArrayStaged([
+            'user' => [['id' => '111111111', 'username' => 'ali', 'number' => 'none', 'Balance' => '0', 'User_Status' => 'Active', 'agent' => 'f', 'pricediscount' => '10']],
+            'DiscountSell' => [
+                ['id' => '1', 'codeDiscount' => 'USED', 'price' => '10', 'limitDiscount' => '5', 'usedDiscount' => '5', 'agent' => 'allusers', 'section' => 'all', 'status' => 'active'],
+                ['id' => '2', 'codeDiscount' => 'ENDS', 'price' => '10', 'limitDiscount' => '0', 'usedDiscount' => '0', 'agent' => 'allusers', 'time' => $ends, 'section' => 'all', 'status' => 'active'],
+            ],
+        ]);
+        $migrator = new FaoximaMigrator();
+        $personal = '۱ مشتری تخفیف شخصی دارند؛ ربات قبلی کد تخفیف را از آن‌ها نمی‌پذیرفت، ولی اینجا کدهای تخفیف برایشان هم کار می‌کند.';
+
+        Carbon::setTestNow(Carbon::parse('2026-11-20 00:00:00', 'UTC'));
+        self::assertSame([$personal], $migrator->survey($staged)->warnings, 'a code still to end');
+        Carbon::setTestNow(Carbon::parse('2026-12-02 00:00:00', 'UTC'));
+        self::assertSame([], $migrator->survey($staged)->warnings, 'one used up and one ended: none comes');
     }
 
     public function testEveryGeneratorGoesOnAfterTheRowItStoppedAt(): void
@@ -409,7 +612,7 @@ final class FaoximaMigratorTest extends TestCase
                 ['name_panel' => 'PG', 'code_panel' => 'g7h8', 'type' => 'pasarguard', 'url_panel' => 'https://pg.example.com', 'username_panel' => 'null', 'password_panel' => 'null', 'api_key' => self::PG_KEY, 'pasarguard_auth_mode' => 'api_key', 'version_panel' => '0', 'subvip' => 'offsubvip', 'limit_panel' => '200'],
                 ['name_panel' => 'PG2', 'code_panel' => 'i9j0', 'type' => 'pasargard', 'url_panel' => 'http://10.0.0.5:8000', 'username_panel' => 'root', 'password_panel' => 'secret', 'api_key' => 'null', 'pasarguard_auth_mode' => 'password', 'version_panel' => '0'],
                 ['name_panel' => 'مرزبان جدید', 'code_panel' => 'k1l2', 'type' => 'marzban', 'url_panel' => 'https://mz.example.com', 'username_panel' => 'sudo', 'password_panel' => 'pw', 'version_panel' => '1', 'status' => 'disable'],
-                ['name_panel' => 'ربکا', 'code_panel' => 'm3n4', 'type' => 'rebecca', 'url_panel' => 'https://rb.example.com', 'username_panel' => 'null', 'password_panel' => 'null', 'api_key' => 'rb-token'],
+                ['name_panel' => 'ربکا', 'code_panel' => 'm3n4', 'type' => 'rebecca', 'url_panel' => 'https://rb.example.com', 'username_panel' => 'null', 'password_panel' => 'null', 'api_key' => self::REBECCA_KEY],
                 ['name_panel' => 'رمن', 'code_panel' => 'o5p6', 'type' => 'remnawave', 'url_panel' => 'https://rw.example.com'],
                 ['name_panel' => 'دستی', 'code_panel' => 'q7r8', 'type' => 'Manualsale', 'url_panel' => 'null'],
                 ['name_panel' => 'بی‌رمز', 'code_panel' => 's9t0', 'type' => 'marzban', 'url_panel' => 'https://nopass.example.com', 'username_panel' => 'null', 'password_panel' => 'null', 'version_panel' => '0'],
@@ -418,8 +621,8 @@ final class FaoximaMigratorTest extends TestCase
                 ['id' => '111111111', 'username' => 'ali_shop', 'number' => '+989121234567', 'Balance' => '50000', 'User_Status' => 'Active', 'agent' => 'f', 'affiliates' => '0', 'register' => '1700000000', 'pricediscount' => '10', 'bottype' => null, 'maxbuyagent' => '0'],
                 ['id' => '222222222', 'username' => 'NOT_USERNAME', 'number' => 'confrim number by admin', 'Balance' => '-30000', 'User_Status' => 'Active', 'agent' => 'n2', 'affiliates' => '111111111', 'register' => '1700000100', 'pricediscount' => '0', 'bottype' => '0', 'maxbuyagent' => '100000'],
                 ['id' => '333333333', 'username' => '@banned_guy', 'number' => '989351112233', 'Balance' => '0', 'User_Status' => 'Block', 'agent' => 'n', 'affiliates' => '0', 'register' => '1700000200', 'pricediscount' => '0', 'expire' => '4000000000'],
-                ['id' => '444444444', 'username' => 'reseller_customer', 'number' => 'none', 'Balance' => '20000', 'User_Status' => 'Active', 'agent' => 'f', 'affiliates' => '0', 'register' => '1700000300', 'bottype' => 'AGENT_TOKEN_1'],
-                ['id' => '555555555', 'username' => 'none', 'number' => 'none', 'Balance' => '5000', 'User_Status' => 'Active', 'agent' => 'f', 'affiliates' => '0', 'register' => '1700000400', 'bottype' => 'GONE_TOKEN'],
+                ['id' => '444444444', 'username' => 'reseller_customer', 'number' => 'none', 'Balance' => '0', 'User_Status' => 'Active', 'agent' => 'f', 'affiliates' => '0', 'register' => '1700000300', 'bottype' => 'AGENT_TOKEN_1'],
+                ['id' => '555555555', 'username' => 'none', 'number' => 'none', 'Balance' => '0', 'User_Status' => 'Active', 'agent' => 'f', 'affiliates' => '0', 'register' => '1700000400', 'bottype' => 'GONE_TOKEN'],
                 ['id' => 'abc', 'username' => '', 'number' => 'none', 'Balance' => '0', 'User_Status' => 'Active', 'agent' => 'f', 'affiliates' => '0', 'register' => 'none'],
                 ['id' => '777777777', 'username' => 'self_ref', 'number' => 'none', 'Balance' => '1000', 'User_Status' => 'Active', 'agent' => 'f', 'affiliates' => '777777777', 'register' => 'none', 'pricediscount' => '150', 'bottype' => '0'],
                 ['id' => '666666666', 'username' => 'old_agent', 'number' => 'none', 'Balance' => '0', 'User_Status' => 'Active', 'agent' => 'n', 'affiliates' => '0', 'register' => '1690000500', 'expire' => '1600000000'],
@@ -450,13 +653,14 @@ final class FaoximaMigratorTest extends TestCase
                 ['id_invoice' => 'inv5', 'id_user' => '111111111', 'username' => 'ali_stock', 'Service_location' => 'آلمان ۱', 'name_product' => 'یک ماهه ۳۰ گیگ', 'Status' => 'active', 'source_panel_code' => 'a1b2'],
                 ['id_invoice' => 'inv6', 'id_user' => '777777777', 'username' => 'manual_1', 'Service_location' => 'دستی', 'name_product' => 'دستی', 'price_product' => '50000', 'Status' => 'active'],
                 ['id_invoice' => 'inv7', 'id_user' => '777777777', 'username' => 'gone_1', 'Service_location' => 'حذف‌شده', 'name_product' => 'نامحدود', 'Status' => 'active'],
-                ['id_invoice' => 'inv8', 'id_user' => '444444444', 'username' => 'res_8', 'Service_location' => 'PG', 'name_product' => 'سه ماهه', 'price_product' => '400000', 'Status' => 'sendedwarn', 'bottype' => 'AGENT_TOKEN_1'],
-                ['id_invoice' => 'inv9', 'id_user' => '111111111', 'username' => 'rb_9', 'Service_location' => 'ربکا', 'name_product' => 'سه ماهه', 'Status' => 'disabled'],
-                ['id_invoice' => 'inv10', 'id_user' => '555555555', 'username' => 'unpaid_10', 'Service_location' => 'آلمان ۱', 'name_product' => 'سه ماهه', 'price_product' => '400000', 'Status' => 'Unpaid'],
+                ['id_invoice' => 'inv8', 'id_user' => '444444444', 'username' => 'res_8', 'Service_location' => 'PG', 'name_product' => 'ویژه نمایندگان', 'price_product' => '400000', 'Status' => 'sendedwarn', 'bottype' => 'AGENT_TOKEN_1'],
+                ['id_invoice' => 'inv9', 'id_user' => '111111111', 'username' => 'rb_9', 'Service_location' => 'ربکا', 'name_product' => 'یک ماهه ۳۰ گیگ', 'Status' => 'disabled'],
+                ['id_invoice' => 'inv10', 'id_user' => '555555555', 'username' => 'unpaid_10', 'Service_location' => 'آلمان ۱', 'name_product' => 'سه ماهه', 'price_product' => '400000', 'Status' => 'Unpaid', 'bottype' => 'GONE_TOKEN'],
                 ['id_invoice' => 'inv11', 'id_user' => '999999999', 'username' => 'custom_11', 'Service_location' => 'PG2', 'name_product' => '⚙️ سرویس دلخواه', 'price_product' => '200000', 'Status' => 'disablebyadmin'],
                 ['id_invoice' => 'inv12', 'id_user' => '666666666', 'username' => 'test_12', 'Service_location' => 'PG', 'name_product' => 'سرویس تست', 'price_product' => '0', 'Status' => 'disabled'],
                 ['id_invoice' => 'inv13', 'id_user' => '111111111', 'username' => 'renamed_13', 'Service_location' => 'هلند', 'name_product' => 'یک ماهه قدیمی', 'Volume' => '30', 'Service_time' => '30', 'Status' => 'active'],
                 ['id_invoice' => 'inv14', 'id_user' => '111111111', 'username' => 'gone_14', 'Service_location' => 'هلند', 'name_product' => 'محصول حذف‌شده', 'Volume' => '77', 'Service_time' => '7', 'Status' => 'active'],
+                ['id_invoice' => 'inv15', 'id_user' => '111111111', 'username' => 'rw_15', 'Service_location' => 'رمن', 'name_product' => 'یک ماهه ۳۰ گیگ', 'Status' => 'active'],
             ],
             'DiscountSell' => [
                 ['id' => '1', 'codeDiscount' => 'SUMMER20', 'price' => '20', 'limitDiscount' => '100', 'usedDiscount' => '30', 'agent' => 'allusers', 'usefirst' => '0', 'useuser' => '1', 'code_product' => 'all', 'code_panel' => '/all', 'time' => '0', 'type' => 'buy', 'section' => 'buy,extend', 'value_type' => 'percent', 'target_user' => null, 'status' => 'active', 'targeting_mode' => 'none', 'code_category' => 'all'],
@@ -488,7 +692,13 @@ final class FaoximaMigratorTest extends TestCase
                 ['id' => '3', 'cardnumber' => '5022 2910 1234 5678', 'namecard' => 'رضا', 'is_active' => '1', 'is_visible' => '0'],
             ],
             'card_whitelist' => [['card_id' => '1'], ['card_id' => '1'], ['card_id' => '3'], ['card_id' => '99']],
-            'Payment_report' => [['id' => '1', 'payment_Status' => 'paid'], ['id' => '2', 'payment_Status' => 'waiting'], ['id' => '3', 'payment_Status' => 'pending']],
+            'Payment_report' => [
+                ['id' => '1', 'payment_Status' => 'paid', 'bottype' => null],
+                ['id' => '2', 'payment_Status' => 'waiting', 'bottype' => null],
+                ['id' => '3', 'payment_Status' => 'pending', 'bottype' => '0'],
+                ['id' => '4', 'payment_Status' => 'waiting', 'bottype' => 'AGENT_TOKEN_1'],
+                ['id' => '5', 'payment_Status' => 'pending', 'bottype' => 'GONE_TOKEN'],
+            ],
             'support_message' => [['id' => '1', 'Tracking' => 't1'], ['id' => '2', 'Tracking' => 't1'], ['id' => '3', 'Tracking' => 't2'], ['id' => '4', 'Tracking' => null]],
             'wallet_ledger' => [['id' => '1'], ['id' => '2']],
             'service_other' => [['id' => '1']],

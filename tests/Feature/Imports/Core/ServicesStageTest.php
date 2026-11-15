@@ -16,6 +16,7 @@ use App\Modules\Imports\Records\ImportedPlan;
 use App\Modules\Imports\Records\ImportedService;
 use App\Modules\Providers\DTO\ClientInfo;
 use App\Modules\Providers\DTO\Expiry;
+use App\Modules\Providers\Enums\ConnectionFailure;
 use App\Modules\Providers\Models\Server;
 use App\Modules\Subscriptions\Enums\SubscriptionStatus;
 use App\Modules\Subscriptions\Models\Subscription;
@@ -256,6 +257,32 @@ final class ServicesStageTest extends ImportTestCase
 
         self::assertSame(['amir_1'], Subscription::query()->pluck('remote_name')->all());
         self::assertSame(['not_on_panel'], array_column(self::problemRows($import), 'reason'));
+    }
+
+    public function testAPanelAskedForEachThatAnswersAgainHasItsTriesAfresh(): void
+    {
+        FakeProvider::$lists = false;
+        $names = ['amir_1', 'amir_2', 'amir_3', 'amir_4'];
+        foreach ($names as $at => $name) {
+            $this->client($name, "https://fake.test/sub/{$at}");
+        }
+        $this->migrator->services = array_map(static fn(string $name): ImportedService => new ImportedService("s-{$name}", 'c1', 'p1', $name), $names);
+        // Every other read times out: each service's first, the step stopping before it; its second answers.
+        $reads = 0;
+        FakeProvider::$onCall = function (int $server, string $call) use (&$reads): void {
+            if ($call === 'findClient') {
+                FakeProvider::$failing[$server] = ++$reads % 2 === 1 ? ['findClient' => ConnectionFailure::Timeout] : [];
+            }
+        };
+
+        $import = $this->started($this->onServer());
+        for ($steps = 0; $import->phase === ImportPhase::Importing; $steps++) {
+            self::assertLessThan(10, $steps, 'it ends');
+            $import = $this->step($import, Budget::unlimited());
+        }
+
+        self::assertSame($names, Subscription::query()->orderBy('id')->pluck('remote_name')->all(), 'a silence in a row counts, not every one of the import: the panel answered between them');
+        self::assertSame([], self::problemRows($import));
     }
 
     public function testAnEndedClientComesEndedToBeRenewed(): void

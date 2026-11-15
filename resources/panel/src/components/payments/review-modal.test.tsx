@@ -5,24 +5,27 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ReviewModal } from '@/components/payments/review-modal'
 import type { PaymentCheckResponse, PaymentRow } from '@/lib/api-types'
 import { idLabel } from '@/lib/direction'
+import { queryKeys } from '@/lib/query-keys'
 import type { NextRow } from '@/lib/use-next-row'
 import { providers, until } from '@/test/render'
-import { onlinePaymentRow, paymentRow } from '@/test/rows'
-import { json, refusal, server, type Answer } from '@/test/server'
+import { depositSettingsRow, onlinePaymentRow, paymentRow } from '@/test/rows'
+import { json, offline, refusal, server, type Answer } from '@/test/server'
 
 /*
  * A payment's dialog (components/payments/review-modal): how approving is labelled, the method's summary, a reminder
  * that could not be sent, an online payment asked of its gateway — what it said, money gone to the wallet, and one held
- * for support —, a receipt the browser could not draw, «بعدی» through the list, and the focus while and after an
- * operation runs.
+ * for support —, a Rikhtam deposit attached (picked from Rikhtam's list, the focus taken there, refused, taken without
+ * paying the payment, no word on what came of it, the dialog held meanwhile, none to pick, Rikhtam gone or out of reach),
+ * a receipt the browser could not draw, «بعدی» through the list, and the focus while and after an operation runs.
  */
 
 const RECEIPT = '/api/admin/payments/7/receipt'
 
 function show(payment: PaymentRow, next: Partial<NextRow> = {}) {
   const props = { onClose: vi.fn(), onReviewed: vi.fn(), onStale: vi.fn(), next: { available: false, busy: false, go: vi.fn(), ...next } }
-  render(<ReviewModal payment={payment} {...props} />, { wrapper: providers().wrapper })
-  return props
+  const { client, wrapper } = providers()
+  render(<ReviewModal payment={payment} {...props} />, { wrapper })
+  return { ...props, client }
 }
 
 const dialog = () => screen.getByRole('dialog', { name: `پرداخت ${idLabel(7)}` })
@@ -166,7 +169,7 @@ describe('an operation', () => {
       status: 'paid',
       reviewer: 'root',
       order: { ...paymentRow().order, status: 'failed', notes: 'پنل «آلمان»: پاسخ نداد.' },
-      actions: { approve: false, reject: false, cancel: false, remind: false, retry: true, refund: true, check: false },
+      actions: { approve: false, reject: false, cancel: false, remind: false, retry: true, refund: true, check: false, rikhtam: false },
     })
     server().on('POST', '/api/admin/payments/7/approve', json({ payment: delivered }))
     vi.spyOn(toast, 'error')
@@ -182,7 +185,7 @@ describe('an operation', () => {
 
   it('refused because the payment changed shows the server’s message once, even with nothing left to do, with the focus on it', async () => {
     const decided = 'این پرداخت را نمی‌شود تایید کرد؛ یا پرداخت‌شده است، یا سفارشش دیگر باز نیست.'
-    const cancelled = paymentRow({ status: 'cancelled', actions: { approve: false, reject: false, cancel: false, remind: false, retry: false, refund: false, check: false } })
+    const cancelled = paymentRow({ status: 'cancelled', actions: { approve: false, reject: false, cancel: false, remind: false, retry: false, refund: false, check: false, rikhtam: false } })
     server().on('POST', '/api/admin/payments/7/approve', refusal(422, decided, { status: [decided] }))
     render(<Reviewing first={paymentRow()} refreshed={cancelled} />, { wrapper: providers().wrapper })
     const approve = button('تایید و شارژ کیف پول')
@@ -354,7 +357,7 @@ describe('an online payment', () => {
       to_wallet: true,
       description: 'سفارش پیش از رسیدن این پرداخت بسته شده بود؛ مبلغ به کیف پول مشتری رفت',
       order: { ...paymentRow().order, status: 'cancelled' },
-      actions: { approve: false, reject: false, cancel: false, remind: false, retry: false, refund: false, check: false },
+      actions: { approve: false, reject: false, cancel: false, remind: false, retry: false, refund: false, check: false, rikhtam: false },
     })
     asked(json({ payment: credited, state: 'paid' } satisfies PaymentCheckResponse), onlinePaymentRow({ status: 'cancelled' }))
 
@@ -438,6 +441,242 @@ describe('a receipt the browser did not draw', () => {
 
     const download = await within(dialog()).findByRole('link', { name: /دانلود رسید/ })
     expect(download.getAttribute('download')).toBe('IMG_1.HEIC')
+  })
+})
+
+describe('a Rikhtam deposit', () => {
+  const DEPOSITS = '/api/admin/payments/7/rikhtam'
+  /** Payment #7 as the server offers it «پیوست واریز ریختم» (an open card payment while Rikhtam is connected). */
+  const attachable = () => paymentRow({ actions: { ...paymentRow().actions, rikhtam: true } })
+  const open = (next: Partial<NextRow> = {}) => show(attachable(), next)
+  const rows = {
+    connected: true,
+    deposits: [
+      { uid: 'dep-exact', amount: '50000.00', received_at: '2026-10-06T08:58:00Z', account: '1234', covers: true },
+      { uid: 'dep-round', amount: '49990.00', received_at: '2026-10-06T09:02:00Z', account: '5678', covers: true },
+    ],
+  }
+
+  it('is offered only where the server allows it', () => {
+    show(paymentRow())
+    expect(within(dialog()).queryByRole('button', { name: 'پیوست واریز ریختم' })).toBeNull()
+  })
+
+  it('lists Rikhtam’s deposits, the exact sum marked, and attaches the one picked once it says what that does', async () => {
+    server().on('GET', DEPOSITS, json(rows))
+    server().on(
+      'POST',
+      DEPOSITS,
+      json({
+        payment: paymentRow({ status: 'paid', reviewer: 'root', actions: { ...paymentRow().actions, approve: false, reject: false, cancel: false } }),
+        message: 'واریز به صورتحساب پیوست شد.',
+        fee: '500.00',
+      }),
+    )
+    const { onReviewed, onClose, client } = open()
+    client.setQueryData(queryKeys.deposits, { deposits: [] })
+    client.setQueryData(queryKeys.depositSettings, depositSettingsRow({ waiting: 1 }))
+
+    fireEvent.click(button('پیوست واریز ریختم'))
+    expect(within(dialog()).getByText(/پرداختی که مشتری مبلغش را گرد کرده خودکار تایید نمی‌شود/)).toBeTruthy()
+    const attach = button('پیوست و تایید')
+    expect(attach.getAttribute('aria-disabled')).toBe('true')
+
+    const choices = await within(dialog()).findAllByRole('radio')
+    expect(choices.map((choice) => choice.getAttribute('aria-checked'))).toEqual(['false', 'false'])
+    expect(within(choices[0] as HTMLElement).getByText('همین مبلغ')).toBeTruthy()
+    expect(within(choices[1] as HTMLElement).getByText(/کمتر/).textContent).toContain('۱۰ تومان')
+    expect(within(choices[1] as HTMLElement).getByText('····5678')).toBeTruthy()
+    expect(server().sent('POST', DEPOSITS)).toEqual([])
+
+    fireEvent.click(choices[1] as HTMLElement)
+    expect(within(dialog()).getByRole('status').textContent).toMatch(/به پرداخت .*7.* وصل می‌شود و پرداخت تایید می‌شود؛ ریختم کارمزد معمولش را/)
+    fireEvent.click(attach)
+
+    await until(() => expect(server().sent('POST', DEPOSITS)[0]?.body).toEqual({ uid: 'dep-round' }))
+    await until(() => expect(onReviewed).toHaveBeenCalled())
+    expect(toast.success).toHaveBeenCalledWith(`پرداخت ${idLabel(7)} با واریز ریختم تایید شد و کیف پول شارژ شد`, { description: 'واریز به صورتحساب پیوست شد. · کارمزد ریختم: ۵۰۰ تومان' })
+    await until(() => expect(onClose).toHaveBeenCalled())
+    // The deposit is matched now: the deposits' list and the week's count that approved nothing are read again.
+    expect(client.getQueryState(queryKeys.deposits)?.isInvalidated).toBe(true)
+    expect(client.getQueryState(queryKeys.depositSettings)?.isInvalidated).toBe(true)
+  })
+
+  it('shows a deposit short of the order’s price in its place, said so, never to be picked', async () => {
+    const short = { uid: 'dep-short', amount: '45000.00', received_at: '2026-10-06T09:01:00Z', account: null, covers: false }
+    server().on('GET', DEPOSITS, json({ connected: true, deposits: [short, ...rows.deposits] }))
+    open()
+
+    fireEvent.click(button('پیوست واریز ریختم'))
+    const choices = await within(dialog()).findAllByRole('radio')
+    const held = choices[0] as HTMLElement
+    expect(within(held).getByText('کمتر از مبلغ سفارش')).toBeTruthy()
+    expect(held.getAttribute('aria-disabled')).toBe('true')
+    // The Tab stop, and the focus once drawn, on the closest that pays.
+    expect([held.tabIndex, (choices[1] as HTMLElement).tabIndex]).toEqual([-1, 0])
+
+    fireEvent.click(held)
+    expect(held.getAttribute('aria-checked')).toBe('false')
+    expect(button('پیوست و تایید').getAttribute('aria-disabled')).toBe('true')
+    // The arrows pass it by: from the last that pays, on to the first that does.
+    fireEvent.click(choices[2] as HTMLElement)
+    fireEvent.keyDown(choices[2] as HTMLElement, { key: 'ArrowDown' })
+    expect((choices[1] as HTMLElement).getAttribute('aria-checked')).toBe('true')
+  })
+
+  it('says so when none of Rikhtam’s deposits covers the order', async () => {
+    server().on('GET', DEPOSITS, json({ connected: true, deposits: [{ uid: 'dep-short', amount: '45000.00', received_at: null, account: null, covers: false }] }))
+    open()
+
+    fireEvent.click(button('پیوست واریز ریختم'))
+
+    expect(await within(dialog()).findByText('هیچ‌کدام از این واریزها به اندازه مبلغ سفارش نیست و این پرداخت با آن‌ها تایید نمی‌شود.')).toBeTruthy()
+    expect(button('پیوست و تایید').getAttribute('aria-disabled')).toBe('true')
+  })
+
+  it('takes the focus to the strip as it opens, then to the closest deposit once Rikhtam answered', async () => {
+    server().on('GET', DEPOSITS, json(rows))
+    open()
+    const offered = button('پیوست واریز ریختم')
+
+    offered.focus()
+    fireEvent.click(offered)
+
+    expect(document.activeElement).toBe(within(dialog()).getByRole('form', { name: 'پیوست واریز ریختم' }))
+    const choices = await within(dialog()).findAllByRole('radio')
+    await until(() => expect(document.activeElement).toBe(choices[0]))
+  })
+
+  it('says so when Rikhtam took the deposit but the payment is still not paid, and stays on it', async () => {
+    const short = 'مبلغ این واریز کمتر از مبلغ سفارش این صورتحساب است.'
+    server().on('GET', DEPOSITS, json(rows))
+    server().on('POST', DEPOSITS, json({ payment: attachable(), message: short, fee: null }))
+    const { onReviewed, onClose } = open()
+
+    fireEvent.click(button('پیوست واریز ریختم'))
+    fireEvent.click((await within(dialog()).findAllByRole('radio'))[1] as HTMLElement)
+    fireEvent.click(button('پیوست و تایید'))
+
+    await until(() => expect(toast.warning).toHaveBeenCalledWith(`پرداخت ${idLabel(7)} هنوز تایید نشده است`, { description: short }))
+    expect(toast.success).not.toHaveBeenCalled()
+    expect(onReviewed).toHaveBeenCalled()
+    expect(onClose).not.toHaveBeenCalled()
+    expect(within(dialog()).queryAllByRole('radio')).toEqual([])
+    expect(button('پیوست واریز ریختم')).toBeTruthy()
+  })
+
+  it('reads the payment again when Rikhtam cannot say whether it was attached — and shows it as it stands', async () => {
+    const paid = paymentRow({ status: 'paid', reviewer: 'ریختم', actions: { ...paymentRow().actions, approve: false, reject: false, cancel: false, rikhtam: false } })
+    server().on('GET', DEPOSITS, json(rows))
+    server().on('POST', DEPOSITS, refusal(503, 'ریختم الان جواب نمی‌دهد؛ چند لحظه بعد وضعیت پرداخت را ببینید و اگر تایید نشده بود، دوباره امتحان کنید.'))
+    render(<Reviewing first={attachable()} refreshed={paid} />, { wrapper: providers().wrapper })
+
+    fireEvent.click(button('پیوست واریز ریختم'))
+    fireEvent.click((await within(dialog()).findAllByRole('radio'))[0] as HTMLElement)
+    fireEvent.click(button('پیوست و تایید'))
+
+    expect(await within(dialog()).findByText(/همین الان تغییر کرد و «پیوست واریز ریختم» دیگر برایش ممکن نیست/)).toBeTruthy()
+    expect(within(dialog()).getByText('وضعیت').nextElementSibling?.textContent).toContain('پرداخت‌شده')
+    expect(toast.success).not.toHaveBeenCalled()
+  })
+
+  it('says no answer leaves it unknown, and reads the payment and what attaching changes again', async () => {
+    server().on('GET', DEPOSITS, json(rows))
+    server().on('POST', DEPOSITS, offline)
+    const { onStale, onReviewed, client } = open()
+    client.setQueryData(queryKeys.deposits, { deposits: [] })
+
+    fireEvent.click(button('پیوست واریز ریختم'))
+    fireEvent.click((await within(dialog()).findAllByRole('radio'))[0] as HTMLElement)
+    fireEvent.click(button('پیوست و تایید'))
+
+    expect(await within(dialog()).findByText(/معلوم نیست واریز پیوست شد یا نه؛ وضعیت پرداخت دوباره خوانده شد/)).toBeTruthy()
+    expect(onStale).toHaveBeenCalledTimes(1)
+    expect(client.getQueryState(queryKeys.deposits)?.isInvalidated).toBe(true)
+    expect(onReviewed).not.toHaveBeenCalled()
+  })
+
+  it('holds «بعدی» and «بستن» while the deposit is being attached: its answer belongs to this payment', async () => {
+    server().on('GET', DEPOSITS, json(rows))
+    const answer = server().hold('POST', DEPOSITS)
+    const { next } = open({ available: true })
+
+    fireEvent.click(button('پیوست واریز ریختم'))
+    fireEvent.click((await within(dialog()).findAllByRole('radio'))[0] as HTMLElement)
+    fireEvent.click(button('پیوست و تایید'))
+    await until(() => expect(answer.waiting).toBe(1))
+
+    expect(button('بعدی').getAttribute('aria-disabled')).toBe('true')
+    fireEvent.click(button('بعدی'))
+    expect(next.go).not.toHaveBeenCalled()
+    // The foot's «بستن», not the dialog's ✕ of the same name.
+    const close = () => within(dialog()).getAllByText('بستن')[0]?.closest('button')
+    expect(close()?.disabled).toBe(true)
+
+    await act(async () => answer.answer(refusal(422, 'ریختم فعلا پیوست تازه نمی‌پذیرد.', { uid: ['ریختم فعلا پیوست تازه نمی‌پذیرد.'] })))
+    await until(() => expect(button('بعدی').getAttribute('aria-disabled')).toBeNull())
+    expect(close()?.disabled).toBe(false)
+  })
+
+  it('says Rikhtam’s refusal on the strip, which stays to pick another from its list read again', async () => {
+    const taken = 'واریز پیدا نشد، قبلا تایید شده یا درگاه شما صورتحساب را نپذیرفت.'
+    server().on('GET', DEPOSITS, json(rows))
+    server().on('POST', DEPOSITS, refusal(422, taken, { uid: [taken] }))
+    const { onReviewed, onStale } = open()
+
+    fireEvent.click(button('پیوست واریز ریختم'))
+    fireEvent.click((await within(dialog()).findAllByRole('radio'))[0] as HTMLElement)
+    fireEvent.click(button('پیوست و تایید'))
+
+    expect(await within(dialog()).findByText(new RegExp(taken))).toBeTruthy()
+    await until(() => expect(server().sent('GET', DEPOSITS)).toHaveLength(2))
+    expect(within(dialog()).getAllByRole('radio')).toHaveLength(2)
+    expect(onReviewed).not.toHaveBeenCalled()
+    expect(onStale).not.toHaveBeenCalled()
+  })
+
+  it('says when Rikhtam has nothing unattached, and asks it again', async () => {
+    server().on('GET', DEPOSITS, json({ connected: true, deposits: [] }))
+    open()
+
+    fireEvent.click(button('پیوست واریز ریختم'))
+
+    expect(await within(dialog()).findByText(/ریختم واریزی ندارد که به پرداختی وصل نشده باشد/)).toBeTruthy()
+    fireEvent.click(button('تازه‌سازی'))
+    await until(() => expect(server().sent('GET', DEPOSITS)).toHaveLength(2))
+    expect(button('پیوست و تایید').getAttribute('aria-disabled')).toBe('true')
+  })
+
+  it('points to the settings once Rikhtam is no longer connected', async () => {
+    server().on('GET', DEPOSITS, json({ connected: false, deposits: [] }))
+    open()
+
+    fireEvent.click(button('پیوست واریز ریختم'))
+
+    expect((await within(dialog()).findByRole('link', { name: 'روش‌های پرداخت' })).getAttribute('href')).toBe('/payment-methods')
+  })
+
+  it('reads the payment again when its list is refused on its state, the refusal shown meanwhile', async () => {
+    const decided = 'این پرداخت را نمی‌شود تایید کرد؛ یا پرداخت‌شده است، یا سفارشش دیگر باز نیست.'
+    server().on('GET', DEPOSITS, refusal(422, decided, { status: [decided] }))
+    const { onStale } = open()
+
+    fireEvent.click(button('پیوست واریز ریختم'))
+
+    expect(await within(dialog()).findByText(decided)).toBeTruthy()
+    expect(onStale).toHaveBeenCalledTimes(1)
+  })
+
+  it('can be asked again while Rikhtam is out of reach', async () => {
+    server().on('GET', DEPOSITS, refusal(503, 'ریختم در دسترس نبود؛ کمی بعد دوباره امتحان کنید.'))
+    open()
+
+    fireEvent.click(button('پیوست واریز ریختم'))
+
+    expect(await within(dialog()).findByText(/ریختم در دسترس نبود/)).toBeTruthy()
+    server().on('GET', DEPOSITS, json(rows))
+    fireEvent.click(button('تلاش دوباره'))
+    expect(await within(dialog()).findAllByRole('radio')).toHaveLength(2)
   })
 })
 

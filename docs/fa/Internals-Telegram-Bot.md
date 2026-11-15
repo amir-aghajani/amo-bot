@@ -5,10 +5,10 @@
 # ساختار داخلی: ربات تلگرام
 
 اینکه ربات چطور به کاربران و مدیرانش خدمت می‌کند: dispatcher و مسیرهایش، وضعیت گفتگو، هندلرها و صفحه‌های مشترکشان،
-متن‌ها و کیبوردهایی که ادمین بازنویسی می‌کند، گیت‌ها، گروه گزارش‌ها و ارسال همگانی. آنچه مالک فروشگاه و کاربر از آن
-می‌بینند در [راهنمای ربات](Bot-Guide.md)، [تنظیمات ربات](Bot-Settings.md)،
-[متن‌ها و کیبوردهای ربات](Bot-Texts-And-Keyboards.md)، [گروه گزارش‌ها](Telegram-Group.md) و [ارسال همگانی](Broadcasts.md)
-آمده است.
+متن‌ها و کیبوردهایی که ادمین بازنویسی می‌کند، گیت‌ها، گروه گزارش‌ها، ارسال همگانی و مدیریت فروشگاه در چت خصوصی. آنچه
+مالک فروشگاه و کاربر از آن می‌بینند در [راهنمای ربات](Bot-Guide.md)، [تنظیمات ربات](Bot-Settings.md)،
+[متن‌ها و کیبوردهای ربات](Bot-Texts-And-Keyboards.md)، [گروه گزارش‌ها](Telegram-Group.md)، [ارسال همگانی](Broadcasts.md) و
+[مدیریت فروشگاه از ربات](Bot-Management.md) آمده است.
 
 همه چیز در `app/Modules/Telegram` است، و مسیرها در `routes/bot.php`.
 
@@ -26,6 +26,7 @@
 | <code dir="ltr">Polling/</code>، <code dir="ltr">Controllers/</code>، <code dir="ltr">Services/</code> | حلقه `bot:poll`، اندپوینت Webhook، مدیریت Webhook و هویت |
 | <code dir="ltr">Notifications/</code>، <code dir="ltr">Qr/</code>، <code dir="ltr">Emoji/</code> | `ServiceCard` (یک سرویس به شکل کارت QR یا متن)، تصویر QR، ایموجی پرمیوم |
 | <code dir="ltr">Contracts/</code> | آنچه ربات از ماژول دیگری از راه interface خودش می‌پرسد: `MiniAppAddress`، آدرس مینی‌اپ فروشگاه |
+| <code dir="ltr">Admin/</code> | مدیریت فروشگاه در چت خصوصی: چه کسی مدیریت می‌کند (`AdminSeats`، `OwnerLinks`، `BotAdminSettings`)، ورودی API پنل‌ها (<code dir="ltr">Door/</code>)، چارچوب صفحه‌ها (<code dir="ltr">Ui/</code>) و صفحه‌های هر بخش (<code dir="ltr">Sections/</code>) ([پایین‌تر](#مدیریت-فروشگاه)) |
 
 اول این‌ها را باز کنید: `routes/bot.php`، `Update/Dispatcher.php`، `Context.php`، `Handlers/CheckoutScreen.php`،
 `Texts/BotTexts.php` و `Reports/ShopReports.php`.
@@ -58,8 +59,13 @@
 
 مسیری که **navigation** علامت خورده (دستورها، برچسب‌ها، ضربه‌های <code dir="ltr">menu:\*</code> منو، ضربه
 <code dir="ltr">claim:</code>، یک الگوی متن، fallback، همه ضربه‌های تیکت) روندی را که چت در آن بوده پاک می‌کند، پس آنچه کاربر
-بعد تایپ می‌کند هرگز پاسخ یک قدم قدیمی گرفته نمی‌شود. مسیر **فقط مدیران ربات** (<code dir="ltr">/broadcast</code>،
-<code dir="ltr">/emoji</code>) به هر کس دیگری اصلا هیچ جوابی نمی‌دهد.
+بعد تایپ می‌کند هرگز پاسخ یک قدم قدیمی گرفته نمی‌شود. مسیر **فقط مدیران ربات** به هر کس دیگری اصلا هیچ جوابی نمی‌دهد؛
+<code dir="ltr">/broadcast</code> و <code dir="ltr">/emoji</code> خودشان می‌پرسند (یک مدیر ربات، یا هر کسی که `AdminSeats` به
+او جایگاه بدهد)، و مدیریت هم همین‌طور. قدمی که **captures** علامت خورده هر پیامی را پاسخ خودش می‌گیرد، برچسب کیبورد
+پایین صفحه را هم؛ فقط یک دستور آن را رها می‌کند. سوال‌های مدیریت در <code dir="ltr">Admin::INPUT</code> منتظر می‌مانند،
+جایی که برچسب منو مال منوست (برچسب هرگز به عنوان پاسخ، مثلا به یک تیکت، فرستاده نمی‌شود)، و فقط سوال‌هایی که پاسخشان
+می‌تواند هر کلمه‌ای باشد (برچسب تازه یک دکمه کیبورد، یک متن ربات) در <code dir="ltr">Admin::INPUT_ANY</code>، که captures
+است (<code dir="ltr">Prompt::$anyText</code>).
 
 تلگرام برای هر ضربه یک پاسخ می‌پذیرد: <code dir="ltr">Context::answer()</code> فقط اولی را می‌فرستد، و dispatcher چرخش
 (spinner) ضربه‌ای را که کسی جوابش نداده متوقف می‌کند. پاپ‌آپ فقط برای یک ضربه نشان داده می‌شود، پس ردی که ممکن است به چیزی
@@ -309,7 +315,10 @@ Subscriptions، Support…)، هرگز در خود هندلر: ربات فقط �
 در هر صفحه. بازگشت از یک پلن یا یک لوکیشن به صفحه اول فهرست برمی‌گردد.
 
 **گیت‌ها** (`MaintenanceGate`، `PhoneGate`، `ChannelGate`، به همین ترتیب) پیش از هر هندلری اجرا می‌شوند؛ گیتی که آپدیتی را
-نگه دارد خودش به آن جواب می‌دهد، و مدیران ربات از همه آن‌ها می‌گذرند. لینک <code dir="ltr">/start</code>ی که یک گیت نگه داشته
+نگه دارد خودش به آن جواب می‌دهد. هر کسی که فروشگاه را مدیریت می‌کند از همه آن‌ها می‌گذرد
+(<code dir="ltr">AdminSeats::exempt()</code>: یک مدیر ربات، حساب وصل‌شده مالک در ربات اصلی، نماینده در ربات خودش)، و
+همین‌طور <code dir="ltr">/start</code> لینک باز مالک (<code dir="ltr">AdminSeats::passGates()</code>)، پس هیچ مدیری پشت در
+نمی‌ماند. لینک <code dir="ltr">/start</code>ی که یک گیت نگه داشته
 به شکل واقعیت چت <code dir="ltr">\_start</code> نگه داشته می‌شود (<code dir="ltr">Dispatcher::keepStartLink()</code>) — فقط
 آنچه یک لینک t.me می‌تواند ببرد (حروف لاتین، رقم‌ها، `_` و `-`، حداکثر ۶۴)، همراه زمانی که نگه داشته شده — و آپدیتی که در
 همان ساعت از گیت‌ها بگذرد آن را برمی‌دارد — کارت مخاطب، یک <code dir="ltr">/start</code> یا <code dir="ltr">/menu</code> بعدی
@@ -413,7 +422,89 @@ Subscriptions، Support…)، هرگز در خود هندلر: ربات فقط �
 می‌شود**، پس هیچ‌کس آن را دو بار نمی‌گیرد. ارسال‌ها با سرعت کنترل‌شده‌اند (`Api\Pacer`)؛ محدودیت flood کاربر را برای دسته
 بعدی برمی‌گرداند. توقف، ادامه و لغو یک compare-and-swap روی وضعیت‌اند. اجرای پیامی که مدیری که آن را فرستاده دیگر چت تلگرامی ندارد (حسابش
 رفته، یا تلگرامش از آن جدا شده) چیزی ندارد که پیامش را از آن کپی کند: با وضعیت «لغوشده» تمام می‌شود، و لاگ می‌شود.
-`Audience` تعیین می‌کند به چه کسی می‌رسد؛ مخاطبانی که گروه یا سرورشان رفته به هیچ‌کس نمی‌رسند، هرگز به همه.
+`Audience` تعیین می‌کند به چه کسی می‌رسد؛ مخاطبانی که گروه یا سرورشان رفته به هیچ‌کس نمی‌رسند، هرگز به همه. «➕ پیام
+همگانی تازه» مدیریت همین نوشتن را شروع می‌کند (<code dir="ltr">BroadcastHandler::compose()</code>)، فقط در ربات فروشگاهی
+که روی صفحه است.
+
+## مدیریت فروشگاه
+
+پوشه <code dir="ltr">Admin/</code> فروشگاه را از چت خصوصی ربات اداره می‌کند ([مدیریت فروشگاه از ربات](Bot-Management.md)):
+بخش‌های پنل به شکل صفحه‌های خود ربات، و **هر خواندن و هر نوشتن از راه API خود پنل‌ها**، پس هیچ قاعده‌ای دو جا نوشته
+نمی‌شود.
+
+**چه کسی مدیریت می‌کند**: <code dir="ltr">AdminSeats::of()</code>، که با هر آپدیت پرسیده می‌شود، یک `AdminSeat` می‌دهد:
+نوعش (`SeatKind`)، `Principal` که درخواست‌هایش با آن اجرا می‌شوند، و حساب کاربر. در ربات اصلی، حساب تلگرامی که `OwnerLinks`
+نگه داشته (تنظیم `owner.telegram_ids` فروشگاه اصلی، که لینک یک‌بارمصرف <code dir="ltr">/start owner-&lt;code&gt;</code> آن را پر
+می‌کند و `StartHandler` آن را می‌پذیرد: کد فقط به شکل sha256 نگه داشته می‌شود و با یک compare-and-swap مصرف می‌شود،
+`LINK_MINUTES` برای باز کردنش، حداکثر `MOST` حساب؛ <code dir="ltr">POST /settings/owner-telegram/link</code> پنل
+`current_password` را می‌خواهد مگر درخواست `BotAdminDoor::SEAT` ورودی ربات را داشته باشد، و
+<code dir="ltr">OwnerAuth::changeCredentials()</code> همه لینک‌ها را با <code dir="ltr">OwnerLinks::revokeAll()</code> تمام
+می‌کند) مالک است، در فروشگاهی که چت انتخاب کرده؛ در ربات یک نماینده، حساب خود
+نماینده نماینده است، تا وقتی نمایندگی‌اش برقرار است (همان‌طور که `AgentAuth` می‌پرسد)؛ و یک مدیر ربات،
+تا وقتی `BotAdminSettings` (`bot_admins`) روشن است، staff است و مجوزهایش مجوزهای `Principal` می‌شود. مسدود شدن هر
+کدام را تمام می‌کند. هر کدام از این principalها `inBot` را دارد، که به `Actor::$inBot` می‌رسد: پاسخ تیکتی که از اینجا
+نوشته شود `TicketChannel::Manage` است.
+
+**ورودی**: `Door\BotAdminDoor`، که در `routes/api.php` زیر <code dir="ltr">/api/bot-admin/{owner|agent|staff}</code> روی همان
+گروه‌های مسیر پنل‌ها سوار شده: برای مالک <code dir="ltr">$operations</code>، <code dir="ltr">$configuration</code>، و
+همچنین <code dir="ltr">$system</code>، <code dir="ltr">$everywhere</code> (با `shop.everywhere`)، <code dir="ltr">$main</code>
+(با `shop.main`) و <code dir="ltr">/shops</code>؛ برای نماینده <code dir="ltr">$agentAccount</code>،
+<code dir="ltr">$operations</code> و <code dir="ltr">$configuration</code>؛ و برای staff فقط <code dir="ltr">$operations</code>.
+این ورودی Session، کوکی و هدر CSRF ندارد: درخواست فقط با یک `AdminSeat` در attribute `SEAT` خودش وارد می‌شود، که فقط خود پروسه
+می‌تواند آن را بگذارد؛ از بیرون، هر مسیر آن 404 است. بعد نوع جایگاه باید نوع همان ورودی باشد، و مسیری که
+`StaffGrant::ARGUMENT` را نام می‌برد باید مجوزش داده شده باشد (`NOT_GRANTED`)؛ درخواست در فروشگاه جایگاه و به نام
+principal آن اجرا می‌شود، و هر تغییر (نه GET) با جایگاه، مسیر و وضعیت پاسخ لاگ می‌شود. مجوزی که یک سرویس می‌پرسد
+(`ActorRefusedException` با `grant` آن) با کلمه‌های ربات جواب داده می‌شود.
+
+**پل**: <code dir="ltr">Door\PanelBridge::for($seat)</code> هر درخواست را می‌سازد (`get`، `post`، `put`، `patch`، `delete`،
+`upload` برای یک فایل multipart، `file` برای پاسخی که فایل است) و آن را داخل همان پروسه به هسته HTTP خود برنامه می‌دهد:
+همان اعتبارسنجی، ردها، فهرست تغییرات و خط‌های لاگ پنل‌ها، همان JSON. پاسخ 2xx بدنه‌اش را برمی‌گرداند؛ هر چیز دیگری یک
+`Door\ApiRefusal` است با وضعیت، پیام فارسی و خطاهای فیلدها. مسیرها همان مسیرهای پنل‌اند، بدون
+<code dir="ltr">/api/admin</code>.
+
+**هندلر**: `Ui\AdminHandler` این‌ها را می‌گیرد: <code dir="ltr">/admin</code>، <code dir="ltr">/panel</code>، برچسب
+«⚙️ مدیریت» (که `MainMenu` برای هر جایگاه می‌افزاید)، ضربه‌های `Nav::PREFIX` (navigation) و وضعیت‌های
+<code dir="ltr">Admin::INPUT</code> و <code dir="ltr">Admin::INPUT_ANY</code>؛ بدون جایگاه، آپدیت را به fallback می‌دهد.
+آپدیت‌های یک چت به نوبت اجرا می‌شوند (یک فایل قفل برای هر چت، در `storage/cache/bot-admin-turns`): دو ضربه‌ای که یک Webhook با هم می‌رساند
+یکی پس از دیگری اجرا می‌شوند و دومی آنچه را اولی ذخیره کرده می‌خواند. یک پیام پنجره است: هر ضربه آن را ویرایش می‌کند
+(صفحه‌ای که به تصویر تبدیل شود یا برعکس، پیام تازه‌ای می‌گیرد)، و یک دستور، آن برچسب یا یک پاسخ نوشتنی آن را دوباره
+می‌فرستد و قبلی را پاک می‌کند؛ پاسخ نوشتنی بعد از خوانده شدن پاک می‌شود، هر چه سرش آمده باشد. یک `ApiRefusal` برای ضربه
+پاپ‌آپ است، و برای پاسخ نوشتنی همان سوال همان‌طور که پرسیده شده بود (با راهنما و گزینه‌های آماده‌اش) با رد بالای آن، که
+همچنان منتظر می‌ماند. فایلی که تلگرام نپذیرد (محدودیت حجمش) در یک پاپ‌آپ گفته می‌شود.
+
+**صفحه‌ها**: `Ui\Screen` (<code dir="ltr">allows()</code>، <code dir="ltr">show()</code>، <code dir="ltr">act()</code>،
+<code dir="ltr">input()</code>، که هر کدام یک `Ui\View` برمی‌گرداند)، با یک شناسه کوتاه در `Ui\Screens` ثبت می‌شود: صفحه‌های
+هسته (`h` صفحه اصلی، `ba`، `ol`، `shop`) و `Sections\<Area>\<Area>Screens::SCREENS` هر بخش. ورودی‌های صفحه اصلی و
+منوها (`hl`، `hs`، `hm`، `hb`، `hc`) فهرستی از شناسه‌ها در همان‌جا هستند؛ ورودی‌ای که صفحه‌اش نیست یا جایگاه نمی‌تواند
+بازش کند کنار گذاشته می‌شود. پایه‌ها: `BaseScreen`؛ `ListScreen` (یک مسیر فهرست پنل، `PER_PAGE` یعنی ۸ ردیف که از
+صفحه‌های ۲۵تایی پنل بریده می‌شود، فیلترهایش به شکل دکمه، جستجو، صفحه‌ها، <code dir="ltr">extra()</code> برای «➕ افزودن»،
+<code dir="ltr">keepsRows()</code> جایی که مسیری برای خواندن یک ردیف نیست)؛ `Settings\SettingsScreen` (یک کارت تنظیمات به
+شکل `FieldDef`هایی روی یک `SettingsSource`، یعنی `BotGroupSource` برای یک گروه «تنظیمات ربات»، `PatchSource` یا
+`PutSource`، که فیلد به فیلد ذخیره می‌شود)؛ `HubScreen`. یک `View` عنوان، مسیر بالای آن (زنجیره منوها)، خط‌ها، مشخصات،
+ردیف‌های `Button` و راه بازگشت است، یعنی «⬅️ بازگشت» از <code dir="ltr">back()</code> با «🏠 مدیریت» کنارش؛ متن بلندتر از
+`TEXT_MOST` (۴۰۰۰) را سر یک خط و کپشن بلندتر از `CAPTION_MOST` را کوتاه می‌کند، و فهرستی از گزینه‌ها (پلن‌ها، سرورها،
+اینباندها، فروشگاه‌ها) `CHOICES_MOST` یعنی ۴۰تا در هر صفحه می‌آید. یک دکمه
+<code dir="ltr">Button::to(label, screen, action, ...args)</code> است: برچسبش در ۴۸ کاراکتر بریده می‌شود، و callback آن
+<code dir="ltr">a:&lt;screen&gt;:&lt;action&gt;:&lt;args&gt;</code> از <code dir="ltr">Nav::to()</code> است، حداکثر ۶۴ بایت،
+هر بخشش <code dir="ltr">[A-Za-z0-9_.-]</code> (وگرنه Nav استثنا پرتاب می‌کند): هرگز متن در آن نیست.
+
+**وضعیت**: `Admin` یک آپدیت است همان‌طور که صفحه آن را می‌بیند: `seat`، `api` (پل برای همان جایگاه)،
+<code dir="ltr">state()</code>، <code dir="ltr">remember()</code> و <code dir="ltr">forget()</code> برای هر صفحه (fact چت
+<code dir="ltr">_adm</code>، پس روند یک کاربر در این میان چیزی از آن کم نمی‌کند؛ انتخاب فروشگاه مالک هم همین‌جاست:
+<code dir="ltr">pickShop()</code> وضعیت همه صفحه‌ها را خالی می‌کند)، <code dir="ltr">open()</code> برای صفحه‌ای دیگر،
+<code dir="ltr">ask(Prompt)</code> (چت در `adm.input` منتظر می‌ماند؛ پاسخ به شکل یک `Answer` به
+<code dir="ltr">input()</code> صفحه‌ای که پرسیده می‌رسد: <code dir="ltr">text()</code>، <code dir="ltr">latin()</code>،
+<code dir="ltr">integer()</code>، <code dir="ltr">amount(Unit)</code>، <code dir="ltr">decimal()</code>،
+<code dir="ltr">numbers()</code>، <code dir="ltr">picture()</code>، <code dir="ltr">document()</code>)،
+<code dir="ltr">confirm()</code>، <code dir="ltr">notice()</code> (اعلانی برای ضربه، یا خطی بالای صفحه بعد از یک پاسخ
+نوشتنی)، <code dir="ltr">alert()</code> و <code dir="ltr">send(ApiFile)</code>. کلاس `Ui\Fmt` آنچه صفحه نشان می‌دهد را
+قالب می‌دهد (<code dir="ltr">e()</code> برای هر چه از یک آدم یا از پنل آمده، <code dir="ltr">ltr()</code> و
+<code dir="ltr">code()</code> برای متن لاتین در یک خط فارسی، مبلغ، حجم، تاریخ شمسی).
+
+**دسترسی‌ها آینه ورودی‌اند**: صفحه‌ای روی مسیرهای کارهای روزانه به همه جایگاه‌ها اجازه می‌دهد؛ روی پیکربندی،
+<code dir="ltr">$seat->configures()</code> (مالک و نماینده)؛ روی سیستم، سرورها، نمایندگی، هدیه همگانی و تنظیمات پنل،
+<code dir="ltr">$seat->isOwner()</code>؛ و کاری که مسیرش یک مجوز را نام می‌برد فقط تا وقتی نشان داده می‌شود که
+<code dir="ltr">$seat->holds()</code> آن را داشته باشد. پنهان کردن فقط ادب صفحه‌هاست: ورودی هر چیز دیگری را رد می‌کند.
 
 ## رابط API تلگرام
 
@@ -447,6 +538,14 @@ pollی که هنوز با توکن قدیمی باز است رها می‌شود
 <code dir="ltr">groupReply()</code> و <code dir="ltr">botMembership()</code> را دارد. `BotQueryBudgetTest` هر صفحه رایج را به
 سهمیه ثابتی از کوئری‌ها و فراخوانی‌های تلگرام پایبند نگه می‌دارد — سهمیه‌ای که بالا برود می‌گوید کوئری تازه چه چیزی می‌خرد
 (مثلا ردیف مینی‌اپ در منو). <code dir="ltr">miniApp()</code> مینی‌اپ فروشگاه را برای تست دکمه‌اش روشن می‌کند (`BotMenuTest`).
-unit testهای API، متن‌ها و کیبوردها در `tests/Unit/Telegram` هستند. [تست](Testing.md) را ببینید.
+unit testهای API، متن‌ها و کیبوردها در `tests/Unit/Telegram` هستند. تست‌های مدیریت در `tests/Feature/BotAdmin` هستند:
+`BotAdminDoorTest` (نگهبان‌های ورودی)، `BotAdminFlowTest` (مالکی که با <code dir="ltr">OwnerLinks::link()</code> و
+<code dir="ltr">redeem()</code> وصل شده، <code dir="ltr">/admin</code>، ضربه‌ها با <code dir="ltr">Nav::to()</code>، پاسخ‌های
+نوشتنی) و یک یا چند فایل برای هر بخش، که با نام پوشه‌اش شروع می‌شود (<code dir="ltr">Support*</code>،
+<code dir="ltr">Customers*</code>، <code dir="ltr">Sales*</code>، <code dir="ltr">Catalog*</code>،
+<code dir="ltr">Marketing*</code>، <code dir="ltr">BotArea*</code>، <code dir="ltr">Owner*</code> و
+<code dir="ltr">Panel*</code>، یعنی `PanelConfigTest`، `PanelWebsiteTest`، `PanelMiniAppTest`،
+و همچنین `PanelUpdateTest`، `PanelImportsTest` و `PanelOperationsTest`)، و هر کدام فهرست ← ردیف ← کار ← اثرش در API را می‌پیماید،
+جایگاهی بدون مجوز (بدون دکمه، و رد ورودی) و یک پاسخ نوشتنی را. [تست](Testing.md) را ببینید.
 
 </div>

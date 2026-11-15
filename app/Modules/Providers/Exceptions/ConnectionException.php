@@ -18,8 +18,19 @@ final class ConnectionException extends ProviderException
     public function __construct(
         public readonly ConnectionFailure $failure,
         public readonly string $detail,
+        /** What to do about it in the panel's own terms, for a cause only its connector knows; '' when there is none. */
+        public readonly string $hint = '',
     ) {
         parent::__construct("The panel could not be reached ({$failure->value}): {$detail}");
+    }
+
+    /**
+     * The same failure with its connector's remedy (`hint`) — Remnawave drops a request that came through no HTTPS proxy —,
+     * as the transport threw it: before any afterWrite(), which a new one does not carry.
+     */
+    public function withHint(string $hint): self
+    {
+        return new self($this->failure, $this->detail, $hint);
     }
 
     /** A Guzzle/cURL transport failure, classified — of a request sent through the panel's proxy when `$proxied` — and let go of. */

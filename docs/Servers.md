@@ -2,7 +2,8 @@
 
 # Servers
 
-«سرورها», the owner's alone: the VPN panels the shop sells on — 3X-UI v3, PasarGuard 3.1+, HMPanel 2.5+ or Marzban 0.8+.
+«سرورها», the owner's alone: the VPN panels the shop sells on — 3X-UI v3, PasarGuard 3.1+, HMPanel 2.5+, Marzban 0.8+,
+Rebecca 1.0+ or Remnawave 2.1+.
 Every shop sells on the same servers: an agent's plans are built on them too, and a server's services are every shop's.
 An agent's panel has no servers page.
 
@@ -21,26 +22,27 @@ address, and in amber why it cannot sell, when it cannot; then «وضعیت», �
 
 ## Adding a server
 
-«افزودن سرور» asks which software runs the panel — «3X-UI», «PasarGuard», «HMPanel (HMray)» or «Marzban», each with its
-notes and a link to its project —, then its form:
+«افزودن سرور» asks which software runs the panel — «3X-UI», «PasarGuard», «HMPanel (HMray)», «Marzban», «Rebecca» or
+«Remnawave», each with its notes and a link to its project —, then its form:
 
 | Field | What it takes |
 |---|---|
 | «نام سرور» | 100 characters at most. **Customers see it**: it is the server's «لوکیشن» in the bot, on the shop's website and its status page — name it as a customer should read it («آلمان ۱») |
 | «ایموجی پرمیوم نام» | Optional: a premium emoji from the bot's list ([Bot texts and keyboards](Bot-Texts-And-Keyboards.md#premium-emoji)). Picked, its plain emoji becomes the name's first, and the bot draws that one premium: the location's button gets it as its icon — in place of the «🌍» its wording starts with —, and the texts that name the location (`%server%`) show it in its place. The website, the status page and the panels show the plain one. While it is chosen the name must start with an emoji |
-| «آدرس پنل» | The panel's own address, 255 characters at most, http or https: 3X-UI's with its web base path (`https://host:2053/AbCdEf`), without the `/panel` or `/login` of its pages after it; PasarGuard's dashboard address without `/dashboard` (`https://panel.example.com:8000`), no `/api` either; HMPanel's the address its sign-in page opens at (`https://panel.example.com`), without `/api`, `/dashboard`, `/clients` or any page of it; Marzban's dashboard address without `/dashboard` (`https://panel.example.com:8000`), no `/api` or `/docs` either. No `user:pass@`, `?` or `#` |
-| «احراز هویت» | «توکن API» (3X-UI) or «کلید API» (PasarGuard, HMPanel) — recommended —, or «نام کاربری و رمز». HMPanel offers its key alone: its API takes no admin's password. Marzban offers «نام کاربری و رمز» alone: its API has no keys |
-| «توکن API» / «کلید API» | 3X-UI's from *Settings → Security → API Token*, an **Admin** token (a Monitor or Node one only reads the status). PasarGuard's from *API Keys* (version 5.1 and later): the whole `pg_key_…` key, which the panel shows once, with full rights over users and reading groups and the system. HMPanel's from «تنظیمات ← API» (*Settings → API*): the whole `hmp_…` key, which the panel shows once, made with the scope `*` — or with `clients.read`, `clients.write`, `clients.renew` and `inbounds.read` |
-| «نام کاربری» / «رمز عبور» | The panel admin you sign in with (PasarGuard: an admin made in the dashboard — the one of its env file signs in only in debug mode; Marzban: a sudo admin, who sees every user — another sees only the users it made) |
+| «آدرس پنل» | The panel's own address, 255 characters at most, http or https: 3X-UI's with its web base path (`https://host:2053/AbCdEf`), without the `/panel` or `/login` of its pages after it; PasarGuard's dashboard address without `/dashboard` (`https://panel.example.com:8000`), no `/api` either; HMPanel's the address its sign-in page opens at (`https://panel.example.com`), without `/api`, `/dashboard`, `/clients` or any page of it; Marzban's dashboard address without `/dashboard` (`https://panel.example.com:8000`), no `/api` or `/docs` either; Rebecca's likewise; Remnawave's the https address of its reverse proxy, the domain its dashboard opens at (`https://panel.example.com`), without `/dashboard`, `/auth` or `/api` — its own port over plain http only on the shop's own host or its private network ([Remnawave](#the-connectors)). No `user:pass@`, `?` or `#` |
+| «احراز هویت» | «توکن API» (3X-UI, Remnawave) or «کلید API» (PasarGuard, HMPanel, Rebecca) — recommended —, or «نام کاربری و رمز». HMPanel, Rebecca and Remnawave offer their key or token alone: their APIs take no admin's password. Marzban offers «نام کاربری و رمز» alone: its API has no keys |
+| «توکن API» / «کلید API» | 3X-UI's from *Settings → Security → API Token*, an **Admin** token (a Monitor or Node one only reads the status). PasarGuard's from *API Keys* (version 5.1 and later): the whole `pg_key_…` key, which the panel shows once, made with *Inherit admin permissions* — or with the users' permissions (create, view, edit, delete, reset usage, revoke) and viewing groups (their simple list is enough) and the system —, best without an expiry or a request cap. HMPanel's from «تنظیمات ← API» (*Settings → API*): the whole `hmp_…` key, which the panel shows once, made with the scope `*` — or with `clients.read`, `clients.write`, `clients.renew` and `inbounds.read`. Rebecca's from «حساب من ← کلیدهای API» (*My Account → API keys*): the whole `rk_…` key, which the panel shows once — a full access or sudo admin's ([Rebecca](#the-connectors)). Remnawave's from *Remnawave Settings → API Tokens*: the whole token — `eyJ…`, three parts joined by dots —, which the panel shows once, made with the scopes `users:*`, `internal-squads:read` and `system:read` (`*` works too, but opens the whole panel) |
+| «نام کاربری» / «رمز عبور» | The panel admin you sign in with (PasarGuard: an admin made in the dashboard who sees every user — the one of its env file signs in only in debug mode ([PasarGuard](#the-connectors)); Marzban: a sudo admin, who sees every user — another sees only the users it made) |
 | «کلید TOTP» | 3X-UI only, when its two-factor login is on: the Base32 secret it showed as you turned it on. The shop makes each sign-in's code from it |
 
 Under «تنظیمات پیشرفته»:
 
 | Field | What it takes |
 |---|---|
+| «کلید دروازه» | Remnawave only, for a panel behind an auth portal (Caddy's or TinyAuth): the portal's API key — TinyAuth's whole `Basic …` value —, sent with every call. Blank for a panel without one ([Remnawave](#the-connectors)) |
 | «بررسی گواهی TLS» | On. Off for a panel with a self-signed certificate |
 | «تایم‌اوت اتصال (ثانیه)» | 5 to 120, 30 by default: how long a call to the panel may take (connecting gives up after 10 seconds at most) |
-| «آدرس اشتراک» | Blank: the subscription links are the panel's own. Set, the full prefix before the link's token, when the links must come from another address (a reverse proxy): `https://sub.example.com/sub` (HMPanel's links: `https://sub.example.com/s`) |
+| «آدرس اشتراک» | Blank: the subscription links are the panel's own. Set, the full prefix before the link's token, when the links must come from another address (a reverse proxy): `https://sub.example.com/sub` (HMPanel's links: `https://sub.example.com/s`; Remnawave's, the prefix before the user's short id: `https://sub.example.com`) |
 | «اتصال از طریق پراکسی SOCKS5» | Off: the shop talks to the panel directly. On, every request the shop makes to this panel goes through a SOCKS5 proxy ([below](#a-panel-behind-a-socks5-proxy)), and these appear: |
 | «آدرس پراکسی» | The proxy's host name or IP address, without `socks5://` and without a port: `proxy.example.com`, `203.0.113.10` (an IP typed in Persian digits is read as the same IP) |
 | «پورت پراکسی» | 1 to 65535, 1080 by default |
@@ -61,13 +63,13 @@ it.
 is saved even when that check fails**: fix the connection on its page. The check lists its inbounds, **all of them not
 for sale** until you mark them ([inbounds](#inbounds)).
 
-**The secrets** — the token or key, the password, the TOTP secret, the proxy's password — are kept encrypted and never
-shown again: a kept one shows as dots — a token of 12 characters or more with its last four; a password, the TOTP
-secret and the proxy's password with none. Left blank on an edit, it stays; «پاک کردن مقدار ذخیره‌شده» removes one the
+**The secrets** — the token or key, the password, the TOTP secret, Remnawave's gate key, the proxy's password — are kept
+encrypted and never shown again: a kept one shows as dots — a token of 12 characters or more with its last four; a
+password, the TOTP secret, the gate key and the proxy's password with none. Left blank on an edit, it stays; «پاک کردن مقدار ذخیره‌شده» removes one the
 connection can do without — one it needs (a panel's token or password) has no such button: type the new one. **A secret
 stays only while the way to the panel stays**: the address's origin — the same http or https, host and port (a path
-may change) —, the proxy's address and port, and «بررسی گواهی TLS». Change one, and the kept token or password is never
-sent the new way, not even by «تست اتصال»: the form asks for it again («آدرس پنل، پراکسی یا بررسی گواهی TLS عوض شده
+may change) —, the proxy's address and port, and «بررسی گواهی TLS». Change one, and the kept token, password or gate key
+is never sent the new way, not even by «تست اتصال»: the form asks for it again («آدرس پنل، پراکسی یا بررسی گواهی TLS عوض شده
 است؛ … را دوباره وارد کنید.»). Switching the proxy off keeps it — it then goes straight to the panel it was given for.
 The proxy's password likewise stays only while the proxy's address and port do. Saving another way in removes the
 other way's credentials.
@@ -139,7 +141,8 @@ whose connector this installation no longer has is not checked: «کانکتور
 
 The panel's inbounds as the shop last read them — PasarGuard's groups play their part; HMPanel's are the inbounds of
 the 3X-UI panels beneath it, each named after its panel («Germany · DE»); Marzban's are those of its Xray config, each
-by its tag —, each with its protocol, port, clients and the «فروش» switch. A plan sold on the whole server uses every inbound marked «فروش» and enabled on the
+by its tag; Rebecca's are its services, a plan picking one; Remnawave's are its internal squads, a client in several at
+once —, each with its protocol, port, clients and the «فروش» switch. A plan sold on the whole server uses every inbound marked «فروش» and enabled on the
 panel, at the moment of each purchase; a plan that pins its inbounds uses those whatever the switch says
 ([Plans](Plans.md)); a service moved here, on a plan without this server, gets the inbounds marked. Every service is
 one client on the panel, attached to its inbounds.
@@ -316,11 +319,51 @@ and «🟢 پنل سرور «…» دوباره جواب می‌دهد» when it
 - Its status shows CPU, RAM, disk and uptime of the panel's host; the cores run on its nodes, so their state reads
   «نامشخص».
 - «تغییر لینک» revokes the link: every earlier one stops working.
-- **A term from the first connection cannot be cleared** from a service through PasarGuard's API, and PasarGuard 5
-  puts any switched-off service still carrying one on hold when it is switched on. When the shop switches on or updates
+- **Give a key or an admin that sees every user.** An admin limited to its own users — before 5.0 one that is not sudo;
+  from 5.0 one whose role reads only its own users, as the built-in *operator* does — sees only the users it made:
+  another admin's user is refused (before 5.0, with a hint to sign in as a sudo admin) or not found (5.0 and later), a
+  service moved on the panel to another admin is taken for deleted at the next sync, and an
+  [import](Importing.md) finds no other admin's services. A name another admin's user holds is taken all the same: a
+  sale gives way to the next name — also when PasarGuard 5 refuses a name as taken but will not show its user. The
+  card's notes say so.
+- **A role's rules are named**: a refusal for a permission the admin's role lacks says what it needs — the users'
+  permissions (create, view, edit, delete, reset usage, revoke), viewing groups and the system, as the *administrator*
+  role has —, and so do the refusals of an admin out of traffic, a role that makes users from templates only (*Require
+  template*), a role's limits on traffic, term or user count, a role that demands an on-hold timeout or a HWID limit of
+  every user (the shop sends neither), and a group the panel or the role does not have. Such a refusal fails the sale
+  at once — a permission the admin lacks is no taken name. An admin out of traffic whose role blocks all its access
+  («Admin is limited — all access blocked») leaves the whole server out of use until it is given traffic: recorded on
+  the server, reported as not answering, and left alone a while like a panel out of reach ([Health](#health)); one
+  whose role blocks only its writes is refused call by call.
+- **An admin whose role may read only the groups' simple list** — the built-in *operator* from 5.0 — gets them by id
+  and name alone: a group switched off on the panel cannot be seen there and shows switched on. Remove a group you
+  switch off on the panel from this server's plans too, or a service on it is made without configs. The card's notes
+  say so.
+- **An API key** (5.1 and later) acts as its admin. One refused — unknown, expired, revoked, out of its *Max Requests*,
+  or of an admin switched off — says so, with what to do: give a key without an expiry or a request cap. One without
+  the right says to make it with *Inherit admin permissions*, or with the permissions above (the groups' simple list is
+  enough). Signed in with a username and password instead, the panel reports every sign-in of the shop's to its
+  Telegram or Discord admins (when its admin-login notice is on), a failed one with the password that was sent; a
+  key's calls are not reported.
+- **The panel's own clean-up of ended users** — 5.6's *Cleanup → Automatic retention → Expired accounts* in its
+  settings, `USERS_AUTODELETE_DAYS` before — would delete the shop's ended services before the shop's renewal window
+  and its own removal of ended services. The users the shop makes are exempt from it. Those made by an earlier AmoBot
+  cannot be changed so — PasarGuard sets a user's own days only as it is made —: on a panel with that clean-up on,
+  turn its rule for expired accounts off (*Keep forever*), or before 5.6 unset `USERS_AUTODELETE_DAYS` or make it
+  negative, to keep them.
+- **The quota is once a term**: every update sets the user's traffic reset to none, so a user taken over from the
+  panel with a reset of its own (each day, week or month) no longer gets its quota back every period.
+- **A term from the first connection cannot be cleared** from a service through PasarGuard's API, and PasarGuard 5.1
+  and later puts any switched-off service still carrying one on hold when it is switched on. When the shop switches on or updates
   a service it knows is not waiting — one with a fixed end, or with none —, it puts it back active, so it never starts
   its old term over its end at its next connection; a switched-off service with no end that still carries a duration is read as waiting, as the
   panel reads it.
+- Before 5.1 the panel's own traffic reset makes a service waiting for its first connection active; the update the
+  shop sends right after a reset puts its waiting term back. A *next plan* set on the panel survives an update from
+  PasarGuard 5.5; earlier versions drop it.
+- The comment, naming the customer's Telegram id, is the user's note, cut to PasarGuard's 500 characters. A link a
+  customer claims is checked by asking the panel's own subscription route whose it is — a route of several folders too
+  ([Services added by their link](Service-Claims.md)).
 
 **HMPanel** («HMPanel (HMray)» in «افزودن سرور», 2.5 and later) — a panel that runs several 3X-UI panels beneath it:
 
@@ -353,23 +396,43 @@ and «🟢 پنل سرور «…» دوباره جواب می‌دهد» when it
   that login, until shortly before it ends (10 minutes, or a tenth of its life when that is shorter): it signs in again
   only then, or when the panel refuses the token (a password changed, say). Marzban tells its Telegram admins of every
   sign-in: to hear none of the shop's, put the shop's host's IP in `LOGIN_NOTIFY_WHITE_LIST`, in Marzban's settings, as
-  the card's note says.
-- **Give a sudo admin.** Another admin sees only the users it made: its server is never read whole — the sync, and an
-  [import](Importing.md), ask for its services one at a time —, and another admin's user is refused with a hint to sign
-  in as a sudo admin.
+  the card's note says. A failed sign-in is reported all the same, with the password that was sent; `NOTIFY_LOGIN=false`
+  silences every report.
+- **Give a sudo admin**, one made in the panel's database rather than the `SUDO_USERNAME` of its `.env` file: the users
+  that one makes belong to no admin, which Marzban 0.8.2 to 0.8.4 fails to delete cleanly (below).
+  Another admin sees only the users it made: its server is never read whole — the sync, and an [import](Importing.md),
+  ask for its services one at a time —, and another admin's user is refused with a hint to sign in as a sudo admin. A
+  name another admin's user holds is taken all the same: a sale gives way to the next name.
 - **Its inbounds** are those of the panel's Xray config («Core Settings» in its dashboard), each by its tag, with its
   protocol, port, transport and security; none of them is switched off on the panel. A service is made on its plan's
-  inbounds, with a proxy of each protocol they speak (the panel makes their ids and passwords). An inbound the panel no
-  longer has is refused before anything is sent, saying to read the inbounds again; one the panel refuses — an inbound
-  gone, a protocol disabled on it — says to look at «Core Settings».
+  inbounds, with a proxy of each protocol they speak (the panel makes their ids and passwords). Marzban keeps a user's
+  inbounds as the inbounds of its protocols it is left out of: an inbound added to the panel later, of a protocol a
+  service has, reaches that service too. An inbound the panel no longer has is refused before anything is sent, saying
+  to read the inbounds again; one the panel refuses — an inbound gone, a protocol disabled on it — says to look at
+  «Core Settings».
 - A service's term starts at its first connection (Marzban's *on hold*) or ends on its day; one made switched off is
   made, then switched off — taken back when the panel refuses that. The comment, naming the customer's Telegram id, is
   the user's note (500 characters at most). Every change reads the user first and keeps a *next plan* set on the panel.
-  A traffic reset leaves a switched-off service off and one waiting for its first connection on hold — Marzban's own
-  reset would switch both on.
-- **A waiting term cannot be cleared**: Marzban's API keeps a service's on-hold duration once its term is replaced, and
-  the panel reads a switched-off service with no end that still carries one as waiting — so does the shop. A service
-  that was waiting, was later given unlimited time and is then switched off, comes back on hold when switched on.
+  A service switched back on is judged by the panel at once — limited or expired when its traffic or time is over —,
+  never given a few seconds' access first.
+- **A term replaced leaves no waiting behind**: Marzban's API cannot clear a service's on-hold duration (0 means "no
+  change"), and the panel reads a switched-off service with no end that still carries one as waiting. So an update
+  that replaces a waiting term overwrites the duration with one Marzban reads as none — a service once waiting, later
+  given unlimited time, then switched off and on, no longer comes back on hold with its old term.
+- **The quota is once a term**: every update sets the user's traffic reset to none, so a user adopted from the panel
+  with a reset of its own (each day, week or month) no longer gets its quota back every period.
+- **The panel's own clean-up of ended users** (`USERS_AUTODELETE_DAYS`) would delete the shop's ended services before
+  the shop's renewal window and its own removal of ended services. The users the shop makes are exempt from it. Those
+  made by an earlier AmoBot cannot be changed so — Marzban's API sets that only as a user is made —: on a panel with
+  `USERS_AUTODELETE_DAYS` set, unset it or make it negative to keep them.
+- **Deleting a service whose user belongs to no admin** — made by the `.env` file's `SUDO_USERNAME`, or whose admin was
+  removed — on Marzban 0.8.2 to 0.8.4: Marzban deletes it from its database, then fails (an error 500, its issue
+  #1634) before taking it off Xray, where the customer's config would go on working until the core restarts. The shop
+  switches such a user off first, which takes it off Xray, and counts a failure after which the user is gone as the
+  delete done — a refund, a move or a removal goes through.
+- A traffic reset leaves a switched-off service off and one waiting for its first connection on hold — Marzban's own
+  reset would switch both on: in 0.8.x it misreads a status and makes a switched-off user active (fixed in its
+  unreleased development line), and in every version it makes one on hold active with no end.
 - **It has no IP limit**: a plan's device count is not applied, and no «کاربر اضافه» is sold on it.
 - A client's name is 3 to 32 English letters, digits and `_` ([Bot settings](Bot-Settings.md#service-usernames)).
 - «تغییر لینک» revokes the link (Marzban's *revoke_sub*): new proxy credentials, and every earlier link stops working.
@@ -381,9 +444,113 @@ and «🟢 پنل سرور «…» دوباره جواب می‌دهد» when it
   online when Marzban saw it in the last minute.
 - The sync reads a sudo admin's users 500 at a time; a panel of more than 50,000 is asked service by service instead.
 
-**Rebecca**, a fork of Marzban (Faoxima offers it), has no connector: its current version (1.x) puts every user in a
-service, as PasarGuard puts them in groups, and takes no choice of inbounds as Marzban does — it needs a connector of its
-own.
+**Rebecca** (1.0 and later, rebeccapanel's — Marzban's descendant, rewritten in Go):
+
+- **Its API key is the one way in**: an admin's personal key, made in its dashboard under «حساب من ← کلیدهای API» (*My
+  Account → API keys*, a tab an admin allowed «مدیریت کلیدهای API خود» has; one who manages admins makes another's
+  under «کلیدهای API» on the admins page), the whole `rk_…` key, which the panel shows once. Rebecca asks bots in so:
+  no admin's password is typed here. The key acts as its admin, with that admin's role, permissions and services.
+- **Give a full access or sudo admin's key.** Those see every user of the panel. A standard admin — or a reseller —
+  sees only the users it made: its server is never read whole — the sync, and an [import](Importing.md), ask for its
+  services one at a time —, and another admin's user is refused with a hint to give a sudo or full access admin's key.
+  A name another admin's user holds is taken all the same: a sale gives way to the next name. An admin who is not full
+  access needs these permissions for its users: «ساخت کاربر», «حذف کاربر», «ریست مصرف», «لغو دسترسی» (a link changed), «ساخت کاربر در حالت تعلیق» (a term from the first connection), «اجازه حجم نامحدود»,
+  «اجازه تاریخ انقضا نامحدود» and «مدیریت محدودیت IP کاربران»; a refusal for want of one says so, with what to give.
+- **Its services are the inbounds**: a Rebecca user belongs to exactly one service and takes that service's hosts, so
+  «اینباندها» lists the services the key's admin may put users in, each by its name. **A plan on this server picks one
+  service** — and a plan sold on the whole server, a free test and a service a customer builds take every service
+  marked «فروش», so the shop lets one be marked at a time: marking a second asks you to take the mark off the first —:
+  a sale naming two is refused before anything is sent. A service without an active host takes no user: it shows switched off and cannot be sold. To sell
+  two services as two locations, add the panel twice, each server selling one.
+- A service's term starts at its first connection (Rebecca's *on hold*) or ends on its day; one made switched off is
+  made, then switched off — taken back when the panel refuses that. Every change reads the user first: it keeps the
+  user's service, link and the *next plans* set on the panel, a term replaced is replaced whole — a waiting one is
+  cleared with a deadline —, and the traffic reset is set to none, so the quota is once a term. The comment, naming
+  the customer's Telegram id, is the user's note (500 characters at most).
+- **The plan's devices are its IP limit**, and «کاربر اضافه» is sold on it.
+- «تغییر لینک» revokes the link (Rebecca's *revoke_sub*): a new key for the user, so new configs and a new link, and
+  every earlier one stops working. A traffic reset puts a user Rebecca had limited for its traffic back on, and leaves
+  any other as it was. A deleted service's name is free on the panel again.
+- A client's name is 3 to 32 English letters, digits and `_ . @ -` ([Bot settings](Bot-Settings.md#service-usernames)).
+- The link is the user's subscription link — on the panel's own address when Rebecca gives only its path —, or
+  «آدرس اشتراک» in front of its token. A link signed afresh in an answer changes the service's kept link at a sync —
+  every one keeps working until the link is revoked.
+- **A link a customer claims** ([Services added by their link](Service-Claims.md)) is a subscription link — its token or
+  key shown to the panel's own subscription route, a route of several folders too —, or a **VLESS or VMess** config,
+  whose id is the user's key. A Trojan or Shadowsocks config is found by no one: its password is a hash of the key that
+  nothing on the panel looks up — such a customer sends the subscription link. (A user made before Rebecca changed its
+  configs' ids, in its early versions, may be found by its subscription link alone.)
+- **Usage hidden**: an admin whose traffic mode is «حجم ساخته‌شده» with «نمایش ترافیک کاربران» off sees every user's
+  usage as zero — so would the shop, which could then never end a service by its traffic. Give the key of an admin who
+  sees its users' usage.
+- Its status shows the panel host's CPU, RAM, disk and uptime, and Xray's state, version and last error. A user counts
+  as online when Rebecca saw it in its last 20 seconds.
+- The sync reads a full access or sudo admin's users 500 at a time; a panel of more than 50,000 is asked service by
+  service instead.
+
+**Remnawave** (2.1 and later, 3.x included — a panel of Xray nodes, its users reaching them through squads):
+
+- **Its API token is the one way in**: made in its *Remnawave Settings → API Tokens*, the whole token — `eyJ…`, three
+  parts joined by dots —, which the panel shows once, with the scopes `users:*`, `internal-squads:read` and
+  `system:read` (the scope `*` works too, but opens the whole panel). Remnawave takes no admin's password for API calls, nor an admin's own sign-in token: given in its
+  place, one is refused, saying to make an API token. Every token has a lifetime: make a new one before it ends, and
+  put it here. A refused token says it is wrong, of another panel or past its time; one without a scope a call needs,
+  or deleted on the panel, says which scopes to give.
+- **Only through an HTTPS reverse proxy**: Remnawave drops — with no answer — every request that did not come through
+  one. Give the https address of the panel's domain, where its dashboard opens. The panel's own port over plain http
+  works only when the panel is on the shop's own host or its private network — `localhost`, a loopback, private or
+  Tailscale-style (`100.64.0.0/10`) IP address, a host name of one word, as a Docker service's, or one under `.lan`,
+  `.local`, `.internal` or `.home.arpa` —: the shop then adds what such a proxy would. Across
+  the internet it adds nothing, so Remnawave drops the request: the token and the customers' data would travel
+  unencrypted. A connection cut off with no answer — or a failed TLS handshake on an https address that names a port
+  other than 443, the panel's plain port (a certificate refused is the certificate's) — is said as nothing having
+  answered, with that rule and what to give; a proxy in front
+  of the panel that got no answer says the panel is down, or the proxy does not send `X-Forwarded-For` and
+  `X-Forwarded-Proto`.
+- **A panel behind an auth portal** — Caddy's or TinyAuth, as Remnawave's own security guides set up — lets the shop's
+  calls through only with the portal's key: give it as «کلید دروازه» under «تنظیمات پیشرفته» (the portal's API key, or
+  TinyAuth's whole `Basic …` value); the shop sends it with every call. «آدرس پنل» stays the panel's own address,
+  without the portal's secret sign-in path. A portal that turns the shop away — its page, or a redirect, in place of
+  the API — says to give the gate key.
+- **Its internal squads are the inbounds**: «اینباندها» lists them by name, each with its inbounds' tags and its
+  members. A squad with no inbound gives a user nothing: it shows switched off and cannot be sold. A user may be in
+  several squads, so a plan on this server may sell several together. An update leaves a user's squads as they are.
+- **No term from the first connection**: Remnawave has none, so a service's time runs from the sale — a term counted
+  from the first connection, a plan's or a free test's, starts as the service is made, and the shop keeps the end the
+  panel then has.
+- A service is made switched on or off in one step. One switched off stays off whatever its time and traffic. One
+  renewed, or updated while on, runs again when its new term has time and traffic left; otherwise the panel keeps it
+  ended. One switched back on runs until the panel's next review — every 30 seconds for time, 45 for traffic — ends it
+  again if its time or traffic is over. A term cut to end now ends a minute or so later: Remnawave takes no end that is
+  not in the future. A renewal whose answer never came (a timeout) is asked about on the panel, which shows a term from
+  the first connection as the deadline it started — or a deadline gone by as the soonest it takes —: the shop knows it
+  there, and delivers it once, never twice.
+- **The quota is once a term**: a user is made and updated with no traffic reset.
+- The comment, naming the customer's Telegram id, is the user's description, and the Telegram id also goes in
+  Remnawave's own field for it (Remnawave sends nothing to users through it); a service handed to another customer
+  clears the previous owner's id there.
+- **A plan's devices are its HWID device limit** (0 for none), and «کاربر اضافه» is sold on it. Remnawave holds it
+  only while «HWID Device Limit» is on in its subscription settings (off by default), and counts only the apps that send
+  a device id when they fetch the link (Happ, v2RayTun and a few more); while it is on, an app that sends none gets no
+  subscription. With it off, the device count is the shop's word alone.
+- A client's name is 3 to 36 English letters, digits, `_` and `-`, matched as it is written
+  ([Bot settings](Bot-Settings.md#service-usernames)).
+- «تغییر لینک» revokes the subscription: a new short id — so a new link — and new credentials; every link and config
+  handed out before stops working. A traffic reset puts a user Remnawave had limited for its traffic back on, and leaves
+  any other as it was. A deleted service is deleted for good: its name is free on the panel again.
+- The link is the user's subscription link — Remnawave's subscription domain and the user's short id —, or «آدرس
+  اشتراک» in front of the short id.
+- **A link a customer claims** ([Services added by their link](Service-Claims.md)) is a subscription link — up to four
+  of its parts asked of the panel as a short id —, or a VLESS, Trojan or Shadowsocks config, matched against every
+  user's credentials (a VLESS id even when a host's route replaced its third group). A short id looked up is masked in
+  the log and in any error that would quote it.
+- Its status shows the panel host's RAM and uptime: Remnawave reports no CPU load or disk («—»), and its Xray cores run
+  on its nodes, so their state reads «نامشخص». A user counts as online when Remnawave saw its traffic in the last 30
+  seconds.
+- The sync reads the users 1,000 at a time; a panel of more than 50,000 is asked service by service instead.
+- **An error of Remnawave's own** (an answer of 500 or more) to a change counts as no clear answer: the panel may have
+  made the change before it failed, so the shop asks the panel before doing it again. An end the panel refuses as past
+  says to check that the shop's host and the panel's server keep the same time.
 
 Another panel is a driver ([Drivers](Drivers.md#a-vpn-panel-connector)). For developers, `panel:probe` tries a panel
 from a console as «تست اتصال» does ([Console commands](Console-Commands.md)); a shop never needs it.

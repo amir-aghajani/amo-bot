@@ -17,13 +17,15 @@ use App\Modules\Auth\PrincipalKind;
 use App\Modules\Bots\CurrentBot;
 use App\Modules\Bots\Models\Bot;
 use App\Modules\Bots\Services\Bots;
+use App\Modules\Telegram\Admin\OwnerLinks;
 use App\Support\Input;
 use Psr\Http\Message\ServerRequestInterface;
+use Psr\Log\LoggerInterface;
 
 /**
  * The owner's panel sign-in (/api/admin). The session keeps a fingerprint of the login it was opened under, so a new
- * login (edited, recovered, changed elsewhere) ends every other session. The owner may work in any shop; which one is
- * each request's (NamedShop).
+ * login (edited, recovered, changed elsewhere) ends every other session — and, changed here, every Telegram account
+ * linked as the owner (changeCredentials()). The owner may work in any shop; which one is each request's (NamedShop).
  */
 final class OwnerAuth implements PanelAuth
 {
@@ -34,6 +36,8 @@ final class OwnerAuth implements PanelAuth
         private readonly AdminAccount $account,
         private readonly SignInThrottle $throttle,
         private readonly Bots $bots,
+        private readonly OwnerLinks $links,
+        private readonly LoggerInterface $logger,
     ) {}
 
     public function principal(ServerRequestInterface $request): ?Principal
@@ -145,13 +149,22 @@ final class OwnerAuth implements PanelAuth
 
     /**
      * Save a new login (the caller has proved it is the owner) and keep this session under it; every other session
-     * ends with the old fingerprint.
+     * ends with the old fingerprint, and every Telegram account linked as the owner is let go, with any open link
+     * (OwnerLinks::revokeAll()): what the old login made — a session stolen, an account linked with it — ends with it.
      *
      * @throws ValidationException when config.php cannot be written; nothing changed then
      */
     public function changeCredentials(Credentials $credentials, Bot $shop): Principal
     {
         $this->account->save($credentials);
+        $open = $this->links->openUntil() !== null;
+        $let = $this->links->revokeAll();
+        if ($let !== [] || $open) {
+            $this->logger->warning('The panel\'s login changed: every Telegram account linked as the owner was let go ({accounts}); the open link: {link}.', [
+                'accounts' => $let === [] ? 'none was linked' : 'Telegram ids ' . implode(', ', $let),
+                'link' => $open ? 'ended unopened' : 'none',
+            ]);
+        }
         $this->hold();
 
         return new Principal(PrincipalKind::Owner, $this->account->username(), $shop);

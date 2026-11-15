@@ -16,8 +16,12 @@ import { isolate } from '@/lib/direction'
  * ban or a role changes, and the bot admin's mark.
  */
 
-/** What a bot admin may do — said on their mark, and asked about before an account gets it (a plain string: its command isolated). */
-const BOT_ADMIN = `مدیر ربات دستور ${isolate('/broadcast')} را دارد، رسیدها را در گروه گزارش‌ها تایید و رد می‌کند و از شرط‌های ربات (خاموش بودن، شماره موبایل، کانال‌ها) معاف است.`
+/**
+ * What a bot admin may do — said on their mark, and asked about before an account gets it (a plain string: its command
+ * isolated) —, as the bot's own management says it: the shop's daily work from the bot too, while «مدیران ربات» lets
+ * its admins in.
+ */
+const BOT_ADMIN = `مدیر ربات دستور ${isolate('/broadcast')} را دارد، رسیدها را در گروه گزارش‌ها تایید و رد می‌کند و از شرط‌های ربات (خاموش بودن، شماره موبایل، کانال‌ها) معاف است. تا «مدیران ربات» روشن است، با «⚙️ مدیریت» کارهای روزانه فروشگاه را هم از خود ربات انجام می‌دهد.`
 
 /** A change of a customer's account. */
 type AccountChange = { user: UserRow; status: UserStatus } | { user: UserRow; role: UserRole }
@@ -114,7 +118,7 @@ function question(change: AccountChange): { title: string; description: string; 
         description: `${name} دیگر مدیر ربات نیست.`,
         confirmLabel: 'برداشتن مدیریت',
         destructive: true,
-        children: 'از این پس مثل بقیه مشتری‌هاست: دستورهای مدیر و دکمه‌های گروه گزارش‌ها برایش کار نمی‌کند.',
+        children: 'از این پس مثل بقیه مشتری‌هاست: دستورهای مدیر، دکمه‌های گروه گزارش‌ها و مدیریت فروشگاه از ربات برایش کار نمی‌کند.',
       }
 }
 

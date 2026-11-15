@@ -6,8 +6,13 @@ namespace Tests\Feature;
 
 use App\Core\Config\ConfigFile;
 use App\Core\Config\Repository as Config;
+use App\Modules\Auth\Actor;
 use App\Modules\Auth\Services\AdminAccount;
 use App\Modules\Auth\Services\SignInThrottle;
+use App\Modules\Telegram\Admin\OwnerLinks;
+use App\Modules\Users\Enums\UserRole;
+use App\Modules\Users\Models\User;
+use App\Modules\Users\Services\UserActions;
 use Psr\Http\Message\ServerRequestInterface;
 use Slim\Psr7\Factory\ServerRequestFactory;
 use Tests\HttpTestCase;
@@ -16,8 +21,9 @@ use Tests\HttpTestCase;
  * The owner changes the panel's login from their panel (PUT /api/admin/auth/credentials): the current password first —
  * a wrong one is a failed sign-in, counted with the login's, so this is no way around the throttle —, then the
  * installer's one rule for the new login, every refusal at once; written to config.php, the change signs every
- * other browser out and keeps this one signed in, in the shop it has open. A file the server may not write is said, and
- * changes nothing.
+ * other browser out and keeps this one signed in, in the shop it has open, and lets go of every Telegram account linked
+ * as the owner — with the admin roles their links gave — and of an open link. A file the server may not write is said,
+ * and changes nothing.
  */
 final class AdminCredentialsApiTest extends HttpTestCase
 {
@@ -53,6 +59,48 @@ final class AdminCredentialsApiTest extends HttpTestCase
         self::assertSame(401, $this->signIn(self::ADMIN_USERNAME, self::ADMIN_PASSWORD), 'the old password opens nothing');
         self::assertSame(401, $this->signIn(self::ADMIN_USERNAME, trim(self::NEW_PASSWORD)), 'a password is what was typed, spaces and all');
         self::assertSame(200, $this->signIn(self::ADMIN_USERNAME, self::NEW_PASSWORD));
+    }
+
+    public function testTheChangeLetsGoOfEveryTelegramAccountLinkedAsTheOwnerAndTheRolesTheirLinksGave(): void
+    {
+        $this->config(['telegram.username' => 'amo_shop_bot']);
+        $links = $this->service(OwnerLinks::class);
+        $raised = $this->customer(['telegram_id' => 7001]);
+        $before = $this->customer(['telegram_id' => 7002, 'role' => UserRole::Admin]);
+        $chosen = $this->customer(['telegram_id' => 7003]);
+        $this->linked(7001, raise: true);
+        $this->linked(7002, raise: false);
+        $this->linked(7003, raise: true);
+        // Made an admin by hand since, in «کاربران»: the owner's choice.
+        $this->service(UserActions::class)->setRole($chosen, Actor::system(), ['role' => UserRole::Admin->value]);
+        $open = $links->link() ?? self::fail('No link: the main bot has no username.');
+        $logs = $this->logs();
+
+        $changed = $this->putJson(self::URL, $this->change(['username' => 'boss']));
+
+        self::assertSame(200, $changed->getStatusCode(), (string) $changed->getBody());
+        self::assertSame([], $links->ids(), 'no account is the owner in the bot any more');
+        self::assertNull($links->openUntil(), 'the open link ended');
+        self::assertFalse($links->redeem(self::payload($open['url']), 7004), 'and opens nothing');
+        self::assertSame(UserRole::Customer, $raised->refresh()->role, 'the admin role a link gave goes with it');
+        self::assertSame(UserRole::Admin, $before->refresh()->role, 'an admin before the link stays one');
+        self::assertSame(UserRole::Admin, User::query()->findOrFail($chosen->id)->role, 'a role set by hand stays');
+        self::assertTrue($logs->hasWarningThatContains('every Telegram account linked as the owner was let go (Telegram ids 7001, 7002, 7003)'));
+
+        // Linked again under the new login, as before.
+        $this->linked(7001, raise: false);
+        self::assertSame([7001], $links->ids());
+    }
+
+    public function testAChangeRefusedLeavesTheLinkedAccountsAsTheyAre(): void
+    {
+        $this->config(['telegram.username' => 'amo_shop_bot']);
+        $this->customer(['telegram_id' => 7001]);
+        $this->linked(7001, raise: false);
+
+        self::assertSame(422, $this->putJson(self::URL, $this->change(['current_password' => 'guess', 'username' => 'boss']))->getStatusCode());
+
+        self::assertSame([7001], $this->service(OwnerLinks::class)->ids());
     }
 
     public function testABlankPasswordChangesTheUsernameAloneInTheShopThatIsOpen(): void
@@ -174,6 +222,24 @@ final class AdminCredentialsApiTest extends HttpTestCase
     private function change(array $fields = []): array
     {
         return $fields + ['current_password' => self::ADMIN_PASSWORD, 'username' => self::ADMIN_USERNAME, 'password' => '', 'password_confirmation' => ''];
+    }
+
+    /** `$telegramId` linked as the owner, as opening a fresh link from that account does — made the bot's admin by it with `$raise`. */
+    private function linked(int $telegramId, bool $raise): void
+    {
+        $links = $this->service(OwnerLinks::class);
+        $link = $links->link() ?? self::fail('No link: the main bot has no username.');
+        self::assertTrue($links->redeem(self::payload($link['url']), $telegramId));
+        if ($raise) {
+            User::query()->where('telegram_id', $telegramId)->firstOrFail()->forceFill(['role' => UserRole::Admin])->save();
+            $links->raised($telegramId);
+        }
+    }
+
+    /** What a link's /start carries. */
+    private static function payload(string $url): string
+    {
+        return substr($url, (int) strpos($url, '=') + 1);
     }
 
     private function signIn(string $username, string $password): int

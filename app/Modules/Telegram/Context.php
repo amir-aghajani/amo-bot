@@ -45,32 +45,32 @@ final class Context
     /**
      * Show `$text` in place of the tapped button's message; a new message for a message update or one Telegram will not
      * edit. A photo (a QR card) cannot become text, so it is replaced: deleted and sent anew, keeping one message.
+     * Returns the id of the message that shows it: the tapped one, or the one sent instead.
      *
      * @param array<string, mixed> $options
      */
-    public function edit(string $text, array $options = []): void
+    public function edit(string $text, array $options = []): ?int
     {
         $messageId = $this->update->messageId();
 
         if (!$this->update->isCallback() || $messageId === null) {
-            $this->reply($text, $options);
-
-            return;
+            return self::idOf($this->reply($text, $options));
         }
         if ($this->update->hasMedia()) {
-            $this->replace($text, $options);
-
-            return;
+            return self::idOf($this->replace($text, $options));
         }
 
         try {
             $this->api->editMessageText($this->chatId(), $messageId, $text, $options);
+
+            return $messageId;
         } catch (TelegramApiException $e) {
             // Past editing: send it instead. Anything else (Telegram out of reach, the chat gone) would fail a message too.
             if (!$e->is(Refusal::BadRequest)) {
                 throw $e;
             }
-            $this->reply($text, $options);
+
+            return self::idOf($this->reply($text, $options));
         }
     }
 
@@ -89,11 +89,11 @@ final class Context
 
     /**
      * A picture in place of the tapped message: edited in (Bot API 10.3 lets a text message take media), or the
-     * message replaced by it when Telegram refuses.
+     * message replaced by it when Telegram refuses. Returns the id of the message that shows it.
      *
      * @param array<string, mixed> $options sendPhoto options (caption, reply_markup)
      */
-    public function editPhoto(string $bytes, string $filename, array $options = []): void
+    public function editPhoto(string $bytes, string $filename, array $options = []): ?int
     {
         $messageId = $this->update->messageId();
 
@@ -101,7 +101,7 @@ final class Context
             try {
                 $this->api->editMessageMedia($this->chatId(), $messageId, $bytes, $filename, $options);
 
-                return;
+                return $messageId;
             } catch (TelegramApiException $e) {
                 // An older Bot API server, a message too old or gone: the picture takes its place instead.
                 if (!$e->is(Refusal::BadRequest)) {
@@ -111,7 +111,18 @@ final class Context
         }
 
         $this->delete();
-        $this->api->sendPhoto($this->chatId(), $bytes, $filename, $options);
+
+        return self::idOf($this->api->sendPhoto($this->chatId(), $bytes, $filename, $options));
+    }
+
+    /**
+     * A sent message's id, from Telegram's answer; null when it gave none.
+     *
+     * @param array<string, mixed> $message
+     */
+    private static function idOf(array $message): ?int
+    {
+        return is_int($message['message_id'] ?? null) ? $message['message_id'] : null;
     }
 
     /**
@@ -188,7 +199,7 @@ final class Context
         return is_scalar($album) ? (string) $album : null;
     }
 
-    /** Whether the sender is a bot admin (role admin): admin-only commands, and exempt from the gates. */
+    /** Whether the sender is a bot admin (role admin): admin-only commands. The gates ask AdminSeats::passGates(). */
     public function isAdmin(): bool
     {
         return $this->user->isAdmin();

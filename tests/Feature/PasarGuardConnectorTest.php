@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Modules\Providers\Models\Server;
+use App\Modules\Providers\Models\ServerInbound;
 use App\Modules\Subscriptions\Models\Subscription;
 use App\Modules\Subscriptions\Services\ProvisioningService;
 use GuzzleHttp\Psr7\Response;
@@ -63,6 +64,29 @@ final class PasarGuardConnectorTest extends HttpTestCase
         $long = $groups->last();
         self::assertSame([255, 128], [mb_strlen((string) $long?->remark), mb_strlen((string) $long?->tag)], 'cut to what server_inbounds keeps');
         self::assertStringEndsWith('…', (string) $long?->tag);
+    }
+
+    /**
+     * A key of PasarGuard's built-in operator role (every non-sudo admin's since 5.0) may read the users it makes and the
+     * system, but only the groups' simple list: the server is added all the same, its groups by id and name.
+     */
+    public function testAnOperatorsKeyAddsTheServerWithTheGroupsItMaySee(): void
+    {
+        $this->panelHttp()->raw(
+            self::answer(['users' => [], 'total' => 0]),
+            self::answer(['version' => '5.6.0', 'uptime_seconds' => 60, 'mem_total' => 4096, 'mem_used' => 1024, 'disk_total' => 8192, 'disk_used' => 2048, 'cpu_cores' => 2, 'cpu_usage' => 3.5]),
+            self::answer(['detail' => 'Permission denied: groups.read'], 403),
+            self::answer(['groups' => [['id' => 3, 'name' => 'VIP'], ['id' => 5, 'name' => 'Germany']], 'total' => 2]),
+        );
+
+        $response = $this->postJson('/api/admin/servers', self::form());
+        $data = $this->decode($response);
+
+        self::assertSame(201, $response->getStatusCode());
+        self::assertTrue($data['probe']['ok'], (string) ($data['probe']['error'] ?? ''));
+        self::assertSame(['GET /api/users', 'GET /api/system', 'GET /api/groups', 'GET /api/groups/simple'], $this->panelHttp()->calls());
+        $groups = Server::query()->findOrFail($data['server']['id'])->inbounds()->oldest('id')->get();
+        self::assertSame([['3', 'VIP', true], ['5', 'Germany', true]], $groups->map(static fn(ServerInbound $group): array => [$group->remote_key, $group->remark, $group->enabled])->all());
     }
 
     public function testARefusedKeyIsExplainedInPersianWithWhereToMakeAnother(): void

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Telegram\Channels;
 
+use App\Modules\Telegram\Admin\AdminSeats;
 use App\Modules\Telegram\Api\BotApi;
 use App\Modules\Telegram\Api\Refusal;
 use App\Modules\Telegram\Api\TelegramApiException;
@@ -32,18 +33,20 @@ final class ChannelMembership
         private readonly BotSettings $settings,
         private readonly BotApi $api,
         private readonly LoggerInterface $logger,
+        private readonly AdminSeats $seats,
     ) {}
 
     /**
-     * The channels the customer has still to join, in the order they are shown — none while the rule is off, for a bot
-     * admin, or while a recent check holds (`$fresh` asks Telegram whatever the mark says: "عضو شدم"). A channel with no
-     * way in (BotChannel::link()) is not asked: no one could join it.
+     * The channels the customer has still to join, in the order they are shown — none while the rule is off, for whoever
+     * manages the shop or the owner's open link being opened (AdminSeats::passGates()), or while a recent check holds
+     * (`$fresh` asks Telegram whatever the mark says: "عضو شدم"). A channel with no way in (BotChannel::link()) is not
+     * asked: no one could join it.
      *
      * @return list<BotChannel>
      */
     public function missing(Context $ctx, bool $fresh = false): array
     {
-        if (!$this->settings->joinRequired() || $ctx->isAdmin()) {
+        if (!$this->settings->joinRequired() || $this->seats->passGates($ctx)) {
             return [];
         }
 

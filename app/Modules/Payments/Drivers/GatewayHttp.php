@@ -13,7 +13,8 @@ use GuzzleHttp\Exception\GuzzleException;
  * the gateway's own host's or none), asking for JSON, an error status read like any other — and back its HTTP status
  * and its JSON object, empty for anything else (a list, a page, nothing). Each driver brings its address, its
  * credentials, its guard against an empty one and what to make of a refusal — the gateway's own words in it cut short
- * alike (said()).
+ * alike (said()), a sum it names read alike (whole()), and the page it sends a customer to held to its own host
+ * (page()).
  */
 final class GatewayHttp
 {
@@ -24,6 +25,29 @@ final class GatewayHttp
     public static function said(mixed $words): string
     {
         return is_string($words) ? mb_substr($words, 0, self::SAID_MAX) : '';
+    }
+
+    /**
+     * A whole sum as a gateway may write one in its answer — a number (50000, or 50000.0), or its digits —; null for
+     * anything else.
+     */
+    public static function whole(mixed $value): ?int
+    {
+        return match (true) {
+            is_int($value) => $value,
+            is_float($value) && $value >= 0 && $value < 1e15 && fmod($value, 1.0) === 0.0 => (int) $value,
+            is_string($value) && preg_match('/^\d{1,15}$/D', $value) === 1 => (int) $value,
+            default => null,
+        };
+    }
+
+    /**
+     * The page a gateway's answer sends a customer to, when it is one of its own: over https, on `$host` or a host under
+     * it; null for anything else, which no customer is sent to.
+     */
+    public static function page(mixed $url, string $host): ?string
+    {
+        return is_string($url) && preg_match('~^https://([a-z0-9-]+\.)*' . preg_quote($host, '~') . '/[\x21-\x7e]*$~D', $url) === 1 ? $url : null;
     }
 
     /**

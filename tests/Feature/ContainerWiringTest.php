@@ -5,6 +5,9 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Console\Kernel;
+use App\Modules\Telegram\Gates\Gate;
+use App\Modules\Telegram\Handler;
+use App\Modules\Telegram\Update\GroupHandler;
 use Slim\Interfaces\RouteInterface;
 use Symfony\Component\Console\Command\Command;
 use Tests\DatabaseTestCase;
@@ -44,7 +47,9 @@ final class ContainerWiringTest extends DatabaseTestCase
         $built = 0;
         foreach ($imports[1] as $class) {
             $reflection = new \ReflectionClass($class);
-            if (!$reflection->isInstantiable()) {
+            // What the Dispatcher builds: the handlers, the gates, the group's handlers — not a class named for its constants.
+            $wired = $reflection->implementsInterface(Handler::class) || $reflection->implementsInterface(Gate::class) || $reflection->implementsInterface(GroupHandler::class);
+            if (!$reflection->isInstantiable() || !$wired) {
                 continue;
             }
             self::assertInstanceOf($class, $this->built($class));

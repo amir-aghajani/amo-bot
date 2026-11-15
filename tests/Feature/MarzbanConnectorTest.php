@@ -19,6 +19,9 @@ use Tests\HttpTestCase;
  */
 final class MarzbanConnectorTest extends HttpTestCase
 {
+    /** The panel's inbounds as GET /api/inbounds answers them, grouped by protocol. */
+    private const INBOUNDS = ['vless' => [['tag' => 'VLESS TCP REALITY', 'protocol' => 'vless', 'network' => 'tcp', 'tls' => 'reality', 'port' => 443]]];
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -87,13 +90,12 @@ final class MarzbanConnectorTest extends HttpTestCase
 
     public function testASaleMakesAUserOnHoldOnTheEntrysInboundsAndASyncLearnsTheDeadlineItsFirstConnectionSet(): void
     {
-        $server = $this->panelServer('MZ', ['driver' => 'marzban', 'base_url' => 'https://mz.example:8000', 'api_token' => null, 'username' => 'admin', 'password' => 'S3cret pass', 'serves_subscriptions' => true]);
-        $this->inbound($server, 'VLESS TCP REALITY', ['tag' => 'VLESS TCP REALITY', 'remark' => 'VLESS TCP REALITY', 'protocol' => 'vless', 'port' => 443]);
+        $server = $this->marzbanServer('admin');
         $plan = $this->plan(['traffic_gb' => 30, 'duration_hours' => 720], $server);
         $customer = $this->customer(['username' => 'amir', 'telegram_id' => 4242]);
         $this->panelHttp()->raw(
             self::answer(['access_token' => 'jwt-1', 'token_type' => 'bearer']),
-            self::answer(['vless' => [['tag' => 'VLESS TCP REALITY', 'protocol' => 'vless', 'network' => 'tcp', 'tls' => 'reality', 'port' => 443]]]),
+            self::answer(self::INBOUNDS),
             self::answer(self::user(['status' => 'on_hold', 'expire' => null, 'on_hold_expire_duration' => 30 * 86400])),
         );
 
@@ -109,6 +111,7 @@ final class MarzbanConnectorTest extends HttpTestCase
         self::assertSame(0, $sent['expire']);
         self::assertSame(30 * 1024 ** 3, $sent['data_limit']);
         self::assertSame('4242 | amir', $sent['note']);
+        self::assertSame(-1, $sent['auto_delete_in_days'], 'never removed by the panel\'s own clean-up: the shop removes an ended service itself');
         self::assertSame('Bearer jwt-1', $this->panelHttp()->request(2)->getHeaderLine('Authorization'));
 
         $subscription = Subscription::query()->findOrFail($order->refresh()->subscription_id);
@@ -145,12 +148,11 @@ final class MarzbanConnectorTest extends HttpTestCase
 
     public function testANonSudoAdminsServerIsSyncedServiceByService(): void
     {
-        $server = $this->panelServer('MZ', ['driver' => 'marzban', 'base_url' => 'https://mz.example:8000', 'api_token' => null, 'username' => 'reseller', 'password' => 'S3cret pass', 'serves_subscriptions' => true]);
-        $this->inbound($server, 'VLESS TCP REALITY', ['tag' => 'VLESS TCP REALITY', 'remark' => 'VLESS TCP REALITY', 'protocol' => 'vless', 'port' => 443]);
+        $server = $this->marzbanServer('reseller');
         $customer = $this->customer(['username' => 'amir', 'telegram_id' => 4242]);
         $this->panelHttp()->raw(
             self::answer(['access_token' => 'jwt-1', 'token_type' => 'bearer']),
-            self::answer(['vless' => [['tag' => 'VLESS TCP REALITY', 'protocol' => 'vless', 'network' => 'tcp', 'tls' => 'reality', 'port' => 443]]]),
+            self::answer(self::INBOUNDS),
             self::answer(self::user(['status' => 'on_hold', 'expire' => null, 'on_hold_expire_duration' => 30 * 86400])),
         );
         $order = $this->buy($customer, $this->plan(['traffic_gb' => 30, 'duration_hours' => 720], $server), $server);
@@ -165,6 +167,63 @@ final class MarzbanConnectorTest extends HttpTestCase
 
         self::assertSame(['GET /api/admin', 'GET /api/user/amir_1'], $this->panelHttp()->calls());
         self::assertSame(1024 ** 3, Subscription::query()->findOrFail($order->refresh()->subscription_id)->usedBytes());
+    }
+
+    /**
+     * A non-sudo admin's panel refuses a name another admin's user has (409): the name is taken, with no look at it — the
+     * panel would not show that user anyway (403) —, and the sale goes on under the customer's next.
+     */
+    public function testANameAnotherAdminsUserHasGivesWayToTheNext(): void
+    {
+        $server = $this->marzbanServer('reseller');
+        $this->panelHttp()->raw(
+            self::answer(['access_token' => 'jwt-1', 'token_type' => 'bearer']),
+            self::answer(self::INBOUNDS),
+            self::answer(['detail' => 'User already exists'], 409),
+            self::answer(self::INBOUNDS),
+            self::answer(self::user(['username' => 'amir_2', 'status' => 'on_hold', 'expire' => null, 'on_hold_expire_duration' => 30 * 86400])),
+        );
+
+        $order = $this->buy($this->customer(['username' => 'amir', 'telegram_id' => 4242]), $this->plan(['traffic_gb' => 30, 'duration_hours' => 720], $server), $server);
+
+        self::assertSame(['POST /api/admin/token', 'GET /api/inbounds', 'POST /api/user', 'GET /api/inbounds', 'POST /api/user'], $this->panelHttp()->calls());
+        self::assertSame(['amir_1', 'amir_2'], [$this->panelHttp()->params(2)['username'], $this->panelHttp()->params(4)['username']]);
+        self::assertSame('amir_2', Subscription::query()->findOrFail($order->refresh()->subscription_id)->remote_name);
+    }
+
+    /**
+     * Marzban 0.8.2–0.8.4 deletes a user no admin owns and then fails the request (HTTP 500, its issue #1634) before
+     * taking it off Xray: the service's user is switched off first, and the 500 after which the user is gone is the
+     * service deleted.
+     */
+    public function testAServiceWhoseUserNoAdminOwnsIsSwitchedOffThenDeleted(): void
+    {
+        $server = $this->marzbanServer('admin');
+        $customer = $this->customer(['username' => 'amir', 'telegram_id' => 4242]);
+        $service = $this->subscription($customer, $this->plan(['traffic_gb' => 30, 'duration_hours' => 720], $server), $server, 'amir_1');
+        $ownerless = self::user(['status' => 'active', 'expire' => 1793786400, 'on_hold_expire_duration' => null, 'admin' => null]);
+        $this->panelHttp()->raw(
+            self::answer(['access_token' => 'jwt-1', 'token_type' => 'bearer']),
+            self::answer($ownerless),
+            self::answer(['status' => 'disabled'] + $ownerless),
+            new Response(500, ['Content-Type' => 'text/plain; charset=utf-8'], 'Internal Server Error'),
+            self::answer(['detail' => 'User not found'], 404),
+        );
+
+        self::assertTrue($this->service(ProvisioningService::class)->delete($service));
+
+        self::assertSame(['POST /api/admin/token', 'GET /api/user/amir_1', 'PUT /api/user/amir_1', 'DELETE /api/user/amir_1', 'GET /api/user/amir_1'], $this->panelHttp()->calls());
+        self::assertSame(['status' => 'disabled'], $this->panelHttp()->params(2), 'off Xray before the panel forgets it');
+        self::assertNull(Subscription::query()->find($service->id));
+    }
+
+    /** A Marzban server signed in to as `$admin`, its one inbound synced. */
+    private function marzbanServer(string $admin): Server
+    {
+        $server = $this->panelServer('MZ', ['driver' => 'marzban', 'base_url' => 'https://mz.example:8000', 'api_token' => null, 'username' => $admin, 'password' => 'S3cret pass', 'serves_subscriptions' => true]);
+        $this->inbound($server, 'VLESS TCP REALITY', ['tag' => 'VLESS TCP REALITY', 'remark' => 'VLESS TCP REALITY', 'protocol' => 'vless', 'port' => 443]);
+
+        return $server;
     }
 
     /**

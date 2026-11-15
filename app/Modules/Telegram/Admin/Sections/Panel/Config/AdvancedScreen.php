@@ -1,0 +1,96 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Modules\Telegram\Admin\Sections\Panel\Config;
+
+use App\Modules\Telegram\Admin\Sections\Panel\Forms\DraftForm;
+use App\Modules\Telegram\Admin\Ui\Admin;
+use App\Modules\Telegram\Admin\Ui\Button;
+use App\Modules\Telegram\Admin\Ui\Fmt;
+use App\Modules\Telegram\Admin\Ui\View;
+
+/**
+ * «پیشرفته» of config.php: the log, the panels' session, the timeout of outgoing requests, and the cron run from the
+ * web — its token, and the whole address and the cPanel line, shown on a tap (the screen shows the address masked, as the
+ * panel does until its copy button).
+ *
+ * Actions besides the form's: `cron` (the whole address and line shown, until the next tap).
+ */
+final class AdvancedScreen extends ConfigScreen
+{
+    public const ID = 'ppv';
+
+    /** The whole cron address, for the update that asked for it (shownFor) alone. */
+    private ?string $shown = null;
+
+    private ?Admin $shownFor = null;
+
+    protected function screen(): string
+    {
+        return self::ID;
+    }
+
+    protected function title(): string
+    {
+        return '🛠 پیشرفته';
+    }
+
+    protected function group(): string
+    {
+        return 'advanced';
+    }
+
+    protected function done(): string
+    {
+        return '✅ تنظیمات پیشرفته ذخیره شد.';
+    }
+
+    protected function formOf(array $config): DraftForm
+    {
+        $levels = [];
+        foreach (is_array(self::meta($config)['log_levels'] ?? null) ? self::meta($config)['log_levels'] : [] as $level) {
+            if (is_string($level)) {
+                $levels[$level] = $level;
+            }
+        }
+
+        return DraftForm::fixed([
+            DraftForm::field('log_level', 'choice', 'سطح لاگ', required: true, options: $levels),
+            DraftForm::field('session_lifetime', 'number', "طول \u{2068}Session\u{2069} پنل‌ها", 'بعد از این مدت بی‌کاری باید دوباره وارد شد؛ در پنل شما و پنل نماینده‌ها.', required: true, unit: 'دقیقه', min: 5, max: 43200),
+            DraftForm::field('http_timeout', 'number', 'تایم‌اوت درخواست‌های خروجی', required: true, unit: 'ثانیه', min: 5, max: 120),
+            DraftForm::field('session_secure_cookie', 'toggle', "کوکی \u{2068}Session\u{2069} همیشه امن", 'روی https کوکی خودکار امن می‌شود. فقط وقتی روشن کنید که سایت پشت پروکسی (مثلا Cloudflare) است و PHP درخواست را http می‌بیند؛ روی http واقعی ورود به پنل غیرممکن می‌شود.', default: false),
+            DraftForm::field('cron_token', 'secret', "توکن \u{2068}Cron\u{2069}", 'کارهای زمان‌بندی‌شده (تمدید خودکار، یادآوری‌ها، همگام‌سازی سرویس‌ها) با صدا زدن آدرس Cron اجرا می‌شوند: توکن بسازید و ذخیره کنید، بعد خط Cron را که این‌جا آماده می‌شود در فرم Cron Jobs در cPanel بگذارید، یا آدرس را به یک سرویس Cron بیرونی بدهید که هر دقیقه صدایش بزند.', generate: 20),
+        ], self::groupOf($config, 'advanced'));
+    }
+
+    protected function extra(View $view, Admin $admin, DraftForm $form, string $driver, array $values): void
+    {
+        $masked = self::meta($this->config($admin))['cron_url'] ?? null;
+        if (!is_string($masked)) {
+            return;
+        }
+        $whole = $this->shownFor === $admin ? $this->shown : null;
+        $view->line()->line("<b>⏱ آدرس \u{2068}Cron\u{2069}</b>");
+        if ($whole !== null) {
+            $view->line(Fmt::code($whole))
+                ->line("خط \u{2068}Cron\u{2069}:")
+                ->line(Fmt::code('curl -fsS ' . $whole . ' > /dev/null'))
+                ->line('<i>این خط برای فرم «Cron Jobs» در cPanel است: زمان‌بندی را هر دقیقه بگذارید (Once Per Minute) و خط را در فیلد Command بچسبانید. آدرس، توکن را دارد؛ آن را جای عمومی نگذارید. با دکمه بعدی پنهان می‌شود.</i>');
+
+            return;
+        }
+        $view->line(Fmt::ltr($masked))->row(Button::to("📋 آدرس و خط \u{2068}Cron\u{2069}", self::ID, 'cron'));
+    }
+
+    protected function action(Admin $admin, string $action, array $args, DraftForm $form, string $driver, array $values): View
+    {
+        if ($action === 'cron') {
+            $url = $admin->api->get('/settings/config/cron-url')['url'] ?? null;
+            // Shown on this screen alone: kept nowhere, gone with the next tap.
+            [$this->shown, $this->shownFor] = [is_string($url) ? $url : null, $admin];
+        }
+
+        return $this->card($admin, $form);
+    }
+}

@@ -18,7 +18,7 @@ GET {base}/admin/payments?status=awaiting_review      the panels' GET /api/{pane
 | Area | What the shop's admins do there |
 |---|---|
 | The dashboard, the queues, the change feed | `GET /admin/dashboard` (its `attention` counts what waits on support — the queues, the online payments held for support in `held_payments`, the servers whose panel failed — and then what waits on customers; its `agency_standing` always null: an agent's terms with the main shop are the agent's own), `/admin/queues`, `/admin/changes` (poll it to follow the shop live: it counts the website's own shop alone, and what every shop shares) |
-| Payments | the list — its `held` tab (`?status=held`: the online payments held for support and still waiting, counted in `meta.held` whatever the filters) among the statuses — and a payment, its receipt; approve, reject, cancel, remind, retry, ask an online payment's gateway (`POST /admin/payments/{id}/check`) — refund with the `refunds` grant, reject receipts in bulk with `payments`; the bank SMS «تایید خودکار واریز» was sent, each with the card payment it approved or why none (`GET /admin/deposits`) |
+| Payments | the list — its `held` tab (`?status=held`: the online payments held for support and still waiting, counted in `meta.held` whatever the filters) among the statuses — and a payment, its receipt; approve, reject, cancel, remind, retry, ask an online payment's gateway (`POST /admin/payments/{id}/check`) — refund with the `refunds` grant, reject receipts in bulk with `payments`; a card payment approved by a deposit Rikhtam holds, while the shop's Rikhtam is connected — its receipt in review, signed in recently as for an approval (`GET` and `POST /admin/payments/{id}/rikhtam`: the deposits no payment took, and the one picked attached); the bank deposits «تایید خودکار واریز» was sent, each with the card payment it approved or why none (`GET /admin/deposits`) |
 | Orders | the list and an order; retry a delivery, cancel an unpaid order |
 | Services | the list and a service; read it from its panel, switch it off or on, move it — days and traffic with `extend`, delete or hand to another customer with `delete` |
 | Customers | the list (by role too) and a customer's page, their wallet's ledger, their groups (adding them to a «همکار» group with `catalog`), a ban, excusing them from the phone number (`PUT /admin/users/{id}/phone-exempt`), a message written to them through the shop's bot (`POST /admin/users/{id}/message`, «ارسال پیام») — never an admin's or an agent's account ([refusals](#refusals)); the wallet changed with `wallet`; an order made for them by hand with `manual_orders`; two-factor sign-in turned off and every device signed out with `account_security` |
@@ -30,7 +30,7 @@ GET {base}/admin/payments?status=awaiting_review      the panels' GET /api/{pane
 | Broadcasts | the runs; pause, resume, cancel, unpin (composing one stays the bot's `/broadcast`) |
 
 Everything else is the panels' alone, and a `404` here: the shop's configuration — its payment methods and
-«تایید خودکار واریز»'s switch and key (`/deposits/settings`), the bot's settings, texts and keyboards, the report
+«تایید خودکار واریز»'s switch, key and Rikhtam connection (`/deposits/settings`), the bot's settings, texts and keyboards, the report
 group, the website itself, **who its admins are**, a customer's own discount, the discounts and rewards (discount codes, sales, gift codes, the wheel, loyalty, cashback, the draw), the
 test accounts — and the owner's sections (the servers, the agency, the installation's settings).
 
@@ -60,6 +60,12 @@ The shop's owner — or the agent, for their shop — sets it up in the panel, �
 the website with the very account that has it — their Telegram, or a way in added to that account
 ([ways in](Store-API-Account.md#ways-in-adding-and-removing)). A website account they made with an email alone is
 another customer, and no admin.
+
+**The same admins may manage the shop from its bot's private chat** («⚙️ مدیریت»), with switches of its own —
+«تنظیمات ربات › مدیران ربات»: whether they may, and the same grants, set apart from the website's
+([Managing the shop from the bot](Bot-Management.md#the-shops-admins)). Neither carries over: a grant given on the
+website opens nothing in the bot, nor the bot's on the website. A ticket answered there carries the channel `manage`
+(«مدیریت ربات»), beside `web`, `bot`, `panel`, `staff` and `group`.
 
 ## Signing in
 
@@ -117,7 +123,7 @@ the website lets no admin in, and for a session the mini app signed in ([below](
 
 | Grant | What it opens |
 |---|---|
-| `catalog` | The plans and their categories: add, change, reorder, switch on or off, duplicate, delete — and several plans' prices changed at once (`POST /admin/plans/prices`, previewed with `POST /admin/plans/prices/preview`). The customer groups too: add, change, reorder, delete — and a customer added to a «همکار» group (`PUT /admin/users/{id}/groups`), whose members pay the agents' prices; the plain groups, and a «همکار» one the customer is in already, ask none |
+| `catalog` | The plans and their categories: add, change, reorder, switch on or off, duplicate, delete — and several plans' prices changed at once (`POST /admin/plans/prices`, previewed with `POST /admin/plans/prices/preview`; send the preview's `changes` back as `previewed` — each plan's `id` and `before` — and the change is the one previewed or none: a plan whose prices moved since is a `422` on `plan_ids`). The customer groups too: add, change, reorder, delete — and a customer added to a «همکار» group (`PUT /admin/users/{id}/groups`), whose members pay the agents' prices; the plain groups, and a «همکار» one the customer is in already, ask none |
 | `wallet` | A customer's wallet credited or debited by hand (with an optional `Idempotency-Key`: [a change sent again](#what-it-is)) |
 | `refunds` | A payment given back |
 | `payments` | «رد یکجای رسیدها»: the receipts waiting for review rejected in bulk (`POST /admin/payments/dismiss`), each as rejecting one does, an uploaded picture deleted ([receipts](Orders-And-Payments.md#receipts)) |

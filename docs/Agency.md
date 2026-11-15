@@ -74,6 +74,11 @@ it — their traffic, terms and suspension, your servers, what you keep from the
 their account and their dashboard's «نیازمند توجه» say so, and why — and a strip over every other page of their panel
 leads to the account.
 
+The same shop is theirs to run from their own bot's private chat: «⚙️ مدیریت» (or `/admin`) under their menu opens their
+panel's sections as the bot's menus, from the Telegram account the agency is theirs by, with nothing to set up — and
+they decide there, as in their panel, whether their bot's admins may too
+([Managing the shop from the bot](Bot-Management.md#an-agent)).
+
 ## Their traffic
 
 Every purchase and renewal their bot delivers draws its traffic from their pool, once per order. A failed delivery gives

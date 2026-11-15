@@ -23,7 +23,12 @@ final class Recognition
         return new self(true, $version, []);
     }
 
-    /** @param list<string> $missing */
+    /**
+     * Not its bot's: `$missing` what it lacks — none for a database that has the bot's tables and marks of a kin's (a
+     * fork's), which the core then names when another migrator takes it.
+     *
+     * @param list<string> $missing
+     */
     public static function no(array $missing): self
     {
         return new self(false, null, $missing);

@@ -5,16 +5,17 @@ declare(strict_types=1);
 namespace App\Modules\Auth\Exceptions;
 
 use App\Core\Exceptions\DomainRuleException;
+use App\Modules\Auth\CurrentPrincipal;
 use App\Modules\Auth\StaffGrant;
 
 /**
  * A decision this actor may not make whatever the row's state (403): a shop's admin — also its customer — deciding about
  * themselves (their payment, wallet, service, agency request, review, referral alert, an order made for them); from the
  * website, touching an admin's or an agent's account, switching «همکار» on for a group an admin is in, putting a customer
- * in a «همکار» group without the `catalog` grant (one with a `grant`: StaffMiddleware answers it as its own door does), or
- * approving a payment with no receipt in review; from the report group, an admin's own account, an agent's, banning an
- * admin, putting one in a «همکار» group, setting one's own discount, making an admin of someone with either, or their
- * website sign-in. The owner and agents are refused none of these.
+ * in a «همکار» group without the `catalog` grant (one with a `grant`: StaffMiddleware answers it as its own door does); from
+ * the website or the bot's management, approving a payment with no receipt in review; from the report group, an admin's
+ * own account, an agent's, banning an admin, putting one in a «همکار» group, setting one's own discount, making an admin of
+ * someone with either, or their website sign-in. The owner and agents are refused none of these.
  */
 final class ActorRefusedException extends DomainRuleException
 {
@@ -34,6 +35,8 @@ final class ActorRefusedException extends DomainRuleException
     public const AGENT_ACCOUNT = 'حساب نماینده‌ها فقط از پنل تغییر می‌کند.';
     public const ADMIN_IN_GROUP = 'گروه «%s» حساب یکی از مدیران فروشگاه را دارد؛ «همکار» کردن آن فقط از پنل ممکن است.';
     public const RECEIPT_FIRST = 'از وب‌سایت فقط پرداختی تایید می‌شود که رسیدش رسیده و در انتظار بررسی است.';
+    /** RECEIPT_FIRST as a shop's admin managing it from the bot reads it (Actor::$inBot). */
+    public const RECEIPT_FIRST_IN_BOT = 'مدیران ربات فقط پرداختی را تایید می‌کنند که رسیدش رسیده و در انتظار بررسی است.';
     public const AGENT_GROUP_NOT_GRANTED = 'فروشگاه گذاشتن مشتری در گروه «همکار» را به مدیران وب‌سایت نسپرده است.';
 
     private function __construct(
@@ -128,9 +131,13 @@ final class ActorRefusedException extends DomainRuleException
         return new self(sprintf(self::ADMIN_IN_GROUP, $group));
     }
 
-    public static function receiptFirst(): self
+    /**
+     * A shop's admin approving a payment with no receipt in review — from its website, or (`$inBot`) from the bot; left
+     * out, as the request's principal says (CurrentPrincipal).
+     */
+    public static function receiptFirst(?bool $inBot = null): self
     {
-        return new self(self::RECEIPT_FIRST);
+        return new self(($inBot ?? CurrentPrincipal::get()->inBot ?? false) ? self::RECEIPT_FIRST_IN_BOT : self::RECEIPT_FIRST);
     }
 
     /** A customer put in a «همکار» group — the plans' agent prices — by a shop's admin on its website who holds no `catalog` now. */

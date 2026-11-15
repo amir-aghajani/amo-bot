@@ -290,7 +290,7 @@ export const WHEEL_PRIZE_KIND: Record<WheelPrizeKind, string> = {
 
 /**
  * Where a ticket's message was written: the customer's on the shop's website or in its bot, support's on a panel, on the
- * website's admin side (one of the shop's admins) or in the report group.
+ * website's admin side (one of the shop's admins), in the report group or in the bot's own management.
  */
 export const TICKET_CHANNEL: Record<TicketChannel, string> = {
   web: 'وب‌سایت',
@@ -298,6 +298,7 @@ export const TICKET_CHANNEL: Record<TicketChannel, string> = {
   panel: 'پنل',
   staff: 'مدیریت وب‌سایت',
   group: 'گروه گزارش‌ها',
+  manage: 'مدیریت ربات',
 }
 
 /** A request to become an agent: one waiting is «در انتظار بررسی», as a receipt waiting is. */

@@ -11,15 +11,18 @@ use App\Modules\Auth\Services\AdminAccount;
 use App\Modules\Auth\Services\LoginRecovery;
 use App\Modules\Auth\Services\RecoveryKey;
 use App\Modules\Auth\Services\SignInThrottle;
+use App\Modules\Telegram\Admin\OwnerLinks;
+use App\Modules\Users\Enums\UserRole;
 use Monolog\LogRecord;
 use Tests\HttpTestCase;
 
 /**
  * The way back into the owner's panel on a host without a shell — a password forgotten, or no login at all: the sign-in
  * page has the panel write a one-time key to storage/recovery-key.txt, the owner reads it off the host's files (its File
- * Manager) and sets a new login with it — signed in under it, every other session out, the key spent. Nobody without the
- * host's files gets in: a wrong key is a failed sign-in counted per address, a key opens nothing after an hour, and the
- * one there is kept while it opens, so nobody can turn it over while its owner copies it.
+ * Manager) and sets a new login with it — signed in under it, every other session out, every Telegram account linked as
+ * the owner let go, the key spent. Nobody without the host's files gets in: a wrong key is a failed sign-in counted per
+ * address, a key opens nothing after an hour, and the one there is kept while it opens, so nobody can turn it over while
+ * its owner copies it.
  */
 final class LoginRecoveryApiTest extends HttpTestCase
 {
@@ -75,6 +78,30 @@ final class LoginRecoveryApiTest extends HttpTestCase
         $this->postJson('/api/admin/auth/logout');
         self::assertSame(401, $this->postJson('/api/admin/auth/login', ['username' => self::ADMIN_USERNAME, 'password' => self::ADMIN_PASSWORD])->getStatusCode(), 'the old login opens nothing');
         self::assertSame(200, $this->postJson('/api/admin/auth/login', ['username' => 'boss', 'password' => self::NEW_PASSWORD])->getStatusCode());
+    }
+
+    public function testTheKeyLetsGoOfEveryTelegramAccountLinkedAsTheOwner(): void
+    {
+        $this->config(['telegram.username' => 'amo_shop_bot']);
+        $links = $this->service(OwnerLinks::class);
+        $raised = $this->customer(['telegram_id' => 7001]);
+        $before = $this->customer(['telegram_id' => 7002, 'role' => UserRole::Admin]);
+        foreach ([7001, 7002] as $telegramId) {
+            $link = $links->link() ?? self::fail('No link: the main bot has no username.');
+            self::assertTrue($links->redeem(substr($link['url'], (int) strpos($link['url'], '=') + 1), $telegramId));
+        }
+        $raised->forceFill(['role' => UserRole::Admin])->save();
+        $links->raised(7001);
+        $links->link();
+        $this->postJson(self::KEY_URL);
+
+        $response = $this->postJson(self::URL, $this->login($this->key(), ['username' => 'boss']));
+
+        self::assertSame(200, $response->getStatusCode(), (string) $response->getBody());
+        self::assertSame([], $links->ids(), 'whoever had the lost login keeps nothing in the bot either');
+        self::assertNull($links->openUntil(), 'the open link ended');
+        self::assertSame(UserRole::Customer, $raised->refresh()->role, 'the admin role its link gave goes with it');
+        self::assertSame(UserRole::Admin, $before->refresh()->role, 'an admin before the link stays one');
     }
 
     public function testAPanelWithNoLoginAtAllGetsOneThisWay(): void

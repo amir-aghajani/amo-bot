@@ -40,8 +40,8 @@ final class DiscountCodeWriter
         $text = DiscountCodes::normalize($code->code);
         $reason = match (true) {
             $text === '' => ProblemReason::Unreadable,
-            $code->usesLeft !== null && $code->usesLeft <= 0 => ProblemReason::UsedUp,
-            $code->endsAt !== null && $code->endsAt <= now() => ProblemReason::Expired,
+            $code->usedUp() => ProblemReason::UsedUp,
+            $code->ended() => ProblemReason::Expired,
             DiscountCode::query()->where('code', $text)->exists() => ProblemReason::CodeTaken,
             default => null,
         };

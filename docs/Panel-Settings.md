@@ -113,8 +113,26 @@ refuses says so there. Setting IPPanel up: [SMS](Sms.md).
 
 «ورود به پنل» — your username (2 to 64 characters: Latin letters, digits, `. _ @ -`) and password (8 characters at least,
 72 bytes at most — 36 Persian letters), with **«رمز عبور فعلی»** asked first; a new password left empty keeps the old
-one. Saving signs every other browser out; this one stays. A wrong current password counts as a failed sign-in. Lost
-it: the sign-in page's «رمز را فراموش کرده‌اید؟» ([the panel's login](Running-In-Production.md#the-panels-login)).
+one. Saving signs every other browser out; this one stays. It also lets go of every Telegram account linked in
+«مدیریت از ربات» below — link them again afterwards. A wrong current password counts as a failed sign-in. Lost it: the
+sign-in page's «رمز را فراموش کرده‌اید؟» ([the panel's login](Running-In-Production.md#the-panels-login)), which lets
+the linked accounts go too.
+
+Card **«مدیریت از ربات»** — your own Telegram accounts, which manage the shop from the main bot's private chat as this
+login does the panel: «⚙️ مدیریت» or `/admin` opens every section of the panel there, in any shop, as the bot's menus
+([Managing the shop from the bot](Bot-Management.md)).
+
+- **The accounts linked**, each with its name, handle and Telegram id, and «برداشتن» (asked first): from its next message
+  it is the owner no more, and the bot's admin role its link gave it goes too — an account that was the bot's admin
+  before keeps it. Five stay linked at most; a sixth ends the oldest one's link, and the role it gave.
+- **«ساخت لینک»** — asks the panel's password first, in place («رمز عبور فعلی», then «ساخت لینک» again, or «انصراف»; a
+  wrong one is said under the field and counts as a failed sign-in). Then a one-time link to the main bot, shown once
+  with «کپی لینک» and «باز کردن در تلگرام»: open it from the Telegram account that should be the owner, within 10
+  minutes. A new link ends the last; leave the page without it, and only «یک لینک تا … باز است» is left — make another.
+  While a link is open the list is read again every few seconds, so the account it links shows up. Until the main bot's
+  token has been checked on «ربات تلگرام», the link cannot be made: the card says why.
+
+Every account linked has this login's whole power: link only your own.
 
 ## Appearance
 
@@ -155,7 +173,7 @@ the panels. What is in a backup, what is not, and moving to another host: [Backu
 Another Telegram bot's customers, their wallets and services, its plans, codes, required channels and bank cards brought
 into the main shop, with nothing changed on the VPN panels or in the other bot:
 
-- **«انتقال تازه»** — the bot (today Faoxima), then where its data is read from: «فایل پشتیبان» (its backup, or an export
+- **«انتقال تازه»** — the bot (today Faoxima or MirzaBot), then where its data is read from: «فایل پشتیبان» (its backup, or an export
   of its database — the largest file the host takes said under it) or «اتصال به دیتابیس». For the import you keep, stop
   the other bot before its backup, as both tabs say: what changes there after it does not come.
 - **The reading**, then **the review** — what it found, where each of its panels' services go, the switches of what to

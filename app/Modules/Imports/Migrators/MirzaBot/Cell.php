@@ -2,18 +2,19 @@
 
 declare(strict_types=1);
 
-namespace App\Modules\Imports\Migrators\Faoxima;
+namespace App\Modules\Imports\Migrators\MirzaBot;
 
 use App\Support\Money;
 use App\Support\Persian;
 
 /**
- * A value of Faoxima's database as it writes it, read: text whose placeholders («none», «null») mean nothing, numbers
- * kept as text (Persian digits or thousands separators now and then), unix times, comma-separated lists.
+ * A value of MirzaBot's database as it writes it, read — and of Faoxima's, descended from it: text whose placeholders
+ * («none», «null») mean nothing, numbers kept as text (Persian digits or thousands separators now and then), unix times,
+ * comma-separated lists, the chats its customers must join.
  */
 final class Cell
 {
-    /** What Faoxima writes in a text column that holds nothing (it never leaves one empty when it can say so). */
+    /** What the bot writes in a text column that holds nothing (it never leaves one empty when it can say so). */
     private const PLACEHOLDERS = ['none', 'null'];
 
     /** Trimmed text; null for none, blank or a placeholder. */
@@ -56,7 +57,7 @@ final class Cell
         return Money::normalize(self::number($value) ?? '0');
     }
 
-    /** A moment Faoxima kept as unix seconds; null for none, 0 or anything else. */
+    /** A moment kept as unix seconds; null for none, 0 or anything else. */
     public static function moment(?string $value): ?\DateTimeImmutable
     {
         $seconds = trim((string) $value);
@@ -72,5 +73,19 @@ final class Cell
     public static function list(?string $value): array
     {
         return array_values(array_unique(array_filter(array_map(trim(...), explode(',', (string) $value)), static fn(string $item): bool => $item !== '')));
+    }
+
+    /**
+     * A required channel (`channels.link`) as the bot asks Telegram about it — a -100… chat id, or an @username kept with
+     * its @, bare, or in a t.me link; null for none of those (an invite link).
+     */
+    public static function chat(string $link): ?string
+    {
+        return match (true) {
+            preg_match('/^-\d{5,}$/', $link) === 1, preg_match('/^@[A-Za-z][A-Za-z0-9_]{3,31}$/', $link) === 1 => $link,
+            preg_match('~^(?:https?://)?(?:www\.)?(?:t\.me|telegram\.me|telegram\.dog)/(?:s/)?([A-Za-z][A-Za-z0-9_]{3,31})/?(?:\?.*)?$~i', $link, $match) === 1 && strtolower($match[1]) !== 'joinchat' => '@' . $match[1],
+            preg_match('/^[A-Za-z][A-Za-z0-9_]{3,31}$/', $link) === 1 => '@' . $link,
+            default => null,
+        };
     }
 }

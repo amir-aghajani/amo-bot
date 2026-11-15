@@ -133,7 +133,9 @@ as the extra work does.
 
 **Who the admins are** is the users list's: the customers with the bot's admin role («لیست کاربران» on the card opens
 them; [Customers](Customers.md#the-bots-admins)). An admin signs in to the website with that same account — their
-Telegram, or a way in added to it. Whatever is granted:
+Telegram, or a way in added to it. The same admins may manage the shop from the bot's private chat too, under switches
+and grants of its own in «تنظیمات ربات › مدیران ربات»: neither card opens anything for the other
+([Managing the shop from the bot](Bot-Management.md#the-shops-admins)). Whatever is granted:
 
 - an admin never decides about themselves — their own payment, wallet, service or review;
 - an admin never touches an admin's or an agent's account — their groups included —, nor marks a group that holds an

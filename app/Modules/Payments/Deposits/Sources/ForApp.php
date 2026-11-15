@@ -20,6 +20,9 @@ final class ForApp implements DepositSource
 {
     public const KEY = 'forapp';
 
+    /** Why an SMS it did not read as a known bank's deposit approves nothing (IncomingDeposit::$doubt). */
+    public const UNRECOGNISED = 'فوراپ این پیامک را واریز یک بانک تشخیص نداد؛ چیزی خودکار تایید نشد.';
+
     private const ID_MAX = 100;
     private const LABEL_MAX = 60;
 
@@ -47,16 +50,21 @@ final class ForApp implements DepositSource
             throw ValidationException::on('amount', 'مبلغ (amount) باید عدد ریال باشد.');
         }
 
+        $isDeposit = is_bool($body['is_deposit'] ?? null) ? $body['is_deposit'] : null;
+        $bank = self::short($body['bank'] ?? null);
+
         return new IncomingDeposit(
             externalId: trim($id),
             // A sum in another unit counts as none read: the SMS is kept, and approves nothing.
             amountRial: $amount === null || ($body['unit'] ?? 'rial') !== 'rial' ? null : (int) $amount,
-            isDeposit: is_bool($body['is_deposit'] ?? null) ? $body['is_deposit'] : null,
+            isDeposit: $isDeposit,
             test: ($body['test'] ?? false) === true,
             receivedAt: self::when($body),
-            bank: self::short($body['bank'] ?? null),
+            bank: $bank,
             sender: self::short($body['sender'] ?? null),
             body: is_string($body['body'] ?? null) ? $body['body'] : '',
+            // Only an SMS it read as a known bank's deposit is vouched for; one it could not tell is support's.
+            doubt: $isDeposit !== true || $bank === null ? self::UNRECOGNISED : null,
         );
     }
 

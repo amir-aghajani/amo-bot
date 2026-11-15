@@ -19,6 +19,8 @@ final class Capabilities
         public readonly bool $ipLimit = false,
         /** What the panel takes as a client's name; by default any name. */
         public readonly ClientNameRule $names = new ClientNameRule(),
+        /** A client lives in one inbound only (Rebecca's services): a server sells from one at a time. */
+        public readonly bool $oneInbound = false,
     ) {}
 
     /**

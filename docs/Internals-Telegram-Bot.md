@@ -3,9 +3,10 @@
 # Internals: Telegram bot
 
 How the bot serves its customers and its admins: the dispatcher and its routes, the conversation state, the handlers
-and their shared screens, the texts and keyboards the admin rewords, the gates, the report group and broadcasts. What an
-owner and a customer see of it is in the [Bot guide](Bot-Guide.md), [Bot settings](Bot-Settings.md), [Bot texts and
-keyboards](Bot-Texts-And-Keyboards.md), [Report group](Telegram-Group.md) and [Broadcasts](Broadcasts.md).
+and their shared screens, the texts and keyboards the admin rewords, the gates, the report group, broadcasts and the
+shop's management in the private chat. What an owner and a customer see of it is in the [Bot guide](Bot-Guide.md),
+[Bot settings](Bot-Settings.md), [Bot texts and keyboards](Bot-Texts-And-Keyboards.md), [Report group](Telegram-Group.md),
+[Broadcasts](Broadcasts.md) and [Managing the shop from the bot](Bot-Management.md).
 
 Everything lives in `app/Modules/Telegram`, the routes in `routes/bot.php`.
 
@@ -23,6 +24,7 @@ Everything lives in `app/Modules/Telegram`, the routes in `routes/bot.php`.
 | `Polling/`, `Controllers/`, `Services/` | `bot:poll`'s loop, the webhook endpoint, webhook and identity management |
 | `Notifications/`, `Qr/`, `Emoji/` | `ServiceCard` (a service as a QR card or text), the QR picture, premium emoji |
 | `Contracts/` | What the bot asks of another module through an interface of its own: `MiniAppAddress`, the shop's mini app's address |
+| `Admin/` | The shop's management in the private chat: who manages (`AdminSeats`, `OwnerLinks`, `BotAdminSettings`), the door to the panels' API (`Door/`), the screens' framework (`Ui/`) and each area's screens (`Sections/`) ([below](#the-shops-management)) |
 
 Open first: `routes/bot.php`, `Update/Dispatcher.php`, `Context.php`, `Handlers/CheckoutScreen.php`,
 `Texts/BotTexts.php` and `Reports/ShopReports.php`.
@@ -55,7 +57,11 @@ served in its bot's shop (`CurrentBot::run()`), then the reports that bot's grou
 
 A route marked **navigation** (commands, labels, the menu's `menu:*` taps, the `claim:` tap, a text pattern, the
 fallback, every ticket tap) clears the flow the chat was in, so what the customer types next is never taken as an old step's answer. An
-**admin-only** route (`/broadcast`, `/emoji`) answers anyone else nothing at all.
+**admin-only** route answers anyone else nothing at all; `/broadcast` and `/emoji` ask for themselves — a role admin, or
+anyone `AdminSeats` gives a seat — and so does the management. A step marked **captures** takes any message as its
+answer, a reply keyboard's label too; only a command leaves it. The management's questions wait in `Admin::INPUT`,
+where a menu label is the menu's (a label is never sent as an answer, to a ticket say), and only those whose answer may
+be any words — a keyboard button's new label, a bot text — in `Admin::INPUT_ANY`, which captures (`Prompt::$anyText`).
 
 Telegram takes one answer per tap: `Context::answer()` sends only the first, and the dispatcher stops the spinner of a
 tap nobody answered. A popup only shows for a tap, so a refusal that may answer something typed as well goes through
@@ -286,7 +292,9 @@ go to) and «صفحه ۲ از ۳» on its text; a list of one page is left as it
 to the list's first page.
 
 The **gates** (`MaintenanceGate`, `PhoneGate`, `ChannelGate`, in that order) run before any handler; a gate that holds an
-update back answers it itself, and bot admins pass them all. A `/start` link a gate held back is kept as the chat fact
+update back answers it itself. Whoever manages the shop passes them all (`AdminSeats::exempt()`: a role admin, the
+owner's linked account in the main bot, the agent in their own bot), and so does the `/start` of the owner's open link
+(`AdminSeats::passGates()`), so nobody who manages is locked out. A `/start` link a gate held back is kept as the chat fact
 `_start` (`Dispatcher::keepStartLink()`) — only what a t.me link can carry (Latin letters, digits, `_` and `-`, 64 at
 most), with when it was kept — and taken by the update that gets through within the hour — the contact card, a later
 `/start` or `/menu` (`StartHandler`, which `ContactHandler` hands the card to), or «عضو شدم» (`JoinHandler`) —, so a
@@ -419,7 +427,75 @@ then `SendBroadcastsTask` — past a cursor, **each customer claimed before thei
 Sends are paced (`Api\Pacer`); a flood limit puts the customer back for the next batch. Pause, resume and cancel are a
 compare-and-swap on the status. A message run whose admin has no Telegram chat any more (the account gone, or its
 Telegram taken off) has nothing to copy its message from: it ends cancelled («لغوشده»), logged. `Audience` decides who
-is reached; an audience whose group or server is gone reaches nobody, never everyone.
+is reached; an audience whose group or server is gone reaches nobody, never everyone. The management's «➕ پیام همگانی
+تازه» starts the same compose (`BroadcastHandler::compose()`), in the bot of the shop on screen only.
+
+## The shop's management
+
+`Admin/` runs the shop from the bot's private chat ([Managing the shop from the bot](Bot-Management.md)): the panels'
+sections as the bot's own screens, **every read and every write through the panels' own API**, so no rule lives twice.
+
+**Who manages** — `AdminSeats::of()`, asked on every update, gives an `AdminSeat`: its kind (`SeatKind`), the
+`Principal` its requests run as, and the account. In the main bot, a Telegram account `OwnerLinks` holds (the main
+shop's setting `owner.telegram_ids`, filled by the one-time `/start owner-<code>` link `StartHandler` redeems: the code
+kept as its sha256 and spent by a compare-and-swap, `LINK_MINUTES` to open it, at most `MOST` accounts; the panel's
+`POST /settings/owner-telegram/link` asks `current_password` unless the request carries the door's `BotAdminDoor::SEAT`,
+and `OwnerAuth::changeCredentials()` ends every link with `OwnerLinks::revokeAll()`) is the owner, in
+the shop the chat picked; in an agent's bot, the agent's own account is the agent, while their agency stands (as
+`AgentAuth` asks it); a role admin, while `BotAdminSettings` (`bot_admins`) is on, is staff,
+its grants the `Principal`'s. A ban ends any of them. Every such principal has `inBot`, which reaches `Actor::$inBot`: a
+ticket's answer from here is `TicketChannel::Manage`.
+
+**The door** — `Door\BotAdminDoor`, mounted in `routes/api.php` at `/api/bot-admin/{owner|agent|staff}` over the panels'
+own route groups: the owner's `$operations`, `$configuration`, `$system`, `$everywhere` (with `shop.everywhere`), `$main`
+(with `shop.main`) and `/shops`; the agent's `$agentAccount`, `$operations` and `$configuration`; staff `$operations`
+alone. It has no session, cookie or CSRF header: a request gets in only with an `AdminSeat` in its `SEAT` attribute,
+which only the process can set — from outside, every path is a 404. Then the seat's kind must be the door's, and a route
+naming `StaffGrant::ARGUMENT` must be granted (`NOT_GRANTED`); the request runs in the seat's shop as its principal, and
+every change (not a GET) is logged with the seat, the path and the status. A grant a service asks
+(`ActorRefusedException` with its `grant`) is answered in the bot's words.
+
+**The bridge** — `Door\PanelBridge::for($seat)` builds each request (`get`, `post`, `put`, `patch`, `delete`, `upload`
+for a multipart file, `file` for an answer that is a file) and hands it to the app's own HTTP kernel in-process: the
+panels' validation, refusals, change feed and log lines, the same JSON. A 2xx answers its body; anything else is a
+`Door\ApiRefusal` with the status, the Persian message and the field errors. Paths are the panels', without
+`/api/admin`.
+
+**The handler** — `Ui\AdminHandler` takes `/admin`, `/panel`, the «⚙️ مدیریت» label (`MainMenu` adds it for a seat), the
+`Nav::PREFIX` taps (navigation) and the `Admin::INPUT` and `Admin::INPUT_ANY` states; without a seat it hands the update
+to the fallback. A chat's updates take turns (a lock file a chat, in `storage/cache/bot-admin-turns`): two taps a webhook delivers
+together run one after the other, the second reading what the first saved. One message is the window: a tap edits it
+(a screen turning into a picture or back takes a new one), a command, the label or a typed answer sends it anew and
+deletes the last; a typed answer is deleted once read, whatever came of it. An `ApiRefusal` is a popup for a tap, and
+for a typed answer the question asked again as it was asked — its hint and quick choices — with the refusal over it,
+still waiting. A file Telegram refuses (its size limits) is said in a popup.
+
+**Screens** — `Ui\Screen` (`allows()`, `show()`, `act()`, `input()`, each answering a `Ui\View`), registered by a short
+id in `Ui\Screens`: the core's (`h` the home, `ba`, `ol`, `shop`) and each area's `Sections\<Area>\<Area>Screens::SCREENS`.
+The home's entries and the hubs (`hl`, `hs`, `hm`, `hb`, `hc`) are lists of ids there; an entry whose screen is missing
+or that the seat may not open is left out. The bases: `BaseScreen`; `ListScreen` — a panel list route, `PER_PAGE` (8)
+rows cut from the panel's pages of 25, its filters as chips, a search, the pages, `extra()` for «➕ افزودن», `keepsRows()`
+where no route reads one row —; `Settings\SettingsScreen` — a settings card as `FieldDef`s over a `SettingsSource`
+(`BotGroupSource` for a «تنظیمات ربات» group, `PatchSource`, `PutSource`), saved a field at a time —; `HubScreen`. A
+`View` is a title, the path over it (the hubs' chain), lines, facts, rows of `Button`s and the way back — `back()`'s
+«⬅️ بازگشت» with «🏠 مدیریت» beside it; it cuts a text past `TEXT_MOST` (4000) at a line and a caption past
+`CAPTION_MOST`, and a list of choices (plans, servers, inbounds, shops) goes `CHOICES_MOST` (40) a page. A button is `Button::to(label, screen, action, ...args)`
+— its label cut at 48 characters, its callback `Nav::to()`'s `a:<screen>:<action>:<args>`, 64 bytes at most, each part
+`[A-Za-z0-9_.-]` (Nav throws otherwise): never text in it.
+
+**State** — `Admin` is one update as a screen sees it: `seat`, `api` (the bridge for the seat), `state()`,
+`remember()` and `forget()` per screen (the chat fact `_adm`, so a customer's flow in between loses none of it — the
+owner's shop pick too: `pickShop()` empties every screen's state), `open()` another screen, `ask(Prompt)` (the chat waits
+in `adm.input`; the answer reaches the asking screen's `input()` as an `Answer`: `text()`, `latin()`, `integer()`,
+`amount(Unit)`, `decimal()`, `numbers()`, `picture()`, `document()`), `confirm()`, `notice()` (a toast for a tap, a line
+atop the next screen after a typed answer), `alert()` and `send(ApiFile)`. `Ui\Fmt` formats what a screen shows
+(`e()` for whatever came from a person or the panel, `ltr()` and `code()` for Latin in a Persian line, money, quotas,
+dates in the Jalali calendar).
+
+**Permissions mirror the door**: a screen over the daily work's routes allows every seat; over configuration,
+`$seat->configures()` (the owner and an agent); over the system, the servers, the agency, the mass gifts and the panel's
+settings, `$seat->isOwner()`; an action whose route names a grant shows only while `$seat->holds()` it. Hiding is the
+screens' courtesy: the door refuses anything else.
 
 ## Telegram's API
 
@@ -449,4 +525,9 @@ against the fake Telegram, and `said()`, `popup()`, `calls()`, `inlineKeyboard()
 group has `groupTap()`, `groupReply()` and `botMembership()`. `BotQueryBudgetTest` holds each common screen to a fixed
 budget of queries and Telegram calls — a budget raised says what the new query buys (the menu's mini app row, for one).
 `miniApp()` switches the shop's mini app on for a test of its button (`BotMenuTest`). Unit tests of the API, texts and
-keyboards are in `tests/Unit/Telegram`. See [Testing](Testing.md).
+keyboards are in `tests/Unit/Telegram`. The management's are in `tests/Feature/BotAdmin`: `BotAdminDoorTest` (the door's
+guards), `BotAdminFlowTest` (an owner linked by `OwnerLinks::link()` and `redeem()`, `/admin`, taps by `Nav::to()`,
+typed answers) and a file or more per area, named by its folder — `Support*`, `Customers*`, `Sales*`, `Catalog*`,
+`Marketing*`, `BotArea*`, `Owner*` and `Panel*` (`PanelConfigTest`, `PanelWebsiteTest`, `PanelMiniAppTest`,
+`PanelUpdateTest`, `PanelImportsTest`, `PanelOperationsTest`) —, each walking list → row → action → the API's effect, a
+seat without the grant (no button, and the door's refusal), and a typed answer. See [Testing](Testing.md).

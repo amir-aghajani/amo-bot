@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Imports\Records;
 
 use App\Modules\Orders\Enums\OrderType;
+use Illuminate\Support\Carbon;
 
 /**
  * A discount code the other bot took at checkout (discount_codes), with the uses it has left. What the shop's codes
@@ -37,4 +38,16 @@ final class ImportedDiscountCode
         public readonly bool $enabled = true,
         public readonly ?string $note = null,
     ) {}
+
+    /** It has no use left: the core does not bring it. */
+    public function usedUp(): bool
+    {
+        return $this->usesLeft !== null && $this->usesLeft <= 0;
+    }
+
+    /** Its end has come: the core does not bring it. */
+    public function ended(): bool
+    {
+        return $this->endsAt !== null && $this->endsAt <= Carbon::now();
+    }
 }

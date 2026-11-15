@@ -48,8 +48,8 @@ final class AbanGateway implements OnlineGateway
      */
     public const CARD_MOST = 10_000_000;
 
-    /** A page Aban sends a customer to: on its own host, over https. */
-    private const PAGE = '~^https://([a-z0-9-]+\.)*abangateway\.ir/[\x21-\x7e]*$~D';
+    /** Its own host, which a page it sends a customer to is on (GatewayHttp::page()). */
+    private const HOST = 'abangateway.ir';
 
     /** An invoice's id at Aban ("inv_…"). */
     private const INVOICE = '/^[A-Za-z0-9_]{4,32}$/D';
@@ -93,11 +93,11 @@ final class AbanGateway implements OnlineGateway
             throw new GatewayUnavailableException(self::refusal('would not open an invoice', $status, $answer));
         }
         $id = $answer['invoice_id'] ?? null;
-        $url = $answer['payment_url'] ?? null;
+        $url = GatewayHttp::page($answer['payment_url'] ?? null, self::HOST);
         $payable = $answer['payable_rial'] ?? null;
         // The same order id twice is the first invoice again, as it stands: one for another sum, or no longer pending (paid,
         // expired, cancelled), is no page to send the customer to.
-        if (!is_string($id) || preg_match(self::INVOICE, $id) !== 1 || !is_string($url) || preg_match(self::PAGE, $url) !== 1
+        if (!is_string($id) || preg_match(self::INVOICE, $id) !== 1 || $url === null
             || ($answer['amount_rial'] ?? null) !== $rial || !is_int($payable) || $payable < $rial || ($answer['status'] ?? null) !== 'pending') {
             throw new GatewayUnavailableException(self::refusal('opened an invoice it did not describe', $status, $answer));
         }

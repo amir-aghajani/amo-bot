@@ -91,6 +91,43 @@ final class AdminPlanPricesApiTest extends HttpTestCase
         self::assertSame(['قیمت کمتر از صفر می‌شود.', null], array_column($below, 'problem'));
     }
 
+    public function testWithThePricesPreviewedItIsMadeOnceAndOnlyOnThem(): void
+    {
+        $change = $this->change();
+        $previewed = array_map(static fn(array $row): array => ['id' => $row['id'], 'before' => $row['before']], $this->decode($this->postJson('/api/admin/plans/prices/preview', $change))['changes']);
+
+        $made = $this->postJson('/api/admin/plans/prices', $change + ['previewed' => $previewed]);
+        self::assertSame(200, $made->getStatusCode());
+        self::assertSame(['132000.00', '330000.00'], [$this->monthly->refresh()->price, $this->quarterly->refresh()->price]);
+
+        // The same request again — a second tap, a retry —: the prices are no longer the ones previewed.
+        $again = $this->postJson('/api/admin/plans/prices', $change + ['previewed' => $previewed]);
+        self::assertSame(422, $again->getStatusCode());
+        self::assertSame(['plan_ids' => [
+            'پلن «یک‌ماهه»: قیمتش بعد از پیش‌نمایش تغییر کرده است؛ دوباره پیش‌نمایش بگیرید.',
+            'پلن «سه‌ماهه»: قیمتش بعد از پیش‌نمایش تغییر کرده است؛ دوباره پیش‌نمایش بگیرید.',
+        ]], $this->decode($again)['errors']);
+        self::assertSame(['132000.00', '330000.00'], [$this->monthly->refresh()->price, $this->quarterly->refresh()->price], 'raised once, not twice');
+    }
+
+    public function testAPlanChangedSinceThePreviewHoldsEveryPlanBack(): void
+    {
+        $change = $this->change();
+        $previewed = array_map(static fn(array $row): array => ['id' => $row['id'], 'before' => $row['before']], $this->decode($this->postJson('/api/admin/plans/prices/preview', $change))['changes']);
+        $this->quarterly->forceFill(['price' => '310000.00'])->save();
+
+        $refused = $this->postJson('/api/admin/plans/prices', $change + ['previewed' => $previewed]);
+        self::assertSame(['plan_ids' => ['پلن «سه‌ماهه»: قیمتش بعد از پیش‌نمایش تغییر کرده است؛ دوباره پیش‌نمایش بگیرید.']], $this->decode($refused)['errors']);
+        self::assertSame(['120000.00', '310000.00'], [$this->monthly->refresh()->price, $this->quarterly->refresh()->price]);
+
+        $partly = $this->postJson('/api/admin/plans/prices', $change + ['previewed' => [$previewed[0]]]);
+        self::assertSame(['plan_ids' => ['پلن «سه‌ماهه»: در پیش‌نمایش نبود؛ دوباره پیش‌نمایش بگیرید.']], $this->decode($partly)['errors'], 'a plan the preview did not show');
+
+        $unread = $this->unchecked()->postJson('/api/admin/plans/prices', $change + ['previewed' => [['id' => $this->monthly->id, 'before' => ['price' => 'ارزان']]]]);
+        self::assertSame(['previewed' => ['پیش‌نمایش همراه درخواست خوانده نشد؛ دوباره پیش‌نمایش بگیرید.']], $this->decode($unread)['errors']);
+        self::assertSame('120000.00', $this->monthly->refresh()->price);
+    }
+
     public function testEveryRefusalAtOnce(): void
     {
         $refused = $this->unchecked()->postJson('/api/admin/plans/prices/preview', ['plan_ids' => [], 'direction' => 'decrease', 'mode' => 'percent', 'value' => '150', 'round_to' => 5, 'prices' => []]);

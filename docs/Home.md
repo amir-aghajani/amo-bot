@@ -6,7 +6,7 @@ AmoBot is an open-source shop for selling VPN subscriptions. Customers buy, pay 
 Telegram bot; the owner runs the shop from a web panel (`/admin/`), and each agent — a reseller with a bot and a shop of
 their own — from theirs (`/agent/`); the shop's mini app brings the customer's side into Telegram itself, and a shop's
 own website can sell through the Store API. AmoBot makes each service on the VPN panels it connects to (3X-UI,
-PasarGuard, HMPanel, Marzban), and takes the payment methods the owner sets up.
+PasarGuard, HMPanel, Marzban, Rebecca, Remnawave), and takes the payment methods the owner sets up.
 
 It runs on shared hosting — cPanel, DirectAdmin and the like —, the one supported way: PHP answers a JSON API, the
 panels are static files, a web installer sets it all up from the browser, the host's cron runs its scheduler and
@@ -29,6 +29,7 @@ Then, as the shop runs:
 | To | Read |
 |---|---|
 | Work in the panels, a screen at a time | The [Owner's guide](Owners-Guide.md#the-pages) and its pages |
+| Manage the shop from the bot's private chat, away from a computer | [Managing the shop from the bot](Bot-Management.md) |
 | See what customers and the bot's admins see in the bot | [Bot guide](Bot-Guide.md) |
 | Open the shop inside Telegram | [Mini app](Mini-App.md) |
 | Connect the shop's own website | [Website](Website.md) |
@@ -59,7 +60,7 @@ shop's admins' in the [admin API reference](Store-Admin-API-Reference.md).
 | Write and run the tests | [Testing](Testing.md) |
 | Write code like the code around it | [Conventions](Conventions.md) |
 | Add a VPN panel, a payment gateway, a database, a mail service, a captcha or another bot to import from | [Drivers](Drivers.md) |
-| Add a panel screen, a bot screen, an endpoint, a setting or a scheduled job | [Extending](Extending.md) |
+| Add a panel screen, a bot screen, a screen of the bot's management, an endpoint, a setting or a scheduled job | [Extending](Extending.md) |
 | Propose a change, and change these pages | [Contributing](Contributing.md) |
 | Publish a release | [Releasing](Releasing.md) |
 

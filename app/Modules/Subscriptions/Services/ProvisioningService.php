@@ -100,6 +100,12 @@ final class ProvisioningService
     /** Names a new client is tried under while its panel has a client by each already (named()). */
     private const NAME_TRIES = 10;
 
+    /** The HTTP status a panel refuses a name it has with (named()). */
+    private const CONFLICT = 409;
+
+    /** How far a panel's clock may be from the shop's when a term it set itself is read back (tookTerm()). */
+    private const TERM_SLACK = 300;
+
     /** Why rotateLink() refuses: the service does not run, or its panel cannot rotate. */
     public const ROTATE_INACTIVE = 'لینک فقط برای سرویس فعال عوض می‌شود.';
     public const ROTATE_UNSUPPORTED = 'سرور این سرویس تغییر لینک را پشتیبانی نمی‌کند.';
@@ -182,7 +188,9 @@ final class ProvisioningService
      * already (`$onPanel`, asked only then), under `$next`'s name instead, NAME_TRIES names in all: the shop knows the
      * names of the services it keeps (ClientNaming skips those), not of a client made on the panel by hand, nor of
      * another order's asking the same name delivered at the same moment. A buyer's own name, and the name a moved
-     * service keeps, give way to the pattern so.
+     * service keeps, give way to the pattern so. A conflict (HTTP 409, "User already exists": the Marzban family's) is a
+     * taken name without a look — which could not say more, and on PasarGuard 5 finds nothing: an admin limited to its
+     * own users gets a 404 for another admin's.
      *
      * @template T
      * @param \Closure(string): T $create
@@ -199,7 +207,7 @@ final class ProvisioningService
                 return $create($name);
             } catch (PanelApiException $e) {
                 // One that failed after the panel took it (the read of it after) refused no name: the client is there.
-                if ($try >= self::NAME_TRIES || $e->mayHaveBeenDone() || !$onPanel($name)) {
+                if ($try >= self::NAME_TRIES || $e->mayHaveBeenDone() || !($e->httpStatus === self::CONFLICT || $onPanel($name))) {
                     throw $e;
                 }
                 $this->logger->info('Client name {name} is taken on its panel by a client the shop does not keep; the next is tried', ['name' => $name]);
@@ -208,10 +216,30 @@ final class ProvisioningService
         }
     }
 
-    /** @return \Closure(string): bool Whether the server's panel has a client by that name (one findClient()). */
+    /** @return \Closure(string): bool Whether the server's panel has a client by that name (taken()). */
     private function hasClient(Server $server): \Closure
     {
-        return fn(string $name): bool => $this->onPanel($server, static fn(ProviderInterface $panel): bool => $panel->findClient($name) !== null);
+        return fn(string $name): bool => $this->onPanel($server, static fn(ProviderInterface $panel): bool => self::taken($panel, $name));
+    }
+
+    /**
+     * Whether the panel has a client named `$name` (one findClient()) — one it refuses to show as another admin's user, on
+     * a panel where the shop's admin sees only its own (PanelApiException::hidesAnothersClient()), is there too: the name
+     * is taken all the same. A refusal for a permission the admin lacks is no answer: it fails the call.
+     *
+     * @throws ProviderException
+     */
+    private static function taken(ProviderInterface $panel, string $name): bool
+    {
+        try {
+            return $panel->findClient($name) !== null;
+        } catch (PanelApiException $e) {
+            if ($e->hidesAnothersClient()) {
+                return true;
+            }
+
+            throw $e;
+        }
     }
 
     /**
@@ -995,7 +1023,7 @@ final class ProvisioningService
                 $client = $this->named(
                     $this->naming->nameOn($subscription, $target),
                     fn(string $name): ClientInfo => $this->makeOn($target, $keys, $spec($name), $lease, $left),
-                    fn(string $name): bool => $this->held($lease, $target, static fn(ProviderInterface $panel): bool => $panel->findClient($name) !== null),
+                    fn(string $name): bool => $this->held($lease, $target, static fn(ProviderInterface $panel): bool => self::taken($panel, $name)),
                     fn(): string => $this->naming->next($subscription->user, $target, $subscription->is_test),
                 );
             } catch (ProviderException $e) {
@@ -1142,8 +1170,9 @@ final class ProvisioningService
     /** Whether the server's panel still has a client by that name; null when it cannot say (the contact recorded on the server). */
     private function stillOn(Server $server, string $name): ?bool
     {
+        // The client itself asked about, not the name (taken()): a panel that refuses to show it cannot say.
         try {
-            return $this->hasClient($server)($name);
+            return $this->onPanel($server, static fn(ProviderInterface $panel): bool => $panel->findClient($name) !== null);
         } catch (ProviderException) {
             return null;
         }
@@ -1345,6 +1374,7 @@ final class ProvisioningService
      */
     private function update(Server $server, ClientSpec $spec, Lease $lease): ClientInfo
     {
+        $sentAt = Carbon::now();
         try {
             return $this->held($lease, $server, static fn(ProviderInterface $panel): ClientInfo => $panel->updateClient($spec));
         } catch (ProviderException $e) {
@@ -1357,7 +1387,7 @@ final class ProvisioningService
             } catch (ProviderException) {
                 throw $e;
             }
-            if ($client === null || !self::took($client, $spec)) {
+            if ($client === null || !self::took($client, $spec, $sentAt)) {
                 throw $e;
             }
             $this->logger->info('{server} took the update of client {name} though it did not answer; it is recorded', ['server' => $server->name, 'name' => $spec->name]);
@@ -1366,14 +1396,39 @@ final class ProvisioningService
         }
     }
 
-    /** Whether the client has what `$spec` sends it: its quota, term, switch, and device limit where its panel keeps one. */
-    private static function took(ClientInfo $client, ClientSpec $spec): bool
+    /**
+     * Whether the client has what `$spec` sends it — sent at `$sentAt` —: its quota, term (tookTerm()), switch, and device
+     * limit where its panel keeps one.
+     */
+    private static function took(ClientInfo $client, ClientSpec $spec, Carbon $sentAt): bool
     {
         return $client->totalBytes === $spec->totalBytes
             && $client->enabled === $spec->enabled
             && ($client->ipLimit === null || $client->ipLimit === $spec->ipLimit)
-            && $client->expiry->deadline()?->getTimestamp() === $spec->expiry->deadline()?->getTimestamp()
-            && $client->expiry->pendingSeconds() === $spec->expiry->pendingSeconds();
+            && self::tookTerm($client->expiry, $spec->expiry, $sentAt);
+    }
+
+    /**
+     * Whether a client's term (`$has`) is the one sent at `$sentAt`: the same, or as a panel words it that starts no term
+     * at the first connection nor takes a deadline gone by (Remnawave) — a term waiting for the first connection started
+     * while the call was out (its deadline that term after a moment between the sending and now), a deadline gone by
+     * moved to the soonest the panel takes or left as it had passed. TERM_SLACK each side for the panel's clock.
+     */
+    private static function tookTerm(Expiry $has, Expiry $sent, Carbon $sentAt): bool
+    {
+        $deadline = $has->deadline()?->getTimestamp();
+        $wanted = $sent->deadline()?->getTimestamp();
+        $pending = $sent->pendingSeconds();
+        if ($deadline === $wanted && $has->pendingSeconds() === $pending) {
+            return true;
+        }
+        $now = Carbon::now()->getTimestamp();
+
+        return $deadline !== null && match (true) {
+            $pending !== null => $deadline >= $sentAt->getTimestamp() + $pending - self::TERM_SLACK && $deadline <= $now + $pending + self::TERM_SLACK,
+            $wanted !== null && $wanted <= $now => $deadline <= $now + self::TERM_SLACK,
+            default => false,
+        };
     }
 
     /**

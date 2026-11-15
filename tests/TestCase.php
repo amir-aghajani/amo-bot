@@ -41,10 +41,13 @@ use Tests\Fakes\RecordingSmsSender;
 use Tests\Support\FakeAban;
 use Tests\Support\FakeAqayePardakht;
 use Tests\Support\FakeAtlasPay;
+use Tests\Support\FakeBluepal;
 use Tests\Support\FakeCubePay;
 use Tests\Support\FakeGoogleLogin;
 use Tests\Support\FakePanel;
 use Tests\Support\FakePlisio;
+use Tests\Support\FakeRialit;
+use Tests\Support\FakeRikhtam;
 use Tests\Support\FakeTelegram;
 use Tests\Support\FakeTelegramLogin;
 use Tests\Support\FakeTurnstile;
@@ -55,9 +58,9 @@ use Tests\Support\FakeZarinpal;
  * The base of every test: one booted application per process, kept off this machine (its own config.php, files and
  * no network). A test gets its doubles by swapping a leaf, never what was built around it: a fake transport under the
  * HTTP clients (panelHttp(), telegramLogin(), googleLogin(), turnstile(), cubePay(), zarinpal(), atlasPay(), aban(),
- * plisio(), aqayePardakht(), variza() — outgoingFake() for any other —, telegram()), the mail server (mail()), a log
- * handler (logs()), config.php (configFile()), a database probe (probedDatabase()), configuration (config()).
- * Everything is put back in tearDown.
+ * plisio(), aqayePardakht(), variza(), bluepal(), rialit(), rikhtam() — outgoingFake() for any other —, telegram()), the
+ * mail server (mail()), a log handler (logs()), config.php (configFile()), a database probe (probedDatabase()),
+ * configuration (config()). Everything is put back in tearDown.
  */
 abstract class TestCase extends BaseTestCase
 {
@@ -417,6 +420,24 @@ abstract class TestCase extends BaseTestCase
     protected function variza(): FakeVariza
     {
         return $this->outgoingFake(FakeVariza::class);
+    }
+
+    /** Bluepal's API as the outgoing client's transport for this test. */
+    protected function bluepal(): FakeBluepal
+    {
+        return $this->outgoingFake(FakeBluepal::class);
+    }
+
+    /** Rialit's API as the outgoing client's transport for this test; its webhooks are the test's to send. */
+    protected function rialit(): FakeRialit
+    {
+        return $this->outgoingFake(FakeRialit::class);
+    }
+
+    /** Rikhtam's one address (rikhtam.com/api.php) as the outgoing client's transport for this test; what it sends the shop is the test's to send. */
+    protected function rikhtam(): FakeRikhtam
+    {
+        return $this->outgoingFake(FakeRikhtam::class);
     }
 
     /**

@@ -7,10 +7,10 @@ import { depositRow, depositSettingsRow } from '@/test/rows'
 import { json, server } from '@/test/server'
 
 /*
- * «واریزهای پیامکی», the payments page's second section (components/payments/deposits): the bank SMS ForApp forwarded,
- * each with its sum in Toman and Rial, its bank and sender, and what came of it — the payment it approved, linked with
- * its order and its customer, or why none —; a tab a status, asked of the server; a row opened with the SMS as it came;
- * and the section saying so while «تایید خودکار واریز» is off.
+ * «واریزهای پیامکی», the payments page's second section (components/payments/deposits): the bank SMS ForApp forwarded
+ * and the deposits Rikhtam told, each with its sum in Toman and Rial, its bank and sender, and what came of it — the
+ * payment it approved, linked with its order and its customer, or why none —; a tab a status, asked of the server; a row
+ * opened with the SMS as it came (Rikhtam's: what it sent); and the section saying so while «تایید خودکار واریز» is off.
  */
 
 const LIST = '/api/admin/deposits'
@@ -70,6 +70,21 @@ describe('the bank SMS', () => {
     const dialog = await screen.findByRole('dialog')
     expect(within(dialog).getByText(/واریز: 1,503,700 ریال/).textContent).toBe('بانک ملت\nواریز: 1,503,700 ریال\nمانده: 9,000,000')
     expect(within(dialog).getByRole('link', { name: 'پرداخت #7' })).toBeTruthy()
+    expect(within(dialog).getByText('پیامک واریز بانک، همان‌طور که فوراپ فرستاد.')).toBeTruthy()
+  })
+
+  it('of Rikhtam’s open with what Rikhtam sent, never as an SMS ForApp forwarded', async () => {
+    const line = 'واریز ۱٬۵۰۳٬۷۰۰ ریال · به حساب …1119 · 1405/08/24 12:30'
+    open([depositRow({ source: 'rikhtam', bank: null, sender: 'ریختم', body: line })])
+
+    fireEvent.click(within((await rowsOf())[0] as HTMLElement).getByRole('button', { name: 'جزئیات' }))
+
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText(/ریختم از پیامک بانک خبر داد/)).toBeTruthy()
+    expect(within(dialog).getByText('آنچه ریختم فرستاد')).toBeTruthy()
+    expect(within(dialog).getByText(line)).toBeTruthy()
+    expect(within(dialog).queryByText(/فوراپ/)).toBeNull()
+    expect(within(dialog).queryByText('متن پیامک')).toBeNull()
   })
 })
 
@@ -107,6 +122,7 @@ describe('the section', () => {
     open([])
 
     expect(await screen.findByText('هنوز پیامکی نرسیده است')).toBeTruthy()
+    expect(screen.getByText(/فوراپ یا ریختم وصل باشد/)).toBeTruthy()
   })
 
   it('says so while the auto-verifier is off, with the way to its switch', async () => {

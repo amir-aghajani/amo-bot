@@ -24,11 +24,14 @@ use Psr\Log\LoggerInterface;
 /**
  * GET or POST /payments/callback/{payment}/{secret} — an online gateway's word that something happened to a payment:
  * CubePay, AtlasPay, Aban and Plisio call it from their servers (each only given an https address); Zarinpal,
- * AqayePardakht and Variza — and Aban and Plisio, from their pages — send the customer's browser back to it, paid or
- * not (Variza's word itself is its signed webhook, GatewayWebhookController's). What it says is never believed: with the
- * payment's own secret in the address (OnlineInvoices), it only makes the shop ask the gateway itself (OnlinePayments::
- * check()), in the payment's shop — CALLBACK_ASKS times a minute a payment at most, any call past that answered from the
- * payment as it stands. A gateway is answered whether the payment is paid now — a 503 while the gateway cannot be asked, so it calls
+ * AqayePardakht, Variza and Bluepal — and Aban, Plisio and Rikhtam (crypto), from their pages, on an https shop — send
+ * the customer's browser back to it, paid or not (Variza's word itself is its signed webhook, GatewayWebhookController's;
+ * Rikhtam's server tells the shop at its own address, RikhtamWebhookController's). Rialit takes no address of the
+ * payment's and sends nobody back: its webhook only names a payment for the shop to ask about (GatewayWebhookController),
+ * and the shop asks by itself meanwhile (Tasks\OnlinePaymentsTask). What it says is never believed: with the payment's
+ * own secret in the address (OnlineInvoices), it only makes the shop ask the gateway itself (OnlinePayments::check()), in
+ * the payment's shop — CALLBACK_ASKS times a minute a payment at most, any call past that answered from the payment as
+ * it stands. A gateway is answered whether the payment is paid now — a 503 while the gateway cannot be asked, so it calls
  * again, but never for one held for support (it is not asked again); a 404 for an address that names no payment —, a
  * browser the same as a page (ReturnPage), with the way back to the bot for a customer with a Telegram account. A
  * browser sent to it with `?go=1` (OnlineRequest::viaShop()) while the payment's page takes money is shown the page that
@@ -129,9 +132,12 @@ final class CallbackController extends ApiController
         return $payment->hasOpenPage() && !OnlinePayments::isHeld($payment) && is_string($page) && str_starts_with($page, 'https://') ? $page : null;
     }
 
-    /** A customer's browser sent back by the gateway — a page it asks for —, not the gateway's own server calling. */
+    /**
+     * A customer's browser sent back by the gateway — a page it asks for, by a link or by a form the bank's page posts
+     * (as many do) —, not the gateway's own server calling.
+     */
     private static function isBrowser(Request $request): bool
     {
-        return $request->getMethod() === 'GET' && str_contains($request->getHeaderLine('Accept'), 'text/html');
+        return str_contains($request->getHeaderLine('Accept'), 'text/html');
     }
 }

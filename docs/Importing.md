@@ -6,8 +6,9 @@
 VPN services brings it over — its customers and their wallet balances, their services (still on the same VPN panels),
 its plans, discount and gift codes, required channels and bank cards. The other bot's data is read once; you see what
 it holds and choose what comes; then it is written into the main shop. **Nothing changes on the VPN panels or in the
-other bot, and no customer is told anything.** Today AmoBot reads **Faoxima** (https://github.com/Mmd-Amir/Faoxima);
-another bot is a driver of its own ([for developers](#for-developers)).
+other bot, and no customer is told anything.** Today AmoBot reads **Faoxima** (https://github.com/Mmd-Amir/Faoxima),
+its 1.x, and **MirzaBot** (https://github.com/mahdiMGF2/mirzabot), the bot Faoxima grew out of — any version, from its
+old 5.x line to 0.9.3 and later; another bot is a driver of its own ([for developers](#for-developers)).
 
 ## Before you start
 
@@ -18,9 +19,10 @@ another bot is a driver of its own ([for developers](#for-developers)).
   database is read — does not come: a code redeemed, a purchase, a balance topped up or spent. A balance is credited
   once, so a later import of a newer backup does not correct it ([running it again](#running-it-again)). An import
   while the other bot still sells is a rehearsal; the last one is taken from the bot switched off.
-- **The servers.** A service comes over only from a panel the shop has a connector for — for Faoxima's, 3X-UI,
-  PasarGuard and Marzban ([the panels](#the-panels)) —, onto one of the shop's servers. Add the other bot's panels as
-  servers first ([Servers](Servers.md)), or let the import add them from the other bot's own connection.
+- **The servers.** A service comes over only from a panel the shop has a connector for — for Faoxima's and MirzaBot's,
+  3X-UI, PasarGuard, Marzban and Rebecca, and Faoxima's Remnawave ([the panels](#the-panels)) —, onto one of the shop's
+  servers. Add the other
+  bot's panels as servers first ([Servers](Servers.md)), or let the import add them from the other bot's own connection.
 - **Back the shop up first** when it sells already: an import writes many rows, and a restore is the way back
   ([Backups](Backups.md)).
 - **One import at a time**: one reading, in review or importing holds a new one off until it ends or is cancelled.
@@ -30,8 +32,10 @@ another bot is a driver of its own ([for developers](#for-developers)).
 ## Starting an import
 
 The card «انتقال تازه» asks two things. First **«ربات قبلی»** — the bot the data is of, a card each: its mark, name,
-project, what comes over and its notes (today «Faoxima»). Then where its data is read from, one of two tabs. Both say
-it again: «برای انتقال نهایی، اول ربات قبلی را خاموش کنید و بعد پشتیبانش را بگیرید؛ …».
+project, what comes over and its notes (today «Faoxima» and «MirzaBot»). Pick the one the data is of: Faoxima grew out
+of MirzaBot and their databases look much alike, but the import tells them apart, and names the right one when the
+other was picked ([when it fails](#when-it-is-refused-or-fails)). Then where its data is read from, one of two tabs.
+Both say it again: «برای انتقال نهایی، اول ربات قبلی را خاموش کنید و بعد پشتیبانش را بگیرید؛ …».
 
 ### Its backup file
 
@@ -40,6 +44,12 @@ it again: «برای انتقال نهایی، اول ربات قبلی را خ�
 - **Faoxima's own backup**: `backup.zip`, which Faoxima sends to its report channel every 5 hours by default (its admin
   menu «🕚 تنظیمات کرون جاب» sets how often). Download the latest from that channel. It holds `backup.sql` and a
   `vpnbot/` folder of the bot's files, which is ignored.
+- **MirzaBot's own backup**: `backup_<date>.sql` (`backup_2026-11-14.sql`, say), which MirzaBot sends to its report
+  group every 5 hours, in the topic «🤖 بکاپ ربات», captioned «📌 خروجی دیتابیس ربات اصلی». Download the latest from
+  there; the zips beside it, each captioned with a reseller bot's username, are its resellers' bots' files, not its
+  database. A MirzaBot before 0.1.6 (May 2026) sent `backup_<date>.zip` instead, its `.sql` behind a password its
+  caption sends you to MirzaBot's support for: open it with that password and upload the `.sql` inside — the shop never
+  guesses one —, or export the database.
 - **An export of the bot's database** — phpMyAdmin's *Export* in the SQL format, with the tables' structure and their
   data («ساختار و داده», *Structure and data*), `mysqldump`, Adminer or the like — as a `.sql` file, or that file zipped
   (`.zip`) or gzipped (`.gz`). In a zip, `backup.sql` is read, else its largest `.sql` file. A `.tar` or `.bz2` is not
@@ -59,8 +69,8 @@ read.
 «نام کاربری» and «رمز عبور», then «اتصال و خواندن». The connection is tried at once, 5 seconds at most, and a refusal is
 said under the field at fault ([when it fails](#when-it-is-refused-or-fails)).
 
-- Faoxima keeps them in its `config.php`: `$dbhost`, `$dbname`, `$usernamedb` and `$passworddb` (a Docker install of
-  Faoxima, in its `.env`).
+- Faoxima and MirzaBot keep them in their `config.php`: `$dbhost`, `$dbname`, `$usernamedb` and `$passworddb` (a
+  Docker install of Faoxima, in its `.env`).
 - On the same host, the host is usually `localhost`. A database on another host must take connections from this shop's
   host: in that host's cPanel, *Remote MySQL*, allow this shop's server. Faoxima's Docker install publishes no port for
   its database: upload its backup instead.
@@ -83,17 +93,19 @@ too. Nothing is written into the shop yet.
   press «تلاش دوباره».
 - **«لغو انتقال»** asks first, then stops it, and the file and what was read of it are deleted.
 
-Read whole, the data is recognised as that bot's — or the import fails, saying which of the bot's tables it did not find
-([when it fails](#when-it-is-refused-or-fails)) —, and the review opens. The uploaded file, its unpacked dump and the
-database's connection are deleted then: only the copy read stays, until the import ends.
+Read whole, the data is recognised as that bot's — or the import fails, saying which of the bot's tables it did not
+find, or, for the data of another bot AmoBot reads, whose it is ([when it fails](#when-it-is-refused-or-fails)) —, and
+the review opens. The uploaded file, its unpacked dump and the database's connection are deleted then: only the copy
+read stays, until the import ends.
 
 ## The review
 
 Before anything is written: what the other bot holds, where its services go, and what to bring.
 
-**«آنچه در ربات قبلی پیدا شد»** — its customers (and how many came through its resellers' bots), live services (and the
+**«آنچه در ربات قبلی پیدا شد»** — its customers (and how many are its resellers' bots' alone), live services (and the
 free tests still on their panels), the customers' wallet balances together and how many have one, plans, discount
-codes, gift codes, required channels and bank cards; the bot's version too, when it can be told (Faoxima keeps none).
+codes, gift codes, required channels and bank cards; the bot's version too, when it can be told (neither Faoxima nor
+MirzaBot keeps one).
 
 ### The panels
 
@@ -115,8 +127,27 @@ plans that sold on it are sold there. For each, «سرویس‌های «…» ک
 A panel no connector of the shop speaks to says so in amber, and its services stay behind. Faoxima's kinds become:
 `marzban` Marzban (or PasarGuard, for a Marzban panel Faoxima marks as speaking PasarGuard's API), `pasarguard`
 PasarGuard, `x-ui_single` 3X-UI — v3 and later: a panel Faoxima reached by its old login may be older, and the review
-warns of it —; `rebecca`, `remnawave`, `guard` and `WGDashboard` have no connector yet
-([Servers](Servers.md#the-connectors)). Its «فروش دستی» panels hold configs sold by hand, no clients: they are not listed.
+warns of it —, `rebecca` Rebecca, from the `rk_…` API key Faoxima kept for it, `remnawave` Remnawave, from the API
+token Faoxima kept for it; `guard` and `WGDashboard` have no connector yet ([Servers](Servers.md#the-connectors)). Its «فروش دستی» panels hold configs sold by
+hand, no clients: they are not listed.
+
+MirzaBot's become: `marzban` Marzban (or PasarGuard, for a panel MirzaBot added as PasarGuard — its «نسخه پنل» 1),
+`x-ui_single` 3X-UI — from the API token MirzaBot keeps: every panel of a MirzaBot later than 0.1.9 (its tables tell),
+and any it added without a username, as it adds them since. An older MirzaBot reached a 3X-UI panel by the admin's
+login, the way of a panel before v3, whose services do not come: the review names such a panel —, `rebecca` Rebecca,
+from the `rk_…` API key MirzaBot kept for it; `marzneshin`, `hiddify`, `WGDashboard`, `ibsng`, `mikrotik`,
+`mirza_agent`, `nexora` and `wg_mate` (and the `alireza_single` and `s_ui` an old MirzaBot may still have) have no
+connector yet. Its «فروش دستی» panels (`Manualsale`) are not listed either.
+
+A Rebecca panel is added as a new server with the key the old bot kept — an admin's key, whose admin should see every
+user (full access or sudo) and its usage ([Servers](Servers.md#the-connectors)); one the old bot reached another way,
+an older Rebecca's login say, has no key to add it with: add it in «سرورها» with a key of yours, and choose it. Its
+services are found by name, each read on its own for the device limit Rebecca's list leaves out.
+
+A Remnawave panel of Faoxima's is added as a new server with the API token Faoxima kept — Remnawave takes no admin's
+password, so one without a token is not offered as a new server ([Servers](Servers.md#the-connectors)). A panel
+behind an auth portal wants its gate key too, which Faoxima does not keep: add it in «سرورها» with its token and gate
+key, and choose it. Its services are found by name, as written, with their squads as they are.
 
 ### What to bring
 
@@ -129,9 +160,9 @@ warns of it —; `rebecca`, `remnawave`, `guard` and `WGDashboard` have no conne
 | «شماره موبایل‌ها» | on | The mobile number a customer gave the other bot — an Iranian mobile; anything else is left out —, or that its admin excused them from giving one ([customers](#customers)) |
 | «معرف‌ها» | on | Each customer under the one who brought them there; no referral gift is given |
 | «تخفیف شخصی» | on | A customer's own discount percent |
-| «گروه‌ها» | on | The customer groups — Faoxima's agents — listed with their customers; one the shop lacks is made. Shown when there are any |
-| «مدیرها» | off | Those who would become the bot's admins here, listed — Faoxima's full admins ([admins](#admins)). Shown when there are any |
-| «مشتری‌های ربات‌های نماینده» | off | The customers who bought through the other bot's resellers' bots, with their services. Shown when there are any |
+| «گروه‌ها» | on | The customer groups — the other bot's agents ([groups](#groups)) — listed with their customers; one the shop lacks is made. Shown when there are any |
+| «مدیرها» | off | Those who would become the bot's admins here, listed — the other bot's full admins ([admins](#admins)). Shown when there are any |
+| «مشتری‌های ربات‌های نماینده» | off | The customers of the other bot's resellers' bots alone ([customers](#customers)) — without their wallets, which those bots keep —, and the services sold through those bots. Shown when there are any |
 | «سرویس‌ها» | on | Every live service, as it stands on its panel |
 | «اکانت‌های تست» | on | The free tests still on their panels; held off while «سرویس‌ها» is |
 | «پلن‌ها» | on | The plans with their categories, on the servers their panels map to |
@@ -155,10 +186,26 @@ Every customer comes whatever the switches — the first part's say what of thei
 - customers with a discount of their own while codes come: Faoxima refused them codes, the shop takes them;
 - the advanced agents' prices of their own (a plan keeps one agent price), and services that found no plan (their
   product renamed or deleted);
-- card payments still waiting for approval: approve them in the other bot, then take a fresh backup — else that money
-  never reaches those wallets;
+- the bot's own card payments still waiting for approval (a reseller bot's credit the wallets in its files): approve
+  them in the other bot, then take a fresh backup — else that money never reaches those wallets;
 - customers' links that went through the other bot, panels it reached by 3X-UI's old login, panels whose certificate it
   never checked, and cards it showed to some customers only.
+
+For MirzaBot, the same but for the credit limits, the discounts of their own and the cards — customers in debt, its
+support and sellers, agencies ending on a day to come, the advanced agents' prices, the bot's own card payments waiting,
+links through the bot, 3X-UI on the old login, certificates never checked —, and:
+
+- its advanced agents, every one of whom bought on credit, below a zero balance — without a floor unless MirzaBot was
+  given one —: the shop has no such buying;
+- services that found no plan — their product renamed or deleted, or a service the customer built themselves;
+- products MirzaBot marked «ناموجود» (sold out): their plans come switched off, whatever «پلن‌ها روشن بیایند» says;
+- customers it excused from the required channels, while the channels come: here nobody is excused;
+- customers it showed no card-to-card, while the cards come: here every card switched on is shown to all;
+- panels it showed to one audience alone (its customers, or one agent level), or hid from some customers: here the
+  plans sold on them reach everyone.
+
+Customers with a discount of their own bring no warning for MirzaBot: it took a code and the customer's own percent on
+top of it, as the shop does.
 
 ### Starting
 
@@ -192,32 +239,41 @@ By their Telegram account:
   referral gift, joined on the day they joined the other bot.
 - **One who bought in the other bot is no newcomer here**: no plan's first-purchase price
   ([Plans](Plans.md#first-purchase-price)), no code «فقط برای خرید اول», no free test while «اکانت تست فقط برای کاربران
-  جدید» is on, and no referral «هدیه شروع» for a first purchase — whatever they buy here.
+  جدید» is on, and no referral «هدیه شروع» for a first purchase — whatever they buy here. For Faoxima, a paid purchase it
+  delivered counts; for MirzaBot, any it delivered but a free test, at any price, as MirzaBot told its own newcomers.
 - **One the other bot's admin excused from giving a mobile number** — Faoxima writes `confirm number by admin` in place
-  of it — comes excused from the phone number here ([Customers](Customers.md#excused-from-the-phone-number)), with
-  «شماره موبایل‌ها» on; a customer the shop has already gains the excuse too, and never loses one.
+  of it, MirzaBot `confrim number by admin` — comes excused from the phone number here
+  ([Customers](Customers.md#excused-from-the-phone-number)), with «شماره موبایل‌ها» on; a customer the shop has already
+  gains the excuse too, and never loses one.
 - A customer the other bot kept without a Telegram id is left out, and named in the report.
-- A customer of one of the other bot's resellers' bots comes only with «مشتری‌های ربات‌های نماینده».
+- **A customer of one of the other bot's resellers' bots** comes only with «مشتری‌های ربات‌های نماینده», and without a
+  wallet: a reseller bot keeps its customers' wallets in its own files, never in the database the import reads (the
+  review counts them under what stays behind). Faoxima and MirzaBot mark a customer with the reseller bot they last
+  opened, and never clear it; so one is a reseller bot's customer only when nothing ties them to the bot itself — a
+  balance there, an agent's level, an admin's role of any kind, a reseller bot of their own, or a purchase in the bot
+  itself. Anyone else comes as the bot's own. A service sold through a reseller bot comes only with that switch,
+  whoever's it is.
 
 ### Balances
 
-Each customer's balance comes as one wallet line, «موجودی منتقل‌شده از Faoxima»: a credit, or for a debt a line that
-takes the wallet below zero. **A balance is credited once**, however many times an import is run: a later change of it
-in the other bot does not come. What comes is Faoxima's balance itself — its own wallet history is incomplete.
+Each customer's balance comes as one wallet line, «موجودی منتقل‌شده از Faoxima» (or «… از MirzaBot»): a credit, or for
+a debt a line that takes the wallet below zero. **A balance is credited once**, however many times an import is run: a
+later change of it in the other bot does not come. What comes is the bot's balance itself — Faoxima's own wallet
+history is incomplete, and MirzaBot keeps none.
 
 ### Groups
 
-Faoxima's agents become two customer groups, «نماینده عادی» (its level `n`) and «نماینده پیشرفته» (`n2`), both paying the
-plans' agent prices («همکار», [Customers](Customers.md#groups)); a group of that name the shop has already is used as it
-is. An agency whose end date has passed comes as a customer; one ending later stays an agent here, its end not carried.
-A plan keeps one agent price ([plans](#plans)), and an agent's credit limit in Faoxima — buying below zero — is not
-carried.
+Faoxima's and MirzaBot's agents become two customer groups, «نماینده عادی» (their level `n`) and «نماینده پیشرفته»
+(`n2`), both paying the plans' agent prices («همکار», [Customers](Customers.md#groups)); a group of that name the shop
+has already is used as it is. An agency whose end date has passed comes as a customer; one ending later stays an agent
+here, its end not carried. A plan keeps one agent price ([plans](#plans)), and the advanced agents' buying on credit —
+below zero, down to a limit in Faoxima, and in MirzaBot without one unless it was set — is not carried.
 
 ### Admins
 
-Only with «مدیرها», and only Faoxima's full admins (its `administrator` role) become the bot's admins here
-([Customers](Customers.md#the-bots-admins)); the review lists them alone, and warns of its sellers and support staff,
-who become nothing.
+Only with «مدیرها», and only the other bot's full admins (Faoxima's and MirzaBot's `administrator` role) become the
+bot's admins here ([Customers](Customers.md#the-bots-admins)); the review lists them alone, and warns of its sellers
+and support staff, who become nothing.
 
 ### Referrals
 
@@ -234,30 +290,37 @@ comes switched on. It is sold on the servers its panels map to, on every inbound
 ([inbounds](Servers.md#inbounds)), with its price, traffic (GB; 0 unlimited), days (0 no end), devices and note
 («یادداشت پیش‌فاکتور»). A plan switched off still renews the services it sold ([Plans](Plans.md)).
 
-Faoxima prices its agents in products of their own: one only agents saw, of the same traffic, days and panels as a
-customers' product, becomes that plan's agent price — «نماینده عادی»'s over «نماینده پیشرفته»'s —, and the services
-bought under it that plan's. An agents' product with no such twin comes as a plan of its own, always switched off, and
-named in the report. A plan none of whose panels came over comes without a server, named in the report: give it one
-before switching it on.
+Faoxima and MirzaBot price their agents in products of their own: one only agents saw, of the same traffic, days and
+panels as a customers' product, becomes that plan's agent price — «نماینده عادی»'s over «نماینده پیشرفته»'s —, and the
+services bought under it that plan's. An agents' product with no such twin comes as a plan of its own, always switched
+off, and named in the report. A plan none of whose panels came over comes without a server, named in the report: give
+it one before switching it on.
+
+A MirzaBot product is sold on one panel, or on every one but those it was hidden from, and its plan on the servers
+those map to. One MirzaBot marked «ناموجود» (sold out) comes switched off, even with «پلن‌ها روشن بیایند» on — and
+still renews what it sold.
 
 ### Services
 
-Each live service — for Faoxima, one not removed, no stock or hand-sold config, and no test whose time is up — on a
-panel chosen in the review is found on its server by its client's name, and **taken as it stands on the panel**: its
-subscription link, the traffic it used, its end and its switch. **Nothing on the panel changes**, not even its comment.
-Then:
+Each live service — for Faoxima, one not removed, no stock or hand-sold config, and no test whose time is up; for
+MirzaBot, one not removed or gone from its panel, no hand-sold config, and none it marked `disabled` (a test whose time
+was up, its client taken off the panel) — on a panel chosen in the review is found on its server by its client's name,
+and **taken as it stands on the panel**: its subscription link, the traffic it used, its end and its switch. **Nothing
+on the panel changes**, not even its comment. Then:
 
-- with the plan it was bought from, when that plan came — found by its product's name, or, for a product renamed or
-  deleted since, by its traffic, days and panel when exactly one plan fits: renewed from it as any other;
+- with the plan it was bought from, when that plan came — found by its product's name among the products sold on its
+  panel (a name may repeat, a product for each panel), or, for a product renamed or deleted since, by its traffic, days
+  and panel when exactly one plan fits: renewed from it as any other;
 - without one, as a [service added by its link](Service-Claims.md#renewing-one) is: its first renewal gives it a plan
-  (the review counts such services);
+  (the review counts such services). A service a MirzaBot customer built themselves («⚙️ سرویس دلخواه») always comes
+  so: MirzaBot renewed it at its own prices, never a plan's;
 - a free test stays a test, and the customer's own name for it comes as «نام دلخواه»;
 - one that had ended by time or traffic comes ended, to renew, and its automatic removal counts from the import
   ([Services](Services.md#what-runs-by-itself)).
 
 The link is the panel's own, or the server's «آدرس اشتراک» in front of its token. Where the other bot gave its customers
-links through its own address (Faoxima's «لینک ساب اختصاصی»), those stop with it: the review warns of it, and customers
-find the new link in this bot.
+links through its own address (Faoxima's and MirzaBot's «لینک ساب اختصاصی»), those stop with it: the review warns of
+it, and customers find the new link in this bot.
 
 A service is left out, and named in the report, when its client is not on its panel, the panel gives no link for it,
 its customer did not come, or the shop keeps that client already for someone else (one this customer has is linked to
@@ -270,15 +333,24 @@ Each code with uses and days left, its cap the uses it has left, with its limit 
 اول», its end and its note; codes are kept in capitals ([Discounts](Discounts.md#discount-codes)). A code of a name
 the shop has already is left as it is, and named in the report. One the shop's codes cannot hold as it was comes
 **switched off**, a note saying why: one only for agents, only for regular customers or for some of the bot's
-audiences, or for one customer; one only for wallet top-ups (the shop's codes are not taken for them); and one whose
-plans or panels all stayed behind — so it never holds for more customers, or more plans, than it did.
+audiences, or for one customer; one only for wallet top-ups (the shop's codes are not taken for them); one the other
+bot could never take; and one whose plans or panels all stayed behind — so it never holds for more customers, or more
+plans, than it did. Its limit for one customer counts afresh here: the history of its uses stays behind.
+
+MirzaBot's codes are a percent off a purchase, a renewal or both — the two it asked for a code at —, of one product or
+every one, on one panel or every one, each for everyone or for one audience (its customers, or one agent level). One
+whose audience, kind of order, product or panel it does not know — or that names none, as a column an old MirzaBot
+added later leaves it, which MirzaBot never matched — it could never take: it comes switched off. It held every code
+to its uses and to its uses for each customer: one whose uses are spent, or that allowed none (or none for each
+customer), it never took either — counted as used up, it does not come.
 
 ### Gift codes
 
 The shop's gift codes are spent once, by whoever has them ([Gift codes](Gift-Codes-And-Lucky-Wheel.md#gift-codes)). A
 wallet code with **one use left**, switched on and not past its day comes as one of them, with its amount and last day,
-under the batch «منتقل‌شده از Faoxima». One with more uses left (or no limit), or one the other bot kept for one
-customer, is named in the report — with its amount and the uses it had left, or whose it was — for you to give by hand.
+under the batch «منتقل‌شده از Faoxima» (or «… از MirzaBot»). One with more uses left (or no limit), or one the other
+bot kept for one customer, is named in the report — with its amount and the uses it had left, or whose it was — for you
+to give by hand. MirzaBot's have no last day, and always a limit: one with no use left is used up, never unlimited.
 A code is kept as the shop keeps its own: in capitals, its hyphens dropped (`GIFT-WELCOME` comes as `GIFTWELCOME`) —
 the shop drops them from what customers type too, so the code they have still redeems. It must then be Latin letters
 and digits, 32 at most, and its amount within the wallet's bounds: any other is refused.
@@ -294,7 +366,7 @@ requires already is left as it is.
 
 Into the shop's card-to-card method — its first, or one made for them switched off, «کارت به کارت» —, **each card
 switched off**, even in a method that is on: a card the other bot showed may be one nobody checks any more, or one it
-showed to a few customers alone (the review names those). Check each, then switch it on
+showed to a few customers alone (as Faoxima could; the review names those). Check each, then switch it on
 ([Payment methods](Payment-Methods.md#card-to-card)). A number that is no valid card's — not 16 digits, or failing the
 card-number check — is named in the report; a card the shop shows already is left as it is.
 
@@ -308,14 +380,16 @@ choose «افزودن به‌عنوان سرور تازه» for its panel again 
 
 ## What stays behind
 
-- The payment history, the support tickets, the history of the wallets, of the services' renewals and extras and of
-  the codes' uses.
-- The other bot's resellers' bots — and, unless chosen, their customers.
+- The payment history, the support tickets, the history of the wallets (Faoxima's), of the services' renewals and
+  extras and of the codes' uses — a code's limit for one customer counts afresh here.
+- The other bot's resellers' bots — and, unless chosen, their customers —, and those customers' wallets, which the
+  resellers' bots keep in their own files, not in the database.
 - Stock and hand-sold configs, and services on panels the other bot no longer has.
-- Services on panels AmoBot has no connector for — Faoxima's Rebecca, Remnawave, Guard and WGDashboard panels —: their
-  customers and balances still come.
+- Services on panels AmoBot has no connector for — Faoxima's Guard and WGDashboard panels, MirzaBot's Marzneshin,
+  Hiddify, WGDashboard, IBSng, MikroTik and the rest —: their customers and balances still come.
 - The panels' own prices of extra traffic and time and of built services, and the products' options no plan keeps — a
-  device limit of their own, one purchase each, traffic reset on a schedule.
+  device limit of their own, one purchase each, only for customers who never bought (MirzaBot's), traffic reset on a
+  schedule.
 - The bot's settings and texts.
 
 Keep a copy of the other bot's database for any of it.
@@ -416,12 +490,15 @@ An owner whose host has a shell may also work an import's steps from it: `php bi
 | «فایل بزرگ‌تر از چیزی است که هاست می‌پذیرد (…)؛ …» | The same, said by the host where PHP does not tell its limit |
 | «این فایل، پشتیبان دیتابیس نیست؛ …» | No SQL dump, nor a zip or a gzip of one |
 | «در این فایل zip هیچ فایل .sql پیدا نشد.» | A zip without a `.sql` in it |
+| «این فایل zip رمز دارد؛ …» | Its `.sql` is behind a password — a backup of a MirzaBot before 0.1.6, say: open it with its password and upload the `.sql` inside, or export the database |
 | «افزونه zip روی این هاست فعال نیست؛ …» | The host's PHP cannot open a zip: upload the `.sql` inside it, or a `.gz` of it |
 | «این فایل فشرده باز که شود از … بزرگ‌تر است؛ …» | It unpacks to more than 1 GB — far more than a bot's database |
 | «فضای خالی هاست برای نگه داشتن و باز کردن این فایل کافی نیست؛ …» | Keeping and unpacking it would leave less than 256 MB of the host's disk free |
 | «این فایل ناقص است یا خراب شده و تا آخر خوانده نشد؛ …» | Cut short or damaged — an upload broken off, a dump that ends half-way through a statement, a row of more than 16 MB: take the backup again |
 | «این فایل فقط داده‌های جدول‌ها را دارد، بدون ساختارشان (…)؛ …» | An export of the data alone: export again with the tables' structure, or upload the bot's own backup |
-| «این داده‌ها مال … نیست؛ جدول‌هایی که این ربات دارد پیدا نشد (…).» | Not that bot's database — MirzaBot's, Faoxima's ancestor, say —, or not the whole of it |
+| «این داده‌ها مال … نیست؛ جدول‌هایی که این ربات دارد پیدا نشد (…).» | Not that bot's database, nor another's AmoBot reads, or not the whole of it: the tables looked for are named |
+| «این داده‌های … است، نه …؛ …» | Another bot's data, one AmoBot reads too — Faoxima's with MirzaBot picked, say, or MirzaBot's with Faoxima: the import fails; start again with «انتقال تازه», picking the bot it names |
+| «این داده‌ها مال … نیست.» | The bot's tables, with the marks of a relative of it AmoBot does not read — another fork of MirzaBot, say |
 | «آدرس سرور دیتابیس ربات قبلی را وارد کنید.» · «آدرس سرور دیتابیس درست نیست؛ …» | «هاست» empty, or not a host's name or IP alone |
 | «پورت باید عددی بین 1 تا 65535 باشد.» | — |
 | «نام دیتابیس ربات قبلی را وارد کنید.» · «نام کاربری دیتابیس را وارد کنید.» | — |

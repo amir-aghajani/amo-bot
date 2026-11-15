@@ -80,6 +80,8 @@ The shop's daily work; each operation answers like its panel counterpart (linked
 | [`GET /payments/{id}`](#get-paymentsid) | One payment, as the list shows it |
 | [`GET /payments/{id}/receipt`](#get-paymentsidreceipt) | The payment's receipt picture |
 | [`POST /payments/{id}/approve`](#post-paymentsidapprove) | Approve a payment and deliver what it paid for |
+| [`GET /payments/{id}/rikhtam`](#get-paymentsidrikhtam) | The deposits of the last 20 days no invoice took at Rikhtam (at most 40), to attach one to this card payment |
+| [`POST /payments/{id}/rikhtam`](#post-paymentsidrikhtam) | Attach one of those deposits to this payment |
 | [`POST /payments/{id}/reject`](#post-paymentsidreject) | Reject a receipt |
 | [`POST /payments/{id}/cancel`](#post-paymentsidcancel) | Cancel an unpaid payment and its open order |
 | [`POST /payments/{id}/remind`](#post-paymentsidremind) | Remind the customer to pay |
@@ -414,14 +416,14 @@ A bulk change of several plans' prices: raise or lower the named prices by a per
 
 ### POST /plans/prices
 
-Raise or lower several plans' prices at once. All or nothing: if any plan cannot take the change (a price below zero, or a first-purchase or agent price no longer below the price), nothing changes and a 422 on `plan_ids` names each such plan.
+Raise or lower several plans' prices at once. All or nothing: if any plan cannot take the change (a price below zero, or a first-purchase or agent price no longer below the price) or, with `previewed`, its prices moved since the preview, nothing changes and a 422 on `plan_ids` names each such plan.
 
 - **Who:** an admin of the shop, signed in on its website, when the website grants `catalog` ([grants](#grants)) and the sign-in is at most 15 minutes old.
 - **In the panels:** [`POST /api/{panel}/plans/prices`](Panels-API-Reference.md#post-apipanelplansprices).
 
 **Body**, as JSON:
 
-A bulk change of several plans' prices: raise or lower the named prices by a percent or a number of Toman, rounding each new price to the nearest step. A plan without one of the named prices still has none afterwards.
+A bulk change of several plans' prices as it is made: the change previewed (PlanPricesRequest) and, to make exactly the change the preview showed, each plan's prices as the preview showed them.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -431,6 +433,9 @@ A bulk change of several plans' prices: raise or lower the named prices by a per
 | `value` | [AmountInput](API-Schemas.md#amountinput) | yes | The percent (decimals allowed) or whole Toman; above zero. |
 | `round_to` | integer: `1`, `100`, `1000`, `10000` | yes | Each new price is rounded to the nearest multiple of this; 1 means whole Toman. |
 | `prices` | list of string: `price`, `first_purchase_price`, `agent_price` | yes | Which prices change: the price, the first-purchase price, the agent price. |
+| `previewed` | list of object, at most 1000 | no | Each plan's prices as the preview showed them: its `changes`' `id` and `before`. Sent, the change is the one previewed or none: a plan whose prices moved since (another change meanwhile, or this one sent again) is refused with a 422 on `plan_ids` naming it. Left out, the change is applied to the prices as they are. |
+| `previewed[].id` | integer | yes |  |
+| `previewed[].before` | [PlanPrices](API-Schemas.md#planprices) | yes |  |
 
 **Answers**
 
@@ -1368,6 +1373,56 @@ Approve a payment and deliver what it paid for. With a receipt in review, or by 
 | Status | What it is | Body |
 |---|---|---|
 | `200` | Approved | [PaymentResponse](API-Schemas.md#paymentresponse) |
+| `401` | [SignedOut](API-Schemas.md#response-signedout) | [ErrorResponse](API-Schemas.md#errorresponse) |
+| `403` | [StaffRefused](API-Schemas.md#response-staffrefused) | [ErrorResponse](API-Schemas.md#errorresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### GET /payments/{id}/rikhtam
+
+The deposits of the last 20 days no invoice took at Rikhtam (at most 40), to attach one to this card payment: the closest to its sum first. Offered (`actions.rikhtam`) for a payment that may be approved in a shop whose Rikhtam is connected; not connected, `connected` is false and the list empty.
+
+- **Who:** an admin of the shop, signed in on its website, when the sign-in is at most 15 minutes old.
+- **In the panels:** [`GET /api/{panel}/payments/{id}/rikhtam`](Panels-API-Reference.md#get-apipanelpaymentsidrikhtam).
+
+**Parameters**
+
+| Name | In | Type | Required | What it is |
+|---|---|---|---|---|
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | OK | [PaymentRikhtamResponse](API-Schemas.md#paymentrikhtamresponse) |
+| `401` | [SignedOut](API-Schemas.md#response-signedout) | [ErrorResponse](API-Schemas.md#errorresponse) |
+| `403` | [StaffRefused](API-Schemas.md#response-staffrefused) | [ErrorResponse](API-Schemas.md#errorresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### POST /payments/{id}/rikhtam
+
+Attach one of those deposits to this payment: Rikhtam sends it to the shop again, named for the payment, and it approves the payment when it covers its order's price — delivered, and the customer told, as by a bank SMS. The answer is the payment as it stands after, with Rikhtam's word (`message`) and its fee.
+
+- **Who:** an admin of the shop, signed in on its website, when the sign-in is at most 15 minutes old.
+- **In the panels:** [`POST /api/{panel}/payments/{id}/rikhtam`](Panels-API-Reference.md#post-apipanelpaymentsidrikhtam).
+
+**Parameters**
+
+| Name | In | Type | Required | What it is |
+|---|---|---|---|---|
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
+
+**Body**, as JSON:
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `uid` | string | yes | The deposit to attach, from `GET …/rikhtam`. |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | Attached | [PaymentRikhtamAttachResponse](API-Schemas.md#paymentrikhtamattachresponse) |
 | `401` | [SignedOut](API-Schemas.md#response-signedout) | [ErrorResponse](API-Schemas.md#errorresponse) |
 | `403` | [StaffRefused](API-Schemas.md#response-staffrefused) | [ErrorResponse](API-Schemas.md#errorresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |

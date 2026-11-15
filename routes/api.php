@@ -41,7 +41,9 @@ use App\Modules\Admin\Api\MassGrantsController;
 use App\Modules\Admin\Api\MiniAppController;
 use App\Modules\Admin\Api\OrdersController;
 use App\Modules\Admin\Api\OwnerAuthController;
+use App\Modules\Admin\Api\OwnerTelegramController;
 use App\Modules\Admin\Api\PaymentMethodsController;
+use App\Modules\Admin\Api\PaymentRikhtamController;
 use App\Modules\Admin\Api\PaymentsController;
 use App\Modules\Admin\Api\PlanCategoriesController;
 use App\Modules\Admin\Api\PlansController;
@@ -92,6 +94,7 @@ use App\Modules\Store\Http\StaffMiddleware;
 use App\Modules\Store\Http\StoreMiddleware;
 use App\Modules\Store\Http\WebsiteOnlyMiddleware;
 use App\Modules\Store\Services\Storefront;
+use App\Modules\Telegram\Admin\Door\BotAdminDoor;
 use App\Modules\Updates\Controllers\UpdateController;
 use Slim\App;
 use Slim\Routing\RouteCollectorProxy;
@@ -181,6 +184,9 @@ return static function (App $app): void {
         $shop->get('/payments/{id:[0-9]+}', [PaymentsController::class, 'show']);
         $shop->get('/payments/{id:[0-9]+}/receipt', [PaymentsController::class, 'receipt']);
         $shop->post('/payments/{id:[0-9]+}/approve', [PaymentsController::class, 'approve'])->setArgument(StaffMiddleware::RECENT_SIGN_IN, 'true');
+        // A deposit Rikhtam holds, attached to a payment, approves it: guarded as an approval, its list too.
+        $shop->get('/payments/{id:[0-9]+}/rikhtam', [PaymentRikhtamController::class, 'show'])->setArgument(StaffMiddleware::RECENT_SIGN_IN, 'true');
+        $shop->post('/payments/{id:[0-9]+}/rikhtam', [PaymentRikhtamController::class, 'attach'])->setArgument(StaffMiddleware::RECENT_SIGN_IN, 'true');
         $shop->post('/payments/{id:[0-9]+}/reject', [PaymentsController::class, 'reject']);
         $shop->post('/payments/{id:[0-9]+}/cancel', [PaymentsController::class, 'cancel']);
         $shop->post('/payments/{id:[0-9]+}/remind', [PaymentsController::class, 'remind']);
@@ -235,6 +241,9 @@ return static function (App $app): void {
         $shop->get('/deposits/settings', [DepositsController::class, 'show']);
         $shop->put('/deposits/settings', [DepositsController::class, 'update']);
         $shop->post('/deposits/settings/key', [DepositsController::class, 'rotate']);
+        $shop->put('/deposits/settings/rikhtam', [DepositsController::class, 'connectRikhtam']);
+        $shop->post('/deposits/settings/rikhtam/hook', [DepositsController::class, 'hookRikhtam']);
+        $shop->delete('/deposits/settings/rikhtam', [DepositsController::class, 'disconnectRikhtam']);
         $shop->get('/payment-methods', [PaymentMethodsController::class, 'index']);
         $shop->get('/payment-methods/drivers', [PaymentMethodsController::class, 'drivers']);
         $shop->post('/payment-methods', [PaymentMethodsController::class, 'store']);
@@ -242,6 +251,8 @@ return static function (App $app): void {
         $shop->put('/payment-methods/{id:[0-9]+}', [PaymentMethodsController::class, 'update']);
         $shop->patch('/payment-methods/{id:[0-9]+}', [PaymentMethodsController::class, 'patch']);
         $shop->delete('/payment-methods/{id:[0-9]+}', [PaymentMethodsController::class, 'destroy']);
+        $shop->get('/payment-methods/{id:[0-9]+}/webhook', [PaymentMethodsController::class, 'webhook']);
+        $shop->post('/payment-methods/{id:[0-9]+}/webhook', [PaymentMethodsController::class, 'hook']);
 
         $shop->get('/bot/settings', [BotSettingsController::class, 'index']);
         $shop->put('/bot/settings/{group:[a-z_]+}', [BotSettingsController::class, 'update']);
@@ -334,132 +345,167 @@ return static function (App $app): void {
         $shop->get('/lottery/draws', [LotteryController::class, 'draws']);
     };
 
+    // The installation's own state, beside the dashboard of whichever shop is open — an agent is not told it —, how every
+    // bot gets its updates: on webhooks, or polling (each bot switched in its own shop), and AmoBot's own update to a
+    // newer release, a step a request.
+    $system = static function (RouteCollectorProxy $owner): void {
+        $owner->get('/system', SystemController::class);
+        $owner->post('/system/webhook', [BotWebhooksController::class, 'enable']);
+        $owner->delete('/system/webhook', [BotWebhooksController::class, 'disable']);
+        $owner->get('/system/update', [UpdateController::class, 'show']);
+        $owner->post('/system/update/check', [UpdateController::class, 'check']);
+        $owner->post('/system/update/start', [UpdateController::class, 'start']);
+        $owner->post('/system/update/step', [UpdateController::class, 'step']);
+        $owner->post('/system/update/cancel', [UpdateController::class, 'cancel']);
+        $owner->post('/system/update/rollback', [UpdateController::class, 'rollback']);
+    };
+
+    // The sections that are the shop's as a whole: its servers, their grants, the moves of their services and the
+    // mass gifts, across every bot's services…
+    $everywhere = static function (RouteCollectorProxy $owner): void {
+        $owner->get('/servers/drivers', [ServersController::class, 'drivers']);
+        $owner->get('/servers', [ServersController::class, 'index']);
+        $owner->post('/servers', [ServersController::class, 'store']);
+        $owner->post('/servers/test', [ServersController::class, 'test']);
+        $owner->get('/servers/{id:[0-9]+}', [ServersController::class, 'show']);
+        $owner->put('/servers/{id:[0-9]+}', [ServersController::class, 'update']);
+        $owner->delete('/servers/{id:[0-9]+}', [ServersController::class, 'destroy']);
+        $owner->post('/servers/{id:[0-9]+}/test', [ServersController::class, 'check']);
+        $owner->post('/servers/{id:[0-9]+}/inbounds/sync', [ServersController::class, 'syncInbounds']);
+        $owner->patch('/servers/{id:[0-9]+}/inbounds/{inbound:[0-9]+}', [ServersController::class, 'updateInbound']);
+        $owner->get('/servers/{id:[0-9]+}/test-account', [TestAccountsController::class, 'show']);
+        $owner->put('/servers/{id:[0-9]+}/test-account', [TestAccountsController::class, 'update']);
+        $owner->get('/servers/{id:[0-9]+}/grants', [ServerGrantsController::class, 'index']);
+        $owner->post('/servers/{id:[0-9]+}/grants', [ServerGrantsController::class, 'store']);
+        $owner->post('/servers/{id:[0-9]+}/grants/{grant:[0-9]+}/run', [ServerGrantsController::class, 'run']);
+        $owner->post('/servers/{id:[0-9]+}/grants/{grant:[0-9]+}/cancel', [ServerGrantsController::class, 'cancel']);
+        $owner->get('/servers/{id:[0-9]+}/migrations', [ServerMigrationsController::class, 'index']);
+        $owner->post('/servers/{id:[0-9]+}/migrations/preview', [ServerMigrationsController::class, 'preview']);
+        $owner->post('/servers/{id:[0-9]+}/migrations', [ServerMigrationsController::class, 'store']);
+        $owner->get('/servers/{id:[0-9]+}/migrations/{migration:[0-9]+}', [ServerMigrationsController::class, 'show']);
+        $owner->post('/servers/{id:[0-9]+}/migrations/{migration:[0-9]+}/run', [ServerMigrationsController::class, 'run']);
+        $owner->post('/servers/{id:[0-9]+}/migrations/{migration:[0-9]+}/pause', [ServerMigrationsController::class, 'pause']);
+        $owner->post('/servers/{id:[0-9]+}/migrations/{migration:[0-9]+}/resume', [ServerMigrationsController::class, 'resume']);
+        $owner->post('/servers/{id:[0-9]+}/migrations/{migration:[0-9]+}/cancel', [ServerMigrationsController::class, 'cancel']);
+        $owner->post('/servers/{id:[0-9]+}/migrations/{migration:[0-9]+}/rescue', [ServerMigrationsController::class, 'rescue']);
+        $owner->post('/servers/{id:[0-9]+}/leftovers/clean', [ServerMigrationsController::class, 'clean']);
+        $owner->delete('/servers/{id:[0-9]+}/leftovers', [ServerMigrationsController::class, 'forget']);
+
+        $owner->get('/mass-grants', [MassGrantsController::class, 'index']);
+        $owner->post('/mass-grants', [MassGrantsController::class, 'store']);
+        $owner->post('/mass-grants/{id:[0-9]+}/run', [MassGrantsController::class, 'run']);
+        $owner->post('/mass-grants/{id:[0-9]+}/cancel', [MassGrantsController::class, 'cancel']);
+    };
+
+    // …and the agency, the panel's settings and the imports from another bot, in the main bot's shop (the agents are
+    // its customers; what an import brings is its).
+    $main = static function (RouteCollectorProxy $owner): void {
+        $owner->get('/agency', [AgencyController::class, 'summary']);
+        $owner->get('/agency/settings', [AgencySettingsController::class, 'show']);
+        $owner->put('/agency/settings', [AgencySettingsController::class, 'update']);
+        $owner->get('/agency/requests', [AgencyController::class, 'requests']);
+        $owner->post('/agency/requests/{id:[0-9]+}/approve', [AgencyController::class, 'approve']);
+        $owner->post('/agency/requests/{id:[0-9]+}/reject', [AgencyController::class, 'reject']);
+        $owner->get('/agency/agents', [AgencyController::class, 'agents']);
+        $owner->put('/agency/agents/{id:[0-9]+}', [AgencyController::class, 'update']);
+        $owner->post('/agency/agents/{id:[0-9]+}/revoke', [AgencyController::class, 'revoke']);
+        $owner->get('/agency/agents/{id:[0-9]+}/traffic', [AgencyController::class, 'traffic']);
+        $owner->post('/agency/agents/{id:[0-9]+}/traffic', [AgencyController::class, 'adjustTraffic']);
+        $owner->post('/agency/agents/{id:[0-9]+}/suspend', [AgencyController::class, 'suspend']);
+        $owner->post('/agency/agents/{id:[0-9]+}/resume', [AgencyController::class, 'resume']);
+        $owner->get('/agency/agents/{id:[0-9]+}/hidden', [AgencyController::class, 'hidden']);
+        $owner->put('/agency/agents/{id:[0-9]+}/hidden', [AgencyController::class, 'hide']);
+        $owner->get('/agency/levels', [AgencyLevelsController::class, 'index']);
+        $owner->post('/agency/levels', [AgencyLevelsController::class, 'store']);
+        $owner->post('/agency/levels/reorder', [AgencyLevelsController::class, 'reorder']);
+        $owner->put('/agency/levels/{id:[0-9]+}', [AgencyLevelsController::class, 'update']);
+        $owner->delete('/agency/levels/{id:[0-9]+}', [AgencyLevelsController::class, 'destroy']);
+
+        $owner->get('/schedule', [ScheduleController::class, 'show']);
+        $owner->put('/schedule', [ScheduleController::class, 'update']);
+        $owner->get('/settings/config', [ConfigSettingsController::class, 'index']);
+        $owner->get('/settings/config/cron-url', [ConfigSettingsController::class, 'cronUrl']);
+        $owner->post('/settings/config/telegram/test', [ConfigSettingsController::class, 'testTelegram']);
+        $owner->post('/settings/config/database/test', [ConfigSettingsController::class, 'testDatabase']);
+        $owner->post('/settings/config/mail/test', [ConfigSettingsController::class, 'testMail']);
+        $owner->post('/settings/config/sms/test', [ConfigSettingsController::class, 'testSms']);
+        $owner->get('/settings/config/sms/credit', [ConfigSettingsController::class, 'smsCredit']);
+        $owner->put('/settings/config/{group:app|database|telegram|mail|sms|advanced}', [ConfigSettingsController::class, 'update']);
+        $owner->get('/settings/owner-telegram', [OwnerTelegramController::class, 'index']);
+        $owner->post('/settings/owner-telegram/link', [OwnerTelegramController::class, 'link']);
+        $owner->delete('/settings/owner-telegram/{telegram_id:[0-9]+}', [OwnerTelegramController::class, 'unlink']);
+
+        $owner->get('/imports', [ImportsController::class, 'index']);
+        $owner->post('/imports', [ImportsController::class, 'store']);
+        $owner->post('/imports/database', [ImportsController::class, 'database']);
+        $owner->get('/imports/{id:[0-9]+}', [ImportsController::class, 'show']);
+        $owner->delete('/imports/{id:[0-9]+}', [ImportsController::class, 'destroy']);
+        $owner->post('/imports/{id:[0-9]+}/continue', [ImportsController::class, 'step']);
+        $owner->put('/imports/{id:[0-9]+}/choices', [ImportsController::class, 'choose']);
+        $owner->post('/imports/{id:[0-9]+}/start', [ImportsController::class, 'start']);
+        $owner->get('/imports/{id:[0-9]+}/problems', [ImportsController::class, 'problems']);
+    };
+
+    // An agent's own account: their agency's terms and their traffic.
+    $agentAccount = static function (RouteCollectorProxy $agent): void {
+        $agent->get('/account', [AccountController::class, 'show']);
+        $agent->get('/account/traffic', [AccountController::class, 'traffic']);
+    };
+
     // The owner's panel: config.php's login (or its recovery by a key off the host's files), each request in the shop
     // it names.
-    $app->group('/api/admin', function (RouteCollectorProxy $api) use ($operations, $configuration): void {
+    $app->group('/api/admin', function (RouteCollectorProxy $api) use ($operations, $configuration, $system, $everywhere, $main): void {
         $api->post('/auth/login', [OwnerAuthController::class, 'login']);
         $api->post('/auth/recovery/key', [OwnerAuthController::class, 'recoveryKey']);
         $api->post('/auth/recovery', [OwnerAuthController::class, 'recover']);
 
-        $api->group('', function (RouteCollectorProxy $panel) use ($operations, $configuration): void {
+        $api->group('', function (RouteCollectorProxy $panel) use ($operations, $configuration, $system, $everywhere, $main): void {
             $panel->get('/auth/me', [OwnerAuthController::class, 'me']);
             $panel->post('/auth/logout', [OwnerAuthController::class, 'logout']);
             $panel->put('/auth/credentials', [OwnerAuthController::class, 'credentials']);
             $panel->get('/shops', [OwnerAuthController::class, 'shops']);
             $operations($panel);
             $configuration($panel);
-            // The installation's own state, beside the dashboard of whichever shop is open — an agent is not told it —, how
-            // every bot gets its updates: on webhooks, or polling (each bot switched in its own shop), and AmoBot's own
-            // update to a newer release, a step a request.
-            $panel->get('/system', SystemController::class);
-            $panel->post('/system/webhook', [BotWebhooksController::class, 'enable']);
-            $panel->delete('/system/webhook', [BotWebhooksController::class, 'disable']);
-            $panel->get('/system/update', [UpdateController::class, 'show']);
-            $panel->post('/system/update/check', [UpdateController::class, 'check']);
-            $panel->post('/system/update/start', [UpdateController::class, 'start']);
-            $panel->post('/system/update/step', [UpdateController::class, 'step']);
-            $panel->post('/system/update/cancel', [UpdateController::class, 'cancel']);
-            $panel->post('/system/update/rollback', [UpdateController::class, 'rollback']);
-
-            // The sections that are the shop's as a whole: its servers, their grants, the moves of their services and the
-            // mass gifts, across every bot's services…
-            $panel->group('', function (RouteCollectorProxy $owner): void {
-                $owner->get('/servers/drivers', [ServersController::class, 'drivers']);
-                $owner->get('/servers', [ServersController::class, 'index']);
-                $owner->post('/servers', [ServersController::class, 'store']);
-                $owner->post('/servers/test', [ServersController::class, 'test']);
-                $owner->get('/servers/{id:[0-9]+}', [ServersController::class, 'show']);
-                $owner->put('/servers/{id:[0-9]+}', [ServersController::class, 'update']);
-                $owner->delete('/servers/{id:[0-9]+}', [ServersController::class, 'destroy']);
-                $owner->post('/servers/{id:[0-9]+}/test', [ServersController::class, 'check']);
-                $owner->post('/servers/{id:[0-9]+}/inbounds/sync', [ServersController::class, 'syncInbounds']);
-                $owner->patch('/servers/{id:[0-9]+}/inbounds/{inbound:[0-9]+}', [ServersController::class, 'updateInbound']);
-                $owner->get('/servers/{id:[0-9]+}/test-account', [TestAccountsController::class, 'show']);
-                $owner->put('/servers/{id:[0-9]+}/test-account', [TestAccountsController::class, 'update']);
-                $owner->get('/servers/{id:[0-9]+}/grants', [ServerGrantsController::class, 'index']);
-                $owner->post('/servers/{id:[0-9]+}/grants', [ServerGrantsController::class, 'store']);
-                $owner->post('/servers/{id:[0-9]+}/grants/{grant:[0-9]+}/run', [ServerGrantsController::class, 'run']);
-                $owner->post('/servers/{id:[0-9]+}/grants/{grant:[0-9]+}/cancel', [ServerGrantsController::class, 'cancel']);
-                $owner->get('/servers/{id:[0-9]+}/migrations', [ServerMigrationsController::class, 'index']);
-                $owner->post('/servers/{id:[0-9]+}/migrations/preview', [ServerMigrationsController::class, 'preview']);
-                $owner->post('/servers/{id:[0-9]+}/migrations', [ServerMigrationsController::class, 'store']);
-                $owner->get('/servers/{id:[0-9]+}/migrations/{migration:[0-9]+}', [ServerMigrationsController::class, 'show']);
-                $owner->post('/servers/{id:[0-9]+}/migrations/{migration:[0-9]+}/run', [ServerMigrationsController::class, 'run']);
-                $owner->post('/servers/{id:[0-9]+}/migrations/{migration:[0-9]+}/pause', [ServerMigrationsController::class, 'pause']);
-                $owner->post('/servers/{id:[0-9]+}/migrations/{migration:[0-9]+}/resume', [ServerMigrationsController::class, 'resume']);
-                $owner->post('/servers/{id:[0-9]+}/migrations/{migration:[0-9]+}/cancel', [ServerMigrationsController::class, 'cancel']);
-                $owner->post('/servers/{id:[0-9]+}/migrations/{migration:[0-9]+}/rescue', [ServerMigrationsController::class, 'rescue']);
-                $owner->post('/servers/{id:[0-9]+}/leftovers/clean', [ServerMigrationsController::class, 'clean']);
-                $owner->delete('/servers/{id:[0-9]+}/leftovers', [ServerMigrationsController::class, 'forget']);
-
-                $owner->get('/mass-grants', [MassGrantsController::class, 'index']);
-                $owner->post('/mass-grants', [MassGrantsController::class, 'store']);
-                $owner->post('/mass-grants/{id:[0-9]+}/run', [MassGrantsController::class, 'run']);
-                $owner->post('/mass-grants/{id:[0-9]+}/cancel', [MassGrantsController::class, 'cancel']);
-            })->add('shop.everywhere');
-
-            // …and the agency, the panel's settings and the imports from another bot, in the main bot's shop (the agents are
-            // its customers; what an import brings is its).
-            $panel->group('', function (RouteCollectorProxy $owner): void {
-                $owner->get('/agency', [AgencyController::class, 'summary']);
-                $owner->get('/agency/settings', [AgencySettingsController::class, 'show']);
-                $owner->put('/agency/settings', [AgencySettingsController::class, 'update']);
-                $owner->get('/agency/requests', [AgencyController::class, 'requests']);
-                $owner->post('/agency/requests/{id:[0-9]+}/approve', [AgencyController::class, 'approve']);
-                $owner->post('/agency/requests/{id:[0-9]+}/reject', [AgencyController::class, 'reject']);
-                $owner->get('/agency/agents', [AgencyController::class, 'agents']);
-                $owner->put('/agency/agents/{id:[0-9]+}', [AgencyController::class, 'update']);
-                $owner->post('/agency/agents/{id:[0-9]+}/revoke', [AgencyController::class, 'revoke']);
-                $owner->get('/agency/agents/{id:[0-9]+}/traffic', [AgencyController::class, 'traffic']);
-                $owner->post('/agency/agents/{id:[0-9]+}/traffic', [AgencyController::class, 'adjustTraffic']);
-                $owner->post('/agency/agents/{id:[0-9]+}/suspend', [AgencyController::class, 'suspend']);
-                $owner->post('/agency/agents/{id:[0-9]+}/resume', [AgencyController::class, 'resume']);
-                $owner->get('/agency/agents/{id:[0-9]+}/hidden', [AgencyController::class, 'hidden']);
-                $owner->put('/agency/agents/{id:[0-9]+}/hidden', [AgencyController::class, 'hide']);
-                $owner->get('/agency/levels', [AgencyLevelsController::class, 'index']);
-                $owner->post('/agency/levels', [AgencyLevelsController::class, 'store']);
-                $owner->post('/agency/levels/reorder', [AgencyLevelsController::class, 'reorder']);
-                $owner->put('/agency/levels/{id:[0-9]+}', [AgencyLevelsController::class, 'update']);
-                $owner->delete('/agency/levels/{id:[0-9]+}', [AgencyLevelsController::class, 'destroy']);
-
-                $owner->get('/schedule', [ScheduleController::class, 'show']);
-                $owner->put('/schedule', [ScheduleController::class, 'update']);
-                $owner->get('/settings/config', [ConfigSettingsController::class, 'index']);
-                $owner->get('/settings/config/cron-url', [ConfigSettingsController::class, 'cronUrl']);
-                $owner->post('/settings/config/telegram/test', [ConfigSettingsController::class, 'testTelegram']);
-                $owner->post('/settings/config/database/test', [ConfigSettingsController::class, 'testDatabase']);
-                $owner->post('/settings/config/mail/test', [ConfigSettingsController::class, 'testMail']);
-                $owner->post('/settings/config/sms/test', [ConfigSettingsController::class, 'testSms']);
-                $owner->get('/settings/config/sms/credit', [ConfigSettingsController::class, 'smsCredit']);
-                $owner->put('/settings/config/{group:app|database|telegram|mail|sms|advanced}', [ConfigSettingsController::class, 'update']);
-
-                $owner->get('/imports', [ImportsController::class, 'index']);
-                $owner->post('/imports', [ImportsController::class, 'store']);
-                $owner->post('/imports/database', [ImportsController::class, 'database']);
-                $owner->get('/imports/{id:[0-9]+}', [ImportsController::class, 'show']);
-                $owner->delete('/imports/{id:[0-9]+}', [ImportsController::class, 'destroy']);
-                $owner->post('/imports/{id:[0-9]+}/continue', [ImportsController::class, 'step']);
-                $owner->put('/imports/{id:[0-9]+}/choices', [ImportsController::class, 'choose']);
-                $owner->post('/imports/{id:[0-9]+}/start', [ImportsController::class, 'start']);
-                $owner->get('/imports/{id:[0-9]+}/problems', [ImportsController::class, 'problems']);
-            })->add('shop.main');
+            $system($panel);
+            $panel->group('', fn(RouteCollectorProxy $owner) => $everywhere($owner))->add('shop.everywhere');
+            $panel->group('', fn(RouteCollectorProxy $owner) => $main($owner))->add('shop.main');
         })->add('panel.admin');
     })->add(SessionMiddleware::class)->add(JsonCsrfMiddleware::class)->add(InstalledMiddleware::class);
 
     // An agent's panel: signed in by the one-time link the main bot gives them, always in their bot's shop.
-    $app->group('/api/agent', function (RouteCollectorProxy $api) use ($operations, $configuration): void {
+    $app->group('/api/agent', function (RouteCollectorProxy $api) use ($operations, $configuration, $agentAccount): void {
         $api->post('/auth/link', [AgentAuthController::class, 'link']);
 
-        $api->group('', function (RouteCollectorProxy $panel) use ($operations, $configuration): void {
+        $api->group('', function (RouteCollectorProxy $panel) use ($operations, $configuration, $agentAccount): void {
             $panel->get('/auth/me', [AgentAuthController::class, 'me']);
             $panel->post('/auth/logout', [AgentAuthController::class, 'logout']);
             $panel->post('/auth/sessions/end', [AgentAuthController::class, 'endSessions']);
-            $panel->get('/account', [AccountController::class, 'show']);
-            $panel->get('/account/traffic', [AccountController::class, 'traffic']);
+            $agentAccount($panel);
             $operations($panel);
             $configuration($panel);
         })->add('panel.agent');
     })->add(SessionMiddleware::class)->add(JsonCsrfMiddleware::class)->add(InstalledMiddleware::class);
+
+    // The shop's management from its bot's private chat (Telegram\Admin): the panels' very routes, run in-process for the
+    // owner's linked Telegram account (owner), the agent in their own bot (agent) and the shop's admins (staff: the daily
+    // work, its grants as the bot's «مدیران ربات» gives them). No session, no cookie, no CSRF header: BotAdminDoor lets a
+    // request in only with the seat the bot put on it in-process — from outside, every path here is a 404.
+    $app->group(BotAdminDoor::PATH, function (RouteCollectorProxy $door) use ($operations, $configuration, $system, $everywhere, $main, $agentAccount): void {
+        $door->group('/owner', function (RouteCollectorProxy $owner) use ($operations, $configuration, $system, $everywhere, $main): void {
+            $owner->get('/shops', [OwnerAuthController::class, 'shops']);
+            $operations($owner);
+            $configuration($owner);
+            $system($owner);
+            $owner->group('', fn(RouteCollectorProxy $group) => $everywhere($group))->add('shop.everywhere');
+            $owner->group('', fn(RouteCollectorProxy $group) => $main($group))->add('shop.main');
+        });
+        $door->group('/agent', function (RouteCollectorProxy $agent) use ($operations, $configuration, $agentAccount): void {
+            $agentAccount($agent);
+            $operations($agent);
+            $configuration($agent);
+        });
+        $door->group('/staff', fn(RouteCollectorProxy $staff) => $operations($staff));
+    })->add(BotAdminDoor::class);
 
     // The Store API: the store key names a shop's website or its Telegram mini app (each has a key of its own), and the
     // request runs in that shop. Customers use bearer tokens — no cookie, so no CSRF header — and bodies are JSON (a form

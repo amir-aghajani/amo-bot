@@ -14,6 +14,7 @@ use App\Modules\Orders\Enums\OrderStatus;
 use App\Modules\Orders\Exceptions\OrderNotPayableException;
 use App\Modules\Orders\Services\OrderActions;
 use App\Modules\Payments\Contracts\RefundedOrders;
+use App\Modules\Payments\Deposits\Services\DepositSettings;
 use App\Modules\Payments\Enums\CancelOutcome;
 use App\Modules\Payments\Enums\GatewayKind;
 use App\Modules\Payments\Enums\OnlineState;
@@ -50,6 +51,7 @@ final class PaymentActions
         private readonly RefundedOrders $refunded,
         private readonly OnlinePayments $online,
         private readonly ReferralService $referrals,
+        private readonly DepositSettings $deposits,
     ) {}
 
     /**
@@ -61,11 +63,13 @@ final class PaymentActions
      * - retry: the payment that paid an order whose delivery stalled (OrderActions::stalled());
      * - refund: a paid payment whose order's delivery is not under way;
      * - check: an online payment opened on its gateway and not paid — waiting, its page closed, or cancelled —, whose
-     *   gateway may have taken the money all the same (check()); never one held for support (OnlinePayments::isHeld()).
+     *   gateway may have taken the money all the same (check()); never one held for support (OnlinePayments::isHeld());
+     * - rikhtam: attach a deposit Rikhtam holds to it (Deposits\Services\RikhtamDeposits) — one it may approve, in a shop
+     *   whose Rikhtam is connected.
      * One that went to the wallet once its order had closed (Payment::wentToWallet()) paid nothing of the order: its
      * money is the customer's, nothing to retry or refund.
      *
-     * @return array{approve: bool, reject: bool, cancel: bool, remind: bool, retry: bool, refund: bool, check: bool}
+     * @return array{approve: bool, reject: bool, cancel: bool, remind: bool, retry: bool, refund: bool, check: bool, rikhtam: bool}
      */
     public function allowed(Payment $payment): array
     {
@@ -74,9 +78,10 @@ final class PaymentActions
         $card = $this->gateways->isManual($payment->method);
         $unpaid = $payment->status->isOpen();
         $paid = $payment->isPaid() && !$payment->wentToWallet();
+        $approve = $card && $unpaid && $orderOpen;
 
         return [
-            'approve' => $card && $unpaid && $orderOpen,
+            'approve' => $approve,
             'reject' => $payment->status === PaymentStatus::AwaitingReview,
             'cancel' => $unpaid,
             'remind' => $card && in_array($payment->status, [PaymentStatus::Pending, PaymentStatus::Failed], true) && $orderOpen,
@@ -84,6 +89,7 @@ final class PaymentActions
             'refund' => $paid && in_array($order->status, [OrderStatus::Paid, OrderStatus::Failed, OrderStatus::Fulfilled], true),
             'check' => $this->isOnline($payment) && $payment->link !== null && !OnlinePayments::isHeld($payment)
                 && in_array($payment->status, [PaymentStatus::Pending, PaymentStatus::Failed, PaymentStatus::Cancelled], true),
+            'rikhtam' => $approve && $this->deposits->rikhtamConnected(),
         ];
     }
 

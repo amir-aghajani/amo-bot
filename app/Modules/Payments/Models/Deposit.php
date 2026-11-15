@@ -11,18 +11,19 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Carbon;
 
 /**
- * A bank SMS a phone app forwarded to the shop (Services\Deposits), once per its id at the app, and what came of it.
+ * A bank deposit sent to the shop — a phone app's forwarded SMS, Rikhtam's word — (Services\Deposits), once per its id at
+ * its source, and what came of it.
  *
  * @property int $id
  * @property int $bot_id
- * @property string $source The app's key (Contracts\DepositSource): "forapp"
- * @property string $external_id The app's own id for the SMS: a retry sends it again, and finds this row
+ * @property string $source Its source's key (Contracts\DepositSource): "forapp", "rikhtam"
+ * @property string $external_id Its source's own id for it: a retry sends it again, and finds this row
  * @property DepositStatus $status
  * @property int|null $amount_rial The sum the SMS said, in Rial as banks write it; null when none was read
  * @property string|null $bank
  * @property string|null $sender
- * @property string|null $body The SMS as it came, cut to BODY_MAX
- * @property string|null $note Why it approved nothing, as support reads it
+ * @property string|null $body The SMS as it came, cut to BODY_MAX (Rikhtam's, which sends none: a line of what it sent)
+ * @property string|null $note Why it approved nothing — or that it was attached to its payment by hand —, as support reads it
  * @property int|null $payment_id The card payment it approved
  * @property Carbon|null $received_at When the phone got the SMS
  * @property Carbon|null $created_at

@@ -84,11 +84,11 @@ final class AdminPaymentsApiTest extends HttpTestCase
         self::assertNotNull($row['receipt']['sent_at']);
         self::assertNull($row['reviewer']);
         self::assertSame('6037 •••• •••• 1119 · AmoBot', $row['summary'], 'the card the customer was told to pay to, and whose it is');
-        self::assertSame(['approve' => true, 'reject' => true, 'cancel' => true, 'remind' => false, 'retry' => false, 'refund' => false, 'check' => false], $row['actions']);
+        self::assertSame(['approve' => true, 'reject' => true, 'cancel' => true, 'remind' => false, 'retry' => false, 'refund' => false, 'check' => false, 'rikhtam' => false], $row['actions']);
 
         $wallet = $data['payments'][0];
         self::assertSame(['instant', null, null], [$wallet['kind'], $wallet['summary'], $wallet['receipt']], 'the wallet has no card to show, and no receipt');
-        self::assertSame(['approve' => false, 'reject' => false, 'cancel' => false, 'remind' => false, 'retry' => false, 'refund' => true, 'check' => false], $wallet['actions']);
+        self::assertSame(['approve' => false, 'reject' => false, 'cancel' => false, 'remind' => false, 'retry' => false, 'refund' => true, 'check' => false, 'rikhtam' => false], $wallet['actions']);
 
         $ids = fn(string $query): array => array_column($this->decode($this->get("/api/admin/payments?{$query}"))['payments'], 'id');
         self::assertSame([$waiting->id], $ids('status=awaiting_review'));
@@ -287,7 +287,7 @@ final class AdminPaymentsApiTest extends HttpTestCase
         self::assertSame('واریز کردم', $row['receipt']['note'], "the customer's own note is untouched");
         self::assertSame(self::ADMIN_USERNAME, $row['reviewer']);
         self::assertSame('pending', $row['order']['status'], 'the order can still be paid');
-        self::assertSame(['approve' => true, 'reject' => false, 'cancel' => true, 'remind' => true, 'retry' => false, 'refund' => false, 'check' => false], $row['actions'], 'support may still find the money, drop it or nudge');
+        self::assertSame(['approve' => true, 'reject' => false, 'cancel' => true, 'remind' => true, 'retry' => false, 'refund' => false, 'check' => false, 'rikhtam' => false], $row['actions'], 'support may still find the money, drop it or nudge');
         self::assertSame('0.00', $this->ali->balance());
 
         self::assertSame([self::text(BotText::ReceiptRejected, [
@@ -340,7 +340,7 @@ final class AdminPaymentsApiTest extends HttpTestCase
     public function testAnUnpaidCardPaymentCanBeApprovedByHandRemindedOrCancelled(): void
     {
         $payment = $this->cardPayment($this->topUpOrder($this->ali, '50000.00'), $this->card);
-        self::assertSame(['approve' => true, 'reject' => false, 'cancel' => true, 'remind' => true, 'retry' => false, 'refund' => false, 'check' => false], $this->service(PaymentActions::class)->allowed($payment));
+        self::assertSame(['approve' => true, 'reject' => false, 'cancel' => true, 'remind' => true, 'retry' => false, 'refund' => false, 'check' => false, 'rikhtam' => false], $this->service(PaymentActions::class)->allowed($payment));
 
         // A nudge: send the receipt, or pay again.
         $reminded = $this->postJson("/api/admin/payments/{$payment->id}/remind");
@@ -373,7 +373,7 @@ final class AdminPaymentsApiTest extends HttpTestCase
             'note' => self::text(BotText::AdminNote, ['comment' => 'سفارش تکراری بود']),
         ])], $this->telegram()->sentTo(1001));
         self::assertArrayNotHasKey('reply_markup', $this->telegram()->params(0), 'no keyboard on a verdict');
-        self::assertSame(['approve' => false, 'reject' => false, 'cancel' => false, 'remind' => false, 'retry' => false, 'refund' => false, 'check' => false], $row['actions']);
+        self::assertSame(['approve' => false, 'reject' => false, 'cancel' => false, 'remind' => false, 'retry' => false, 'refund' => false, 'check' => false, 'rikhtam' => false], $row['actions']);
 
         self::assertSame(422, $this->postJson("/api/admin/payments/{$second->id}/remind")->getStatusCode(), 'nothing to remind about');
     }
@@ -624,7 +624,7 @@ final class AdminPaymentsApiTest extends HttpTestCase
         self::assertSame($payment->link_expires_at?->toIso8601String(), $row['link_expires_at']);
         self::assertNotNull($row['link_expires_at']);
         self::assertSame([null, false], [$row['checked_at'], $row['to_wallet']]);
-        self::assertSame(['approve' => false, 'reject' => false, 'cancel' => true, 'remind' => false, 'retry' => false, 'refund' => false, 'check' => true], $row['actions']);
+        self::assertSame(['approve' => false, 'reject' => false, 'cancel' => true, 'remind' => false, 'retry' => false, 'refund' => false, 'check' => true, 'rikhtam' => false], $row['actions']);
 
         $refused = fn(string $action): string => $this->decode($this->postJson("/api/admin/payments/{$payment->id}/{$action}", $action === 'reject' ? [] : null))['errors']['status'][0];
         self::assertSame('پرداخت آنلاین تایید دستی ندارد؛ نتیجه‌اش را درگاه می‌گوید.', $refused('approve'));
@@ -640,7 +640,7 @@ final class AdminPaymentsApiTest extends HttpTestCase
         $this->cubePay()->pay((string) $payment->reference);
         $asked = $this->decode($this->postJson("/api/admin/payments/{$payment->id}/check"));
         self::assertSame(['paid', 'paid', 'fulfilled', null], [$asked['state'], $asked['payment']['status'], $asked['payment']['order']['status'], $asked['payment']['reviewer']], 'settled on its word: nobody approved it');
-        self::assertSame(['approve' => false, 'reject' => false, 'cancel' => false, 'remind' => false, 'retry' => false, 'refund' => true, 'check' => false], $asked['payment']['actions']);
+        self::assertSame(['approve' => false, 'reject' => false, 'cancel' => false, 'remind' => false, 'retry' => false, 'refund' => true, 'check' => false, 'rikhtam' => false], $asked['payment']['actions']);
         self::assertSame($payment->amount, $this->ali->balance(), 'a top-up credits its own amount, not the few Toman the gateway added');
         self::assertSame([self::charged($payment->amount)], $this->telegram()->sentTo(1001), 'told once');
         self::assertSame('این پرداخت انجام شده است.', $refused('check'));
@@ -676,7 +676,7 @@ final class AdminPaymentsApiTest extends HttpTestCase
         self::assertSame([422, PaymentService::NOTE_HELD . '.'], [$response->getStatusCode(), $this->decode($response)['errors']['status'][0] ?? null]);
         $row = $this->decode($this->get("/api/admin/payments/{$payment->id}"))['payment'];
         self::assertSame([true, 'pending', PaymentService::NOTE_HELD], [$row['held'], $row['status'], $row['description']]);
-        self::assertSame(['approve' => false, 'reject' => false, 'cancel' => true, 'remind' => false, 'retry' => false, 'refund' => false, 'check' => false], $row['actions']);
+        self::assertSame(['approve' => false, 'reject' => false, 'cancel' => true, 'remind' => false, 'retry' => false, 'refund' => false, 'check' => false, 'rikhtam' => false], $row['actions']);
         $orders = $this->decode($this->get("/api/admin/orders/{$payment->order_id}"))['order']['payments'];
         self::assertSame([true], array_column($orders, 'held'), 'its order\'s payments say so too');
         $again = $this->postJson("/api/admin/payments/{$payment->id}/check");
@@ -745,7 +745,7 @@ final class AdminPaymentsApiTest extends HttpTestCase
 
         $row = $asked['payment'];
         self::assertSame(['paid', 'paid', true, PaymentService::NOTE_TO_WALLET, 'fulfilled'], [$asked['state'], $row['status'], $row['to_wallet'], $row['description'], $row['order']['status']]);
-        self::assertSame(['approve' => false, 'reject' => false, 'cancel' => false, 'remind' => false, 'retry' => false, 'refund' => false, 'check' => false], $row['actions']);
+        self::assertSame(['approve' => false, 'reject' => false, 'cancel' => false, 'remind' => false, 'retry' => false, 'refund' => false, 'check' => false, 'rikhtam' => false], $row['actions']);
         $balance = Money::add('50000.00', $payment->amount);
         self::assertSame($balance, $this->ali->balance(), 'the top-up once, and the late payment beside it');
         self::assertSame(WalletService::describeLatePayment($payment), WalletTransaction::query()->where('user_id', $this->ali->id)->latest('id')->value('description'));

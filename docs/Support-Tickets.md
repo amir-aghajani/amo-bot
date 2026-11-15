@@ -5,7 +5,8 @@
 «پشتیبانی», in both panels, right under the dashboard: the customers' support conversations. A ticket is a subject, the
 service it is about (or none), and messages — words, each with at most one picture. Customers open them in the bot
 («☎️ پشتیبانی» › «📨 تیکت جدید», or a service's «⚠️ ارسال گزارش اختلال»), in the shop's [mini app](Mini-App.md) or on its
-website; you answer from either panel or from the report group.
+website; you answer from either panel, from the report group or from the bot's management
+([Managing the shop from the bot](Bot-Management.md)).
 
 | Status | Means |
 |---|---|
@@ -28,7 +29,8 @@ and «پاسخ» on one waiting for you («مشاهده» on the rest).
 The subject and status, «تیکت #12 · باز شده در …» (and since when it is closed), the customer, the service — a link to
 it —, the customer's rating (one to five stars) and note; then the conversation, oldest first: the customer's at the
 start, support's at the end, each with where it was written — «وب‌سایت», «ربات», «پنل», «مدیریت وب‌سایت» (a bot admin on
-the shop's website), «گروه گزارش‌ها» — and, for support's, who wrote it (below).
+the shop's website), «گروه گزارش‌ها», «مدیریت ربات» (the bot's «⚙️ مدیریت», whoever wrote there) — and, for support's,
+who wrote it (below).
 A picture opens at full size («دانلود تصویر» for one the browser cannot draw, a phone's HEIC sent as a file).
 
 **«پاسخ به مشتری»**: «متن پاسخ» (4000 characters at most) and, optionally, one picture — JPG, PNG or WebP, 10 MB at most
@@ -47,16 +49,17 @@ The page's one button follows the status:
   ticket asks first: opening it clears the rating (they may rate it again when it closes).
 
 **Who of support wrote** shows to the panel's reader beside «پشتیبانی»: your login, an agent's «@bot», or a bot admin —
-from the group or the website — by the first and last name of their account («پشتیبانی · سارا احمدی»), else by their
-handle or number. Anyone but you reads your login as «پشتیبانی» alone; the customer never sees who — every answer is
+from the group, the website or the bot's management — by the first and last name of their account («پشتیبانی · سارا
+احمدی»), else by their handle or number. Anyone but you reads your login as «پشتیبانی» alone; the customer never sees who — every answer is
 «🎧 پشتیبانی» to them. The bot's admins may answer, close and open tickets from the shop's website too, while it lets
-them in ([Website](Website.md#the-shops-admins)).
+them in ([Website](Website.md#the-shops-admins)), and from the bot's private chat — «⚙️ مدیریت › 🎧 پشتیبانی», words or a
+picture with its caption —, while «مدیران ربات» lets them in; you and an agent do too, from your own Telegram accounts.
 
 ## Read ticks
 
 The [mini app](Mini-App.md) shows each of the customer's messages with one tick once it is sent and two once support has
 read it; the shop's website may show the same. **Support has read a message** once the ticket's page is opened after it
-was written — in either panel, or by a bot admin on the website —, or once the ticket is answered after it, from
+was written — in either panel, by a bot admin on the website, or in the bot's management —, or once the ticket is answered after it, from
 anywhere: a reply in the report group too. A report reaching the group is no reading. The customer is never told of a
 reading: only the ticks change.
 
@@ -64,8 +67,8 @@ reading: only the ticks change.
 
 The group's «تیکت‌ها» topic hears every ticket, while a group is connected and the topic is on: a new one with its
 first message — a picture uploaded on the website or a panel as its photo; one sent in the bot is only mentioned —, then
-each later message (the customer's, or an answer from a panel), its closing, opening again and rating, each a reply under
-the one before. While the ticket is open, the latest carries **«🔒 بستن تیکت»**, which closes it as the panel does.
+each later message (the customer's, or an answer from a panel, the website or the bot's management — «از مدیریت
+ربات»), its closing, opening again and rating, each a reply under the one before. While the ticket is open, the latest carries **«🔒 بستن تیکت»**, which closes it as the panel does.
 
 **A bot admin's reply to any of a ticket's reports is the answer**, sent to the customer: words, or a photo with a
 caption. The bot says under it «✅ پاسخ برای مشتری فرستاده شد.», or why not — not a bot admin, written anonymously

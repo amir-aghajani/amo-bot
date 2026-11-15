@@ -7,6 +7,9 @@ namespace App\Modules\Telegram\Handlers;
 use App\Core\Exceptions\ValidationException;
 use App\Modules\Bots\CurrentBot;
 use App\Modules\Providers\Models\Server;
+use App\Modules\Telegram\Admin\AdminSeats;
+use App\Modules\Telegram\Api\TelegramApiException;
+use App\Modules\Telegram\Api\TelegramUnreachableException;
 use App\Modules\Telegram\Broadcasts\Audience;
 use App\Modules\Telegram\Broadcasts\BroadcastControl;
 use App\Modules\Telegram\Broadcasts\BroadcastMode;
@@ -20,12 +23,15 @@ use App\Modules\Telegram\Models\Broadcast;
 use App\Modules\Telegram\Texts\BotText;
 use App\Modules\Telegram\Texts\BotTexts;
 use App\Modules\Telegram\Update\CallbackData;
+use App\Modules\Telegram\Update\Dispatcher;
 use App\Modules\Users\Models\CustomerGroup;
 use App\Modules\Users\Services\CustomerGroups;
 use App\Support\Persian;
 
 /**
- * /broadcast (bot admins only): the admin sends any message, and the bot answers with a draft card kept in the session:
+ * /broadcast (the bot's admins and whoever manages the shop from it — AdminSeats —; anyone else gets no answer, and a
+ * message of theirs at its step is one at no step), or «➕ پیام همگانی تازه» in the management's «📣 ارسال همگانی»
+ * (compose()): the admin sends any message, and the bot answers with a draft card kept in the session:
  *   broadcast:mode            copy (from the bot, with link buttons) or forward (from its first sender)
  *   broadcast:aud[:key[:id]]  the audience (Broadcasts\Audience), each option with its size (a group's or a server's
  *                             list paged: broadcast:aud:{key}:p:{page})
@@ -48,6 +54,10 @@ final class BroadcastHandler implements Handler
     private const DRAFT = 'broadcast.draft';
     private const BUTTONS = 'broadcast.buttons';
 
+    /** The management's window the message was asked from, and its way back (compose()), as the step keeps them. */
+    private const WINDOW = 'broadcast_window';
+    private const BACK = 'broadcast_back';
+
     /** The draft, as the session keeps it. */
     private const KEY = 'broadcast';
 
@@ -62,6 +72,8 @@ final class BroadcastHandler implements Handler
         private readonly CustomerGroups $groups,
         private readonly BotTexts $texts,
         private readonly Buttons $buttons,
+        private readonly AdminSeats $seats,
+        private readonly Dispatcher $dispatcher,
     ) {}
 
     /** A run's control on its progress message: `broadcast:<pause|resume|cancel|unpin>:<id>`. */
@@ -73,6 +85,15 @@ final class BroadcastHandler implements Handler
     public function handle(Context $ctx): void
     {
         $update = $ctx->update;
+        if (!$ctx->isAdmin() && $this->seats->of($ctx->user) === null) {
+            // As if there were no such command or button; a message at its step (left by one who manages no more) is one
+            // at no step.
+            if (!$update->isCommand() && !$update->isCallback()) {
+                $this->dispatcher->atNoStep($ctx);
+            }
+
+            return;
+        }
         if ($update->isCommand()) {
             $this->begin($ctx);
 
@@ -117,8 +138,18 @@ final class BroadcastHandler implements Handler
 
     private function begin(Context $ctx): void
     {
-        $ctx->session->enter(self::COMPOSE);
+        $this->compose($ctx);
         $ctx->reply(Messages::BROADCAST_ASK, ['reply_markup' => InlineKeyboard::make()->row($this->dropButton())->build()]);
+    }
+
+    /**
+     * The chat waits for the message to broadcast — asked by whoever calls (/broadcast, the management's screen). Asked
+     * from the management's window `$window`, that window's «✖️ انصراف» becomes the way back (`$back`, its button's data)
+     * once the message is in.
+     */
+    public function compose(Context $ctx, ?int $window = null, ?string $back = null): void
+    {
+        $ctx->session->enter(self::COMPOSE, $window !== null && $back !== null ? [self::WINDOW => $window, self::BACK => $back] : []);
     }
 
     /** The admin sent the message to broadcast (or a new one in place of the draft's, keeping its settings): a fresh card. */
@@ -134,6 +165,11 @@ final class BroadcastHandler implements Handler
 
         $text = $message['text'] ?? $message['caption'] ?? null;
         $previous = $this->draft($ctx);
+        $window = $ctx->session->get(self::WINDOW);
+        $back = $ctx->session->get(self::BACK);
+        if (is_int($window) && is_string($back)) {
+            self::draftedIn($ctx, $window, $back);
+        }
 
         $this->freshCard($ctx, [
             'message_id' => $messageId,
@@ -456,6 +492,21 @@ final class BroadcastHandler implements Handler
         ]));
 
         return [$text, $keyboard->build()];
+    }
+
+    /**
+     * The management's window the message was asked from, the message in: a word that the draft is below and
+     * «⚙️ بازگشت به مدیریت» in place of «✖️ انصراف» (best effort: one too old to edit stays as it was).
+     */
+    private static function draftedIn(Context $ctx, int $window, string $back): void
+    {
+        try {
+            $ctx->api->editMessageText($ctx->chatId(), $window, "<b>📣 پیام همگانی تازه</b>\n✅ پیام رسید؛ پیش‌نویس زیر همین پیام است: مخاطب، کپی یا فوروارد، پین و دکمه‌ها را همان‌جا انتخاب و ارسال کنید.\n\n<i>بازگشت به مدیریت پیش‌نویسی را که هنوز ارسال نشده کنار می‌گذارد.</i>", [
+                'reply_markup' => ['inline_keyboard' => [[['text' => '⚙️ بازگشت به مدیریت', 'callback_data' => $back]]]],
+            ]);
+        } catch (TelegramApiException | TelegramUnreachableException) {
+            // The window is gone or past editing: the draft card below says it all.
+        }
     }
 
     /** @return array<string, mixed> «❌ انصراف»: the draft dropped. */

@@ -31,8 +31,9 @@ final class LayersTest extends TestCase
         'Admin' => ['Accounts', 'Agency', 'Auth', 'Backups', 'Bots', 'Catalog', 'Discounts', 'Imports', 'Orders', 'Payments', 'Providers', 'Referrals', 'Reviews', 'Rewards', 'Settings', 'Store', 'Subscriptions', 'Support', 'Telegram', 'Users'],
         // An agent's shop opens with a wallet of its own (Payments' built-in method); an order's traffic, drawn from the agent's pool (Orders).
         'Agency' => ['Auth', 'Bots', 'Notifications', 'Orders', 'Payments', 'Settings', 'Subscriptions', 'Telegram', 'Users'],
-        // An actor may be a customer — one of the shop's admins —, named by who reads the decision (Users).
-        'Auth' => ['Bots', 'Users'],
+        // An actor may be a customer — one of the shop's admins —, named by who reads the decision (Users). A new panel login
+        // lets go of every Telegram account linked as the owner, as it ends every other session (Telegram's OwnerLinks).
+        'Auth' => ['Bots', 'Telegram', 'Users'],
         // A backup is of a shop (Bots) or of the whole installation, as the panel's principal works in it (Auth); it goes to
         // the shop's report group (Telegram), when it went kept with the shop's settings (Settings).
         'Backups' => ['Auth', 'Bots', 'Settings', 'Telegram'],

@@ -127,16 +127,20 @@ A window trades checking for speed: a fake receipt is approved too. Keep it for 
 
 ## Confirmed by the bank's SMS
 
-The bank texts you every deposit to your card. **ForApp** («فوراپ», [github.com/erfjab/forapp](https://github.com/erfjab/forapp)),
-a free open-source Android app, reads those SMS on the phone that gets them and forwards each to the shop — which then
-approves the card payment it pays, by itself, in seconds: the customer transfers the exact sum and is done, with no
-receipt to send and nobody to wait for. Unlike a review window, nothing is approved that the bank did not say came in.
+The bank texts you every deposit to your card. An app on the phone that gets those SMS reads them and tells the shop of
+each deposit — which then approves the card payment it pays, by itself, in seconds: the customer transfers the exact
+sum and is done, with no receipt to send and nobody to wait for. Unlike a review window, nothing is approved that the
+bank did not say came in. Two apps do it, each its own way in, alone or together: **ForApp** («فوراپ»,
+[github.com/erfjab/forapp](https://github.com/erfjab/forapp)), a free open-source Android app that forwards each SMS to
+the shop, and **Rikhtam** («ریختم», rikhtam.com), a paid service whose app tells Rikhtam and Rikhtam the shop
+([below](#through-rikhtam)).
 
-**Setting it up** — «روش‌های پرداخت» › the card «تایید خودکار واریز»: switch it on and save. The card «اتصال فوراپ» then
+**Setting up ForApp** — «روش‌های پرداخت» › the card «تایید خودکار واریز»: switch it on and save. The card «اتصال فوراپ» then
 shows the steps: download ForApp («دانلود فوراپ») on the phone that receives the bank's SMS and let it read them; add a
 webhook destination; paste the shop's **webhook address** and **API key** from the card (each with «کپی»); send the
-app's test message. The card says when the last test and the last SMS came — «هنوز پیامی نرسیده است.» until then.
-Each shop has its own address and key (an agent's too); «ساخت کلید تازه» makes a new key, and the old one stops
+app's test message. The card says when ForApp's last test and last SMS came — «هنوز پیامی نرسیده است.» until then;
+Rikhtam's deposits do not count there. While ForApp's first message is awaited, the card reads it again every few
+seconds, so the test shows without a reload. Each shop has its own address and key (an agent's too); «ساخت کلید تازه» makes a new key, and the old one stops
 working at once — give the app the new one.
 
 **How a payment is matched** — while it is on, every card-to-card payment (a purchase, a renewal, an extra, a top-up,
@@ -145,9 +149,10 @@ payment of the shop may still be paid at asks: an open one, one whose receipt yo
 one refused, dropped or approved by hand in the last three days (its customer may still transfer the sum shown). The
 customer is told to pay exactly that sum, to the last digit, and that it is confirmed by itself, usually within a
 minute. A method whose «بیشترین مبلغ (تومان)» leaves no room above the price asks the price itself, and its customer is
-asked for the receipt as usual. When an SMS ForApp recognised as a bank's deposit has the sum of exactly one open
-payment — waiting for the transfer, for its receipt to be reviewed, or refused while its order is open — made before the
-SMS came, the payment is approved as support would: the service is delivered and the customer told. The payments list
+asked for the receipt as usual. When a deposit — an SMS ForApp recognised as a bank's deposit, or one Rikhtam reports —
+has the sum of exactly one open payment — waiting for the transfer, for its receipt to be reviewed, or refused while its
+order is open — made before the SMS came, the payment is approved as support would: the service is delivered and the
+customer told. The payments list
 shows «تایید با پیامک بانک» on it, and so does its report in the report group. The few Toman are part of what the
 customer paid: a top-up credits them, and a refund gives back the whole payment.
 
@@ -168,15 +173,94 @@ that came — and what came of it — is listed in «پرداخت‌ها» › �
 A customer's receipt still works as before: one who sent it anyway is approved by the SMS all the same. Only a card
 whose SMS reach the phone is confirmed this way — a payment to another card waits for its receipt as usual.
 
+### Through Rikhtam
+
+Rikhtam's app on your phone reads the bank's deposit SMS and tells Rikhtam, and Rikhtam tells the shop of each deposit
+at the address the shop registered with it. Rikhtam charges a fee for every deposit it confirms (below); ForApp is
+free. The two may run side by side: a transfer both tell approves its payment once, whichever tells it first — the
+other's word only confirms that payment (listed «تایید شده», nothing for support, Rikhtam told it was taken), never
+another payment that asks the same sum since.
+
+**Setting it up** — the card «اتصال ریختم», under «تایید خودکار واریز», shows the steps:
+
+1. In Rikhtam's panel (rikhtam.com), «درگاه‌ها», make a gateway for the shop's domain — the domain of the shop's address
+   («آدرس سایت», `APP_URL`, [Panel settings](Panel-Settings.md#the-app)), which the card names; a subdomain of it is
+   fine — and copy its «کلید امنیتی».
+2. Paste it in «کلید امنیتی درگاه ریختم» and press «اتصال». The shop registers its own address with that gateway
+   (`https://<the shop's address>/webhooks/rikhtam/<the shop's number>`): there is nothing to paste back at Rikhtam.
+   Connecting switches «تایید خودکار واریز» on, if it was off.
+3. In Rikhtam's app, attach the bank account of the cards your customers pay to to this gateway — its account number
+   as the bank's SMS writes it, not the card's number nor its Sheba.
+4. Check the connection with «تست سلامت درگاه», in Rikhtam's panel or its app.
+
+The shop's address must begin with `https://`: Rikhtam sends deposits only to an https address on the gateway's
+domain, and the card says so before asking Rikhtam. Anything Rikhtam refuses is said under the key, and nothing is
+kept: a key that is no gateway's at Rikhtam; a key another shop of this site has connected already — Rikhtam sends a
+gateway's deposits to one address alone, so make each shop a gateway of its own —; an address on another domain than the
+gateway's — make the gateway with the shop's domain, or put the address the refusal names in the gateway's «آدرس
+کال‌بک» at Rikhtam —; an address that is not a public one; Rikhtam not answering just now.
+
+Connected, the card shows the gateway's domain, its number at Rikhtam and since when, and the shop's address there (to
+copy, for reference). «ثبت دوباره آدرس» registers the address again — after the shop's address changed; a refusal says
+why, and when the key was changed or deleted in Rikhtam's panel, points to «تعویض کلید». **«تعویض کلید»** takes the
+gateway's new key while connected: it replaces the old one, and the address is registered again with it (refused, the
+old key stays). «قطع اتصال», asked first, forgets the key: what Rikhtam reports from then on approves nothing, and the
+gateway stays in Rikhtam's panel. Each shop connects its own (an agent too). The same key serves Rikhtam's
+[crypto payments](#rikhtams-crypto-payments).
+
+**How its deposits are matched** — as ForApp's (above): every card payment asks a sum of its own, and a deposit with the
+sum of exactly one open payment approves it, «تایید با پیامک بانک» on it. Rikhtam sends no SMS, only the money that came
+in: «واریزهای پیامکی» shows its sum, the account's last four digits and its time, from «ریختم». **Rikhtam confirms no
+card payment under 10,000 Toman**: set your card methods' «کمترین مبلغ (تومان)» to 10,000 or more.
+
+- A deposit that pays no open payment, or more than one, is told back to Rikhtam as taken by none: Rikhtam offers it to
+  the next gateway on the same bank account, and once none takes it, leaves it to you to attach by hand. The report
+  group hears of it as of ForApp's («💰 واریز بدون پرداخت», «⚠️ واریز با چند پرداخت هم‌مبلغ»).
+- While «تایید خودکار واریز» is off, Rikhtam's deposits approve nothing and are not kept here — Rikhtam keeps them, and
+  one may still be attached by hand.
+- One sent while the shop was out of reach comes again later: Rikhtam tries again a minute, then minutes, then hours
+  apart. The same deposit sent twice counts once.
+
+**Attaching a deposit by hand** — a customer who rounded the sum, or paid before their payment was made, is not
+approved by itself. Attach their deposit to the payment:
+
+- in Rikhtam's app or panel, naming the payment's number (the «#…» the payments screen shows); or
+- here: a card payment waiting for its transfer or its receipt offers **«پیوست واریز ریختم»** in its review («فروش ›
+  پرداخت‌ها») while Rikhtam is connected — the deposits of the last 20 days no payment took (40 at most), the sum closest
+  to the payment's first, each one's difference said («همین مبلغ» on the exact sum); one short of the order's own price
+  is marked «کمتر از مبلغ سفارش» and cannot be picked. Pick one and «پیوست و تایید». It asks for a recent sign-in, as an
+  approval does, and the shop's admins attach only to a payment whose receipt is in review. The bot's management has it
+  as «📎 پیوست واریز ریختم».
+
+Either way Rikhtam sends that deposit to the shop again, named for the payment, and the shop approves the payment as
+support would — even while «تایید خودکار واریز» is off, since you chose the deposit — when it is one of the shop's card
+payments, still open, its order open, and the deposit is at least the order's own price (a customer who left out the
+few Toman is paid all the same). A payment you or the review window approved already is only confirmed by it, as by a
+deposit of its sum that came by itself: nothing is delivered twice. Otherwise nothing is approved, saying why: no card
+payment of that number, one another deposit paid already, one cancelled or expired, or a deposit short of the order's
+price. Rikhtam takes its usual fee for the deposit; the notice says how much. Should Rikhtam's answer be lost, or come
+as a refusal, after the shop did approve the payment with that deposit, the notice says so — approved, Rikhtam unheard
+(its panel may still show the deposit as not attached) —; and an attach that failed or got no answer reads the payment
+again, so the review shows it as it now stands.
+
+**Its fees** — Rikhtam charges for each deposit it confirms, an attached one too, and invoices you once what you owe
+reaches 10,000 Toman; while its fees are unpaid it attaches nothing. Its crypto payments have a fee of their own.
+
+**If it does not work**, check that: the shop's address begins with `https://` and is on the domain the Rikhtam gateway
+was made for; «تست سلامت درگاه» passes (a wrong key fails it); the bank account is attached to this gateway in Rikhtam's
+app, its number as the SMS writes it; «تایید خودکار واریز» is on; after the shop's address changed, «ثبت دوباره آدرس»
+was pressed; and after the gateway's key was changed at Rikhtam, the new one was given with «تعویض کلید».
+
 ## Every online gateway
 
-The online gateways are CubePay, Zarinpal, AtlasPay, AbanGateway, Plisio, AqayePardakht and Variza — each below. The
-customer pays on the gateway's page (or to the card it gives to show), the gateway confirms it, and the order is
-delivered with no receipt and nobody to approve it. What follows holds for each of them.
+The online gateways are CubePay, Zarinpal, AtlasPay, AbanGateway, Plisio, AqayePardakht, Variza, Bluepal, Rialit and
+Rikhtam's crypto payments — each below. The customer pays on the gateway's page (or to the card it gives to show), the
+gateway confirms it, and the order is delivered with no receipt and nobody to approve it. What follows holds for each of
+them.
 
 **Its notes.** The method's form lists the gateway's notes under its fields — when you add the method and when you edit
 it: what the gateway needs of the shop (an address on `https://`, a domain registered with it), how long its page takes
-money, its least and most amount, and, for Variza, the webhook address to give it.
+money, its least and most amount, and, for Variza and Rialit, the webhook address to give it.
 
 **Its secret** — the token, code or key — is kept encrypted and never shown again: a blank field keeps it, a new one
 replaces it, and it is never cleared. One that can no longer be read (the shop's `APP_KEY` changed) reads as none:
@@ -197,7 +281,8 @@ opens; otherwise a new payment opens a new page.
 **The gateway's word, never a call's.** A gateway may call the shop's address the moment it confirms a payment. The shop
 never takes the call as proof: it asks the gateway itself, then delivers the order and tells the customer — once,
 however many times it is told. Calls about one payment make it ask six times a minute at most; a call past that is
-answered with what the shop already knows. The shop also asks:
+answered with what the shop already knows. Rialit's webhook, which nothing signs, and Rikhtam's word that a crypto
+invoice was paid are such calls too: each only names a payment for the shop to ask about. The shop also asks:
 
 - when the customer taps «🔄 بررسی پرداخت» (a website can ask too);
 - when support presses «استعلام از درگاه» on the payments screen;
@@ -235,9 +320,11 @@ checkout. The customer reads «درگاه پرداخت الان در دسترس 
 log says what the gateway said. A gateway that cannot be asked about a payment changes nothing: the customer is told to
 try again a little later («الان نمی‌شود از درگاه پرسید؛ …»), and the scheduler asks again.
 
-**The page a customer comes back to.** Zarinpal, AbanGateway, Plisio, AqayePardakht and Variza send the customer's
-browser back to the shop's address. That visit, too, only makes the shop ask the gateway (or, for Variza, read what its
-webhook said). The browser is shown a small page of what came of it, under the shop's name:
+**The page a customer comes back to.** Zarinpal, AbanGateway, Plisio, AqayePardakht, Variza and Bluepal — and
+Rikhtam's crypto payments, on a shop whose address begins with `https://` — send the customer's browser back to the
+shop's address, by a link or by a form their page posts (Rialit sends no one back: the customer returns to the bot or
+the website themselves). That visit, too, only makes the shop ask the gateway (or, for Variza, read what its webhook said). The browser is shown a small page of
+what came of it, under the shop's name:
 
 - «✅ پرداخت شما تایید شد» — the order paid; or «💰 مبلغ به کیف پول شما اضافه شد» — money that came once its order had
   closed, in their wallet;
@@ -578,6 +665,188 @@ How a payment goes ([every online gateway](#every-online-gateway) has the rest):
 - A key Variza does not take, a card not registered or not active there, no `callback_url` in its profile, or a
   subscription's limit refuses the checkout, the log saying what Variza said.
 
+## Bluepal
+
+«افزودن روش پرداخت» › «بلو پال»: an [online gateway](#every-online-gateway) for Iran's bank cards. The customer goes from
+Bluepal's page to the bank's, pays there with any card, and is sent back to the shop; the order is delivered with no
+receipt and nobody to approve it.
+
+Setting it up:
+
+1. Open an account at bluepal.ir and a gateway in its dashboard. The merchant must be active there — its account
+   verified — before Bluepal opens a payment.
+2. Copy the gateway's merchant id («مرچنت آیدی», `merchant_id`) and its API key (`sk_live_…`) from the dashboard.
+3. Here: «افزودن روش پرداخت» › «بلو پال», a label, the merchant id, the key, and the bounds — the least and most amount
+   you set for the gateway in Bluepal's dashboard (its least is 1,000 Toman by default).
+
+Nothing is copied the other way: the shop gives Bluepal each payment's return address itself, and asks Bluepal what came
+of each payment, so the dashboard's callback and webhook addresses need nothing of the shop's. Two of its settings do
+concern the shop:
+
+- **«دامنه‌های مجاز»** (allowed domains): when filled, the domain of the shop's address («آدرس سایت», `APP_URL`,
+  [Panel settings](Panel-Settings.md#the-app)) must be one of them.
+- **The IP whitelist**: when on, the outgoing IP of the shop's server must be on it — ask your host's support for it.
+
+| Field | What it is |
+|---|---|
+| «نام روش» | What the checkout's button says |
+| «کمترین مبلغ (تومان)» / «بیشترین مبلغ (تومان)» | The amounts it is offered for ([above](#the-least-and-most-amount)) |
+| «مرچنت آیدی (merchant_id)» | The gateway's id in Bluepal's dashboard: Latin letters, digits, `-` and `_` |
+| «کلید API» | The gateway's key in Bluepal's dashboard (`sk_live_…`). To try it out, give the key of the gateway's sandbox — a switch on the gateway in Bluepal's dashboard, with a key of its own: no money moves, but a payment there still delivers its order. The shop cannot tell a sandbox key from a live one, so the list says nothing of it: put the live key back when you are done |
+| «فعال» | Whether the checkout offers it |
+
+How a payment goes ([every online gateway](#every-online-gateway) has the rest):
+
+- «💳 پرداخت» opens Bluepal's page, which leads on to the bank's; it asks the order's own sum. Bluepal's page counts
+  down 10 minutes; the shop keeps it 15, since a customer who paid in its last seconds may still be on the bank's page,
+  or on the way back.
+- The customer's browser comes back to the shop, paid or not. Whatever its address says, that visit only makes the
+  shop ask Bluepal (verify, by the payment's track id — its reference on the payments screen), and the browser is
+  shown [what came of it](#every-online-gateway). A customer who closes the page before coming back loses nothing: the
+  scheduler asks Bluepal too, and so can «🔄 بررسی پرداخت».
+- Paid — now, or verified before — for the amount asked, the order is delivered, once; a payment Bluepal verifies for
+  another amount is [held for you](#a-payment-held-for-you).
+- A failed payment took nothing from the customer: they may try again while its page is open, and once it closed, the
+  payment closes.
+- A missing merchant id, a merchant not active at Bluepal, a wrong or revoked key, or the shop's domain or server not
+  on the gateway's lists refuses the checkout; the log gives Bluepal's result and what it means.
+
+Bluepal is young and writes little down — its developer page says nothing of what its return address carries, nor of
+everything verify answers. The shop reads only what it documents, its results written as numbers or as text alike, and
+believes nothing but verify's word.
+
+## Rialit
+
+«افزودن روش پرداخت» › «ریالیت»: an [online gateway](#every-online-gateway). The customer pays on Rialit's page, Rialit
+confirms it by itself, and the order is delivered with no receipt and nobody to approve it. Rialit may add its fee for
+the customer to pay, as you set in its dashboard.
+
+Setting it up:
+
+1. Open a merchant account at rialit.io and make an API key in its dashboard.
+2. Nothing to paste for its webhook: when you save the method, the shop registers its own address with Rialit where
+   the account has none (below). Putting the address — `https://<the shop's address>/payments/webhooks/rialit`, the
+   same for every Rialit method, shown in the method's notes — in the dashboard's **Webhook** tab by hand still works.
+   The tab's test delivery is answered and changes nothing.
+3. If you set allowed IPs in the dashboard, add the outgoing IP of the shop's server to them (ask your host's support
+   for it): Rialit opens no payment from any other.
+4. Decide in the dashboard whether the customer pays Rialit's fee (below).
+5. Here: «افزودن روش پرداخت» › «ریالیت», a label, the key, and the bounds — Rialit takes 50,000 to 10,000,000 Toman a
+   payment: set «کمترین مبلغ» to 50,000 and «بیشترین مبلغ» to 10,000,000, so no checkout outside them offers it.
+
+| Field | What it is |
+|---|---|
+| «نام روش» | What the checkout's button says |
+| «کمترین مبلغ (تومان)» / «بیشترین مبلغ (تومان)» | The amounts it is offered for ([above](#the-least-and-most-amount)) |
+| «کلید API» | Your API key from Rialit's dashboard |
+| «فعال» | Whether the checkout offers it |
+
+**Its webhook address.** Rialit keeps **one** webhook address for the whole merchant account, and another site of yours
+may be using the same account — so the shop reads it before it changes anything, and never overwrites another site's
+by itself. Each time the method is saved (added, or its form saved again — not its on/off switch), the shop asks Rialit
+where its webhooks go:
+
+- **nowhere** — the shop registers its own address. Rialit tells the account's owner of the change on Telegram and by
+  email, as it does of every security change;
+- **the shop's address already** — nothing changes;
+- **another address** — nothing is overwritten: you are told, and may replace it yourself (below), when the account is
+  this shop's alone — the other site then gets no more of Rialit's webhooks;
+- **not known** — Rialit could not be read: the key refused, the shop's server not among the allowed IPs, the account
+  not active or blocked, more than 20 security changes in the last hour (Rialit's limit, the dashboard's own changes
+  counted), or Rialit out of reach; or registering failed — the shop's address not on `https://`, or refused by Rialit.
+
+The method is saved whatever came of it; a notice says what did, and why when it did not. The method's dialog in the
+panels keeps a **«وب‌هوک ریالیت»** block with where the webhooks go now («آدرس فروشگاه ثبت است», «ثبت نشده», «به آدرس
+دیگری می‌رود» with that address, or «معلوم نیست» with why) and the way on: «ثبت آدرس فروشگاه» while there is none,
+«جایگزین کردن با آدرس فروشگاه» (asked first) for another site's, «دوباره امتحان» when it is not known — and, until the
+address is the shop's, the shop's address to copy into Rialit's Webhook tab by hand. A save that finds another site's
+address opens the dialog on that block. In the bot's management the method's screen has the same line, «🔗 وب‌هوک
+ریالیت» ([Managing the shop from the bot](Bot-Management.md#the-shop)).
+
+**Its fee on the customer.** Rialit's dashboard may pass its fee on to the payer: a percent Rialit adds on top and
+rounds — 113,650 Toman for a 100,000-Toman order at 12%. Rialit says the sum when the payment is made; the bot's page and
+the website show it with the fee apart («(شامل ۱۳٬۶۵۰ تومان کارمزد درگاه)»), and the customer pays that on Rialit's
+page. The order is paid, delivered and credited at its own price (a top-up credits its own amount); the fee is Rialit's.
+Say it in the label too («ریالیت (+۱۲٪)»): the checkout's buttons show only labels. With no fee passed on, the page asks
+the order's own sum.
+
+How a payment goes ([every online gateway](#every-online-gateway) has the rest):
+
+- «💳 پرداخت» opens Rialit's page, open 30 minutes. The payment is made at Rialit under the shop's own id for it —
+  opened again, it is the same payment there — and for the customer's Telegram account: Rialit knows its payers by
+  Telegram, so a customer with no Telegram account (one signed in to the website by SMS) is not offered Rialit: they
+  pick another method, and nothing is ordered with it.
+- Rialit sends no one back: the customer returns to the bot or the website themselves, and «🔄 بررسی پرداخت» asks.
+- **Rialit's webhook is never believed.** Nothing signs it, so anyone could send one: it only makes the shop ask Rialit
+  about the payment it names — an unpaid payment of one of the shop's Rialit methods, six times a minute at most;
+  anything else it names asks nothing. A body that is not Rialit's is refused and logged. Without the webhook nothing
+  is lost, only slower: the shop asks Rialit by itself every few minutes while the page is open, and support's
+  «استعلام از درگاه» asks too.
+- Paid — for the payment's own order and sum, which Rialit's answer must name —, the order is delivered, once; an
+  answer naming another order or sum is [held for you](#a-payment-held-for-you). Not paid yet waits while the page
+  takes money and closes the payment after; expired or cancelled closes it.
+- Rialit may approve a payment late, after its page expired: it is settled all the same — while the shop still asks,
+  two hours after the page closed by default, or whenever the webhook comes —, or goes to the customer's wallet once
+  its order closed.
+- A wrong or revoked key, the shop's server not among the allowed IPs («IP not allowed»), a merchant account not
+  active, an amount outside 50,000 to 10,000,000 Toman, or too many requests refuses the checkout; the log says what
+  Rialit said and what it means.
+
+**How it was built.** Rialit's API documentation is open only to its merchants, behind a sign-in to its dashboard; the
+shop's Rialit follows Rialit's own OpenAPI description there — its `send` and `status` calls, its payer's fee, its
+webhook's headers and body. Rialit asks merchants to take webhooks only from the IP addresses its Webhook tab lists; the
+shop asks Rialit about every webhook instead, so one from anywhere else changes nothing (and a shop behind a proxy would
+not see Rialit's address anyway). Before switching the method on, pay a small order with it, and send the Webhook tab's
+test delivery once (the log says when a webhook is refused as not Rialit's).
+
+## Rikhtam's crypto payments
+
+«افزودن روش پرداخت» › «ریختم (ارز دیجیتال)»: an [online gateway](#every-online-gateway) of crypto payments. The customer
+pays on Rikhtam's page in a coin — TON's Gram (GRAM), Tether on TON, Tether on TRON (TRC20) or TRON's TRX — straight to
+your own wallet; once Rikhtam sees it on its chain, the order is delivered with no receipt and nobody to approve it.
+Rikhtam's other side, card to card, confirms card payments in «تایید خودکار واریز» ([above](#through-rikhtam)).
+
+Setting it up:
+
+1. Open an account at rikhtam.com. In its panel, «درگاه‌ها», make a gateway with a name and the shop's domain — the
+   domain of the shop's address («آدرس سایت», `APP_URL`); a subdomain of it is fine — and copy its «کلید امنیتی». One
+   gateway serves both of Rikhtam's sides, with the same key.
+2. In the same panel, «درگاه‌ها» › «پرداخت با ارز دیجیتال», set the wallet the coins go to: a personal TON or TRON
+   wallet of yours, never an exchange's deposit address. Rikhtam takes 24 hours to change it, and refuses a testnet one.
+3. Here: «افزودن روش پرداخت» › «ریختم (ارز دیجیتال)», a label, the key, the coin, and the bounds.
+4. For Rikhtam to tell the shop of a paid invoice the moment it is paid, connect it in «تایید خودکار واریز» with the
+   same key ([above](#through-rikhtam)): the shop then registers its address with Rikhtam. Connecting switches the
+   automatic approval of card payments on; switch it off afterwards if you only take crypto through Rikhtam — its word
+   on crypto still comes. Without it, the shop asks Rikhtam every few minutes while the page is open, and whenever the
+   customer comes back or taps «🔄 بررسی پرداخت».
+
+| Field | What it is |
+|---|---|
+| «نام روش» | What the checkout's button says |
+| «کمترین مبلغ (تومان)» / «بیشترین مبلغ (تومان)» | The amounts it is offered for ([above](#the-least-and-most-amount)) |
+| «کلید امنیتی درگاه» | The gateway's «کلید امنیتی» from Rikhtam's panel, «درگاه‌ها» — the same key you give «اتصال ریختم» |
+| «ارز پرداخت» | «انتخاب مشتری در صفحه ریختم» (the default): the customer picks the coin on Rikhtam's page; or one coin — «گرم (GRAM)», «تتر روی شبکه TON», «تتر روی شبکه ترون (TRC20)» or «ترون (TRX)». The list shows it («ارز: تتر روی شبکه TON») |
+| «فعال» | Whether the checkout offers it |
+
+How a payment goes ([every online gateway](#every-online-gateway) has the rest):
+
+- «💳 پرداخت» opens Rikhtam's page. The invoice is asked in Toman for the payment's order number, and Rikhtam prices it
+  in the coin: the bot and the website show the order's price in Toman, and the coin's amount and address are on
+  Rikhtam's page. A transfer on TON must carry the comment the page gives, and one on TRON the exact amount it asks:
+  that is how Rikhtam tells payments apart. The page takes money until the end Rikhtam gives it — an hour, while the
+  customer has not picked a coin yet.
+- Opened again, a payment is its open invoice again, never a second one.
+- On a shop whose address begins with `https://`, the customer's browser comes back to it after paying and is shown
+  [what came of it](#every-online-gateway); otherwise they return to the bot or the website themselves.
+- Rikhtam's word that an invoice was paid, to the shop's Rikhtam address, only makes the shop ask Rikhtam about it.
+  Paid, the order is delivered, once; not paid yet waits while the page takes money and closes the payment after;
+  expired or cancelled closes it. An answer naming another order or invoice is [held for you](#a-payment-held-for-you).
+- **Less than asked, or too late, is never confirmed by itself**: Rikhtam reports such a transfer in its panel, and you
+  settle it with the customer there.
+- Rikhtam's fee for crypto payments is apart from its card-to-card fee; its panel shows it in the same part.
+- A wrong key, a Rikhtam account or gateway disabled there, its fees unpaid, an order Rikhtam says was paid already, or
+  a coin it would not take refuses the checkout; the log says what Rikhtam said and what it means.
+
 ## The list
 
 - **▲▼** — the order of the checkout's buttons.
@@ -585,7 +854,7 @@ How a payment goes ([every online gateway](#every-online-gateway) has the rest):
   what it took today against its cap («امروز ۲۵۰٬۰۰۰ تومان از ۳۰۰٬۰۰۰ تومان»; «پر شده» once full); under them, the
   review window when there is one, and the amounts it is offered for. For an online method: «پرداخت در صفحه CubePay،
   بدون رسید و با تایید خود درگاه» (with its own gateway's name), and its summary — the fee passed on, the test mode,
-  the dollar's rate or the destination card.
+  the dollar's rate, the destination card or the coin.
 - **«نوع»** — «تسویه آنی» (the wallet), «تایید دستی» (a card), «درگاه آنلاین» (any online gateway), or «درایور نصب
   نیست» for a method of a kind this installation no longer has. No checkout offers that one, switched on or not («به
   مشتری پیشنهاد نمی‌شود؛ درایورش نصب نیست.»), and it can only be switched off or deleted.
@@ -627,5 +896,6 @@ different amount, and its receipt is told apart at a glance.
 - **A daily cap is a guard, not a bank's limit**: it counts what the shop asked for on the card today — by the day each
   payment was made, so one made before midnight and paid after it counts for the day before —, not what the bank
   received.
-- **CubePay, Zarinpal, AtlasPay, AbanGateway, Plisio, AqayePardakht and Variza are the online gateways so far**
-  ([Roadmap](Roadmap.md)); another way to pay is a driver ([Drivers](Drivers.md#a-payment-gateway)).
+- **CubePay, Zarinpal, AtlasPay, AbanGateway, Plisio, AqayePardakht, Variza, Bluepal, Rialit and Rikhtam's crypto
+  payments are the online gateways so far** ([Roadmap](Roadmap.md)); another way to pay is a driver
+  ([Drivers](Drivers.md#a-payment-gateway)).

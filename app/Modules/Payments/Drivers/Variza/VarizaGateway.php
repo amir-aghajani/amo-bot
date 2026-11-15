@@ -40,8 +40,8 @@ final class VarizaGateway implements SignedWebhook
     private const EXPIRES_IN = '30m';
     private const PAGE_MINUTES = 30;
 
-    /** A page Variza sends a customer to: on its own host, over https. */
-    private const PAGE = '~^https://([a-z0-9-]+\.)*variza\.ir/[\x21-\x7e]*$~D';
+    /** Its own host, which a page it sends a customer to is on (GatewayHttp::page()). */
+    private const HOST = 'variza.ir';
 
     /** A link's slug at Variza. */
     private const SLUG = '/^[A-Za-z0-9_-]{4,64}$/D';
@@ -72,8 +72,8 @@ final class VarizaGateway implements SignedWebhook
             'card_last_4' => $this->card,
         ]);
         $slug = $answer['slug'] ?? null;
-        $url = $answer['pay_url'] ?? null;
-        if (($status !== 201 && $status !== 200) || !is_string($slug) || preg_match(self::SLUG, $slug) !== 1 || !is_string($url) || preg_match(self::PAGE, $url) !== 1) {
+        $url = GatewayHttp::page($answer['pay_url'] ?? null, self::HOST);
+        if (($status !== 201 && $status !== 200) || !is_string($slug) || preg_match(self::SLUG, $slug) !== 1 || $url === null) {
             throw new GatewayUnavailableException(self::refusal('would not make a payment link', $status, $answer));
         }
 
@@ -90,7 +90,7 @@ final class VarizaGateway implements SignedWebhook
         $invoice = $payment->invoice ?? [];
         $heard = $invoice['heard'] ?? null;
         if (!is_array($heard)) {
-            return $payment->link_expires_at !== null && $payment->link_expires_at->isFuture() ? OnlineVerdict::waiting() : OnlineVerdict::closed();
+            return self::whilePageOpen($payment);
         }
         $asked = $invoice['amount'] ?? null;
         $paid = $heard['amount'] ?? null;

@@ -18,7 +18,8 @@ use App\Modules\Providers\Models\Server;
 /**
  * The servers and plans stages: a panel the owner chose to add made a server through the servers' own form and first
  * check — one that does not answer is not kept, its services left behind —, and the plans made through the plans' form
- * on the servers their panels map to, in their categories, switched on only when the owner says so.
+ * on the servers their panels map to, in their categories, switched on only when the owner says so — and never one only
+ * agents saw or the other bot no longer sold.
  */
 final class CatalogStageTest extends ImportTestCase
 {
@@ -159,6 +160,26 @@ final class CatalogStageTest extends ImportTestCase
         self::assertTrue(PlanCategory::query()->where('name', 'ماهانه')->value('is_active'));
         self::assertFalse(Plan::query()->where('name', 'نماینده')->value('is_active'));
         self::assertSame([['kind' => 'plans', 'key' => '2', 'reason' => 'agents_only_plan', 'detail' => 'نماینده']], self::problemRows($import));
+    }
+
+    public function testAPlanTheOtherBotNoLongerSoldComesSwitchedOffWhateverTheOwnerSays(): void
+    {
+        $this->fakePanel();
+        $de = $this->fakeServer('آلمان');
+        $this->migrator->panels = [self::fakePanelOf('p-de')];
+        $this->migrator->plans = [
+            new ImportedPlan('1', 'موجود', 'ماهانه', '100000', null, '10', 30),
+            new ImportedPlan('2', 'ناموجود', 'سه ماهه', '250000', null, '30', 90, selling: false),
+        ];
+
+        $import = $this->importAll(['plans_on' => true, 'panels' => ['p-de' => ['action' => Choices::SERVER, 'server_id' => $de->id]]]);
+
+        self::assertTrue(Plan::query()->where('name', 'موجود')->value('is_active'));
+        $soldOut = Plan::query()->where('name', 'ناموجود')->firstOrFail();
+        self::assertFalse($soldOut->is_active, 'sold out there: off here, for the owner to switch on');
+        self::assertSame([$de->id], $soldOut->servers()->pluck('server_id')->all(), 'on its server all the same');
+        self::assertFalse(PlanCategory::query()->where('name', 'سه ماهه')->value('is_active'), 'its new category off with it');
+        self::assertSame(['created' => 2, 'linked' => 0, 'skipped' => 0], self::counts($import)['plans']);
     }
 
     public function testAPlanWithNoServerStaysOffAndItsNewCategoryComesOnOnlyWithAPlanSwitchedOn(): void
