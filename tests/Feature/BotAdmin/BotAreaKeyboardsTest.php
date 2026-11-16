@@ -19,8 +19,6 @@ use Tests\BotTestCase;
  */
 final class BotAreaKeyboardsTest extends BotTestCase
 {
-    private const OWNER = 7001;
-
     protected function setUp(): void
     {
         parent::setUp();
@@ -37,7 +35,11 @@ final class BotAreaKeyboardsTest extends BotTestCase
     public function testAButtonIsMovedRetextedRecolouredAndRemoved(): void
     {
         $this->send($this->tap(Nav::to('kb'), chat: self::OWNER));
-        self::assertContains(Nav::to('kbb', 'show', 'start', 'buy'), $this->callbacks(0), 'the one keyboard opened straight away');
+        self::assertSame([Nav::to('kbl', 'show', 'start')], array_values(array_filter($this->callbacks(0), static fn(string $data): bool => str_starts_with($data, 'a:kbl:'))), 'a list of the keyboards, even of one');
+        self::assertNotContains(Nav::to('kbb', 'show', 'start', 'buy'), $this->callbacks(0));
+        $this->send($this->tap(Nav::to('kbl', 'show', 'start'), chat: self::OWNER));
+        self::assertContains(Nav::to('kbb', 'show', 'start', 'buy'), $this->callbacks(0), 'the keyboard laid out as the customer sees it');
+        self::assertContains(Nav::to('kb'), $this->callbacks(0), 'its way back: the list');
 
         $this->send($this->tap(Nav::to('kbb', 'show', 'start', 'buy'), chat: self::OWNER));
         self::assertStringContainsString('ردیف ۱، دکمه ۱ از ۲', $this->said()[0]);
@@ -56,6 +58,11 @@ final class BotAreaKeyboardsTest extends BotTestCase
         $button = $this->layout()['rows'][1][1];
         self::assertSame(['خرید ویژه', '111'], [$button['label'], $button['icon']], 'the premium emoji lifted to its icon');
 
+        $this->send($this->tap(Nav::to('kbb', 'st', 'start', 'buy'), chat: self::OWNER));
+        $colours = array_column(array_merge(...$this->inlineKeyboard(0)), null, 'callback_data');
+        self::assertSame('success', $colours[Nav::to('kbb', 'sts', 'start', 'buy', 'success')]['style'] ?? null, 'each colour drawn in itself');
+        self::assertStringStartsWith('✅ ', (string) ($colours[Nav::to('kbb', 'sts', 'start', 'buy', '_')]['text'] ?? ''), 'the colour in force marked');
+        self::assertMatchesRegularExpression('~<i>مدیریت › ربات › کیبوردها › [^›<]+ › خرید ویژه</i>~u', $this->said()[0], 'under its keyboard and the button itself');
         $this->send($this->tap(Nav::to('kbb', 'sts', 'start', 'buy', 'success'), chat: self::OWNER));
         self::assertSame('success', $this->layout()['rows'][1][1]['style']);
 

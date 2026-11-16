@@ -11,6 +11,7 @@ use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\Fmt;
 use App\Modules\Telegram\Admin\Ui\Json;
 use App\Modules\Telegram\Admin\Ui\View;
+use App\Modules\Telegram\Admin\Ui\Words;
 
 /**
  * A card of a card method added or edited (a row of the panel's CardsEditor): its number, holder, bank, daily cap and
@@ -46,23 +47,23 @@ final class PaymentCardFormScreen extends FormScreen
 
     protected function title(array $state): string
     {
-        return self::isNew($state) ? '➕ افزودن کارت' : '✏️ ویرایش کارت';
+        return self::isNew($state) ? Words::add('کارت') : Words::EDIT . ' کارت';
     }
 
     protected function path(array $state): array
     {
-        return ['مدیریت', 'فروشگاه', 'روش‌های پرداخت', (string) ($state['label'] ?? '')];
+        return PaymentWords::under((string) ($state['label'] ?? ''), Fmt::bare(PaymentCardsScreen::TITLE));
     }
 
     protected function saveLabel(array $state): string
     {
-        return self::isNew($state) ? '✔️ افزودن کارت' : '💾 ذخیره تغییرات';
+        return self::isNew($state) ? Words::CREATE : Words::SAVE;
     }
 
     protected function intro(View $view, Admin $admin, array $state): void
     {
         if (Json::on($state, 'paid')) {
-            $view->line('شماره کارت: ' . Fmt::code((string) ($state['number'] ?? '')) . ' — با این کارت پرداخت شده؛ شماره‌اش عوض نمی‌شود.')->line();
+            $view->line('شماره کارت: ' . Fmt::code((string) ($state['number'] ?? '')) . ' — با این کارت پرداخت شده؛ شماره‌اش عوض نمی‌شود.');
         }
     }
 

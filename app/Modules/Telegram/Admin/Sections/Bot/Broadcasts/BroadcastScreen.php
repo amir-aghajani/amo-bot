@@ -4,12 +4,15 @@ declare(strict_types=1);
 
 namespace App\Modules\Telegram\Admin\Sections\Bot\Broadcasts;
 
+use App\Modules\Telegram\Admin\Sections\Bot\BotScreens;
 use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\BaseScreen;
 use App\Modules\Telegram\Admin\Ui\Button;
 use App\Modules\Telegram\Admin\Ui\Fmt;
+use App\Modules\Telegram\Admin\Ui\Icons;
 use App\Modules\Telegram\Admin\Ui\Json;
 use App\Modules\Telegram\Admin\Ui\View;
+use App\Modules\Telegram\Admin\Ui\Words;
 
 /**
  * One broadcast run (from the list's kept page, BroadcastsScreen — the panel lists runs, it has no route for one): what
@@ -53,8 +56,8 @@ final class BroadcastScreen extends BaseScreen
             case 'cancel':
                 return $admin->confirm(
                     'ارسال ' . Fmt::plain(Fmt::id($id)) . ' لغو شود؟',
-                    Button::to('🚫 بله، لغو شود', self::ID, 'cancelled', $id),
-                    Button::to('✖️ انصراف', self::ID, 'show', $id),
+                    Button::to(Words::yes('لغو شود', '🚫'), self::ID, 'cancelled', $id),
+                    Button::to(Words::CANCEL, self::ID, 'show', $id),
                     'بقیه گیرنده‌ها پیام را نمی‌گیرند؛ کسانی که گرفته‌اند همان را دارند. این کار برگشت ندارد.',
                 );
             case 'unpin':
@@ -62,9 +65,10 @@ final class BroadcastScreen extends BaseScreen
 
                 return $admin->confirm(
                     'پین ارسال ' . Fmt::plain(Fmt::id($id)) . ' برداشته شود؟',
-                    Button::to('📌 بله، برداشته شود', self::ID, 'unpinned', $id),
-                    Button::to('✖️ انصراف', self::ID, 'show', $id),
+                    Button::to(Words::yes('برداشته شود', '📌'), self::ID, 'unpinned', $id),
+                    Button::to(Words::CANCEL, self::ID, 'show', $id),
                     'پیام این ارسال از حالت پین در ' . Fmt::number((int) ($row['pinned'] ?? 0)) . ' گفتگو درمی‌آید؛ خود پیام‌ها می‌مانند.',
+                    danger: true,
                 );
             case 'unpinned':
                 $run = (array) ($admin->api->post("/broadcasts/{$id}/unpin")['broadcast'] ?? []);
@@ -120,29 +124,29 @@ final class BroadcastScreen extends BaseScreen
         $audience = is_array($row['audience'] ?? null) ? $row['audience'] : null;
         $mode = $row['mode'] ?? null;
 
-        $view = View::make('📣 ارسال ' . Fmt::plain(Fmt::id($id)), 'مدیریت', 'ربات', 'ارسال همگانی')
-            ->line(Fmt::e(self::what($row, 300)))
-            ->facts([
+        $view = View::make(Icons::BROADCAST . ' ارسال ' . Fmt::plain(Fmt::id($id)), ...[...BotScreens::PATH, Fmt::bare(BroadcastsScreen::TITLE)])
+            ->card([
+                'وضعیت' => (BroadcastsScreen::MARKS[(string) ($row['status'] ?? '')] ?? '') . ' ' . Fmt::e(self::STATUS[(string) ($row['status'] ?? '')] ?? (string) ($row['status'] ?? '')),
+                'پیام' => Fmt::e(self::what($row, 120)),
                 'شیوه' => $mode === null ? null : ($mode === 'forward' ? 'فوروارد' : 'کپی') . (Json::on($row, 'pin') ? ' · 📌 پین' : '') . ($buttons > 0 ? ' · ' . Fmt::number($buttons) . ' دکمه' : ''),
                 'مخاطب' => $unpin ? 'همان گیرنده‌ها' : ($audience !== null ? Fmt::e((string) ($audience['label'] ?? '')) : Fmt::NONE),
                 'پیشرفت' => self::bar($reached, $total) . ' ' . Fmt::number($reached) . ' از ' . Fmt::number($total),
                 'نتیجه' => implode(' · ', $parts),
-                'وضعیت' => (BroadcastsScreen::MARKS[(string) ($row['status'] ?? '')] ?? '') . ' ' . Fmt::e(self::STATUS[(string) ($row['status'] ?? '')] ?? (string) ($row['status'] ?? '')),
                 'فرستنده' => $by,
                 'شروع' => Fmt::date(is_string($row['created_at'] ?? null) ? $row['created_at'] : null, true),
                 'پایان' => is_string($row['finished_at'] ?? null) ? Fmt::date($row['finished_at'], true) : null,
             ]);
         $actions = Json::part($row, 'actions');
         $view->row(
+            Json::on($actions, 'resume') ? Button::to('▶️ ادامه', self::ID, 'resume', $id)->success() : null,
             Json::on($actions, 'pause') ? Button::to('⏸ توقف', self::ID, 'pause', $id) : null,
-            Json::on($actions, 'resume') ? Button::to('▶️ ادامه', self::ID, 'resume', $id) : null,
             Json::on($actions, 'unpin') ? Button::to('📌 لغو پین', self::ID, 'unpin', $id) : null,
         );
         if (Json::on($actions, 'cancel')) {
-            $view->row(Button::to('🚫 لغو ارسال', self::ID, 'cancel', $id));
+            $view->row(Button::to('🚫 لغو ارسال', self::ID, 'cancel', $id)->danger());
         }
 
-        return $view->row(Button::to('🔄 تازه‌سازی', self::ID, 'r', $id))->back(BroadcastsScreen::ID);
+        return $view->back(BroadcastsScreen::ID)->refresh(self::ID, 'r', $id);
     }
 
     /** A bar of ten for how far it got: "▰▰▰▱▱▱▱▱▱▱". */

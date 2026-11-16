@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Telegram\Admin\Sections\Bot\Settings;
 
 use App\Modules\Telegram\Admin\Ui\Fmt;
+use App\Modules\Telegram\Admin\Ui\Icons;
 use App\Modules\Telegram\Admin\Ui\Settings\FieldDef;
 
 /**
@@ -14,6 +15,8 @@ use App\Modules\Telegram\Admin\Ui\Settings\FieldDef;
 final class ExpiredServicesCard extends BotCard
 {
     public const ID = 'bse';
+
+    public const TITLE = Icons::EXPIRED_CLEANUP . ' حذف سرویس‌های منقضی‌شده';
 
     protected function group(): string
     {
@@ -27,7 +30,7 @@ final class ExpiredServicesCard extends BotCard
 
     protected function title(): string
     {
-        return '🗑 حذف سرویس‌های منقضی‌شده';
+        return self::TITLE;
     }
 
     protected function intro(): string
@@ -37,10 +40,10 @@ final class ExpiredServicesCard extends BotCard
 
     protected function fields(): array
     {
-        return [
+        return $this->described([
             FieldDef::toggle('expired_cleanup', 'حذف خودکار سرویس‌های منقضی‌شده', 'سرویس‌ها به‌طور پیش‌فرض هر ۱۵ دقیقه بررسی می‌شوند؛ این فاصله را مالک فروشگاه در «تنظیمات پنل › زمان‌بندی کارها» تعیین می‌کند. خاموش، سرویس‌های منقضی‌شده می‌مانند تا مشتری تمدیدشان کند یا خودتان حذفشان کنید.'),
             FieldDef::number('expired_cleanup_hours', 'فاصله حذف', 'ساعت', 'بین ۰ تا ۸۷۶۰ ساعت؛ ۰ یعنی همان وقت که تمام شد.')->when('expired_cleanup', [true]),
-        ];
+        ]);
     }
 
     protected function notes(): array

@@ -19,7 +19,7 @@ abstract class MiniAppCard extends Card
 
     protected function path(): array
     {
-        return ['مدیریت', 'تنظیمات', 'مینی‌اپ تلگرام'];
+        return MiniAppScreen::under();
     }
 
     protected function parent(): string
@@ -33,8 +33,8 @@ abstract class MiniAppCard extends Card
     }
 
     /**
-     * Why Telegram does not open the app while APP_URL is not https — said to the owner with where to fix it, to an agent
-     * as the owner's —; nothing while it is.
+     * Why Telegram does not open the app while APP_URL is not https (plain text) — said to the owner with where to fix
+     * it, to an agent as the owner's —; nothing while it is.
      *
      * @param array<string, mixed> $app
      */
@@ -44,7 +44,7 @@ abstract class MiniAppCard extends Card
             return null;
         }
 
-        return "⚠️ تلگرام مینی‌اپ را فقط از آدرس https باز می‌کند و آدرس برنامه (\u{2068}APP_URL\u{2069}) این فروشگاه https نیست؛ تا https نشود، "
+        return "تلگرام مینی‌اپ را فقط از آدرس https باز می‌کند و آدرس برنامه (\u{2068}APP_URL\u{2069}) این فروشگاه https نیست؛ تا https نشود، "
             . (Json::on($app, 'enabled') ? 'تلگرام مینی‌اپ را برای مشتری باز نمی‌کند.' : 'مینی‌اپ روشن نمی‌شود.') . ' '
             . ($seat->isOwner() ? 'آدرس را در «تنظیمات پنل › برنامه» با https بنویسید.' : 'آدرس برنامه را مالک فروشگاه تنظیم می‌کند.');
     }

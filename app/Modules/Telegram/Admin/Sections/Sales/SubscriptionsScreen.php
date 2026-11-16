@@ -7,6 +7,7 @@ namespace App\Modules\Telegram\Admin\Sections\Sales;
 use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\Button;
 use App\Modules\Telegram\Admin\Ui\Fmt;
+use App\Modules\Telegram\Admin\Ui\Icons;
 use App\Modules\Telegram\Admin\Ui\Json;
 use App\Modules\Telegram\Admin\Ui\View;
 
@@ -20,14 +21,17 @@ final class SubscriptionsScreen extends SalesList
 {
     public const ID = 'sb';
 
-    /** The panel's tabs: «همه», then the statuses with the services ending soon after the active ones. */
+    /** The list's title. */
+    public const TITLE = Icons::SERVICES . ' ' . Sales::SERVICES;
+
+    /** The panel's tabs: «همه», then the statuses as the rows say them, those ending soon after the active ones. */
     private const TABS = [
         self::ANY => 'همه',
-        'active' => '🟢 فعال',
+        'active' => Sales::SUBSCRIPTION_STATUS['active'],
         'expiring' => '⏳ رو به انقضا',
-        'expired' => '⌛️ منقضی‌شده',
-        'disabled' => '⏸ غیرفعال',
-        'deleted' => '🗑 حذف‌شده',
+        'expired' => Sales::SUBSCRIPTION_STATUS['expired'],
+        'disabled' => Sales::SUBSCRIPTION_STATUS['disabled'],
+        'deleted' => Sales::SUBSCRIPTION_STATUS['deleted'],
     ];
 
     /** The window of «رو به انقضا», in days, from the list's meta. */
@@ -40,7 +44,7 @@ final class SubscriptionsScreen extends SalesList
 
     protected function title(): string
     {
-        return '📡 اشتراک‌ها';
+        return self::TITLE;
     }
 
     protected function endpoint(): string
@@ -51,6 +55,11 @@ final class SubscriptionsScreen extends SalesList
     protected function key(): string
     {
         return 'subscriptions';
+    }
+
+    protected function noun(): string
+    {
+        return 'اشتراک';
     }
 
     protected function narrower(): string
@@ -70,7 +79,7 @@ final class SubscriptionsScreen extends SalesList
 
     protected function searchHint(): string
     {
-        return 'شماره یا نام کاربری سرویس، لینک یا مشتری';
+        return 'شماره یا نام کاربری سرویس، لینک اشتراک، یا نام، یوزرنیم، ایمیل یا شناسه تلگرام مشتری.';
     }
 
     protected function figures(array $meta): array
@@ -90,9 +99,9 @@ final class SubscriptionsScreen extends SalesList
         };
     }
 
-    protected function more(View $view, Admin $admin): void
+    protected function extra(View $view, Admin $admin): void
     {
-        $view->row(Button::to('🔀 انتقال چند سرویس به سرور دیگر', MoveScreen::ID));
+        $view->row(Button::to(MoveScreen::TITLE . ' به سرور دیگر', MoveScreen::ID));
     }
 
     protected function item(array $row): Button
@@ -102,7 +111,7 @@ final class SubscriptionsScreen extends SalesList
         $left = match (true) {
             ($row['status'] ?? '') !== 'active' => null,
             $expires !== null => (Json::on($row, 'expiring_soon') ? '⏳ ' : '') . Sales::left($expires),
-            (int) ($row['duration_hours'] ?? 0) > 0 => 'در انتظار اولین اتصال',
+            (int) ($row['duration_hours'] ?? 0) > 0 => 'منتظر اتصال',
             default => null,
         };
 
@@ -110,7 +119,7 @@ final class SubscriptionsScreen extends SalesList
             Sales::mark(Sales::SUBSCRIPTION_STATUS, $row['status'] ?? '') . ' ' . implode(' · ', array_filter([
                 (string) ($row['name'] ?? ''),
                 $left,
-                Sales::customer(Json::part($row, 'user')),
+                Fmt::cut(Sales::customer(Json::part($row, 'user')), 14),
                 (string) (Json::part($row, 'server')['name'] ?? ''),
             ])),
             SubscriptionScreen::ID,

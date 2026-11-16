@@ -13,6 +13,7 @@ use App\Modules\Telegram\Admin\Ui\Json;
 use App\Modules\Telegram\Admin\Ui\Prompt;
 use App\Modules\Telegram\Admin\Ui\Settings\FieldDef;
 use App\Modules\Telegram\Admin\Ui\View;
+use App\Modules\Telegram\Admin\Ui\Words;
 
 /**
  * «کد QR» (`qr`): whether a delivered service comes with a QR code of its link, and the picture it is drawn on — seen (the
@@ -24,6 +25,8 @@ use App\Modules\Telegram\Admin\Ui\View;
 final class QrCard extends BotCard
 {
     public const ID = 'bsq';
+
+    public const TITLE = "🔳 کد \u{2068}QR\u{2069}";
 
     protected function group(): string
     {
@@ -37,7 +40,7 @@ final class QrCard extends BotCard
 
     protected function title(): string
     {
-        return "🔳 کد \u{2068}QR\u{2069}";
+        return self::TITLE;
     }
 
     protected function intro(): string
@@ -61,14 +64,13 @@ final class QrCard extends BotCard
     {
         $background = (array) ($admin->api->get('/bot/settings')['qr_background'] ?? []);
         $custom = Json::on($background, 'custom');
-        $view->line()
-            ->line("<b>🖼 پس‌زمینه کد \u{2068}QR\u{2069}</b>")
-            ->line(($custom ? 'آپلودشده' : 'پیش‌فرض') . ' · ' . "\u{2068}" . Fmt::digits((int) ($background['width'] ?? 0)) . '×' . Fmt::digits((int) ($background['height'] ?? 0)) . "\u{2069}" . ' · ' . Fmt::bytes((int) ($background['size'] ?? 0)))
-            ->line("<i>\u{2068}JPG\u{2069}، \u{2068}PNG\u{2069} یا \u{2068}WebP\u{2069}، حداکثر " . Fmt::bytes((int) ($background['max_bytes'] ?? 0)) . '. تصویر همان لحظه جایگزین می‌شود.</i>')
-            ->row(Button::to('👁 دیدن تصویر', self::ID, 'see'), Button::to('📤 آپلود تصویر جدید', self::ID, 'up'));
-        if ($custom) {
-            $view->row(Button::to('↩️ بازگشت به پیش‌فرض', self::ID, 'back'));
-        }
+        $view->section("🖼 پس‌زمینه کد \u{2068}QR\u{2069}")
+            ->card([
+                'تصویر' => $custom ? 'آپلودشده' : 'پیش‌فرض فروشگاه',
+                'اندازه' => "\u{2068}" . Fmt::digits((int) ($background['width'] ?? 0)) . '×' . Fmt::digits((int) ($background['height'] ?? 0)) . "\u{2069} · " . Fmt::bytes((int) ($background['size'] ?? 0)),
+            ])
+            ->row(Button::to('👁 دیدن تصویر', self::ID, 'see'), Button::to('📤 آپلود تصویر جدید', self::ID, 'up'))
+            ->row($custom ? Button::to('↩️ بازگشت به تصویر پیش‌فرض', self::ID, 'back')->danger() : null);
     }
 
     protected function action(Admin $admin, string $action, array $args, array $values): View
@@ -79,13 +81,17 @@ final class QrCard extends BotCard
 
                 return $this->card($admin, $values);
             case 'up':
-                return $admin->ask(new Prompt('تصویر پس‌زمینه تازه', self::ID, 'up', [], 'تصویر را همین‌جا بفرستید (عکس، یا فایل تصویر برای کیفیت بهتر).', Button::to('✖️ لغو', self::ID, self::VIEW), file: true));
+                $background = (array) ($admin->api->get('/bot/settings')['qr_background'] ?? []);
+
+                return $admin->ask((new Prompt('تصویر پس‌زمینه تازه', self::ID, 'up', [], 'عکس، یا فایل تصویر برای کیفیت بهتر؛ همان لحظه جایگزین می‌شود.', Button::to(Words::CANCEL, self::ID, self::VIEW), file: true))
+                    ->limits("\u{2068}JPG\u{2069}، \u{2068}PNG\u{2069} یا \u{2068}WebP\u{2069}، حداکثر " . Fmt::plain(Fmt::bytes((int) ($background['max_bytes'] ?? 0)))));
             case 'back':
                 return $admin->confirm(
                     'بازگشت به پس‌زمینه پیش‌فرض؟',
-                    Button::to('↩️ بازگشت به پیش‌فرض', self::ID, 'gone'),
-                    Button::to('✖️ انصراف', self::ID, self::VIEW),
+                    Button::to(Words::yes('تصویر پیش‌فرض برگردد'), self::ID, 'gone'),
+                    Button::to(Words::CANCEL, self::ID, self::VIEW),
                     "تصویر آپلودشده حذف می‌شود و کدهای \u{2068}QR\u{2069} دوباره روی تصویر پیش‌فرض فروشگاه کشیده می‌شوند. این کار برگشت‌پذیر نیست؛ برای استفاده دوباره از همین تصویر باید آن را دوباره آپلود کنید.",
+                    danger: true,
                 );
             case 'gone':
                 $admin->api->delete('/bot/qr-background');

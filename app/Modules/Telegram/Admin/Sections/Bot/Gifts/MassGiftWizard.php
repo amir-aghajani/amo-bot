@@ -6,30 +6,39 @@ namespace App\Modules\Telegram\Admin\Sections\Bot\Gifts;
 
 use App\Modules\Telegram\Admin\AdminSeat;
 use App\Modules\Telegram\Admin\Door\ApiRefusal;
+use App\Modules\Telegram\Admin\Sections\Bot\BotScreens;
 use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\Answer;
 use App\Modules\Telegram\Admin\Ui\BaseScreen;
 use App\Modules\Telegram\Admin\Ui\Button;
 use App\Modules\Telegram\Admin\Ui\Fmt;
+use App\Modules\Telegram\Admin\Ui\Icons;
 use App\Modules\Telegram\Admin\Ui\Prompt;
 use App\Modules\Telegram\Admin\Ui\View;
+use App\Modules\Telegram\Admin\Ui\Words;
 use App\Support\Unit;
 
 /**
- * «🎁 هدیه جدید» (the panel's mass gift dialog), field by field — to which services (every one, the agents', one
- * server's, one customer group's: each with how many it would reach), the days, the traffic, the reason (may be
- * skipped) —, then its summary: how many services it reaches as it stands, each field to edit, «سرویس‌های در انتظار
- * اولین اتصال» and «پیام به مشتری‌ها» switched at a tap, and «✔️ شروع هدیه» — one POST /mass-grants. The draft is the
- * screen's state.
+ * «🎁 هدیه تازه» (the panel's mass gift dialog), field by field, each step saying where it is («گام ۲ از ۴») — to which
+ * services (every one, the agents', one server's, one customer group's: each with how many it would reach), the days,
+ * the traffic, the reason (may be skipped), each question with the value now, an example and its limits, «⬅️ گام قبل»
+ * and «⏭ رد شدن» —, then its review: the draft whole in one card and how many services it reaches as it stands, each
+ * field to edit, «سرویس‌های در انتظار اولین اتصال» and «پیام به مشتری‌ها» switched as their buttons say, and «✔️ شروع
+ * هدیه» — one POST /mass-grants. A question cancelled lands on the review, which every field then comes back to. The
+ * draft is the screen's state.
  *
- * Actions: `new` (a new draft, its first question), `aud` (pick), `a` (audience), `t` (server or group id), `days`,
- * `gb`, `why` (asks), `q` (field, a quick amount), `skip` (field), `inc`, `msg` (switches: 1 on, 0 off), `sum`, `go`.
+ * Actions: `new` (a new draft, its first question), `aud` (pick), `a` (audience), `t` (server or group id), `tp` (a page
+ * of them), `days`, `gb`, `why` (asks), `q` (field, a quick amount), `skip` (field), `inc`, `msg` (switches: 1 on, 0
+ * off), `sum`, `go`.
  */
 final class MassGiftWizard extends BaseScreen
 {
     public const ID = 'mgn';
 
     private const AUDIENCES = ['all' => 'همه سرویس‌ها', 'agents' => 'فقط سرویس‌های نماینده‌ها', 'server' => 'سرویس‌های یک سرور', 'group' => 'سرویس‌های مشتری‌های یک گروه'];
+
+    /** The fields a new draft walks: the audience, the days, the traffic, the reason; then its review. */
+    private const STEPS = 4;
 
     private const DRAFT = ['audience' => 'all', 'server_id' => '', 'group_id' => '', 'days' => '', 'traffic_gb' => '', 'reason' => '', 'include_unstarted' => false, 'notify' => true];
 
@@ -88,6 +97,14 @@ final class MassGiftWizard extends BaseScreen
                 } => '']);
 
                 return $this->next($admin, $field, $draft);
+            case 'tp':
+                // A page of the servers or groups to pick.
+                return in_array($draft['audience'], ['server', 'group'], true) ? $this->targets($admin, $draft['audience'], self::page($args)) : $this->audiences($admin);
+            case 'sum':
+                // A question cancelled lands on the review, which from then on is where every field goes back to.
+                $admin->remember(self::ID, ['asked' => true]);
+
+                return $this->summary($admin);
             case 'inc':
             case 'msg':
                 // As the button said (1 on, 0 off): a second tap leaves it so.
@@ -143,83 +160,129 @@ final class MassGiftWizard extends BaseScreen
         return $this->summary($admin);
     }
 
+    /** «گام ۲ از ۴» while the draft is new (its fields asked one by one); nothing once it is on its review. */
+    private function step(Admin $admin, int $step): string
+    {
+        return $this->draft($admin)['asked'] ? '' : Words::step($step, self::STEPS);
+    }
+
     private function audiences(Admin $admin): View
     {
         $reach = $this->reach($admin);
-        $view = View::make('🎁 هدیه جدید: به چه سرویس‌هایی', 'مدیریت', 'ربات', 'هدیه همگانی');
-        $current = $this->draft($admin)['audience'];
+        $step = $this->step($admin, 1);
+        $draft = $this->draft($admin);
+        $view = View::make(Icons::MASS_GIFT . ' هدیه تازه: به چه سرویس‌هایی', ...[...BotScreens::PATH, Fmt::bare(MassGiftsScreen::TITLE)]);
+        if ($step !== '') {
+            $view->line('<i>' . $step . '</i>');
+        }
         $buttons = [];
         foreach (self::AUDIENCES as $key => $label) {
             $count = isset($reach[$key]) && is_array($reach[$key]) ? ' (' . Fmt::plain(Fmt::number((int) ($reach[$key]['running'] ?? 0))) . ')' : '…';
-            $buttons[] = Button::to(($current === $key ? '● ' : '') . $label . $count, self::ID, 'a', $key);
+            $buttons[] = Button::to(($draft['audience'] === $key ? Words::PICKED : '') . $label . $count, self::ID, 'a', $key);
         }
 
-        return $view->line('عدد کنار هر گزینه، سرویس‌های فعالی است که هدیه به آن‌ها می‌رسد.')->grid(1, ...$buttons)->row(Button::to('✖️ انصراف', MassGiftsScreen::ID));
+        return $view->line('عدد کنار هر گزینه، سرویس‌های فعالی است که هدیه به آن‌ها می‌رسد.')
+            ->grid(1, ...$buttons)
+            ->row($draft['asked'] ? Button::to(Words::CANCEL, self::ID, 'sum') : Button::to(Words::CANCEL, MassGiftsScreen::ID));
     }
 
-    /** One server or one customer group to pick, each with how many of its services run. */
-    private function targets(Admin $admin, string $audience): View
+    /**
+     * One server or one customer group to pick, each with how many of its services run — the one picked marked —, a page
+     * of View::CHOICES_MOST at a time.
+     */
+    private function targets(Admin $admin, string $audience, int $page = 1): View
     {
+        $draft = $this->draft($admin);
         $options = array_values(array_filter((array) ($this->reach($admin)[$audience === 'group' ? 'groups' : 'servers'] ?? []), is_array(...)));
-        $view = View::make($audience === 'group' ? '👥 گروه مشتریان' : '🖥 سرور', 'مدیریت', 'ربات', 'هدیه همگانی');
+        $picked = (int) $draft[$audience === 'group' ? 'group_id' : 'server_id'];
+        $view = View::make($audience === 'group' ? Icons::GROUPS . ' گروه مشتریان' : Icons::SERVERS . ' سرور', ...[...BotScreens::PATH, Fmt::bare(MassGiftsScreen::TITLE)]);
         if ($options === []) {
             $view->line($audience === 'group' ? 'هنوز گروهی نیست؛ گروه‌ها در صفحه کاربران ساخته می‌شوند.' : 'سروری سرویس فعال ندارد.');
         }
-        $buttons = array_map(static fn(array $option): Button => Button::to((string) ($option['name'] ?? '') . ' (' . Fmt::plain(Fmt::number((int) ($option['running'] ?? 0))) . ' سرویس)', self::ID, 't', (int) ($option['id'] ?? 0)), $options);
+        $buttons = array_map(static fn(array $option): Button => Button::to(((int) ($option['id'] ?? 0) === $picked ? Words::PICKED : '') . (string) ($option['name'] ?? '') . ' (' . Fmt::plain(Fmt::number((int) ($option['running'] ?? 0))) . ' سرویس)', self::ID, 't', (int) ($option['id'] ?? 0)), $options);
 
-        return $view->grid(1, ...$buttons)->row(Button::to('⬅️ بازگشت', self::ID, 'aud'));
+        return $view->paged(1, $buttons, $page, static fn(int $at): array => [self::ID, 'tp', [$at]])->back(self::ID, 'aud');
     }
 
     private function ask(Admin $admin, string $field): View
     {
         $draft = $this->draft($admin);
-        [$question, $hint, $current] = match ($field) {
-            'days' => ['تعداد روز', 'به تاریخ پایان هر سرویس اضافه می‌شود.', $draft['days']],
-            'gb' => ['حجم (گیگابایت)', 'روی حجم هر سرویس اضافه می‌شود.', $draft['traffic_gb']],
-            default => ['دلیل (اختیاری)', 'در پیامی که مشتری در تلگرام یا با ایمیل می‌گیرد نشان داده می‌شود؛ مثلا: هدیه نوروز. حداکثر ۳۰۰ کاراکتر.', $draft['reason']],
+        // Each field with the step it is in a new draft's walk, and the step before it.
+        [$question, $hint, $current, $example, $limits, $step, $before] = match ($field) {
+            'days' => ['تعداد روز', 'به تاریخ پایان هر سرویس اضافه می‌شود.', $draft['days'] === '' ? null : Fmt::plain(Fmt::number((int) $draft['days'])) . ' روز', '۷', 'عدد درست؛ بی روز اضافه: «' . Words::SKIP . '»', 2, 'aud'],
+            'gb' => ['حجم (گیگابایت)', 'روی حجم هر سرویس اضافه می‌شود.', $draft['traffic_gb'] === '' ? null : Fmt::digits(str_replace('.', '٫', $draft['traffic_gb'])) . ' گیگابایت', '۱۰', 'گیگابایت، کسری هم می‌شود؛ بی حجم اضافه: «' . Words::SKIP . '»', 3, 'days'],
+            default => ['دلیل (اختیاری)', 'در پیامی که مشتری در تلگرام یا با ایمیل می‌گیرد نشان داده می‌شود.', $draft['reason'] === '' ? null : $draft['reason'], 'هدیه نوروز', 'حداکثر ۳۰۰ کاراکتر', 4, 'gb'],
         };
-        $prompt = new Prompt($question, self::ID, $field, [], $hint . ($current !== '' ? "\nالان: " . Fmt::e((string) $current) : ''), Button::to('✖️ لغو', self::ID, 'sum'));
+        $progress = $this->step($admin, $step);
+        $prompt = (new Prompt($question, self::ID, $field, [], ($progress === '' ? '' : '<i>' . $progress . '</i>' . "\n") . $hint, Button::to(Words::CANCEL, self::ID, 'sum')))
+            ->example($example)
+            ->limits($limits);
+        if ($current !== null) {
+            $prompt->current($current, $field === 'why');
+        }
         $quick = match ($field) {
             'days' => [Button::to('۷ روز', self::ID, 'q', $field, 7), Button::to('۳۰ روز', self::ID, 'q', $field, 30)],
             'gb' => [Button::to('۱۰ گیگابایت', self::ID, 'q', $field, 10), Button::to('۵۰ گیگابایت', self::ID, 'q', $field, 50)],
             default => [],
         };
+        // Asked from the walk or the review, a question says it is the new gift's, whichever window came before it.
+        $admin->here([...BotScreens::PATH, Fmt::bare(MassGiftsScreen::TITLE), 'هدیه تازه']);
 
-        return $admin->ask($prompt->choices(...[...$quick, Button::to('⏭ رد شدن', self::ID, 'skip', $field)]));
+        return $admin->ask($prompt->choices(...$quick)->ways(
+            $progress === '' ? null : Button::to(Words::PREVIOUS_STEP, self::ID, $before),
+            Button::to(Words::SKIP, self::ID, 'skip', $field),
+        ));
     }
 
+    /**
+     * The review step: the draft whole in one card — whom it reaches, the days, the traffic, the reason, the two switches —,
+     * how many services it reaches as it stands, each field to edit, the switches as their buttons say, and «✔️ شروع
+     * هدیه» (green) while it reaches someone.
+     */
     private function summary(Admin $admin): View
     {
         $draft = $this->draft($admin);
         $reach = $this->reach($admin);
         $target = $this->target($reach, $draft);
-        $view = View::make('🎁 هدیه جدید', 'مدیریت', 'ربات', 'هدیه همگانی');
         $chosen = $draft['audience'] === 'server' || $draft['audience'] === 'group' ? ($target === null ? null : (string) ($target['name'] ?? '')) : '';
-        $view->facts([
-            'به چه سرویس‌هایی' => Fmt::e(self::AUDIENCES[$draft['audience']] ?? '') . ($chosen !== null && $chosen !== '' ? ': ' . Fmt::e($chosen) : ($chosen === null ? ': انتخاب نشده' : '')),
-            'تعداد روز' => $draft['days'] === '' ? Fmt::NONE : Fmt::number((int) $draft['days']) . ' روز',
-            'حجم' => $draft['traffic_gb'] === '' ? Fmt::NONE : Fmt::digits(str_replace('.', '٫', (string) $draft['traffic_gb'])) . ' گیگابایت',
-            'دلیل' => $draft['reason'] === '' ? Fmt::NONE : Fmt::e((string) $draft['reason']),
-            'سرویس‌های در انتظار اولین اتصال' => Fmt::yesNo((bool) $draft['include_unstarted']),
-            'پیام به مشتری‌ها' => Fmt::yesNo((bool) $draft['notify']),
-        ]);
-        $view->line()->line(Fmt::e($this->reachText($target, $draft)));
-        $total = $target === null ? 0 : (int) ($target['running'] ?? 0) + ((bool) $draft['include_unstarted'] ? (int) ($target['unstarted'] ?? 0) : 0);
+        $total = $target === null ? 0 : $this->total($target, $draft);
         $unstarted = $target === null ? 0 : (int) ($target['unstarted'] ?? 0);
-        $view->note('سرویس‌های در انتظار اولین اتصال: سرویس‌هایی که مشتری هنوز به آن‌ها وصل نشده و زمانشان شروع نشده است. پیام به مشتری‌ها: هر مشتری در تلگرام یا با ایمیل می‌بیند چه چیزی به سرویسش اضافه شد.');
+        $view = View::make(Icons::MASS_GIFT . ' هدیه تازه: بازبینی', ...[...BotScreens::PATH, Fmt::bare(MassGiftsScreen::TITLE)])
+            ->card([
+                'به چه سرویس‌هایی' => Fmt::e(self::AUDIENCES[$draft['audience']] ?? '') . ($chosen !== null && $chosen !== '' ? ': ' . Fmt::e($chosen) : ($chosen === null ? ': ⚠️ انتخاب نشده' : '')),
+                'تعداد روز' => $draft['days'] === '' ? Fmt::NONE : Fmt::number((int) $draft['days']) . ' روز',
+                'حجم' => $draft['traffic_gb'] === '' ? Fmt::NONE : Fmt::digits(str_replace('.', '٫', $draft['traffic_gb'])) . ' گیگابایت',
+                'دلیل' => $draft['reason'] === '' ? Fmt::NONE : Fmt::e($draft['reason']),
+                'سرویس‌های در انتظار اولین اتصال' => Fmt::onOff($draft['include_unstarted']),
+                'پیام به مشتری‌ها' => Fmt::onOff($draft['notify']),
+            ])
+            ->line(($total > 0 ? '✅ ' : '⚠️ ') . Fmt::e($this->reachText($target, $draft)));
 
-        $view->row(Button::to('✏️ مخاطب', self::ID, 'aud'), Button::to('✏️ روز', self::ID, 'days'))
-            ->row(Button::to('✏️ حجم', self::ID, 'gb'), Button::to('✏️ دلیل', self::ID, 'why'));
-        $switches = [Button::to(((bool) $draft['notify'] ? '✅' : '◻️') . ' پیام به مشتری‌ها', self::ID, 'msg', (bool) $draft['notify'] ? 0 : 1)];
-        if ($unstarted > 0 || (bool) $draft['include_unstarted']) {
-            array_unshift($switches, Button::to(((bool) $draft['include_unstarted'] ? '✅' : '◻️') . ' در انتظار اولین اتصال', self::ID, 'inc', (bool) $draft['include_unstarted'] ? 0 : 1));
-        }
-        $view->row(...$switches);
-        if ($target !== null && $total > 0) {
-            $view->row(Button::to('✔️ شروع هدیه', self::ID, 'go'));
-        }
+        $view->tiles(
+            Button::to(Words::edit('مخاطب'), self::ID, 'aud')->styled($target === null ? 'primary' : null),
+            Button::to(Words::edit('روز'), self::ID, 'days'),
+            Button::to(Words::edit('حجم'), self::ID, 'gb'),
+            Button::to(Words::edit('دلیل'), self::ID, 'why'),
+        )
+            ->row(Button::to(Words::turn(!$draft['notify'], 'پیام به مشتری‌ها'), self::ID, 'msg', $draft['notify'] ? 0 : 1))
+            ->row($unstarted > 0 || $draft['include_unstarted'] ? Button::to(Words::turn(!$draft['include_unstarted'], 'در انتظار اولین اتصال'), self::ID, 'inc', $draft['include_unstarted'] ? 0 : 1) : null)
+            ->row(
+                $total > 0 ? Button::to('✔️ شروع هدیه', self::ID, 'go')->success() : null,
+                Button::to(Words::CANCEL, MassGiftsScreen::ID),
+            );
 
-        return $view->row(Button::to('✖️ انصراف', MassGiftsScreen::ID));
+        return $view->help('<b>سرویس‌های در انتظار اولین اتصال</b>: سرویس‌هایی که مشتری هنوز به آن‌ها وصل نشده و زمانشان شروع نشده است.' . "\n\n" . '<b>پیام به مشتری‌ها</b>: هر مشتری در تلگرام یا با ایمیل می‌بیند چه چیزی به سرویسش اضافه شد.');
+    }
+
+    /**
+     * How many services the drafted gift reaches: the running ones, and those waiting when ticked in.
+     *
+     * @param array<string, mixed> $target
+     * @param array<string, mixed> $draft
+     */
+    private function total(array $target, array $draft): int
+    {
+        return (int) ($target['running'] ?? 0) + ((bool) $draft['include_unstarted'] ? (int) ($target['unstarted'] ?? 0) : 0);
     }
 
     /**
@@ -257,10 +320,9 @@ final class MassGiftWizard extends BaseScreen
         if ($target === null) {
             return $draft['audience'] === 'group' ? 'اول گروهی انتخاب کنید که به سرویس‌های مشتری‌هایش اضافه شود.' : 'اول سروری انتخاب کنید که به سرویس‌هایش اضافه شود.';
         }
-        $running = (int) ($target['running'] ?? 0);
         $unstarted = (int) ($target['unstarted'] ?? 0);
-        $total = $running + ((bool) $draft['include_unstarted'] ? $unstarted : 0);
-        $active = $running + $unstarted;
+        $total = $this->total($target, $draft);
+        $active = (int) ($target['running'] ?? 0) + $unstarted;
         if ($total > 0) {
             return ($active > $total ? 'از ' . Fmt::plain(Fmt::number($active)) . ' سرویس فعال، به ' . Fmt::plain(Fmt::number($total)) . ' سرویس' : 'به ' . Fmt::plain(Fmt::number($total)) . ' سرویس') . ' اضافه می‌شود؛ ' . $untouched;
         }

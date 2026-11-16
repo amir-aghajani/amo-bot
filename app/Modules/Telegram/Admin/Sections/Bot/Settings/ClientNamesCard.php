@@ -13,6 +13,7 @@ use App\Modules\Telegram\Admin\Ui\Settings\BotGroupSource;
 use App\Modules\Telegram\Admin\Ui\Settings\FieldDef;
 use App\Modules\Telegram\Admin\Ui\Settings\SettingsSource;
 use App\Modules\Telegram\Admin\Ui\View;
+use App\Modules\Telegram\Admin\Ui\Words;
 
 /**
  * «نام کاربری سرویس» (`client_names`): the pattern a sold service's client is named by on its panel and a free test's —
@@ -22,6 +23,8 @@ use App\Modules\Telegram\Admin\Ui\View;
 final class ClientNamesCard extends BotCard
 {
     public const ID = 'bsn';
+
+    public const TITLE = '🪪 نام کاربری سرویس';
 
     /** Where the panel's variables are kept among the card's values. */
     private const VARIABLES = '_name_variables';
@@ -41,7 +44,7 @@ final class ClientNamesCard extends BotCard
 
     protected function title(): string
     {
-        return '🪪 نام کاربری سرویس';
+        return self::TITLE;
     }
 
     protected function intro(): string
@@ -108,15 +111,22 @@ final class ClientNamesCard extends BotCard
         if (!isset(self::DEFAULTS[$field->name])) {
             return null;
         }
-        $lines = [$field->hint, '', 'متغیرها:'];
+        $lines = ['<b>متغیرها</b>'];
         foreach (self::variables($values) as $variable) {
             $lines[] = Fmt::code('{' . (string) ($variable['name'] ?? '') . '}') . ' ' . Fmt::e((string) ($variable['description'] ?? ''));
         }
         $lines[] = '';
-        $lines[] = 'الان: ' . Fmt::code((string) ($values[$field->name] ?? self::DEFAULTS[$field->name]));
-        $prompt = new Prompt($field->label, $this->screen(), 'e', [$index], implode("\n", $lines), Button::to('✖️ لغو', $this->screen(), self::VIEW));
+        $lines[] = '<i>' . $field->hint . '</i>';
+        $pattern = is_string($values[$field->name] ?? null) && $values[$field->name] !== '' ? $values[$field->name] : self::DEFAULTS[$field->name];
+        $prompt = (new Prompt($field->label, $this->screen(), 'e', [$index], implode("\n", $lines), Button::to(Words::CANCEL, $this->screen(), self::VIEW)))
+            ->current($pattern)
+            ->example(self::DEFAULTS[$field->name]);
+        // Emptied, a pattern is the shop's default again.
+        if ($pattern !== self::DEFAULTS[$field->name]) {
+            $prompt->resettable($this->screen(), 'x', $index);
+        }
 
-        return $admin->ask($prompt->choices(Button::to('↩️ الگوی پیش‌فرض', $this->screen(), 'x', $index)));
+        return $admin->ask($prompt);
     }
 
     /**

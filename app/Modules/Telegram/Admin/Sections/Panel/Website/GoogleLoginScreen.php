@@ -8,7 +8,7 @@ use App\Modules\Telegram\Admin\Sections\Panel\Forms\DraftForm;
 use App\Modules\Telegram\Admin\Ui\Fmt;
 use App\Modules\Telegram\Admin\Ui\Settings\FieldDef;
 
-/** «ورود با گوگل» of the website: the site's OAuth Client ID from Google Cloud (emptied: Google sign-in off), with the steps to make one. */
+/** «ورود با گوگل» of the website: the site's OAuth Client ID from Google Cloud (emptied: Google sign-in off), with the steps to make one folded under it. */
 final class GoogleLoginScreen extends WebsiteCard
 {
     public const ID = 'wsg';
@@ -25,14 +25,10 @@ final class GoogleLoginScreen extends WebsiteCard
 
     protected function intro(): string
     {
-        return 'مشتری با حساب گوگلش وارد وب‌سایت می‌شود؛ اگر با همان ایمیل در فروشگاه حساب داشته باشد به همان حساب، وگرنه حساب تازه‌ای برایش ساخته می‌شود.';
-    }
+        $url = is_string($this->drawn()['url'] ?? null) ? $this->drawn()['url'] : '';
 
-    protected function lead(array $values): array
-    {
-        $url = is_string($values['url'] ?? null) ? $values['url'] : '';
-
-        return [
+        return implode("\n", [
+            'مشتری با حساب گوگلش وارد وب‌سایت می‌شود؛ اگر با همان ایمیل در فروشگاه حساب داشته باشد به همان حساب، وگرنه حساب تازه‌ای برایش ساخته می‌شود.',
             '',
             "<b>راه‌اندازی در \u{2068}Google Cloud\u{2069}</b>",
             "۱. در \u{2068}Google Cloud Console\u{2069} به \u{2068}APIs &amp; Services › Credentials\u{2069} بروید.",
@@ -41,14 +37,19 @@ final class GoogleLoginScreen extends WebsiteCard
                 ? "۳. اول آدرس وب‌سایت را در بخش «🔌 اتصال» ذخیره کنید، بعد آن را در \u{2068}Authorized JavaScript origins\u{2069} اضافه کنید"
                 : '۳. آدرس وب‌سایت، ' . Fmt::ltr(DraftForm::origin($url)) . "، را در \u{2068}Authorized JavaScript origins\u{2069} اضافه کنید")
                 . "؛ \u{2068}Origin\u{2069}های دیگر وب‌سایت را هم، اگر ورود با گوگل روی آن‌ها هم لازم است.",
-            "۴. \u{2068}Create\u{2069} را بزنید و \u{2068}Client ID\u{2069} را که \u{2068}Google Cloud\u{2069} نشان می‌دهد پایین‌تر وارد کنید.",
-        ];
+            "۴. \u{2068}Create\u{2069} را بزنید و \u{2068}Client ID\u{2069} را که \u{2068}Google Cloud\u{2069} نشان می‌دهد این‌جا وارد کنید.",
+        ]);
     }
 
     protected function fields(): array
     {
         return [
-            FieldDef::text('google_client_id', "\u{2068}Client ID\u{2069} گوگل", "مثل \u{2068}1234567890-abc123.apps.googleusercontent.com\u{2069}؛ خالی بماند، ورود با گوگل خاموش است.")->nullable(),
+            FieldDef::text('google_client_id', "\u{2068}Client ID\u{2069} گوگل", 'خالی بماند، ورود با گوگل خاموش است.')->nullable()->example('1234567890-abc123.apps.googleusercontent.com'),
         ];
+    }
+
+    protected function shows(FieldDef $field, mixed $value): string
+    {
+        return is_string($value) && $value !== '' ? Fmt::code($value) : '';
     }
 }

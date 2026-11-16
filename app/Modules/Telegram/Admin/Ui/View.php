@@ -7,9 +7,14 @@ namespace App\Modules\Telegram\Admin\Ui;
 use App\Modules\Telegram\Admin\Door\ApiFile;
 
 /**
- * What a management screen shows: its title, its lines (Telegram's HTML: whatever came from a person goes through
- * Fmt::e()), its buttons in rows — a Persian reader's right first in each row — and, for a screen that is a picture (a
- * receipt), the picture with the lines as its caption. Every screen ends with the way back (back(), home()).
+ * What a management screen shows: its title, the path of sections it is in, its lines (Telegram's HTML: whatever came
+ * from a person goes through Fmt::e()) — a summary card (card()), sections (section()), help folded away (help()) —,
+ * its buttons in rows and, for a screen that is a picture (a receipt), the picture with the lines as its caption.
+ *
+ * Rows are written in reading order: the first button of a row is a Persian reader's first, on the right — keyboard()
+ * lays each row out reversed, as Telegram draws a row left to right (the customer keyboards do the same). Every screen
+ * but the home ends with the one way around (back(): «⬅️ بازگشت» · «🏠 خانه»; refresh(): «🔄 تازه‌سازی» beside them
+ * on a screen whose figures move), drawn last whatever was added after it.
  */
 final class View
 {
@@ -21,6 +26,9 @@ final class View
 
     /** The most choices a page of paged() lays: Telegram takes at most 100 buttons, the screen's own rows beside them. */
     public const CHOICES_MOST = 40;
+
+    /** The longest label that shares its row with another in tiles(); a longer one has a row of its own. */
+    public const TILE_MOST = 20;
 
     /**
      * @var list<string>
@@ -40,17 +48,50 @@ final class View
     private array $notices = [];
 
     /**
+     * @var list<string> The sections it is in (make()).
+     */
+    private array $path = [];
+
+    /** «⬅️ بازگشت»'s button; null for none — the way back is the home, or there is no way around at all. */
+    private ?Button $back = null;
+
+    /** Whether the way around is drawn (back()). */
+    private bool $around = false;
+
+    /** «🔄 تازه‌سازی»'s button; null for a screen that does not offer it. */
+    private ?Button $refresh = null;
+
+    /** A question or a confirmation: a step on the way, no place of its own (trail()). */
+    private bool $transient = false;
+
+    /** The window left as it is (stay()). */
+    private bool $stays = false;
+
+    /**
      * @param string $title Plain text: escaped here
      */
     public function __construct(private readonly string $title) {}
 
-    /** A screen titled `$title` (plain text), with `$path` — the sections it is in — above it. */
+    /** A screen titled `$title` (plain text), with `$path` — the sections it is in — under it. */
     public static function make(string $title, string ...$path): self
     {
         $view = new self($title);
+        $view->path = array_values($path);
         if ($path !== []) {
             $view->lines[] = '<i>' . Fmt::e(implode(' › ', $path)) . '</i>';
         }
+
+        return $view;
+    }
+
+    /**
+     * No screen at all: the window stays as it is — a tap answered by a toast alone (Admin::notice() said it), as the
+     * pages' middle button is.
+     */
+    public static function stay(): self
+    {
+        $view = new self('');
+        $view->stays = true;
 
         return $view;
     }
@@ -74,22 +115,56 @@ final class View
     }
 
     /**
-     * Facts, one a line: «label: value» — the value HTML, a null one left out.
+     * The summary card of a row's page or a settings card: its key facts in one quote, a fact a line — «label:
+     * <b>value</b>», the value HTML (Fmt's), a null one left out, an empty one «—». A value to copy (<code>, <pre>)
+     * is not made bold: Telegram nests nothing with them.
      *
      * @param array<string, string|null> $facts
      */
-    public function facts(array $facts): self
+    public function card(array $facts): self
     {
+        $lines = [];
         foreach ($facts as $label => $value) {
-            if ($value !== null) {
-                $this->lines[] = Fmt::e($label) . ': ' . $value;
+            if ($value === null) {
+                continue;
             }
+            $value = $value === '' ? Fmt::NONE : $value;
+            $plain = str_contains($value, '<b>') || str_contains($value, '<code') || str_contains($value, '<pre');
+            $lines[] = Fmt::e((string) $label) . ': ' . ($plain ? $value : '<b>' . $value . '</b>');
+        }
+        if ($lines !== []) {
+            // One line of the screen: cut between lines, a quote is never cut open (text()).
+            $this->lines[] = '<blockquote>' . implode("\n", $lines) . '</blockquote>';
         }
 
         return $this;
     }
 
-    /** A note in italics under the rest: a hint, what a button does. */
+    /** A section's heading (plain text, with its emoji), a blank line over it: its lines follow. */
+    public function section(string $heading): self
+    {
+        $this->lines[] = '';
+        $this->lines[] = '<b>' . Fmt::e($heading) . '</b>';
+
+        return $this;
+    }
+
+    /**
+     * Help folded away under the rest: what the screen is for, how a thing works (HTML) — closed until tapped. A hint of
+     * one short line stays a note().
+     */
+    public function help(string $html): self
+    {
+        if (trim($html) === '') {
+            return $this;
+        }
+        $this->lines[] = '';
+        $this->lines[] = '<blockquote expandable>❔ ' . $html . '</blockquote>';
+
+        return $this;
+    }
+
+    /** A note in italics under the rest: a short hint, what a button does. */
     public function note(string $html): self
     {
         $this->lines[] = '';
@@ -98,7 +173,22 @@ final class View
         return $this;
     }
 
-    /** A row of buttons, a Persian reader's right first; a null one (a button the screen does not offer now) left out. */
+    /**
+     * A list's line of how many it holds and what narrows it: «۲۳ پرداخت · در انتظار بررسی» — `$filters` plain text
+     * (a filter in force, a search).
+     */
+    public function total(int $count, string $noun, string ...$filters): self
+    {
+        $said = array_filter($filters, static fn(string $filter): bool => $filter !== '');
+        $this->lines[] = implode(' · ', [Fmt::number($count) . ' ' . Fmt::e($noun), ...array_map(Fmt::e(...), $said)]);
+
+        return $this;
+    }
+
+    /**
+     * A row of buttons in reading order — the first on the right; a null one (a button not offered now) left out, and a
+     * copy button of no value or one too long to copy whole (offered()).
+     */
     public function row(?Button ...$buttons): self
     {
         $buttons = self::offered($buttons);
@@ -109,7 +199,7 @@ final class View
         return $this;
     }
 
-    /** Buttons laid in rows of `$perRow`; a null one left out. */
+    /** Buttons laid in rows of `$perRow`, in reading order; what row() leaves out left out. */
     public function grid(int $perRow, ?Button ...$buttons): self
     {
         foreach (array_chunk(self::offered($buttons), max(1, $perRow)) as $row) {
@@ -120,8 +210,29 @@ final class View
     }
 
     /**
-     * The row to a list's other pages — «بعدی ›», where it is, «‹ قبلی» —, each button `$screen`'s `$action` with
-     * `$args` and the page; nothing for one page.
+     * Buttons two a row where both labels are short (TILE_MOST), else one a row — a settings card's edits, a menu whose
+     * labels run long —, in reading order; what row() leaves out left out.
+     */
+    public function tiles(?Button ...$buttons): self
+    {
+        $buttons = self::offered($buttons);
+        for ($i = 0, $n = count($buttons); $i < $n; $i++) {
+            $next = $buttons[$i + 1] ?? null;
+            if ($next !== null && self::short($buttons[$i]) && self::short($next)) {
+                $this->rows[] = [$buttons[$i], $next];
+                $i++;
+
+                continue;
+            }
+            $this->rows[] = [$buttons[$i]];
+        }
+
+        return $this;
+    }
+
+    /**
+     * The row to a list's other pages — «‹ قبلی», where it is, «بعدی ›» —, each button `$screen`'s `$action` with
+     * `$args` and the page; nothing for one page. Where it is says «صفحه ۲ از ۵» at a tap (Screens::PAGE).
      */
     public function pager(int $page, int $pages, string $screen, string $action, int|string ...$args): self
     {
@@ -164,7 +275,8 @@ final class View
     }
 
     /**
-     * The pages' row (pager(), paged()), `$button` making each of its buttons from its label and page.
+     * The pages' row (pager(), paged()), in reading order, `$button` making the previous and next buttons from a label
+     * and a page; the middle one says where it is at a tap and leaves the window as it is.
      *
      * @param \Closure(string, int): Button $button
      */
@@ -175,28 +287,48 @@ final class View
         }
 
         return $this->row(
-            $page < $pages ? $button('بعدی ›', $page + 1) : null,
-            $button(Fmt::number($page) . ' / ' . Fmt::number($pages), $page),
-            $page > 1 ? $button('‹ قبلی', $page - 1) : null,
+            $page > 1 ? $button(Words::PREVIOUS, $page - 1) : null,
+            Button::to(Fmt::number($page) . ' / ' . Fmt::number($pages), Screens::PAGE, Nav::SHOW, $page, $pages),
+            $page < $pages ? $button(Words::NEXT, $page + 1) : null,
         );
     }
 
     /**
+     * The buttons offered: a null one left out, and a copy button of nothing or of more than Telegram copies
+     * (Button::fits()).
+     *
      * @param array<int|string, Button|null> $buttons
      * @return list<Button>
      */
     private static function offered(array $buttons): array
     {
-        return array_values(array_filter($buttons, static fn(?Button $button): bool => $button !== null));
+        return array_values(array_filter($buttons, static fn(?Button $button): bool => $button !== null && $button->fits()));
     }
 
-    /** The way back: «⬅️ بازگشت» to `$screen` (with its action and arguments), and «🏠 مدیریت» beside it. */
+    private static function short(Button $button): bool
+    {
+        return mb_strlen($button->label) <= self::TILE_MOST;
+    }
+
+    /**
+     * The way around, under every other row: «⬅️ بازگشت» to `$screen` (with its action and arguments) and «🏠 خانه» —
+     * the home alone when the way back is the home.
+     */
     public function back(string $screen, string $action = Nav::SHOW, int|string ...$args): self
     {
-        $home = $screen === Screens::HOME && $action === Nav::SHOW;
-        $this->rows[] = $home
-            ? [Button::to('🏠 مدیریت', Screens::HOME)]
-            : [Button::to('⬅️ بازگشت', $screen, $action, ...$args), Button::to('🏠 مدیریت', Screens::HOME)];
+        $this->around = true;
+        $this->back = $screen === Screens::HOME && $action === Nav::SHOW ? null : Button::to(Words::BACK, $screen, $action, ...$args);
+
+        return $this;
+    }
+
+    /**
+     * «🔄 تازه‌سازی» beside the way around, to `$screen`'s `$action` with its arguments: a screen whose figures move (a
+     * list, a queue, the dashboard, the home).
+     */
+    public function refresh(string $screen, string $action = Nav::SHOW, int|string ...$args): self
+    {
+        $this->refresh = Button::to(Words::REFRESH, $screen, $action, ...$args);
 
         return $this;
     }
@@ -224,6 +356,38 @@ final class View
     public function photo(): ?ApiFile
     {
         return $this->picture;
+    }
+
+    /** It as a step on the way — a question, a confirmation —, not a place a later step names as where it is (trail()). */
+    public function transient(): self
+    {
+        $this->transient = true;
+
+        return $this;
+    }
+
+    public function isTransient(): bool
+    {
+        return $this->transient;
+    }
+
+    /** Whether the window is left as it is (stay()). */
+    public function stays(): bool
+    {
+        return $this->stays;
+    }
+
+    /**
+     * Where it is, as a question or a confirmation asked from it says so: its path and its own title, without the
+     * title's emoji.
+     *
+     * @return list<string>
+     */
+    public function trail(): array
+    {
+        $title = Fmt::bare($this->title);
+
+        return $title === '' ? $this->path : [...$this->path, $title];
     }
 
     /** The message: the title in bold, then the lines — cut to what Telegram shows. */
@@ -293,10 +457,23 @@ final class View
     }
 
     /**
-     * @return array{inline_keyboard: list<list<array<string, string>>>}
+     * The buttons as Telegram takes them: each row reversed — written in reading order, drawn left to right —, the way
+     * around last.
+     *
+     * @return array{inline_keyboard: list<list<array<string, mixed>>>}
      */
     public function keyboard(): array
     {
-        return ['inline_keyboard' => array_map(static fn(array $row): array => array_map(static fn(Button $button): array => $button->markup(), $row), $this->rows)];
+        $rows = $this->rows;
+        $around = array_values(array_filter([
+            $this->back,
+            $this->around ? Button::to(Words::HOME, Screens::HOME) : null,
+            $this->refresh,
+        ]));
+        if ($around !== []) {
+            $rows[] = $around;
+        }
+
+        return ['inline_keyboard' => array_map(static fn(array $row): array => array_map(static fn(Button $button): array => $button->markup(), array_reverse($row)), $rows)];
     }
 }

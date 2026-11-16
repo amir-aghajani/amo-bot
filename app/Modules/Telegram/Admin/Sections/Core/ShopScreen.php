@@ -10,15 +10,17 @@ use App\Modules\Telegram\Admin\Ui\Answer;
 use App\Modules\Telegram\Admin\Ui\BaseScreen;
 use App\Modules\Telegram\Admin\Ui\Button;
 use App\Modules\Telegram\Admin\Ui\Fmt;
+use App\Modules\Telegram\Admin\Ui\Icons;
 use App\Modules\Telegram\Admin\Ui\Json;
 use App\Modules\Telegram\Admin\Ui\Prompt;
 use App\Modules\Telegram\Admin\Ui\Screens;
 use App\Modules\Telegram\Admin\Ui\View;
+use App\Modules\Telegram\Admin\Ui\Words;
 
 /**
- * «🏪 فروشگاه» (the owner's): which shop the management works — the main one or an agent's, as the panel's shop
- * switcher picks one. The pick is the chat's: the home and every section then show that shop. Many agents' shops are
- * paged (View::paged()) and searched by name or @username.
+ * «🏪 تعویض فروشگاه» (the owner's, on the home): which shop the management works — the main one or an agent's, as the
+ * panel's shop switcher picks one. The pick is the chat's: the home and every section then show that shop. Many agents'
+ * shops are paged (View::paged()) and searched by name or @username.
  *
  * Actions: `pick` (shop id), `page` (page), `search` (asks), `clear`.
  */
@@ -36,7 +38,7 @@ final class ShopScreen extends BaseScreen
         $state = $admin->state(self::ID);
         $search = is_string($state['search'] ?? null) ? $state['search'] : '';
         $current = $admin->seat->shop()->id;
-        $view = View::make('🏪 کدام فروشگاه؟', 'مدیریت')
+        $view = View::make(Icons::SHOP_SWITCH . ' کدام فروشگاه؟', Words::ROOT)
             ->line('فروشگاهی که اینجا مدیریت می‌شود؛ مثل انتخاب فروشگاه در پنل.');
 
         $buttons = [];
@@ -49,7 +51,7 @@ final class ShopScreen extends BaseScreen
             if ($search !== '' && mb_stripos($name . ' @' . $username, $search) === false && $shop['id'] !== $current) {
                 continue;
             }
-            $buttons[] = Button::to(($shop['id'] === $current ? '● ' : '') . $name . ($username !== null ? ' · @' . $username : ''), self::ID, 'pick', $shop['id']);
+            $buttons[] = Button::to(($shop['id'] === $current ? Words::PICKED : '') . $name . ($username !== null ? ' · @' . $username : ''), self::ID, 'pick', $shop['id']);
         }
         if ($search !== '') {
             $view->line('🔎 «' . Fmt::e($search) . '»');
@@ -59,7 +61,7 @@ final class ShopScreen extends BaseScreen
         }
         $view->paged(1, $buttons, (int) ($state['page'] ?? 1), static fn(int $page): array => [self::ID, 'page', [$page]]);
         if ($search !== '' || count($buttons) > View::CHOICES_MOST) {
-            $view->row($search === '' ? Button::to('🔎 جستجو', self::ID, 'search') : Button::to('✖️ پاک کردن جستجو', self::ID, 'clear'));
+            $view->row($search === '' ? Button::to(Words::SEARCH, self::ID, 'search') : Button::to(Words::CLEAR_SEARCH, self::ID, 'clear'));
         }
 
         return $view->back(Screens::HOME);

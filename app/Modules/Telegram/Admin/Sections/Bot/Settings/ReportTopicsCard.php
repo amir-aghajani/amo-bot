@@ -4,8 +4,12 @@ declare(strict_types=1);
 
 namespace App\Modules\Telegram\Admin\Sections\Bot\Settings;
 
+use App\Modules\Telegram\Admin\Sections\Bot\BotScreens;
 use App\Modules\Telegram\Admin\Sections\Bot\ReportGroupScreen;
+use App\Modules\Telegram\Admin\Ui\Fmt;
+use App\Modules\Telegram\Admin\Ui\Icons;
 use App\Modules\Telegram\Admin\Ui\Settings\FieldDef;
+use App\Modules\Telegram\Admin\Ui\Settings\SettingsScreen;
 use App\Modules\Telegram\Reports\Topic;
 
 /**
@@ -15,6 +19,8 @@ use App\Modules\Telegram\Reports\Topic;
 final class ReportTopicsCard extends BotCard
 {
     public const ID = 'rgt';
+
+    public const TITLE = Icons::REPORT_TOPICS . ' بخش‌های گزارش';
 
     protected function group(): string
     {
@@ -28,12 +34,12 @@ final class ReportTopicsCard extends BotCard
 
     protected function title(): string
     {
-        return '🔔 بخش‌های گزارش';
+        return self::TITLE;
     }
 
     protected function path(): array
     {
-        return ['مدیریت', 'ربات', 'گروه گزارش‌ها'];
+        return [...BotScreens::PATH, Fmt::bare(ReportGroupScreen::TITLE)];
     }
 
     protected function parent(): string
@@ -41,7 +47,7 @@ final class ReportTopicsCard extends BotCard
         return ReportGroupScreen::ID;
     }
 
-    /** Back to the group's card where it was left: opened from «🤖 تنظیمات ربات», it still goes back there. */
+    /** Back to the group's card where it was left, its origin kept (a 0.10.0 window's «🤖 تنظیمات ربات»). */
     protected function parentAction(): string
     {
         return ReportGroupScreen::VIEW;
@@ -49,7 +55,18 @@ final class ReportTopicsCard extends BotCard
 
     protected function intro(): string
     {
-        return 'هر بخش یک تاپیک در گروه گزارش‌ها است. بخشی که خاموش باشد گزارشی نمی‌فرستد؛ تاپیکش در گروه می‌ماند.';
+        return 'هر دکمه یک تاپیک گروه گزارش‌ها و حالتش است؛ با یک ضربه روشن یا خاموش می‌شود.';
+    }
+
+    /** Twelve switches alike: chips, two a row, the state on each (SettingsScreen::chips()). */
+    protected function chips(): bool
+    {
+        return true;
+    }
+
+    protected function notes(): array
+    {
+        return ['بخشی که خاموش باشد گزارشی نمی‌فرستد؛ تاپیکش در گروه می‌ماند.'];
     }
 
     protected function fields(): array

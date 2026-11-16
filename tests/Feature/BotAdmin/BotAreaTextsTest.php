@@ -6,6 +6,7 @@ namespace Tests\Feature\BotAdmin;
 
 use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\Nav;
+use App\Modules\Telegram\Admin\Ui\Screens;
 use App\Modules\Telegram\Emoji\CustomEmojis;
 use App\Modules\Telegram\Handlers\CustomEmojiHandler;
 use App\Modules\Telegram\Messages;
@@ -177,7 +178,7 @@ final class BotAreaTextsTest extends BotTestCase
         $this->service(CustomEmojis::class)->remember(array_map(static fn(int $n): array => ['id' => (string) (1000 + $n), 'emoji' => '🎁'], range(1, 30)));
 
         $this->send($this->tap(Nav::to('txe', 'page', 2)));
-        self::assertContains(Nav::to('txe', 'page', 2), $this->callbacks(0), 'the pages\' «n / m»');
+        self::assertContains(Nav::to(Screens::PAGE, 'show', 2, 2), $this->callbacks(0), 'the pages\' «n / m»: page 2 of 2');
         $tile = array_values(array_filter($this->callbacks(0), static fn(string $data): bool => str_starts_with($data, 'a:txe:del:')))[0] ?? '';
         self::assertStringEndsWith(':2', $tile, 'a tile carries its page');
         $this->send($this->tap(str_replace(':del:', ':deld:', $tile)));

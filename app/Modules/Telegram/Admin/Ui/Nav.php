@@ -45,17 +45,18 @@ final class Nav
     }
 
     /**
-     * A button's data read back: its screen, action and arguments; null for data that is none.
+     * A button's data read back: its screen, action and arguments; null for data that is none — a part to() never
+     * makes (a query, a path, a word) too, so what no button carries reaches no screen.
      *
      * @return array{screen: string, action: string, args: list<string>}|null
      */
     public static function parse(?string $data): ?array
     {
-        if ($data === null || !str_starts_with($data, self::PREFIX)) {
+        if ($data === null || !str_starts_with($data, self::PREFIX) || strlen($data) > self::MOST) {
             return null;
         }
         $parts = explode(':', substr($data, strlen(self::PREFIX)));
-        if (count($parts) < 2 || $parts[0] === '' || $parts[1] === '') {
+        if (count($parts) < 2 || array_filter($parts, static fn(string $part): bool => preg_match(self::PART, $part) !== 1) !== []) {
             return null;
         }
 

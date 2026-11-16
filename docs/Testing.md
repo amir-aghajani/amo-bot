@@ -28,7 +28,7 @@ tests themselves. Run everything with `composer check` and `pnpm check` before a
 | `Tests\TestCase` | a unit test that needs the app | `app()`, `service()`, `config()`, `swap()`, `logs()`, `configFile()`, `scratchDir()`, and the fakes below |
 | `Tests\DatabaseTestCase` | anything that touches the database | the tables made once a process, every test in a transaction rolled back after it, the `Fixtures` |
 | `Tests\HttpTestCase` | the API | `get()`, `postJson()`… (with the CSRF header), `send()` (without), `upload()`, `loginAsAdmin()`, `loginAsAgent()`, `openShop()`, `bearer()`, `loginAsStaff()`, `storeApi()`, `unchecked()`, `decode()` |
-| `Tests\BotTestCase` | the Telegram bot | `send($this->message(…))`, `tap()`, `contact()`, the report group's `groupTap()`, `groupText()`, `groupReply()`, `botMembership()`; then `calls()`, `params()`, `said()`, `popup()`, `inlineKeyboard()`, `callbacks()`, `buttonsUnder()` |
+| `Tests\BotTestCase` | the Telegram bot | `send($this->message(…))`, `tap()`, `contact()`, the report group's `groupTap()`, `groupText()`, `groupReply()`, `botMembership()`; then `calls()`, `params()`, `said()`, `popup()`, `inlineKeyboard()`, `callbacks()`, `buttonsUnder()`; for the management, `owner()` (`OWNER` linked as the shop's owner), `tapAs()` and `sayAs()` (as them), `lastSaid()`, `offered()` |
 
 A few things to know:
 
@@ -101,6 +101,9 @@ counts its runs, a leased table).
   finds missing exactly what the description marks `x-door` for the other. `tests/Feature/BotAdmin/BotAdminDoorTest`
   holds the bot's management to its door: nothing from outside gets in, a seat never takes another's door, an admin has
   the daily work and its grants alone ([Internals: Telegram bot](Internals-Telegram-Bot.md#the-shops-management)).
+- **The bot has every setting**: `tests/Feature/BotAdmin/SettingsParityTest` holds the bot's copy of the panel's
+  settings index to the panel's, and every section of it to a place in the bot's management — a screen it has, a field
+  or a part of that card —, or to why the panel alone sets it ([Extending](Extending.md#a-setting)).
 - **The API description**: `tests/Unit/Http/ApiDescriptionTest` holds `resources/api/openapi.yaml` to the routes, its
   objects closed, and readable by a website's own tools ([API contract](API-Contract.md#how-the-php-side-is-held-to-it)).
 - **Upgrades**: `tests/Unit/Database/UpgradesTest` holds every schema change to its upgrade ([Database](Database.md#upgrades)).

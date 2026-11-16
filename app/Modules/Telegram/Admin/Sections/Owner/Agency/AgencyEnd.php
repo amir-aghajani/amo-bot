@@ -16,6 +16,9 @@ use Illuminate\Support\Carbon;
  */
 final class AgencyEnd
 {
+    /** What an agency without an end is said as, wherever its end is shown or asked. */
+    public const NONE = 'بدون پایان';
+
     /** The hour a typed day ends at (the panel's: a day's last hour). */
     private const DAY_ENDS = 23;
 
@@ -52,11 +55,11 @@ final class AgencyEnd
         return sprintf('%04d-%02d-%02dT%02d:00', $gy, $gm, $gd, self::DAY_ENDS);
     }
 
-    /** The moment as a person reads it: «۲۰ مهر ۱۴۰۵، ۲۳:۰۰»; «بدون پایان» for none. */
+    /** The moment as a person reads it: «۲۰ مهر ۱۴۰۵، ۲۳:۰۰»; «بدون پایان» (NONE) for none. */
     public static function words(?string $moment): string
     {
         if ($moment === null || $moment === '') {
-            return 'بدون پایان';
+            return self::NONE;
         }
         $local = \DateTimeImmutable::createFromFormat(LocalTime::MOMENT, $moment, LocalTime::zone());
 

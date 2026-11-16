@@ -34,7 +34,11 @@ Every shop feature is an API endpoint and a screen:
    entry in each app's `nav.ts`. The settings search finds a page and its sections by the nav as they are; a section
    of settings is added to `SECTIONS` in `scripts/settings-index.mjs` too — its address, and the components that draw
    it, `file#Export` —, then `pnpm settings:index`, so its single settings are found
-   ([the checks](Development.md#the-checks)); the search's tests hold every address there to one the nav has.
+   ([the checks](Development.md#the-checks)); the search's tests hold every address there to one the nav has. The same
+   command writes the bot's copy of the index (`Sections/Panel/Search/PanelSettings.php`), and the new section needs its
+   place in the bot's management: an entry in `SettingsIndex::SECTIONS` (`app/Modules/Telegram/Admin/Sections/Panel/Search/`)
+   — the bot screen that has it, its name there and the menus it is under —, or `SettingsParityTest` fails
+   ([below](#a-setting)).
 4. Its tests: an `HttpTestCase` for the endpoint — and a new list's reads in `ListQueriesTest`, which holds every list to
    a few queries however many rows it has; a route that takes a row's id gets its kind in `RouteGuardsTest`'s
    `ROW_KINDS`, which tries it with another shop's row — and a Vitest test beside the page.
@@ -76,20 +80,30 @@ hub's — when a menu opens it.
    `$configuration`, `$seat->isOwner()` over the owner's own groups (and `$seat->shop()->isMain()` where the panel's page
    is the main shop's); a button whose route names a grant shows only while `$seat->holds(StaffGrant::…)`. The door
    refuses the rest anyway.
-3. **The panel's words**: the labels, hints, choices and warnings of the panel's page, copied — plain Persian, no
-   diacritics —; whatever came from a person or the panel through `Fmt::e()`, Latin in a Persian line through
-   `Fmt::ltr()` or `Fmt::code()`.
-4. **One window**: every view ends with `back()` to its parent. What a screen keeps — a page, a filter, a draft, any
-   text — goes in `$admin->remember()`; a button's `Nav::to()` takes ids and short words alone (64 bytes, or it throws).
-5. **Changes**: what cannot be undone behind `$admin->confirm()` with the panel's warning; after the API answers,
-   `$admin->notice('✅ …')` and the row as the panel answers it now. A change of money, or an answer, sends an
-   `Idempotency-Key` kept in the draft until it succeeds, so a retry never repeats it.
-6. **Typed values**: `$admin->ask(new Prompt($question, $screen, $action, $args, hint: …))`, the current value in the
-   hint and quick choices for the common ones; `input()` reads the `Answer` (`amount(Unit::Toman)` takes «۵۰ هزار
-   تومان»). `anyText: true` only where any words may be the answer (a button's label, a bot text): elsewhere a menu
-   button leaves the question, so its label never reaches a customer as an answer. A form keeps its draft in
-   `remember()`, asks field by field, sums up with «✏️» per field, and saves once. A switch's button carries the value it
-   sets, so a second tap changes nothing.
+3. **The panel's words, the management's look**: the labels, hints, choices and warnings of the panel's page, copied —
+   plain Persian, no diacritics —; whatever came from a person or the panel through `Fmt::e()`, Latin in a Persian line
+   through `Fmt::ltr()` or `Fmt::code()`. The words every screen shares come from `Ui\Words` and each thing's emoji from
+   `Ui\Icons`, never typed again. A row's page or a settings card says its key facts in `$view->card()`, its parts under
+   `section()`, anything longer than a line in `help()` (folded); a list says how many first (`ListScreen` does). Rows
+   are written in reading order; a button that confirms, saves, creates or turns on is `->success()`, one that deletes,
+   turns off or rejects `->danger()`, the screen's one main action `->primary()`; a link, an address, a key or a code the
+   owner pastes elsewhere is a `Button::copy(Words::copy('…'), $value)`. A fact is said once: in the card, or on a button.
+   [The management's foundation](Internals-Telegram-Bot.md#the-shops-management).
+4. **One window**: every view ends with `back()` to its parent — and `refresh()` where its figures move. What a screen
+   keeps — a page, a filter, a draft, any text — goes in `$admin->remember()`; a button's `Nav::to()` takes ids and short
+   words alone (64 bytes, or it throws). Keep a released screen's id and its actions' arguments: an older window's
+   buttons still open them, and one that no longer reads lands on the home.
+5. **Changes**: what cannot be undone behind `$admin->confirm()` with the panel's warning, its yes
+   `Words::yes('حذف شود', '🗑')` (red by its icon, or `danger: true`); after the API answers, `$admin->notice('✅ …')` and
+   the row as the panel answers it now. A change of money, or an answer, sends an `Idempotency-Key` kept in the draft until
+   it succeeds, so a retry never repeats it.
+6. **Typed values**: `$admin->ask((new Prompt($question, $screen, $action, $args, hint: …))->current(…)->example(…)
+   ->limits(…))`, `->clearable()` where the field may be emptied and `->resettable()` where it has a default, quick
+   choices for the common answers; `input()` reads the `Answer` (`amount(Unit::Toman)` takes «۵۰ هزار تومان»).
+   `anyText: true` only where any words may be the answer (a button's label, a bot text): elsewhere a menu button leaves
+   the question, so its label never reaches a customer as an answer. A form keeps its draft in `remember()`, asks field by
+   field (a wizard's step offers `->ways()`: «⬅️ گام قبل», «⏭ رد شدن»), sums up in a card with «✏️» per field, and saves
+   once. A switch's button is `Words::turn()` and carries the value it sets, so a second tap changes nothing.
 7. **Tests**: `tests/Feature/BotAdmin/<Area>*Test.php` on `BotTestCase` — the main path (list, row, action, the API's
    effect), a seat without the grant (no button, and the door refusing a forged tap), a typed answer.
 
@@ -116,7 +130,16 @@ to date, and the [Store API](Store-API.md) pages say how to use it.
   on `useBotSettingsGroup`) — [Bot settings](Bot-Settings.md).
 - Either way, the panel's settings search finds the field by the words its section's source writes — its label, its
   hint, its card and fold —: after adding or rewording one, `pnpm settings:index` (`pnpm check` fails while
-  `lib/settings-search/settings.generated.ts` is stale). Words the panel does not write itself — a label the server
+  `lib/settings-search/settings.generated.ts` is stale). It writes the bot's copy too,
+  `app/Modules/Telegram/Admin/Sections/Panel/Search/PanelSettings.php`, which the bot's «🔎 جستجوی تنظیمات» reads (a
+  release ships no panel source): commit both. **The bot must have the setting**: add it to the bot's card of its
+  section (a `FieldDef` in the card's `fields()`, in `app/Modules/Telegram/Admin/Sections/`), whose screen the search
+  then opens for it; where it opens otherwise — a field by its API name, a part of the card, another screen —, or the
+  panel alone sets it (with why), it gets its place under its section in `SettingsIndex::SETTINGS`, and a new section its
+  entry in `SettingsIndex::SECTIONS`. `SettingsParityTest` fails
+  until then: while `PanelSettings.php` is not the panel's index word for word, while a section has no place, or while a
+  place names a screen, a field or a part the bot does not have. It cannot tell a field left out of a card the bot
+  already has, which its section's screen still opens: adding the `FieldDef` is yours to remember. Words the panel does not write itself — a label the server
   sends (a driver's fields, the schedule's tasks, the report group's topics), the English term, the ways owners spell
   it («بک آپ») — go in `lib/settings-search/keywords.ts`, under the entry's id; its tests check every id there is one a
   panel's index has.

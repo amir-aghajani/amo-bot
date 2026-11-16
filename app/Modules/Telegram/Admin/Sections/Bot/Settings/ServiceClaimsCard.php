@@ -5,12 +5,15 @@ declare(strict_types=1);
 namespace App\Modules\Telegram\Admin\Sections\Bot\Settings;
 
 use App\Modules\Telegram\Admin\AdminSeat;
+use App\Modules\Telegram\Admin\Ui\Icons;
 use App\Modules\Telegram\Admin\Ui\Settings\FieldDef;
 
 /** «افزودن سرویس با لینک» (`service_claims`, the main shop's alone): whether a customer may add a client made by hand on a panel by its link. */
 final class ServiceClaimsCard extends BotCard
 {
     public const ID = 'bsc';
+
+    public const TITLE = Icons::CLAIMS . ' افزودن سرویس با لینک';
 
     public function allows(AdminSeat $seat): bool
     {
@@ -29,7 +32,7 @@ final class ServiceClaimsCard extends BotCard
 
     protected function title(): string
     {
-        return '🔗 افزودن سرویس با لینک';
+        return self::TITLE;
     }
 
     protected function intro(): string

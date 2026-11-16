@@ -8,6 +8,7 @@ use App\Modules\Telegram\Admin\Door\ApiRefusal;
 use App\Modules\Telegram\Admin\Sections\Bot\Keyboards\KeyboardScreen;
 use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\Button;
+use App\Modules\Telegram\Admin\Ui\Icons;
 use App\Modules\Telegram\Admin\Ui\Nav;
 
 /**
@@ -30,7 +31,8 @@ final class Links
 
     /**
      * The panel's warning over a program on whose menu button the bot has none (MenuButtonNotice: a menu saved before the
-     * button existed): its line, and the way to the keyboards; nothing while the program is off or the button is there.
+     * button existed): its words (plain text, no mark) and the way to the keyboards; nothing while the program is off or
+     * the button is there.
      *
      * @return array{0: string, 1: ?Button}|null
      * @throws ApiRefusal
@@ -41,6 +43,6 @@ final class Links
             return null;
         }
 
-        return ['⚠️ دکمه «' . $label . '» در منوی ربات نیست، پس مشتری‌ها به ' . $screen . ' راهی ندارند.', self::to($admin, '⌨️ افزودن دکمه در کیبوردها', self::KEYBOARDS)];
+        return ['دکمه «' . $label . '» در منوی ربات نیست، پس مشتری‌ها به ' . $screen . ' راهی ندارند.', self::to($admin, Icons::KEYBOARDS . ' افزودن دکمه در کیبوردها', self::KEYBOARDS)?->primary()];
     }
 }

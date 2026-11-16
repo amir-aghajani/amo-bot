@@ -10,6 +10,7 @@ use App\Modules\Telegram\Admin\Sections\Owner\Forms\FormScreen;
 use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\Fmt;
 use App\Modules\Telegram\Admin\Ui\View;
+use App\Modules\Telegram\Admin\Ui\Words as UiWords;
 
 /**
  * An agency level added or edited (the panel's LevelForm): its name and what a GB of the traffic their bots sell costs
@@ -41,24 +42,24 @@ final class AgencyLevelFormScreen extends FormScreen
 
     protected function title(array $state): string
     {
-        return self::isNew($state) ? '➕ افزودن سطح' : '✏️ ویرایش «' . (string) ($state['name'] ?? '') . '»';
+        return self::isNew($state) ? UiWords::add('سطح') : UiWords::EDIT . ' «' . (string) ($state['name'] ?? '') . '»';
     }
 
     protected function path(array $state): array
     {
-        return ['مدیریت', 'نمایندگان', 'سطح‌ها'];
+        return [...AgencyScreen::path(), 'سطح‌ها'];
     }
 
     protected function saveLabel(array $state): string
     {
-        return self::isNew($state) ? '✔️ افزودن سطح' : '💾 ذخیره تغییرات';
+        return self::isNew($state) ? '✔️ افزودن سطح' : UiWords::SAVE;
     }
 
     protected function intro(View $view, Admin $admin, array $state): void
     {
         $price = (int) (self::draftOf($state)['price_per_gb'] ?? 0);
         if ($price > 0) {
-            $view->line('۱۰۰ گیگابایت برای نماینده‌های این سطح ' . Fmt::money((string) ($price * 100)) . ' است.')->line();
+            $view->line('<i>۱۰۰ گیگابایت برای نماینده‌های این سطح ' . Fmt::money((string) ($price * 100)) . ' است.</i>');
         }
     }
 

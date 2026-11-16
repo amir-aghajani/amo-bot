@@ -8,9 +8,11 @@ use App\Modules\Telegram\Admin\Door\ApiRefusal;
 use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\Button;
 use App\Modules\Telegram\Admin\Ui\Fmt;
+use App\Modules\Telegram\Admin\Ui\Icons;
 use App\Modules\Telegram\Admin\Ui\Json;
 use App\Modules\Telegram\Admin\Ui\ListScreen;
 use App\Modules\Telegram\Admin\Ui\View;
+use App\Modules\Telegram\Admin\Ui\Words;
 
 /**
  * «🔀 انتقال چند سرویس» (the panel's selection on the services list and its MoveDialog): the active services — as the
@@ -20,12 +22,15 @@ use App\Modules\Telegram\Admin\Ui\View;
  * it on the question whether to carry on without it (the rest on that server following the answer) or cancel; a target
  * that refuses one stops it, the next would fail the same way.
  *
- * Actions: `t` (id), `pa` (the page), `pn` (none), `pick` (servers), `to` (server: asks), `go` (server: starts),
- * `run` (on), `yes` / `nope` (the question's answer), `stop`, `end`.
+ * Actions: `t` (id), `pa` (the page), `pn` (none), `pick` (servers), `to` (server: asks), `go` (server: starts — a move
+ * kept, until `end`, shown as it stands), `run` (on), `yes` / `nope` (the question's answer), `stop`, `end`.
  */
 final class MoveScreen extends ListScreen
 {
     public const ID = 'sbm';
+
+    /** The screen's title, as the services list's button says it. */
+    public const TITLE = Sales::MOVE . ' انتقال چند سرویس';
 
     /** Services moved a tap: each asks two panels, and the tap waits for them. */
     private const CHUNK = 5;
@@ -62,12 +67,17 @@ final class MoveScreen extends ListScreen
 
     protected function title(): string
     {
-        return '🔀 انتقال چند سرویس';
+        return self::TITLE;
     }
 
     protected function path(): array
     {
-        return ['مدیریت', 'فروش', 'اشتراک‌ها'];
+        return Sales::under(Sales::SERVICES);
+    }
+
+    protected function noun(): string
+    {
+        return 'سرویس فعال';
     }
 
     protected function parent(): string
@@ -92,7 +102,7 @@ final class MoveScreen extends ListScreen
 
     protected function searchHint(): string
     {
-        return 'شماره یا نام کاربری سرویس، لینک یا مشتری';
+        return 'شماره یا نام کاربری سرویس، لینک اشتراک، یا نام، یوزرنیم، ایمیل یا شناسه تلگرام مشتری.';
     }
 
     protected function keepsRows(): bool
@@ -108,7 +118,7 @@ final class MoveScreen extends ListScreen
     protected function summary(array $meta): array
     {
         return [
-            'سرویس‌های فعالی را که می‌خواهید به سرور دیگر ببرید انتخاب کنید' . ($this->narrowing === [] ? '.' : '؛ همان‌طور که لیست اشتراک‌ها فیلتر شده.'),
+            '<i>سرویس‌های فعالی را که می‌خواهید به سرور دیگر ببرید انتخاب کنید' . ($this->narrowing === [] ? '.' : '؛ همان‌طور که لیست اشتراک‌ها فیلتر شده.') . '</i>',
             '☑️ ' . Fmt::number(count($this->ticked)) . ' سرویس انتخاب شده',
         ];
     }
@@ -117,17 +127,17 @@ final class MoveScreen extends ListScreen
     {
         $id = (int) ($row['id'] ?? 0);
 
-        return Button::to((isset($this->ticked[$id]) ? '✅ ' : '◻️ ') . (string) ($row['name'] ?? '') . ' · ' . (string) (Json::part($row, 'server')['name'] ?? '') . ' · ' . Sales::customer(Json::part($row, 'user')), self::ID, 't', $id);
+        return Button::to(Words::tick(isset($this->ticked[$id])) . (string) ($row['name'] ?? '') . ' · ' . (string) (Json::part($row, 'server')['name'] ?? '') . ' · ' . Fmt::cut(Sales::customer(Json::part($row, 'user')), 14), self::ID, 't', $id);
     }
 
     protected function extra(View $view, Admin $admin): void
     {
         $view->row(
-            Button::to('☑️ همه این صفحه', self::ID, 'pa'),
-            $this->ticked === [] ? null : Button::to('◻️ هیچ‌کدام', self::ID, 'pn'),
+            Button::to(Words::TICK_PAGE, self::ID, 'pa'),
+            $this->ticked === [] ? null : Button::to(Words::TICK_NONE, self::ID, 'pn'),
         );
         if ($this->ticked !== []) {
-            $view->row(Button::to('🔀 انتقال ' . Fmt::number(count($this->ticked)) . ' سرویس به سرور دیگر', self::ID, 'pick'));
+            $view->row(Button::to(Sales::MOVE . ' انتقال ' . Fmt::number(count($this->ticked)) . ' سرویس به سرور دیگر', self::ID, 'pick')->primary());
         }
     }
 
@@ -161,6 +171,12 @@ final class MoveScreen extends ListScreen
             case 'to':
                 return $this->asking($admin, $ticked, self::id($args));
             case 'go':
+                $run = self::run($admin);
+                if ($run !== null) {
+                    // The confirmation tapped again (a second tap, an old window): the move under way — or done — as it
+                    // stands, never started over on services it moved already.
+                    return $this->progress($admin, $run);
+                }
                 $target = self::id($args);
                 $queue = array_values(array_filter(array_keys($ticked), static fn(int $id): bool => $ticked[$id]['s'] !== $target));
                 if ($queue === []) {
@@ -258,25 +274,18 @@ final class MoveScreen extends ListScreen
     private function targets(Admin $admin, array $ticked): View
     {
         $on = array_values(array_unique(array_column($ticked, 's')));
-        $view = View::make('🖥 سرور مقصد', 'مدیریت', 'فروش', 'اشتراک‌ها', 'انتقال چند سرویس')
-            ->line(Fmt::number(count($ticked)) . ' سرویس انتخاب شده. به کدام سرور منتقل شوند؟');
-        $choices = [];
-        foreach (Sales::servers($admin) as $server) {
-            if ($on === [$server['id']]) {
-                continue;
-            }
-            if ($server['reason'] !== null) {
-                $view->line('⛔️ ' . Fmt::e($server['name']) . ': ' . Fmt::e($server['reason']));
-
-                continue;
-            }
-            $choices[] = Button::to('🖥 ' . $server['name'] . ($server['active'] !== null ? ' (' . Fmt::number($server['active']) . ' سرویس فعال)' : ''), self::ID, 'to', $server['id']);
+        // A server every ticked service is on already is no target; one some are on is (those stay where they are).
+        [$choices, $closed] = Sales::targets($admin, count($on) === 1 ? $on : [], self::ID, 'to', []);
+        $view = View::make(Icons::SERVERS . ' سرور مقصد', ...Sales::under(Sales::SERVICES, Fmt::bare(self::TITLE)))
+            ->card(['سرویس‌های انتخاب‌شده' => Fmt::number(count($ticked)), 'روی سرورهای' => Fmt::e(implode('، ', array_unique(array_column($ticked, 'sn'))))]);
+        if ($closed !== []) {
+            $view->section('⛔️ سرورهایی که الان سرویس نمی‌گیرند')->lines(...$closed);
         }
         if ($choices === []) {
             $view->line()->line('سروری نیست که این سرویس‌ها الان به آن منتقل شوند.');
         }
 
-        return $view->grid(1, ...$choices)->back(self::ID);
+        return $view->grid(1, ...$choices)->help(Fmt::e(self::MOVING))->back(self::ID);
     }
 
     /**
@@ -295,10 +304,12 @@ final class MoveScreen extends ListScreen
         $already = count($ticked) - count($queue);
 
         return Sales::choose(
+            $admin,
             Fmt::number(count($queue)) . ' سرویس به «' . Sales::serverName($admin, $target) . '» منتقل شود؟',
             Fmt::e(self::MOVING) . ($already > 0 ? "\n" . Fmt::number($already) . ' سرویس همین حالا روی این سرور است و منتقل نمی‌شود.' : ''),
-            Button::to('🔀 انتقال ' . Fmt::number(count($queue)) . ' سرویس', self::ID, 'go', $target),
-            Button::to('✖️ انصراف', self::ID),
+            false,
+            Button::to(Words::yes(Fmt::number(count($queue)) . ' سرویس منتقل شود'), self::ID, 'go', $target),
+            Button::to(Words::CANCEL, self::ID),
         );
     }
 
@@ -393,14 +404,11 @@ final class MoveScreen extends ListScreen
     {
         $ticked = self::tickedOf($admin);
         $count = static fn(string $state): int => count(array_filter($run['done'], static fn(array $outcome): bool => $outcome[0] === $state));
-        $view = View::make('🔀 انتقال به «' . $run['name'] . '»', 'مدیریت', 'فروش', 'اشتراک‌ها')
-            ->line(implode(' · ', array_filter([
-                Fmt::number($count('ok')) . ' منتقل شد',
-                $count('fail') > 0 ? Fmt::number($count('fail')) . ' ناموفق' : null,
-                $count('cancel') > 0 ? 'انتقال لغو شد' : null,
-                Fmt::number(count($run['queue'])) . ' سرویس',
-            ])))
-            ->line();
+        $view = View::make(Sales::MOVE . ' انتقال به «' . $run['name'] . '»', ...Sales::under(Sales::SERVICES))->card([
+            'منتقل شد' => Fmt::number($count('ok')) . ' از ' . Fmt::number(count($run['queue'])),
+            'ناموفق' => $count('fail') > 0 ? Fmt::number($count('fail')) : null,
+            'لغو شد' => $count('cancel') > 0 ? Fmt::number($count('cancel')) : null,
+        ])->section('📋 سرویس‌ها');
         foreach ($run['queue'] as $id) {
             $name = Fmt::ltr($ticked[$id]['n'] ?? (string) $id);
             $from = Fmt::e($ticked[$id]['sn'] ?? '');
@@ -423,8 +431,8 @@ final class MoveScreen extends ListScreen
             return $view->line()->line('⚠️ ' . Fmt::e($run['ask']['reason']))->line(Fmt::e($others > 0
                 ? 'این سرویس و ' . Fmt::number($others) . ' سرویس دیگر همین سرور بدون حذف از «' . $server . '» منتقل شوند؟ کلاینت‌های قبلی روی آن سرور می‌مانند تا سرور دوباره جواب بدهد، بعد خودکار حذف می‌شوند.'
                 : 'بدون حذف از «' . $server . '» منتقل شود؟ کلاینت قبلی روی آن سرور می‌ماند تا سرور دوباره جواب بدهد، بعد خودکار حذف می‌شود.'))
-                ->row(Button::to('🔀 انتقال بدون حذف از سرور قبلی', self::ID, 'yes'))
-                ->row(Button::to('🚫 لغو انتقال این سرویس', self::ID, 'nope'))
+                ->row(Button::to(Sales::MOVE . ' انتقال بدون حذف از سرور قبلی', self::ID, 'yes')->success())
+                ->row(Button::to(Sales::CANCEL . ' لغو انتقال این سرویس', self::ID, 'nope')->danger())
                 ->back(SubscriptionsScreen::ID);
         }
         if ($run['stopped'] !== null) {
@@ -432,11 +440,11 @@ final class MoveScreen extends ListScreen
         }
         $left = count($run['queue']) - count($run['done']);
         if (!$run['over'] && $run['stopped'] === null && $left > 0) {
-            return $view->row(Button::to('▶️ ادامه انتقال (' . Fmt::number($left) . ' مانده)', self::ID, 'run'))
+            return $view->row(Button::to('▶️ ادامه انتقال (' . Fmt::number($left) . ' مانده)', self::ID, 'run')->primary())
                 ->row(Button::to('⏹ توقف', self::ID, 'stop'))
                 ->back(SubscriptionsScreen::ID);
         }
 
-        return $view->row(Button::to('✔️ بستن', self::ID, 'end'))->back(SubscriptionsScreen::ID);
+        return $view->row(Button::to('✔️ بستن', self::ID, 'end')->primary())->back(SubscriptionsScreen::ID);
     }
 }

@@ -11,17 +11,21 @@ use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\BaseScreen;
 use App\Modules\Telegram\Admin\Ui\Button;
 use App\Modules\Telegram\Admin\Ui\Fmt;
+use App\Modules\Telegram\Admin\Ui\Icons;
 use App\Modules\Telegram\Admin\Ui\Json;
 use App\Modules\Telegram\Admin\Ui\View;
+use App\Modules\Telegram\Admin\Ui\Words;
 
 /**
- * One server (the panel's server page): its connector and address, its state and last check — or what a check just
- * found —, why nothing is sold on it now, its connection's facts in its connector's words (the way in, the subscription
- * links, its active services, the SOCKS5 proxy, TLS, the timeout), and its sections: «🔌 بررسی اتصال», its inbounds,
- * its free test accounts, its connection's form, the days and traffic given to its services, moving its services, and
- * «🗑 حذف سرور» asked first. The server opened is kept for its sections (ServerWords::current()).
+ * One server (the panel's server page), its summary card: its state as a chip and its last check, its connector and
+ * address (to copy), its inbounds for sale and active services, its connection's facts in its connector's words (the
+ * way in, the subscription links, the SOCKS5 proxy, TLS, the timeout) — why nothing is sold on it now over it, what a
+ * check just found (or its last error) under it —; then its actions: «🔌 بررسی اتصال» (the main one), the inbounds read
+ * again from its panel, its inbounds for sale, its connection's form, its free test accounts, the days and traffic given
+ * to its services, moving its services, and «🗑 حذف سرور» (red, asked first). The server opened is kept for its sections
+ * (ServerWords::current()).
  *
- * Actions: `check`, `del` (asks), `gone` (deletes).
+ * Actions: `check`, `sync` (the inbounds read again), `del` (asks), `gone` (deletes).
  */
 final class ServerScreen extends BaseScreen
 {
@@ -40,14 +44,10 @@ final class ServerScreen extends BaseScreen
         if ($id === 0) {
             return $admin->open(ServersScreen::ID);
         }
-        $kept = $admin->state(self::ID);
-        if ((int) ($kept['id'] ?? 0) !== $id) {
-            $admin->remember(self::ID, ['id' => $id, 'probe' => null]);
-        }
+        ServerWords::opened($admin, $id);
         $answer = $admin->api->get("/servers/{$id}");
-        $probe = is_array($kept['probe'] ?? null) && (int) ($kept['id'] ?? 0) === $id ? $kept['probe'] : null;
 
-        return $this->view($admin, (array) ($answer['server'] ?? []), $probe);
+        return $this->view($admin, (array) ($answer['server'] ?? []), self::probe($admin, $id));
     }
 
     public function act(Admin $admin, string $action, array $args): View
@@ -61,16 +61,23 @@ final class ServerScreen extends BaseScreen
                 $admin->notice(Json::on($probe, 'ok') ? '✅ اتصال برقرار است' : '❌ اتصال برقرار نشد');
 
                 return $this->view($admin, (array) ($answer['server'] ?? []), $probe);
+            case 'sync':
+                $answer = $admin->api->post("/servers/{$id}/inbounds/sync");
+                $inbounds = array_filter((array) ($answer['inbounds'] ?? []), is_array(...));
+                $admin->notice('✅ اینباندها از پنل خوانده شدند: ' . Fmt::plain(Fmt::number(count($inbounds))) . ' اینباند');
+
+                return $this->view($admin, (array) ($answer['server'] ?? []), self::probe($admin, $id));
             case 'del':
                 $server = (array) ($admin->api->get("/servers/{$id}")['server'] ?? []);
 
                 return $admin->confirm(
                     '«' . (string) ($server['name'] ?? '') . '» حذف شود؟',
-                    Button::to('🗑 بله، حذف شود', self::ID, 'gone', $id),
-                    Button::to('✖️ انصراف', self::ID, 'show', $id),
+                    Button::to(Words::yes('حذف شود', '🗑'), self::ID, 'gone', $id),
+                    Button::to(Words::CANCEL, self::ID, 'show', $id),
                     '«' . Fmt::e((string) ($server['name'] ?? '')) . '» حذف می‌شود؛ این کار برگشت‌پذیر نیست.' . "\n"
                     . 'اینباندهایش، جایش در پلن‌ها، تاریخچه هدیه‌ها و انتقال‌هایش و فهرست کلاینت‌هایی که انتقال‌ها روی پنلش گذاشته‌اند هم پاک می‌شود، با اطلاعات اتصال و توکنش؛ سفارش‌ها سابقه‌شان را نگه می‌دارند. خود پنل دست نمی‌خورد.' . "\n\n"
                     . '<i>فقط وقتی ممکن است که هیچ اشتراکی روی این سرور ثبت نشده باشد؛ در غیر این صورت آن را غیرفعال کنید.</i>',
+                    danger: true,
                 );
             case 'gone':
                 $admin->api->delete("/servers/{$id}");
@@ -84,6 +91,19 @@ final class ServerScreen extends BaseScreen
     }
 
     /**
+     * The connection test kept for server `$id`'s card (a check's, or what its panel answered as it was added); null for
+     * none, or another server's.
+     *
+     * @return array<string, mixed>|null
+     */
+    private static function probe(Admin $admin, int $id): ?array
+    {
+        $kept = $admin->state(self::ID);
+
+        return is_array($kept['probe'] ?? null) && (int) ($kept['id'] ?? 0) === $id ? $kept['probe'] : null;
+    }
+
+    /**
      * @param array<string, mixed> $server
      * @param array<string, mixed>|null $probe
      */
@@ -92,51 +112,57 @@ final class ServerScreen extends BaseScreen
         $id = (int) ($server['id'] ?? 0);
         $driver = ServerWords::driver($admin, (string) ($server['driver'] ?? ''));
         $form = is_array($server['form'] ?? null) ? $server['form'] : null;
-        $view = View::make('🖥 ' . (string) ($server['name'] ?? ''), 'مدیریت', 'سرورها')
-            ->line(Fmt::ltr((string) ($server['driver_label'] ?? '')) . ' · ' . Fmt::ltr((string) ($server['base_url'] ?? '')))
-            ->line('وضعیت: ' . ServerWords::status($server))
-            ->line(is_string($server['last_checked_at'] ?? null) ? 'آخرین بررسی: ' . Fmt::date($server['last_checked_at'], true) : 'هنوز بررسی نشده است.');
-        if ($probe !== null) {
-            $view->line()->lines(...ServerWords::probe($probe));
-        } elseif (is_string($server['last_error'] ?? null)) {
-            $view->line()->line('❌ ' . Fmt::e($server['last_error']));
-            if (is_string($server['last_error_detail'] ?? null)) {
-                $view->line(Fmt::code($server['last_error_detail']));
-            }
-        }
+        $counts = Json::part($server, 'counts');
+        $address = (string) ($server['base_url'] ?? '');
+        $view = View::make(Icons::SERVERS . ' ' . (string) ($server['name'] ?? ''), Words::ROOT, Fmt::bare(ServersScreen::TITLE));
         if (is_string($server['unsellable_reason'] ?? null)) {
-            $view->line()->line('⚠️ فعلا چیزی روی این سرور فروخته یا به آن منتقل نمی‌شود: ' . Fmt::e($server['unsellable_reason']));
+            $view->line('⚠️ فعلا چیزی روی این سرور فروخته یا به آن منتقل نمی‌شود: ' . Fmt::e($server['unsellable_reason']));
         }
 
-        $view->line()->facts([
+        $view->card([
+            'وضعیت' => ServerWords::status($server),
+            'آخرین بررسی' => is_string($server['last_checked_at'] ?? null) ? Fmt::date($server['last_checked_at'], true) : null,
+            'کانکتور' => Fmt::ltr((string) ($server['driver_label'] ?? '')),
+            'آدرس پنل' => Fmt::code($address),
+            'اینباندهای فروش' => Fmt::number((int) ($counts['selectable_inbounds'] ?? 0)) . ' از ' . Fmt::number((int) ($counts['inbounds'] ?? 0)),
+            'اشتراک‌های فعال' => $this->active($admin, $server),
             'احراز هویت' => $form === null || !array_key_exists('auth_mode', $form) && !array_key_exists('username', $form) ? null : $this->wayIn($form, $driver),
             'لینک اشتراک' => match ($server['serves_subscriptions'] ?? null) {
                 true => is_string($form['subscription_url'] ?? null) && $form['subscription_url'] !== '' ? Fmt::ltr($form['subscription_url']) : 'از تنظیمات پنل',
                 false => '⛔️ در پنل فعال نیست',
                 default => '⚠️ نامشخص — سرور را بررسی کنید',
             },
-            'اشتراک‌های فعال' => $this->active($admin, $server),
             "پراکسی \u{2068}SOCKS5\u{2069}" => $form === null ? null : self::proxy($form),
             "گواهی \u{2068}TLS\u{2069}" => $form === null || !array_key_exists('verify_tls', $form) ? null : (Json::on($form, 'verify_tls') ? 'بررسی می‌شود' : 'بررسی نمی‌شود'),
             'تایم‌اوت' => is_int($form['timeout'] ?? null) ? Fmt::number($form['timeout']) . ' ثانیه' : null,
             'یادداشت' => is_string($server['notes'] ?? null) && $server['notes'] !== '' ? Fmt::e(Fmt::cut($server['notes'], 120)) : null,
             'افزوده‌شده' => Fmt::date(is_string($server['created_at'] ?? null) ? $server['created_at'] : null),
         ]);
+        if ($probe !== null) {
+            $view->section('🔌 نتیجه بررسی اتصال')->lines(...ServerWords::probe($probe));
+        } elseif (is_string($server['last_error'] ?? null)) {
+            $view->section('🔴 آخرین خطا')->line(Fmt::e($server['last_error']));
+            if (is_string($server['last_error_detail'] ?? null)) {
+                $view->line(Fmt::code($server['last_error_detail']));
+            }
+        }
         if ($driver === null) {
-            $view->note('فرم تنظیمات این کانکتور در این نسخه در دسترس نیست.');
+            $view->note(ServerWords::NO_FORM);
         }
 
-        $counts = Json::part($server, 'counts');
-
         return $view
-            ->row(Button::to('🔌 بررسی اتصال', self::ID, 'check', $id), Button::to('📡 اینباندها (' . Fmt::number((int) ($counts['selectable_inbounds'] ?? 0)) . '/' . Fmt::number((int) ($counts['inbounds'] ?? 0)) . ')', ServerInboundsScreen::ID, 'show', $id))
+            ->row(Button::to('🔌 بررسی اتصال', self::ID, 'check', $id)->primary(), Button::to('🔄 خواندن اینباندها از پنل', self::ID, 'sync', $id))
             ->row(
-                Button::to('🧪 اکانت تست', TestServerScreen::ID, 'srv', $id, TestServerScreen::FROM_SERVER),
-                $driver !== null ? Button::to('✏️ تنظیمات اتصال', ServerFormScreen::ID, 'edit', $id) : null,
+                // How many are for sale is the card's: the button says only where it goes.
+                Button::to(ServerInboundsScreen::TITLE, ServerInboundsScreen::ID, 'show', $id),
+                $driver !== null ? Button::to(Words::edit('تنظیمات اتصال'), ServerFormScreen::ID, 'edit', $id) : null,
             )
-            ->row(Button::to('🎁 افزودن زمان و حجم', ServerGrantsScreen::ID, 'show', $id), Button::to('🔀 انتقال سرویس‌ها', ServerMigrationsScreen::ID, 'show', $id))
-            ->row(Button::to('🗑 حذف سرور', self::ID, 'del', $id))
-            ->back(ServersScreen::ID);
+            ->row(Button::to(Icons::TESTS . ' اکانت تست', TestServerScreen::ID, 'srv', $id, TestServerScreen::FROM_SERVER), Button::to(ServerGrantsScreen::TITLE, ServerGrantsScreen::ID, 'show', $id))
+            ->row(Button::to(ServerMigrationsScreen::TITLE, ServerMigrationsScreen::ID, 'show', $id), $address !== '' ? Button::copy(Words::copy('آدرس پنل'), $address) : null)
+            ->row(Button::to(Words::DELETE . ' سرور', self::ID, 'del', $id)->danger())
+            ->help('<b>🔌 بررسی اتصال</b>: پنل همین حالا پرسیده می‌شود و وضعیت هسته، منابع سرور و اینباندهایش این‌جا نشان داده می‌شود. <b>🔄 خواندن اینباندها</b>: فهرست اینباندها دوباره از پنل خوانده می‌شود؛ علامت فروش هر کدام می‌ماند. <b>🗑 حذف</b> فقط برای سروری است که اشتراکی رویش نیست؛ وگرنه آن را در تنظیمات اتصال غیرفعال کنید.')
+            ->back(ServersScreen::ID)
+            ->refresh(self::ID, 'show', $id);
     }
 
     /**

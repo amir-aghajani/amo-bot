@@ -5,29 +5,31 @@ declare(strict_types=1);
 namespace App\Modules\Telegram\Admin\Sections\Marketing\Loyalty;
 
 use App\Modules\Telegram\Admin\AdminSeat;
-use App\Modules\Telegram\Admin\Sections\Marketing\Words;
+use App\Modules\Telegram\Admin\Sections\Marketing\Words as Marketing;
 use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\Button;
 use App\Modules\Telegram\Admin\Ui\Fmt;
+use App\Modules\Telegram\Admin\Ui\Icons;
 use App\Modules\Telegram\Admin\Ui\ListScreen;
 use App\Modules\Telegram\Admin\Ui\View;
+use App\Modules\Telegram\Admin\Ui\Words;
 
 /**
  * «🏅 سطوح وفاداری» (the panel's «سطوح وفاداری»): the tiers by what a customer has spent, lowest threshold first — a list
- * the panel answers whole —, each with its discount and extra cashback, opening its own screen (LoyaltyTierScreen);
- * «➕ افزودن سطح» (LoyaltyTierForm) and the panel's ⓘ.
+ * the panel answers whole —, each a button with its threshold, discount and extra cashback, opening its own screen
+ * (LoyaltyTierScreen); «➕ افزودن سطح» (LoyaltyTierForm) and the panel's ⓘ, folded.
  *
- * Actions: `info`.
+ * Actions: ListScreen's; `info` (an older window's «❔ راهنما»: the list, its help folded in it).
  */
 final class LoyaltyTiersScreen extends ListScreen
 {
     public const ID = 'ly';
 
-    /** The program in a paragraph: the panel's ⓘ. */
-    private const PROGRAM = 'تخفیف سطح یکی از تخفیف‌های خودکار است: از میان فروش ویژه، تخفیف اختصاصی مشتری و تخفیف سطح، فقط بزرگ‌ترین روی قیمت اعمال می‌شود و کد تخفیف بعد از آن. کش‌بک سطح به درصد قانون‌های کش‌بک اضافه می‌شود، تا وقتی کش‌بک در صفحه «کش‌بک» روشن است.';
+    public const TITLE = Icons::LOYALTY . ' ' . Marketing::LOYALTY;
 
-    /** How many tiers there are, as summary() read it for extra(). */
-    private int $total = 0;
+    /** The program in a paragraph: the panel's ⓘ. */
+    private const PROGRAM = 'هر مشتری روی بالاترین سطحی است که جمع خریدهایش به حد آن رسیده؛ خرید، تمدید و حجم، زمان و کاربر اضافه حساب می‌شود، شارژ کیف پول و سفارش برگشت‌خورده نه. مشتری سطحش را در کیف پول ربات و در وب‌سایت می‌بیند و وقتی به سطح بالاتری برسد خبردار می‌شود.' . "\n\n"
+        . 'تخفیف سطح یکی از تخفیف‌های خودکار است: از میان فروش ویژه، تخفیف اختصاصی مشتری و تخفیف سطح، فقط بزرگ‌ترین روی قیمت اعمال می‌شود و کد تخفیف بعد از آن. کش‌بک سطح به درصد قانون‌های کش‌بک اضافه می‌شود، تا وقتی کش‌بک روشن است.';
 
     public function allows(AdminSeat $seat): bool
     {
@@ -41,12 +43,12 @@ final class LoyaltyTiersScreen extends ListScreen
 
     protected function title(): string
     {
-        return '🏅 سطوح وفاداری';
+        return self::TITLE;
     }
 
     protected function path(): array
     {
-        return Words::PATH;
+        return Marketing::PATH;
     }
 
     protected function endpoint(): string
@@ -64,42 +66,50 @@ final class LoyaltyTiersScreen extends ListScreen
         return false;
     }
 
-    protected function empty(): string
+    protected function noun(): string
     {
-        return 'هنوز سطحی تعریف نشده است. بدون سطح، برنامه وفاداری خاموش است. مثلا برنزی از صفر، نقره‌ای از ۵۰۰ هزار و طلایی از ۲ میلیون تومان خرید؛ هر کدام با درصد تخفیف و کش‌بک خودش.';
+        return 'سطح';
     }
 
-    protected function summary(array $meta): array
+    protected function empty(): string
     {
-        $this->total = (int) ($meta['total'] ?? 0);
-
-        return ['هر مشتری روی بالاترین سطحی است که جمع خریدهایش به حد آن رسیده؛ خرید، تمدید و حجم، زمان و کاربر اضافه حساب می‌شود، شارژ کیف پول و سفارش برگشت‌خورده نه. مشتری سطحش را در کیف پول ربات و در وب‌سایت می‌بیند و وقتی به سطح بالاتری برسد خبردار می‌شود.'];
+        return 'هنوز سطحی تعریف نشده است؛ بدون سطح، برنامه وفاداری خاموش است. مثلا برنزی از صفر، نقره‌ای از ۵۰۰ هزار و طلایی از ۲ میلیون تومان خرید؛ هر کدام با درصد تخفیف و کش‌بک خودش.';
     }
 
     protected function parent(): string
     {
-        return 'hm';
+        return Marketing::MENU;
     }
 
     protected function item(array $row): Button
     {
-        $spent = is_numeric($row['min_spent'] ?? null) ? (string) $row['min_spent'] : '0';
-        $from = (float) $spent > 0 ? 'از ' . Fmt::money($spent) : 'از ابتدا';
+        $parts = [Icons::LOYALTY . ' ' . (string) ($row['name'] ?? ''), self::from($row)];
+        if ((int) ($row['discount_percent'] ?? 0) > 0) {
+            $parts[] = self::percent($row['discount_percent']) . ' تخفیف';
+        }
+        if ((int) ($row['cashback_percent'] ?? 0) > 0) {
+            $parts[] = self::percent($row['cashback_percent']) . ' کش‌بک';
+        }
 
-        return Button::to('🏅 ' . (string) ($row['name'] ?? '') . ' · ' . $from . ' · ' . self::percent($row['discount_percent'] ?? 0) . ' / ' . self::percent($row['cashback_percent'] ?? 0), LoyaltyTierScreen::ID, 'show', (int) ($row['id'] ?? 0));
+        return Button::to(implode(' · ', $parts), LoyaltyTierScreen::ID, 'show', (int) ($row['id'] ?? 0));
     }
 
     protected function extra(View $view, Admin $admin): void
     {
-        if ($this->total > 0) {
-            $view->note('هر ردیف: حد خرید · تخفیف / کش‌بک اضافه');
-        }
-        $view->row(Button::to('➕ افزودن سطح', LoyaltyTierForm::ID, 'new'), Button::to('❔ راهنما', self::ID, 'info'));
+        $view->row(Button::to(Words::add('سطح'), LoyaltyTierForm::ID, 'new')->success())
+            ->help(Fmt::e(self::PROGRAM));
     }
 
-    protected function action(Admin $admin, string $action, array $args): View
+    /**
+     * Where a tier starts: «از ۵۰۰٬۰۰۰ تومان», or «از ابتدا» for none.
+     *
+     * @param array<string, mixed> $tier
+     */
+    public static function from(array $tier): string
     {
-        return $action === 'info' ? Words::help(self::ID, 'سطوح وفاداری', self::PROGRAM) : $this->show($admin, []);
+        $spent = is_numeric($tier['min_spent'] ?? null) ? (string) $tier['min_spent'] : '0';
+
+        return (float) $spent > 0 ? 'از ' . Fmt::money($spent) : 'از ابتدا';
     }
 
     /** A tier's percent, «۵٪», or «—» for none (the panel's Dash). */

@@ -30,6 +30,12 @@ final class Admin
     /** The chat's fact the management keeps its screens' state, its message and the owner's shop under. */
     public const FACT = '_adm';
 
+    /** The icons of a confirmation's yes that destroys (confirm()): delete, cancel, ban, stop, cut. */
+    private const DESTRUCTIVE = ['🗑', '🚫', '⛔', '🛑', '✂️'];
+
+    /** The words a way out was given before the one cancel word (Words::CANCEL): drawn in it (wayOut()). */
+    private const CANCELS = ['✖️ لغو', '✖️ انصراف', 'لغو', 'انصراف'];
+
     /**
      * @var list<string> Words for the next screen shown: an action done after a typed answer (no popup to say it in).
      */
@@ -103,39 +109,119 @@ final class Admin
 
     /**
      * Ask `$prompt`: the chat waits for the answer, which the screen's input() takes — `$again` after an answer refused
-     * (the refusal said over it).
+     * (the refusal said over it). Under the field asked: where it is asked from, the hint, the value now («مقدار فعلی»,
+     * to copy), an example and the limits; then its quick picks two a row, «🗑 خالی کردن» · «↩️ پیش‌فرض» where it offers
+     * them, a wizard step's ways on in a row of their own («⬅️ گام قبل» · «⏭ رد شدن»), and «✖️ انصراف» — the
+     * management's one cancel word, whatever cancel word the screen gave its way out (wayOut()).
      */
     public function ask(Prompt $prompt, bool $again = false): View
     {
         $this->ctx->session->enter($prompt->anyText ? self::INPUT_ANY : self::INPUT, ['adm_prompt' => $prompt->keep()]);
-        $view = View::make('✍️ ' . $prompt->question);
+        $view = View::make('✍️ ' . $prompt->question, ...$this->trail())->transient();
         if ($prompt->hint !== '') {
             $view->line($prompt->hint);
         }
+        if ($prompt->current !== null) {
+            $view->line(Words::CURRENT . ': ' . self::current($prompt->current, $prompt->copyable));
+        }
+        if ($prompt->example !== '') {
+            $view->line(Words::EXAMPLE . ': ' . Fmt::code($prompt->example));
+        }
+        if ($prompt->limits !== '') {
+            $view->line(Words::LIMITS . ': ' . Fmt::e($prompt->limits));
+        }
         $view->note(match (true) {
-            $again => 'دوباره بفرستید، یا لغو کنید.',
-            $prompt->file => 'پاسخ را همین‌جا بفرستید.',
-            default => 'پاسخ را همین‌جا بنویسید و بفرستید.',
+            $again => Words::AGAIN,
+            $prompt->file => Words::SEND_HERE,
+            default => Words::TYPE_HERE,
         });
         foreach (array_chunk($prompt->choices, 2) as $row) {
             $view->row(...$row);
         }
+        $view->row($prompt->clear, $prompt->reset);
+        $view->row(...$prompt->ways);
 
-        return $view->row($prompt->cancel ?? Button::to('✖️ لغو', $prompt->screen, Nav::SHOW, ...$prompt->args));
+        return $view->row(self::wayOut($prompt->cancel ?? Button::to(Words::CANCEL, $prompt->screen, Nav::SHOW, ...$prompt->args)));
     }
 
     /**
      * A question before a change that is not undone (a delete, a refund): `$question`, what it does (`$detail`, HTML),
-     * «✔️ …» doing it and «✖️ انصراف» not.
+     * where it is asked from, «✔️ بله، …» doing it and «✖️ انصراف» not (the management's one cancel word, whatever
+     * cancel word `$no` has: wayOut()). The yes is green, or red for a change that destroys (`$danger`; left null, a
+     * yes that deletes, cancels, bans, stops or cuts — its label's icon one of DESTRUCTIVE — is); a yes given its own
+     * colour keeps it.
      */
-    public function confirm(string $question, Button $yes, Button $no, string $detail = ''): View
+    public function confirm(string $question, Button $yes, Button $no, string $detail = '', ?bool $danger = null): View
     {
-        $view = View::make('❓ ' . $question);
+        $view = View::make('❓ ' . $question, ...$this->trail())->transient();
         if ($detail !== '') {
             $view->line($detail);
         }
+        $danger ??= self::destroys($yes);
+        if ($yes->style === null) {
+            $yes = $danger ? $yes->danger() : $yes->success();
+        }
 
-        return $view->row($yes, $no);
+        return $view->row($yes, self::wayOut($no));
+    }
+
+    /**
+     * Keep where the window now is (View::trail()): the path a question or a confirmation asked from it shows.
+     *
+     * @param list<string> $trail
+     */
+    public function here(array $trail): void
+    {
+        $fact = $this->fact();
+        if (($fact['trail'] ?? null) === $trail) {
+            return;
+        }
+        $fact['trail'] = $trail;
+        $this->ctx->session->put(self::FACT, $fact);
+    }
+
+    /**
+     * Where the window was last (here()): a question's or a confirmation's path.
+     *
+     * @return list<string>
+     */
+    public function trail(): array
+    {
+        $trail = $this->fact()['trail'] ?? [];
+
+        return is_array($trail) ? array_values(array_filter($trail, is_string(...))) : [];
+    }
+
+    /** The value now, as a question says it: to copy — a value of lines as a block —, or bold; «—» for none. */
+    private static function current(string $value, bool $copyable): string
+    {
+        return match (true) {
+            trim($value) === '' => Fmt::NONE,
+            !$copyable => '<b>' . Fmt::e($value) . '</b>',
+            str_contains($value, "\n") => "\n<pre>" . Fmt::e($value) . '</pre>',
+            default => Fmt::code($value),
+        };
+    }
+
+    /**
+     * A question's or a confirmation's way out, said in the management's one cancel word when it is a cancel at all (one
+     * of CANCELS); a way out that says what goes on instead («✖️ ادامه انتقال») keeps its words.
+     */
+    private static function wayOut(Button $no): Button
+    {
+        return in_array($no->label, self::CANCELS, true) ? $no->labelled(Words::CANCEL) : $no;
+    }
+
+    /** Whether `$yes` destroys: its label starts with one of DESTRUCTIVE. */
+    private static function destroys(Button $yes): bool
+    {
+        foreach (self::DESTRUCTIVE as $icon) {
+            if (str_starts_with($yes->label, $icon)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -196,7 +282,7 @@ final class Admin
         }
     }
 
-    /** The owner works shop `$shop` from now on («🏪 فروشگاه»): this update's next screens, and the chat's after. */
+    /** The owner works shop `$shop` from now on («🏪 تعویض فروشگاه»): this update's next screens, the chat's after. */
     public function pickShop(int $shop): void
     {
         $bot = Bot::query()->find($shop);

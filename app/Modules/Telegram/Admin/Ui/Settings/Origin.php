@@ -5,14 +5,12 @@ declare(strict_types=1);
 namespace App\Modules\Telegram\Admin\Ui\Settings;
 
 use App\Modules\Telegram\Admin\Ui\Admin;
-use App\Modules\Telegram\Admin\Ui\Button;
-use App\Modules\Telegram\Admin\Ui\Nav;
 
 /**
- * Where a screen was opened from, when that is a menu other than its own parent: a card of «🤖 تنظیمات ربات» that lives
- * on its program's page (the discount codes' settings, the channels). The opening button carries it (button()); the
- * screen keeps it in its state while its own actions run, and its «⬅️ بازگشت» goes back there (back()). Opened without
- * one — from its own list, its hub — it forgets it.
+ * Where a screen was opened from, when that is a menu other than its own parent — as 0.10.0's «🤖 تنظیمات ربات» opened
+ * the cards that live with their features (the discount codes' settings, the channels): a window of then still carries
+ * it (`show` with `from.<menu>`). The screen keeps it in its state while its own actions run, and its «⬅️ بازگشت» goes
+ * back there (back()). Opened without one — from its own list, its hub — it forgets it.
  */
 final class Origin
 {
@@ -24,12 +22,6 @@ final class Origin
 
     /** A screen's id an origin may be. */
     private const SCREEN = '/^[A-Za-z][A-Za-z0-9_-]*$/';
-
-    /** A button to `$screen` that goes back to `$origin`. */
-    public static function button(string $label, string $screen, string $origin): Button
-    {
-        return Button::to($label, $screen, Nav::SHOW, self::MARK . $origin);
-    }
 
     /**
      * Take what show() was opened with: an origin kept, or — opened without one — the one kept forgotten.

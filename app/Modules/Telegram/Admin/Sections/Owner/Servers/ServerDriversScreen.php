@@ -11,6 +11,7 @@ use App\Modules\Telegram\Admin\Ui\Button;
 use App\Modules\Telegram\Admin\Ui\Fmt;
 use App\Modules\Telegram\Admin\Ui\Json;
 use App\Modules\Telegram\Admin\Ui\View;
+use App\Modules\Telegram\Admin\Ui\Words;
 
 /**
  * «➕ افزودن سرور», its first step (the panel's add-server picker): which software manages the server's panel — each
@@ -28,7 +29,7 @@ final class ServerDriversScreen extends BaseScreen
 
     public function show(Admin $admin, array $args): View
     {
-        $view = View::make('➕ افزودن سرور', 'مدیریت', 'سرورها')
+        $view = View::make(Words::add('سرور'), Words::ROOT, Fmt::bare(ServersScreen::TITLE))
             ->line('پنل این سرور با کدام نرم‌افزار مدیریت می‌شود؟')
             ->line();
         $buttons = [];
@@ -46,6 +47,6 @@ final class ServerDriversScreen extends BaseScreen
             $buttons[] = Button::to($mark . ' · ' . (string) ($driver['label'] ?? ''), ServerFormScreen::ID, 'new', $driver['key']);
         }
 
-        return $view->grid(2, ...$buttons)->back(ServersScreen::ID);
+        return $view->tiles(...$buttons)->back(ServersScreen::ID);
     }
 }

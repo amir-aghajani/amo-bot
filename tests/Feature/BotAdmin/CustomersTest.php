@@ -5,12 +5,15 @@ declare(strict_types=1);
 namespace Tests\Feature\BotAdmin;
 
 use App\Modules\Accounts\Services\CustomerSessions;
+use App\Modules\Subscriptions\Enums\SubscriptionStatus;
 use App\Modules\Telegram\Admin\Door\BotAdminDoor;
 use App\Modules\Telegram\Admin\Sections\Customers\Customer;
 use App\Modules\Telegram\Admin\Ui\Nav;
+use App\Modules\Telegram\Admin\Ui\Words;
 use App\Modules\Users\Enums\UserRole;
 use App\Modules\Users\Enums\UserStatus;
 use App\Modules\Users\Models\User;
+use App\Support\Persian;
 use Tests\BotTestCase;
 
 /**
@@ -21,7 +24,6 @@ use Tests\BotTestCase;
  */
 final class CustomersTest extends BotTestCase
 {
-    private const OWNER = 7001;
     private const STAFF = 7100;
 
     protected function setUp(): void
@@ -33,7 +35,7 @@ final class CustomersTest extends BotTestCase
 
     public function testTheOwnerFindsACustomerByThePillsAndTheSearchAndOpensTheirPage(): void
     {
-        $this->owner();
+        $this->owner(UserRole::Admin);
         $ali = $this->wallet($this->customer(['telegram_id' => 1111, 'first_name' => 'Ali', 'username' => 'ali_r', 'phone' => '+989121234567']), '50000');
         $sara = $this->customer(['telegram_id' => 2222, 'first_name' => 'Sara', 'status' => UserStatus::Banned]);
 
@@ -68,7 +70,7 @@ final class CustomersTest extends BotTestCase
 
     public function testTheGroupAndTheOrderNarrowTheList(): void
     {
-        $this->owner();
+        $this->owner(UserRole::Admin);
         $ali = $this->customer(['telegram_id' => 1111, 'first_name' => 'Ali']);
         $sara = $this->wallet($this->customer(['telegram_id' => 2222, 'first_name' => 'Sara']), '90000');
         $vip = $this->customerGroup('VIP', [$ali]);
@@ -76,7 +78,7 @@ final class CustomersTest extends BotTestCase
         $this->send($this->tap(Nav::to('usf', 'show', 'g'), chat: self::OWNER));
         self::assertContains(Nav::to('usf', 'g', $vip->id), $this->window());
         $this->send($this->tap(Nav::to('usf', 'g', $vip->id), chat: self::OWNER));
-        self::assertStringContainsString('فقط گروه «VIP»', $this->screen());
+        self::assertStringContainsString('· گروه: VIP', $this->screen(), 'the group in force, in the line of how many');
         self::assertContains(Nav::to('usv', 'show', $ali->id), $this->window());
         self::assertNotContains(Nav::to('usv', 'show', $sara->id), $this->window());
 
@@ -84,11 +86,66 @@ final class CustomersTest extends BotTestCase
         $this->send($this->tap(Nav::to('usf', 's', 'balance', 'desc'), chat: self::OWNER));
         $rows = array_values(array_filter($this->window(), static fn(string $data): bool => str_starts_with($data, Nav::to('usv'))));
         self::assertSame([Nav::to('usv', 'show', $sara->id), Nav::to('usv', 'show', $ali->id)], array_slice($rows, 0, 2), 'the most money first');
+        self::assertStringContainsString('· ترتیب: بیشترین موجودی اول', $this->screen(), 'the order in force, in the line of how many');
+        self::assertContains('↕️ ترتیب', $this->buttonLabels($this->buttonsCall()), 'its button says only what it picks');
+    }
+
+    public function testEachRowSaysTheFactTheListIsOrderedBy(): void
+    {
+        $this->owner(UserRole::Admin);
+        $ali = $this->wallet($this->customer(['telegram_id' => 1111, 'first_name' => 'Ali']), '50000');
+        $server = $this->fakeServer();
+        $this->purchaseOrder($ali, $this->plan([], $server), $server);
+
+        $this->send($this->tap(Nav::to('us'), chat: self::OWNER));
+        self::assertStringContainsString("\n۲ کاربر", $this->screen(), 'how many (Ali and the owner), by their noun');
+        self::assertContains('👤 ' . Customer::isolate('Ali') . ' · ۵۰٬۰۰۰ تومان', $this->buttonLabels($this->buttonsCall()), 'their wallet at first');
+
+        $this->send($this->tap(Nav::to('usf', 's', 'orders', 'desc'), chat: self::OWNER));
+        self::assertContains('👤 ' . Customer::isolate('Ali') . ' · ۱ سفارش', $this->buttonLabels($this->buttonsCall()), 'ordered by orders: their orders');
+    }
+
+    public function testACustomersPageLeadsWithTheQuickActionsAndEndsWithTheBanInRed(): void
+    {
+        $this->owner(UserRole::Admin);
+        $ali = $this->customer(['telegram_id' => 1111, 'first_name' => 'Ali', 'username' => 'ali_r']);
+
+        $this->send($this->tap(Nav::to('usv', 'show', $ali->id), chat: self::OWNER));
+        self::assertStringContainsString('شناسه تلگرام: <code>1111</code>', $this->screen(), 'their Telegram id, to copy');
+        $rows = $this->inlineKeyboard($this->buttonsCall());
+        $first = array_column($rows[0], 'callback_data');
+        self::assertEqualsCanonicalizing([Nav::to('usm', 'show', $ali->id), Nav::to('usw', 'show', $ali->id)], $first, 'a message and the wallet first');
+        self::assertSame('primary', array_values(array_filter($rows[0], static fn(array $button): bool => $button['callback_data'] === Nav::to('usm', 'show', $ali->id)))[0]['style'] ?? null);
+        $last = $rows[count($rows) - 2];
+        self::assertSame([['text' => '⛔️ مسدود کردن', 'callback_data' => Nav::to('usv', 'ban', $ali->id), 'style' => 'danger']], $last, 'the ban last, red');
+        self::assertContains(Words::REFRESH, array_column($rows[count($rows) - 1], 'text'), 'refreshed from the way around');
+    }
+
+    public function testACustomersServicesNarrowByState(): void
+    {
+        $this->owner(UserRole::Admin);
+        $ali = $this->customer(['telegram_id' => 1111, 'first_name' => 'Ali']);
+        $server = $this->fakeServer();
+        $plan = $this->plan([], $server);
+        $running = $this->subscription($ali, $plan, $server, 'ali_1');
+        $ended = $this->subscription($ali, $plan, $server, 'ali_2', ['status' => SubscriptionStatus::Expired]);
+
+        $this->send($this->tap(Nav::to('usls', 'show', $ali->id), chat: self::OWNER));
+        self::assertContains(Nav::to('sbv', 'show', $running->id, 'from.usls'), $this->window());
+        self::assertContains(Nav::to('sbv', 'show', $ended->id, 'from.usls'), $this->window());
+
+        $this->send($this->tap(Nav::to('usls', 'f', 'status', 'expired'), chat: self::OWNER));
+        self::assertContains(Nav::to('sbv', 'show', $ended->id, 'from.usls'), $this->window());
+        self::assertNotContains(Nav::to('sbv', 'show', $running->id, 'from.usls'), $this->window(), 'narrowed to the ended ones');
+
+        $sara = $this->customer(['telegram_id' => 2222, 'first_name' => 'Sara']);
+        $this->send($this->tap(Nav::to('usls', 'show', $sara->id), chat: self::OWNER));
+        self::assertContains(Words::CHIP . 'همه', $this->buttonLabels($this->buttonsCall()), 'another customer\'s list opens unfiltered');
     }
 
     public function testTheOwnerCreditsAWalletOnceWithANote(): void
     {
-        $this->owner();
+        $this->owner(UserRole::Admin);
         $ali = $this->customer(['telegram_id' => 1111, 'first_name' => 'Ali']);
 
         $this->send($this->tap(Nav::to('usw', 'show', $ali->id), chat: self::OWNER));
@@ -97,6 +154,7 @@ final class CustomersTest extends BotTestCase
         $this->send($this->message('۵۰ هزار تومان', chat: self::OWNER));
         $this->send($this->message('هدیه تولد', chat: self::OWNER));
         self::assertStringContainsString('۵۰٬۰۰۰ تومان', $this->screen(), 'said once more before it goes');
+        self::assertStringContainsString('موجودی بعد از آن: <b>۵۰٬۰۰۰ تومان</b>', $this->screen(), 'with the balance it leaves');
         self::assertContains(Nav::to('usw', 'do', $ali->id), $this->window());
         self::assertSame('0.00', $ali->balance(), 'nothing yet');
 
@@ -107,6 +165,31 @@ final class CustomersTest extends BotTestCase
 
         $this->send($this->tap(Nav::to('usw', 'do', $ali->id), chat: self::OWNER));
         self::assertSame('50000.00', $ali->balance(), 'pressed twice, made once');
+    }
+
+    public function testADebitPastTheBalanceIsSaidBeforeItIsSentAndRefused(): void
+    {
+        $this->owner(UserRole::Admin);
+        $ali = $this->customer(['telegram_id' => 1111, 'first_name' => 'Ali']);
+        $this->wallet($ali, '20000');
+
+        $this->send($this->tap(Nav::to('usw', 'sub', $ali->id), chat: self::OWNER));
+        $this->send($this->message('۵۰ هزار تومان', chat: self::OWNER));
+        $this->send($this->tap(Nav::to('usw', 'skip', $ali->id), chat: self::OWNER));
+        self::assertStringContainsString('بیشتر از موجودی فعلی کم نمی‌شود', $this->screen(), 'said before «✔️»');
+        self::assertStringNotContainsString('موجودی بعد از آن', $this->screen(), 'no balance after a debit that cannot be made');
+        self::assertContains(Nav::to('usw', 'amt', $ali->id), $this->window(), 'the amount a tap away');
+
+        $this->send($this->tap(Nav::to('usw', 'do', $ali->id), chat: self::OWNER));
+        self::assertSame('20000.00', $ali->balance(), 'the panel refuses it');
+        self::assertStringContainsString('از این بیشتر نمی‌شود کم کرد', (string) $this->popup());
+
+        $this->send($this->tap(Nav::to('usw', 'amt', $ali->id), chat: self::OWNER));
+        $this->send($this->message('۱۵۰۰۰', chat: self::OWNER));
+        self::assertStringContainsString('موجودی بعد از آن: <b>۵٬۰۰۰ تومان</b>', $this->screen());
+        self::assertStringNotContainsString('بیشتر از موجودی فعلی', $this->screen());
+        $this->send($this->tap(Nav::to('usw', 'do', $ali->id), chat: self::OWNER));
+        self::assertSame('5000.00', $ali->balance());
     }
 
     public function testAShopsAdminAdjustsAWalletOnlyWithTheGrant(): void
@@ -152,11 +235,22 @@ final class CustomersTest extends BotTestCase
         $this->send($this->tap(Nav::to('usg', 'show', $boss->id), chat: self::STAFF));
         self::assertStringContainsString(Customer::ADMIN_LOCK, $this->screen());
         self::assertSame([], array_filter($this->window(), static fn(string $data): bool => str_starts_with($data, Nav::to('usg', 'sw'))), 'no switch');
+
+        // Forged taps (an old window's, hand-made data): the panel's rules refuse each, nothing changes.
+        $this->send($this->tap(Nav::to('usv', 'bs', $boss->id, 'banned'), chat: self::STAFF));
+        self::assertSame(UserStatus::Active, $boss->refresh()->status, 'a bot admin\'s account is the owner\'s to ban');
+        self::assertNotNull($this->popup());
+        $ali = $this->customer(['telegram_id' => 1111, 'first_name' => 'Ali']);
+        $this->send($this->tap(Nav::to('usv', 'rs', $ali->id, 'admin'), chat: self::STAFF));
+        self::assertSame(UserRole::Customer, $ali->refresh()->role, 'the role is the owner\'s');
+        $this->send($this->tap(Nav::to('usv', 'disc', $ali->id), chat: self::STAFF));
+        $this->send($this->message('۲۰', chat: self::STAFF));
+        self::assertSame(0, $ali->refresh()->discount_percent, 'and the own discount');
     }
 
     public function testABanIsAskedFirstAndLiftedAtOnce(): void
     {
-        $this->owner();
+        $this->owner(UserRole::Admin);
         $ali = $this->customer(['telegram_id' => 1111, 'first_name' => 'Ali']);
 
         $this->send($this->tap(Nav::to('usv', 'ban', $ali->id), chat: self::OWNER));
@@ -175,7 +269,7 @@ final class CustomersTest extends BotTestCase
 
     public function testTheOwnerSetsTheOwnDiscountTheRoleAndThePhoneRule(): void
     {
-        $this->owner();
+        $this->owner(UserRole::Admin);
         $ali = $this->customer(['telegram_id' => 1111, 'first_name' => 'Ali']);
 
         $this->send($this->tap(Nav::to('usv', 'disc', $ali->id), chat: self::OWNER));
@@ -202,7 +296,7 @@ final class CustomersTest extends BotTestCase
 
     public function testTakingTheRoleFromTheSeatsOwnAccountWarnsFirst(): void
     {
-        $own = $this->owner();
+        $own = $this->owner(UserRole::Admin);
 
         $this->send($this->tap(Nav::to('usv', 'role', $own->id, 'customer'), chat: self::OWNER));
         self::assertStringContainsString('این حساب خود شماست', $this->screen());
@@ -237,7 +331,7 @@ final class CustomersTest extends BotTestCase
 
     public function testAMessageIsReadOnceMoreThenSent(): void
     {
-        $this->owner();
+        $this->owner(UserRole::Admin);
         $ali = $this->customer(['telegram_id' => 1111, 'first_name' => 'Ali']);
 
         $this->send($this->tap(Nav::to('usm', 'show', $ali->id), chat: self::OWNER));
@@ -274,7 +368,7 @@ final class CustomersTest extends BotTestCase
 
     public function testAnotherCountrysNumberIsSaidToBeAskedAgainWhileTheBotTakesIranianOnes(): void
     {
-        $this->owner();
+        $this->owner(UserRole::Admin);
         $sam = $this->customer(['telegram_id' => 3333, 'first_name' => 'Sam', 'phone' => '+14155550101']);
         $this->botSettings('general', ['phone_required' => true, 'phone_iran_only' => true]);
 
@@ -288,7 +382,7 @@ final class CustomersTest extends BotTestCase
 
     public function testACustomersListsLinkEachRowToItsOwnScreen(): void
     {
-        $this->owner();
+        $this->owner(UserRole::Admin);
         $ali = $this->customer(['telegram_id' => 1111, 'first_name' => 'Ali']);
         $server = $this->fakeServer();
         $plan = $this->plan([], $server);
@@ -303,6 +397,7 @@ final class CustomersTest extends BotTestCase
         self::assertContains(Nav::to('orv', 'show', $order->id, 'from.uslo'), $this->window());
         $this->send($this->tap(Nav::to('uslt', 'show', $ali->id), chat: self::OWNER));
         self::assertContains(Nav::to('tkv', 'show', $ticket->id, 'from.uslt'), $this->window());
+        self::assertContains('🟡 #' . Persian::digits((string) $ticket->id) . ' · قطعی اتصال', $this->buttonLabels($this->buttonsCall()), 'as the shop\'s tickets list has its rows');
 
         $sara = $this->customer(['telegram_id' => 2222, 'first_name' => 'Sara']);
         $this->send($this->tap(Nav::to('usls', 'show', $sara->id), chat: self::OWNER));
@@ -311,7 +406,7 @@ final class CustomersTest extends BotTestCase
 
     public function testARowOpenedFromACustomersListGoesBackToThatList(): void
     {
-        $this->owner();
+        $this->owner(UserRole::Admin);
         $ali = $this->customer(['telegram_id' => 1111, 'first_name' => 'Ali']);
         $server = $this->fakeServer();
         $plan = $this->plan([], $server);
@@ -336,15 +431,6 @@ final class CustomersTest extends BotTestCase
         $this->send($this->tap(Nav::to('pyv', 'show', $other->id), chat: self::OWNER));
         self::assertContains(Nav::to('py'), $this->window(), 'a row opened from the shop\'s list goes back there');
         self::assertNotContains(Nav::to('uslp'), $this->window());
-    }
-
-    /** The account OWNER linked as the owner — the bot's admin too, as the link makes it. */
-    private function owner(): User
-    {
-        $owner = User::query()->where('telegram_id', self::OWNER)->first() ?? $this->customer(['telegram_id' => self::OWNER, 'first_name' => 'Amir', 'role' => UserRole::Admin]);
-        $this->linkOwner(self::OWNER);
-
-        return $owner;
     }
 
     /** One of the shop's admins (STAFF), who manage it from the bot while «مدیران ربات» lets them in. */

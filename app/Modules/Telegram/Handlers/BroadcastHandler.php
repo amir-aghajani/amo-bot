@@ -129,6 +129,7 @@ final class BroadcastHandler implements Handler
                 : $this->audience($ctx, $draft, $args[1] ?? null, isset($args[2]) ? (int) $args[2] : null),
             'btn' => fn(array $draft) => ($args[1] ?? '') === 'clear' ? $this->redraw($ctx, ['buttons' => []] + $draft) : $this->askButtons($ctx, $draft),
             'card' => fn(array $draft) => $this->redraw($ctx, $draft),
+            'ask' => fn(array $draft) => $this->ask($ctx, $draft),
             'send' => fn(array $draft) => $this->send($ctx, $draft),
         ];
         if (isset($steps[$action])) {
@@ -319,8 +320,39 @@ final class BroadcastHandler implements Handler
     }
 
     /**
-     * «ارسال»: the draft becomes a run — once, though pressed twice — and the card its progress message; the first
-     * INLINE_LIMIT customers get it now.
+     * The card's «ارسال»: asked once more in the card's place — what goes, to whom and how many, pinned or not, and that
+     * a message once received stays —, «✔️ بله، ارسال شود» doing it (send()) and «✖️ انصراف» back to the card. An
+     * audience gone or empty is said as send() says it, nothing asked.
+     *
+     * @param array<string, mixed> $draft
+     */
+    private function ask(Context $ctx, array $draft): void
+    {
+        $audience = Audience::of((string) $draft['audience'], $draft['audience_id']);
+        // The count the run goes through (BroadcastService::start()'s total), as the card's «ارسال» says it — those who
+        // blocked the bot among them said too, as the card says them: counted, never reached.
+        ['total' => $total, 'blocked' => $blocked] = $audience?->size() ?? ['total' => 0, 'blocked' => 0];
+        if ($audience === null || $total === 0) {
+            $ctx->answer($audience === null ? Messages::BROADCAST_AUDIENCE_GONE : Messages::BROADCAST_EMPTY_AUDIENCE, alert: true);
+
+            return;
+        }
+        $text = Messages::fill(Messages::BROADCAST_CONFIRM, [
+            'count' => Persian::number($total),
+            'content' => self::content($draft),
+            'audience' => htmlspecialchars($audience->label()),
+            'blocked' => self::blocked($blocked),
+            'pin' => $draft['pin'] ? Messages::BROADCAST_CONFIRM_PIN : '',
+        ]);
+        $ctx->edit($text, ['reply_markup' => InlineKeyboard::make()->row(
+            InlineKeyboard::callback(Messages::BROADCAST_CONFIRM_NO, self::callback('card')),
+            InlineKeyboard::callback(Messages::BROADCAST_CONFIRM_YES, self::callback('send'), 'success'),
+        )->build()]);
+    }
+
+    /**
+     * «✔️ بله، ارسال شود» (and an older card's «ارسال»): the draft becomes a run — once, though pressed twice — and the
+     * card its progress message; the first INLINE_LIMIT customers get it now.
      *
      * @param array<string, mixed> $draft
      */
@@ -460,17 +492,12 @@ final class BroadcastHandler implements Handler
         ['total' => $total, 'blocked' => $blocked] = $audience?->size() ?? ['total' => 0, 'blocked' => 0];
         $forward = $draft['mode'] === BroadcastMode::Forward->value;
 
-        $content = Messages::BROADCAST_CONTENT[(string) $draft['content']] ?? Messages::BROADCAST_CONTENT_OTHER;
-        if (is_string($draft['excerpt']) && $draft['excerpt'] !== '') {
-            $content .= ' — «' . htmlspecialchars(mb_strimwidth($draft['excerpt'], 0, 60, '…')) . '»';
-        }
-
         $text = Messages::fill(Messages::BROADCAST_DRAFT, [
-            'content' => $content,
+            'content' => self::content($draft),
             'mode' => $forward ? Messages::BROADCAST_MODE_FORWARD : Messages::BROADCAST_MODE_COPY,
             'audience' => htmlspecialchars($audience?->label() ?? Audience::labelOf((string) $draft['audience'], $draft['audience_id'])),
             'count' => Persian::number($total),
-            'blocked' => $blocked > 0 ? Messages::fill(Messages::BROADCAST_DRAFT_BLOCKED, ['count' => Persian::number($blocked)]) : '',
+            'blocked' => self::blocked($blocked),
             'pin' => $draft['pin'] ? Messages::BROADCAST_ON : Messages::BROADCAST_OFF,
             'buttons' => match (true) {
                 $forward => Messages::BROADCAST_FORWARD_NO_BUTTONS,
@@ -488,10 +515,31 @@ final class BroadcastHandler implements Handler
         $forward ? $keyboard->row($pin) : $keyboard->row(InlineKeyboard::callback(Messages::BROADCAST_BTN_BUTTONS, self::callback('btn')), $pin);
         $keyboard->row(...array_filter([
             $this->dropButton(),
-            $total > 0 ? InlineKeyboard::callback(Messages::fill(Messages::BROADCAST_SEND, ['count' => Persian::number($total)]), self::callback('send'), 'success') : null,
+            $total > 0 ? InlineKeyboard::callback(Messages::fill(Messages::BROADCAST_SEND, ['count' => Persian::number($total)]), self::callback('ask'), 'success') : null,
         ]));
 
         return [$text, $keyboard->build()];
+    }
+
+    /**
+     * What the draft sends, as its card and its question say it: the kind of message, and the start of its words.
+     *
+     * @param array<string, mixed> $draft
+     */
+    private static function content(array $draft): string
+    {
+        $content = Messages::BROADCAST_CONTENT[(string) $draft['content']] ?? Messages::BROADCAST_CONTENT_OTHER;
+        if (is_string($draft['excerpt']) && $draft['excerpt'] !== '') {
+            $content .= ' — «' . htmlspecialchars(mb_strimwidth($draft['excerpt'], 0, 60, '…')) . '»';
+        }
+
+        return $content;
+    }
+
+    /** Those of the audience who blocked the bot, beside its count: counted, never reached; nothing for none. */
+    private static function blocked(int $blocked): string
+    {
+        return $blocked > 0 ? Messages::fill(Messages::BROADCAST_DRAFT_BLOCKED, ['count' => Persian::number($blocked)]) : '';
     }
 
     /**

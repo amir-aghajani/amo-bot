@@ -4,12 +4,16 @@ declare(strict_types=1);
 
 namespace App\Modules\Telegram\Admin\Sections\Bot\Settings;
 
+use App\Modules\Telegram\Admin\Ui\Fmt;
+use App\Modules\Telegram\Admin\Ui\Icons;
 use App\Modules\Telegram\Admin\Ui\Settings\FieldDef;
 
 /** «تمدید خودکار» (`auto_renew`, under «تمدید سرویس»): how many days before its end a service is renewed from the wallet, and how new services start. */
 final class AutoRenewCard extends BotCard
 {
     public const ID = 'bsa';
+
+    public const TITLE = Icons::AUTO_RENEW . ' تمدید خودکار';
 
     protected function group(): string
     {
@@ -23,12 +27,12 @@ final class AutoRenewCard extends BotCard
 
     protected function title(): string
     {
-        return '⏱ تمدید خودکار';
+        return self::TITLE;
     }
 
     protected function path(): array
     {
-        return [...parent::path(), 'تمدید سرویس'];
+        return [...parent::path(), Fmt::bare(RenewalCard::TITLE)];
     }
 
     protected function parent(): string
@@ -43,9 +47,9 @@ final class AutoRenewCard extends BotCard
 
     protected function fields(): array
     {
-        return [
+        return $this->described([
             FieldDef::number('auto_renew_days', 'چند روز پیش از پایان سرویس', 'روز', 'بین ۱ تا ۳۰ روز.'),
             FieldDef::toggle('auto_renew_default', 'برای سرویس‌های جدید روشن باشد', 'روشن که باشد، هر سرویسی که از این به بعد خریده می‌شود با تمدید خودکار روشن شروع می‌شود و مشتری می‌تواند آن را خاموش کند. روی سرویس‌های فعلی اثری ندارد.'),
-        ];
+        ]);
     }
 }

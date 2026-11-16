@@ -11,6 +11,103 @@ While a version is being made its changes collect under **Unreleased**; releasin
 
 ## Unreleased
 
+## Version 0.10.1
+
+### Added
+
+- **A search in the bot's management** — «🔎 جستجو» on its home finds a customer, an order, a payment or a service by one
+  value: a number or «#number», a `@username`, a phone number, a service's link or name; each found a tap from its page
+  ([Managing the shop from the bot](Bot-Management.md#the-search)).
+- **«🔎 جستجوی تنظیمات» in the bot** (the owner's and an agent's, first on «⚙️ تنظیمات») — any setting the panel has,
+  found by a word or two of its name, in Persian or English however typed, and opened straight: a value asked at once, a
+  choice offered, a switch shown on its card. It reads the panel's own settings index, so whatever the panel sets is
+  found; what only the panel sets — its own username and password, its light or dark look — is found too, with why
+  ([Managing the shop from the bot](Bot-Management.md#the-settings-search)).
+- **The receipt queue** — «▶️ بررسی رسیدها یکی‌یکی» on the receipts waiting for review: «✅ تایید و تحویل، بعدی»
+  approves one and opens the next, a rejection moves on the same way, «⏭ رسید بعدی» skips one — it comes round again at
+  the end —, and a delivery that fails stays on its payment, its retry right there
+  ([Managing the shop from the bot](Bot-Management.md#sales)).
+- **Ready answers to a ticket** — «⏳ در حال بررسی», «✅ برطرف شد» and «📸 توضیح بیشتر», sent at a tap from the
+  answer's question, their words shown in full first.
+- **More orders for the bot's lists**, as the panel's columns have them: the services by the oldest, ending soonest or
+  latest, used most or least; the agents by joining, balance, their bot's traffic or sales, each both ways; the agency
+  requests oldest first; the referrers, invitees and commissions either way.
+- **Copy buttons** for what you paste elsewhere: a service's link, a discount or gift code and a batch's unused codes, a
+  card number, a channel's link, the report group's connect message, a server's panel address, the website's API address
+  and key, the mini app's address, and the deposit approval's webhook address, key and Rikhtam address.
+
+### Changed
+
+- **The bot's management reads like one app** («⚙️ مدیریت»): every screen laid out the same way — its title and where it
+  is, a summary card of its key facts, its sections, help folded away under «❔», a state said with the same chips
+  everywhere —, a fact said once, in the card or on a button. Buttons are coloured by what they do, where the Telegram
+  app draws colours: green confirms, saves, creates or turns on; red deletes, turns off, rejects or disconnects; blue is
+  the screen's one main action. One row to move around ends every screen, «⬅️ بازگشت» · «🏠 خانه» («🏠 مدیریت» before),
+  with «🔄 تازه‌سازی» where the figures move. A button of an older window opens the home, saying so
+  ([Managing the shop from the bot](Bot-Management.md#how-the-screens-read)).
+  - **The home**: today's figures in a card, and a button straight to each queue that has something waiting — receipts,
+    stuck orders, tickets, reviews, held payments, servers in error —, opening its list as it was counted.
+  - **Lists** say how many first and what narrows them; their rows are their buttons — a state's chip, the name, the key
+    figure —; the pages' middle button says which page it is.
+  - **Settings cards** list every field with its value; a switch's button says the state a tap sets («▶️ روشن کردن «…»»,
+    «⏸ خاموش کردن «…»»), any other field's «✏️ …»; a long card is split into the panel's parts. A question says the
+    value now, an example and the limits, and offers «🗑 خالی کردن» and «↩️ پیش‌فرض» where they apply; «✖️ انصراف» is
+    the one way out of every question, confirmation and form.
+  - **Making something new** in the discounts and rewards goes step by step — «گام ۳ از ۹» with a bar, «⬅️ گام قبل»,
+    «⏭ رد شدن» or «⏭ همین بماند» — to a review card with «✏️» for each field, a refused one marked «⚠️», before
+    «✔️ ساختن»; editing opens on that card, «💾 ذخیره» once something changed. The mass gift likewise («گام ۱ از ۴», a
+    review before «✔️ شروع هدیه»); the owner's forms — a server, a payment method, a card, days and traffic for a
+    server's services, an agency level — sum up on a card before their one save.
+  - **A manual order** («➕ افزودن سفارش») takes four steps — the kind, the plan or your own numbers, the server (picked
+    for you where there is one), the payment and its amount — then one card: the amount, the wallet's balance after or
+    how much it lacks, and the service's username and a note set there rather than asked field by field.
+  - **Every area** follows: a customer's page is one card with «📇 حساب», its actions grouped, a ban and a role taken
+    away last, in red, a wallet change showing the balance after; a service's traffic and time as bars; the payment
+    methods' list with how each settles and the deposit approval's state, the approval's steps folded; the plans, the
+    servers, the agents and the channels as rows with their state; the texts as a short list of groups; «⌨️ کیبوردها» a
+    list of the keyboards, a button's colours each shown as itself; the wheel's chance of winning on a spin and of each
+    prize; a program switched off saying so on its list, with «▶️ روشن کردن «…»» a tap away; the dashboard's system
+    section only when something needs fixing, with the button that fixes it.
+- **Each section of the management is reached from one place**: «🤖 تنظیمات ربات» holds the bot's own cards alone, and a
+  feature's settings live with it — the channels and the report group in «🤖 ربات», the referral rules in «🔗
+  زیرمجموعه‌گیری», the test accounts', custom services', discount codes', gift codes', cashback's, wheel's and draw's on
+  their own screens, the deposit approval with the payment methods, «🛡 مدیران ربات» in «⚙️ تنظیمات». Some labels moved
+  with them: «🔔 بخش‌های گزارش» is «🧵 بخش‌های گزارش», renewal's «⏱ تمدید خودکار» «🔂 تمدید خودکار», and the panel
+  settings' «📡 دریافت پیام‌ها», «🛠 پیشرفته» and «🔀 انتقال از ربات دیگر» are «🛰 دریافت پیام‌ها», «🔧 پیشرفته» and
+  «🚚 انتقال از ربات دیگر».
+- **A broadcast asks once more before it goes**: the draft card's «✅ ارسال به n نفر» says what goes, to whom and whether
+  it is pinned, and «✔️ بله، ارسال شود» starts it — in the bot's management and with `/broadcast` alike
+  ([Broadcasts](Broadcasts.md)).
+
+### Fixed
+
+- **The bot admins' grants were hidden in the bot while «کار مدیران از ربات» was off**: «➕ کارهای بیشتر» shows and sets
+  them whatever its state, as the panel does, ready for when it is turned on
+  ([Managing the shop from the bot](Bot-Management.md#the-shops-admins)).
+- **An order made by hand in an agent's shop said nothing of the agent's traffic**: its summary now says how much the
+  service takes from the bot's traffic and what is left.
+- **A server's screens acted on another server**: the inbounds' «for sale» and sync buttons, and the moves' clean-up and
+  «forget» of leftover clients, worked on the server whose page was opened last, rather than the one on screen; and a
+  connection test's result showed on the next server's card too.
+- **An old management window could act on what had changed since**: a receipt rejected meanwhile could still be approved
+  from a window opened before, and «✔️ اعمال تغییر» of a bulk price change applied the chat's latest preview rather than
+  the one it sat under. Both now check first and show what is current.
+- **The wheel's chances counted a free service whose plan was deleted**: the panel's list and the bot gave it a share,
+  though the wheel never lands on it; its share now goes to the other slices, as the draw does.
+- **«🛰 دریافت پیام‌ها» in the bot never offered «🔗 ثبت Webhook» in the main shop**: it read the shop's address as empty
+  and always warned that it was not https.
+- **In the bot's «انتقال از ربات دیگر», a section turned off and on again failed** instead of giving back the switch
+  that depends on it; and the main bot's card now says when a save reaches the bot (webhook, polling or offline), as it
+  was meant to.
+
+### Upgrading
+
+- **Update from «تنظیمات پنل › به‌روزرسانی»**: nothing else to do, and the database does not change. A management window
+  open from before keeps working; a button whose screen has moved opens the home, saying so. What «🤖 تنظیمات ربات»
+  used to list besides the bot's own cards is now with its feature, and «🔎 جستجوی تنظیمات» finds it.
+- **Colours and copy buttons are Telegram's**: an older Telegram app shows every button plain and copies nothing at a tap
+  — the value is still on the card.
+
 ## Version 0.10.0
 
 ### Added

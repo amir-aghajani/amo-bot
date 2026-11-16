@@ -9,9 +9,11 @@ use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\Answer;
 use App\Modules\Telegram\Admin\Ui\Button;
 use App\Modules\Telegram\Admin\Ui\Fmt;
+use App\Modules\Telegram\Admin\Ui\Icons;
 use App\Modules\Telegram\Admin\Ui\Prompt;
 use App\Modules\Telegram\Admin\Ui\Settings\FieldDef;
 use App\Modules\Telegram\Admin\Ui\View;
+use App\Modules\Telegram\Admin\Ui\Words;
 use App\Support\Persian;
 
 /**
@@ -24,11 +26,13 @@ final class ExtrasCard extends BotCard
 {
     public const ID = 'bsx';
 
-    /** Each extra's words: [title, unit price, amounts offered, least, most, unit, its most]. */
+    public const TITLE = Icons::EXTRAS . ' حجم، زمان و کاربر اضافه';
+
+    /** Each extra's words: [title, unit price, amounts offered, least, most, unit, its most, its part's emoji]. */
     private const KINDS = [
-        'traffic' => ['حجم اضافه', 'قیمت هر گیگابایت', 'حجم‌های پیشنهادی', 'کمترین حجم دلخواه', 'بیشترین حجم دلخواه', 'گیگابایت', 10000],
-        'time' => ['زمان اضافه', 'قیمت هر روز', 'زمان‌های پیشنهادی', 'کمترین زمان دلخواه', 'بیشترین زمان دلخواه', 'روز', 365],
-        'devices' => ['کاربر اضافه', 'قیمت هر کاربر برای ۳۰ روز', 'تعدادهای پیشنهادی', 'کمترین تعداد دلخواه', 'بیشترین تعداد دلخواه', 'کاربر', 20],
+        'traffic' => ['حجم اضافه', 'قیمت هر گیگابایت', 'حجم‌های پیشنهادی', 'کمترین حجم دلخواه', 'بیشترین حجم دلخواه', 'گیگابایت', 10000, '📶'],
+        'time' => ['زمان اضافه', 'قیمت هر روز', 'زمان‌های پیشنهادی', 'کمترین زمان دلخواه', 'بیشترین زمان دلخواه', 'روز', 365, '⏳'],
+        'devices' => ['کاربر اضافه', 'قیمت هر کاربر برای ۳۰ روز', 'تعدادهای پیشنهادی', 'کمترین تعداد دلخواه', 'بیشترین تعداد دلخواه', 'کاربر', 20, '👤'],
     ];
 
     protected function group(): string
@@ -43,7 +47,7 @@ final class ExtrasCard extends BotCard
 
     protected function title(): string
     {
-        return '➕ حجم، زمان و کاربر اضافه';
+        return self::TITLE;
     }
 
     protected function intro(): string
@@ -57,11 +61,22 @@ final class ExtrasCard extends BotCard
         foreach (self::KINDS as $kind => [, $price, $options, $least, $most, $unit, $max]) {
             $fields[] = FieldDef::money("extra_{$kind}_price", $price, "خالی: فقط {$options} با قیمت خودشان فروخته می‌شوند و مشتری مقدار دلخواه نمی‌نویسد.")->nullable()->when('extras_enabled', [true]);
             $fields[] = FieldDef::text("extra_{$kind}_options", $options, "دکمه‌هایی که مشتری می‌بیند، حداکثر ۸ تا؛ قیمت خالی یعنی به {$price}.")->nullable()->when('extras_enabled', [true]);
-            $fields[] = FieldDef::number("extra_{$kind}_min", $least, $unit, 'بین ۱ تا ' . Persian::number($max) . " {$unit}.")->when('extras_enabled', [true]);
-            $fields[] = FieldDef::number("extra_{$kind}_max", $most, $unit, 'بین ۱ تا ' . Persian::number($max) . " {$unit}، نه کمتر از کمترین.")->when('extras_enabled', [true]);
+            $fields[] = FieldDef::number("extra_{$kind}_min", $least, $unit)->limits('از ۱ تا ' . Persian::number($max) . " {$unit}")->when('extras_enabled', [true]);
+            $fields[] = FieldDef::number("extra_{$kind}_max", $most, $unit, 'نه کمتر از کمترین.')->limits('از ۱ تا ' . Persian::number($max) . " {$unit}")->when('extras_enabled', [true]);
         }
 
-        return $fields;
+        return $this->described($fields);
+    }
+
+    /** The panel's parts of the price list: one for each extra, its four fields. */
+    protected function parts(): array
+    {
+        $parts = [];
+        foreach (self::KINDS as $kind => [$title, , , , , , , $emoji]) {
+            $parts[] = [$emoji . ' ' . $title, ["extra_{$kind}_price", "extra_{$kind}_options", "extra_{$kind}_min", "extra_{$kind}_max"]];
+        }
+
+        return $parts;
     }
 
     protected function notes(): array
@@ -131,14 +146,18 @@ final class ExtrasCard extends BotCard
             return null;
         }
         $unit = self::KINDS[$kind][5];
+        $rows = self::rows($values[$field->name] ?? null);
         $hint = implode("\n", [
             $field->hint,
-            "هر مقدار در یک خط یا با «،» جدا؛ قیمت اختیاری بعد از «=»، به تومان. مثل: \u{2068}10=30000، 20=55000، 50\u{2069} یعنی ۱۰ {$unit} ۳۰٬۰۰۰ تومان، ۲۰ {$unit} ۵۵٬۰۰۰ تومان، ۵۰ {$unit} به قیمت واحد.",
-            'الان: ' . ($this->shows($field, $values[$field->name] ?? null) ?? Fmt::NONE),
+            "هر مقدار در یک خط یا با «،» جدا؛ قیمت اختیاری بعد از «=»، به تومان: «۱۰=۳۰۰۰۰» یعنی ۱۰ {$unit} ۳۰٬۰۰۰ تومان، «۵۰» یعنی ۵۰ {$unit} به قیمت واحد.",
         ]);
-        $prompt = new Prompt($field->label, $this->screen(), 'e', [$index], $hint, Button::to('✖️ لغو', $this->screen(), self::VIEW));
-        if (self::rows($values[$field->name] ?? null) !== []) {
-            $prompt->choices(Button::to('🗑 خالی کردن', $this->screen(), 'x', $index));
+        $prompt = (new Prompt($field->label, $this->screen(), 'e', [$index], $hint, Button::to(Words::CANCEL, $this->screen(), self::VIEW)))
+            // The value now in the form an answer takes, so copied it may be sent back changed.
+            ->current(implode('، ', array_map(static fn(array $row): string => $row['quantity'] . ($row['price'] === null ? '' : '=' . $row['price']), $rows)))
+            ->example('10=30000، 20=55000، 50')
+            ->limits('حداکثر ۸ مقدار');
+        if ($rows !== []) {
+            $prompt->clearable($this->screen(), 'x', $index);
         }
 
         return $admin->ask($prompt);

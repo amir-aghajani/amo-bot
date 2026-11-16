@@ -12,6 +12,7 @@ use App\Modules\Telegram\Admin\Ui\Button;
 use App\Modules\Telegram\Admin\Ui\Fmt;
 use App\Modules\Telegram\Admin\Ui\Json;
 use App\Modules\Telegram\Admin\Ui\View;
+use App\Modules\Telegram\Admin\Ui\Words as Vocabulary;
 
 /**
  * «آنچه نیامد» of an import's report, a page at a time (GET /imports/{id}/problems), narrowed to a reason — those only
@@ -58,8 +59,9 @@ final class ImportProblemsScreen extends BaseScreen
         $total = (int) ($answer['total'] ?? 0);
         $pages = max(1, (int) ceil($total / self::PER_PAGE));
 
-        $view = View::make('📋 آنچه نیامد', 'مدیریت', 'انتقال از ربات دیگر', 'گزارش')
-            ->line(Fmt::number($total) . ' مورد' . ($pages > 1 ? ' · صفحه ' . Fmt::number($page) . ' از ' . Fmt::number($pages) : ''));
+        // How many; which page is the pager's middle button's to say.
+        $view = View::make('📋 آنچه نیامد', ...ImportsScreen::under())
+            ->total($total, 'مورد');
         if ($rows === []) {
             $view->line()->line('موردی نیست.');
         }
@@ -73,9 +75,9 @@ final class ImportProblemsScreen extends BaseScreen
             }
         }
 
-        $chips = [Button::to(($reason === '' ? '● ' : '') . 'همه', self::ID, 'r', $id, 0)];
+        $chips = [Button::to(($reason === '' ? Vocabulary::CHIP : '') . 'همه', self::ID, 'r', $id, 0)];
         foreach ($listed as $n => $each) {
-            $chips[] = Button::to((($each['reason'] ?? '') === $reason ? '● ' : '') . (string) ($each['label'] ?? '') . ' (' . Fmt::number((int) ($each['count'] ?? 0)) . ')', self::ID, 'r', $id, $n + 1);
+            $chips[] = Button::to((($each['reason'] ?? '') === $reason ? Vocabulary::CHIP : '') . (string) ($each['label'] ?? '') . ' (' . Fmt::number((int) ($each['count'] ?? 0)) . ')', self::ID, 'r', $id, $n + 1);
         }
         $view->grid(1, ...$chips);
         $view->pager($page, $pages, self::ID, 'pg', $id);

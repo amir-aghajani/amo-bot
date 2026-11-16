@@ -6,15 +6,16 @@ namespace App\Modules\Telegram\Admin\Sections\Marketing\Wheel;
 
 use App\Modules\Telegram\Admin\Sections\Marketing\Form\FormScreen;
 use App\Modules\Telegram\Admin\Sections\Marketing\Form\Step;
-use App\Modules\Telegram\Admin\Sections\Marketing\Words;
+use App\Modules\Telegram\Admin\Sections\Marketing\Words as Marketing;
 use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\Json;
 use App\Modules\Telegram\Admin\Ui\View;
+use App\Modules\Telegram\Admin\Ui\Words;
 
 /**
  * «➕ افزودن جایزه» / «✏️ ویرایش» (the panel's PrizeForm): the slice's label, what it gives — nothing, Toman, GB, days or a
  * plan's free service, each kind's amount kept apart so switching kinds loses nothing typed —, its weight, and its
- * switch from the summary. One save: POST /wheel/prizes, or the slice's PUT.
+ * switch from the review. One save: POST /wheel/prizes, or the slice's PUT.
  */
 final class WheelPrizeForm extends FormScreen
 {
@@ -27,30 +28,25 @@ final class WheelPrizeForm extends FormScreen
 
     protected function title(int $id, array $draft): string
     {
-        return $id === 0 ? '➕ افزودن جایزه' : '✏️ ویرایش «' . (string) ($draft['label'] ?? '') . '»';
+        return $id === 0 ? Words::add('جایزه') : Words::EDIT . ' «' . (string) ($draft['label'] ?? '') . '»';
     }
 
     protected function path(): array
     {
-        return [...Words::PATH, 'گردونه شانس'];
-    }
-
-    protected function createLabel(): string
-    {
-        return '✔️ افزودن';
+        return Marketing::in(Marketing::WHEEL);
     }
 
     protected function steps(Admin $admin): array
     {
         return [
-            Step::text('label', 'متن روی گردونه', 'همان چیزی که مشتری روی گردونه و در نتیجه چرخش می‌بیند؛ حداکثر ۳۲ کاراکتر، مثل «۱۰ گیگ حجم».'),
-            Step::choice('kind', 'جایزه', Words::PRIZES, '«پوچ» چیزی نمی‌دهد؛ برای این‌که هر چرخشی برنده نباشد.'),
-            Step::money('wallet', 'مبلغ جایزه', 'به کیف پول مشتری اضافه می‌شود.')->as('amount')->when('kind', ['wallet']),
-            Step::decimal('traffic', 'حجم جایزه', 'گیگابایت', 'به سرویس فعال مشتری اضافه می‌شود؛ اعشار هم می‌شود، مثل ۲.۵.')->as('amount')->when('kind', ['traffic']),
-            Step::count('days', 'زمان جایزه', 'روز', 'به سرویس فعال مشتری اضافه می‌شود؛ بین ۱ تا ۳۶۵۰.')->as('amount')->range(1, 3650)->when('kind', ['days']),
-            Step::choice('plan_id', 'پلن جایزه', static fn(): array => Words::plans($admin, 'غیرفعال؛ فقط برای هدیه'), 'یک سرویس رایگان از این پلن، روی اولین سروری که همان لحظه تحویل بدهد.')->when('kind', ['plan']),
-            Step::count('weight', 'وزن', '', 'شانس هر جایزه، وزن آن تقسیم بر جمع وزن جایزه‌های فعال است؛ بین ۱ تا ۱۰۰۰۰.')->range(1, 10_000)->quick('۱', 1)->quick('۵', 5)->quick('۱۰', 10),
-            Step::toggle('enabled', 'فعال', 'جایزه غیرفعال روی گردونه نمی‌آید.')->later(),
+            Step::text('label', 'متن روی گردونه', 'همان چیزی که مشتری روی گردونه و در نتیجه چرخش می‌بیند؛ حداکثر ۳۲ کاراکتر.')->asks('روی گردونه چه نوشته شود؟')->example('۱۰ گیگ حجم'),
+            Step::choice('kind', 'جایزه', Marketing::PRIZES, '«پوچ» چیزی نمی‌دهد؛ برای این‌که هر چرخشی برنده نباشد.')->asks('این جایزه چه بدهد؟'),
+            Step::money('wallet', 'مبلغ جایزه', 'به کیف پول مشتری اضافه می‌شود.')->asks('چه مبلغی به کیف پول اضافه شود؟')->example('۱۰۰۰۰')->as('amount')->when('kind', ['wallet']),
+            Step::decimal('traffic', 'حجم جایزه', 'گیگابایت', 'به سرویس فعال مشتری اضافه می‌شود؛ اعشار هم می‌شود.')->asks('چند گیگابایت حجم بدهد؟')->example('۲.۵')->as('amount')->when('kind', ['traffic']),
+            Step::count('days', 'زمان جایزه', 'روز', 'به سرویس فعال مشتری اضافه می‌شود.')->asks('چند روز زمان بدهد؟')->as('amount')->range(1, 3650)->when('kind', ['days']),
+            Step::choice('plan_id', 'پلن جایزه', static fn(): array => Marketing::giftPlans($admin), 'یک سرویس رایگان از این پلن، روی اولین سروری که همان لحظه تحویل بدهد.')->asks('سرویس رایگان از کدام پلن؟')->when('kind', ['plan']),
+            Step::count('weight', 'وزن', '', 'شانس هر جایزه، وزن آن تقسیم بر جمع وزن جایزه‌های فعال است؛ جایزه پروزن‌تر بیشتر می‌آید.')->asks('وزن این جایزه چقدر باشد؟')->range(1, 10_000)->quick('۱', 1)->quick('۵', 5)->quick('۱۰', 10),
+            Step::active('enabled', 'جایزه غیرفعال روی گردونه نمی‌آید.')->later(),
         ];
     }
 
@@ -61,7 +57,7 @@ final class WheelPrizeForm extends FormScreen
 
     protected function row(Admin $admin, int $id): ?array
     {
-        return Words::one($admin, '/wheel/prizes', 'prizes', $id);
+        return Marketing::one($admin, '/wheel/prizes', 'prizes', $id);
     }
 
     protected function draftOf(array $row): array
@@ -73,7 +69,7 @@ final class WheelPrizeForm extends FormScreen
             'label' => (string) ($row['label'] ?? ''),
             'kind' => $kind,
             'wallet' => $kind === 'wallet' && $amount !== null ? (int) $amount : null,
-            'traffic' => $kind === 'traffic' && $amount !== null ? Words::trim($amount) : null,
+            'traffic' => $kind === 'traffic' && $amount !== null ? Marketing::trim($amount) : null,
             'days' => $kind === 'days' && $amount !== null ? (int) $amount : null,
             'plan_id' => is_array($row['plan'] ?? null) ? (int) ($row['plan']['id'] ?? 0) : null,
             'weight' => (int) ($row['weight'] ?? 1),
@@ -109,7 +105,7 @@ final class WheelPrizeForm extends FormScreen
 
     protected function done(Admin $admin, array $row, bool $created): View
     {
-        $admin->notice($created ? '✅ جایزه اضافه شد' : '✅ جایزه ذخیره شد');
+        $admin->notice($created ? '✅ جایزه اضافه شد' : '✅ تغییرهای جایزه ذخیره شد');
 
         return $admin->open(WheelPrizeScreen::ID, 'show', [(int) ($row['id'] ?? 0)]);
     }

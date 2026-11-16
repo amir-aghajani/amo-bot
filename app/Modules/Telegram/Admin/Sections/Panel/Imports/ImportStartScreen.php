@@ -16,6 +16,7 @@ use App\Modules\Telegram\Admin\Ui\Fmt;
 use App\Modules\Telegram\Admin\Ui\Json;
 use App\Modules\Telegram\Admin\Ui\Prompt;
 use App\Modules\Telegram\Admin\Ui\View;
+use App\Modules\Telegram\Admin\Ui\Words as Vocabulary;
 
 /**
  * «انتقال تازه»: which bot the data is of — each bot AmoBot reads, with what comes over and its notes —, then where it is
@@ -38,38 +39,39 @@ final class ImportStartScreen extends BaseScreen
         $page = $admin->api->get('/imports');
         $migrators = DraftForm::drivers(Json::rows($page, 'migrators'));
         $picked = self::picked($admin, $migrators);
-        $view = View::make('➕ انتقال تازه', 'مدیریت', 'تنظیمات پنل', 'انتقال از ربات دیگر')
-            ->line('داده‌های ربات قبلی یک بار خوانده می‌شود و پیش از آن‌که چیزی در فروشگاه نوشته شود، همه را می‌بینید و انتخاب می‌کنید چه چیزهایی منتقل شود. سرویس‌ها همان‌طور که روی پنل هستند می‌آیند: همان لینک، همان حجم مصرف‌شده و همان تاریخ پایان.');
+        $view = View::make('➕ انتقال تازه', ...ImportsScreen::under())
+            ->line('داده‌های ربات قبلی یک بار خوانده می‌شود؛ پیش از آن‌که چیزی در فروشگاه نوشته شود، همه را می‌بینید و انتخاب می‌کنید چه چیزهایی بیاید.');
         if ($migrators === []) {
             return $view->line()->line('این نسخه AmoBot هنوز داده‌های هیچ ربات دیگری را نمی‌خواند.')->back(ImportsScreen::ID);
         }
 
-        $view->line()->line('<b>ربات قبلی</b>:');
+        // The bot picked, said once — on its button (✅) and in what it brings, under it.
+        $migrator = $migrators[$picked];
         $buttons = [];
         foreach (array_keys($migrators) as $n => $key) {
-            $buttons[] = Button::to(($key === $picked ? '● ' : '') . $migrators[$key]['label'], self::ID, 'm', $n);
+            $buttons[] = Button::to(($key === $picked ? Vocabulary::PICKED : '') . $migrators[$key]['label'], self::ID, 'm', $n);
         }
-        $view->grid(2, ...$buttons);
-        $migrator = $migrators[$picked];
-        $view->line('<b>' . Fmt::ltr($migrator['label']) . '</b>: ' . Fmt::e($migrator['description']));
-        foreach ($migrator['notes'] as $note) {
-            $view->line('• ' . Fmt::e($note));
-        }
-        if (is_string($migrator['traits']['vendor'] ?? null)) {
-            $view->row(Button::url('🔗 ' . preg_replace('#^https?://#', '', $migrator['traits']['vendor']), $migrator['traits']['vendor']));
-        }
-
+        $view->section('🤖 ربات قبلی')
+            ->line(Fmt::e($migrator['description']));
         $limit = (int) ($page['upload_max_bytes'] ?? 0);
-        $view->line()->line('<b>📤 فایل پشتیبان</b>: یکی از این‌ها را همین‌جا بفرستید:');
+        $view->section('📤 یکی از این فایل‌ها را بفرستید');
         if (isset(Words::BACKUP_FROM[$picked])) {
             $view->line('• ' . Words::BACKUP_FROM[$picked]);
         }
         $view->line("• خروجی دیتابیس ربات از \u{2068}phpMyAdmin\u{2069} هاستش (\u{2068}Export\u{2069} با فرمت \u{2068}SQL\u{2069}) یا فایل \u{2068}mysqldump\u{2069}")
-            ->line("<i>فایل \u{2068}.zip\u{2069}، \u{2068}.sql\u{2069} یا \u{2068}.gz\u{2069} باشد؛ تلگرام فایل بزرگ‌تر از ۲۰ مگابایت را به ربات نمی‌دهد" . ($limit > 0 ? ' (پنل تا ' . Fmt::bytes($limit) . ' می‌پذیرد)' : '') . '. پس از پایان انتقال، فایل و هرچه از آن خوانده شده پاک می‌شود.</i>')
-            ->line('<i>' . Words::FINAL_BACKUP . '</i>')
-            ->line()->line('<b>🔌 اتصال به دیتابیس</b>: دیتابیس ربات قبلی فقط خوانده می‌شود و چیزی در آن نوشته نمی‌شود.');
+            ->note("فایل \u{2068}.zip\u{2069}، \u{2068}.sql\u{2069} یا \u{2068}.gz\u{2069}، تا ۲۰ مگابایت" . ($limit > 0 ? ' (پنل تا ' . Fmt::bytes($limit) . ' می‌پذیرد)' : '') . '؛ یا به دیتابیسش وصل شوید، که فقط خوانده می‌شود.');
 
-        return $view->row(Button::to('📤 فرستادن فایل پشتیبان', self::ID, 'up'), Button::to('🔌 اتصال به دیتابیس', ImportDatabaseScreen::ID))
+        return $view->grid(2, ...$buttons)
+            ->row(is_string($migrator['traits']['vendor'] ?? null) ? Button::url('🔗 ' . preg_replace('#^https?://#', '', $migrator['traits']['vendor']), $migrator['traits']['vendor']) : null)
+            ->row(Button::to('📤 فرستادن فایل پشتیبان', self::ID, 'up')->primary(), Button::to('🔌 اتصال به دیتابیس', ImportDatabaseScreen::ID))
+            ->help(implode("\n", [
+                'سرویس‌ها همان‌طور که روی پنل هستند می‌آیند: همان لینک، همان حجم مصرف‌شده و همان تاریخ پایان. پس از پایان انتقال، فایل و هرچه از آن خوانده شده پاک می‌شود.',
+                '',
+                '<b>' . Fmt::ltr($migrator['label']) . '</b>',
+                ...array_map(static fn(string $note): string => '• ' . Fmt::e($note), $migrator['notes']),
+                '',
+                Words::FINAL_BACKUP,
+            ]))
             ->back(ImportsScreen::ID);
     }
 

@@ -12,20 +12,23 @@ use App\Modules\Telegram\Admin\Ui\Button;
 use App\Modules\Telegram\Admin\Ui\Fmt;
 use App\Modules\Telegram\Admin\Ui\Json;
 use App\Modules\Telegram\Admin\Ui\View;
+use App\Modules\Telegram\Admin\Ui\Words as UiWords;
 
 /**
  * «🔀 انتقال سرویس‌ها» on a server (the panel's migrations card): every shop's services on it moved to another server —
  * «مهاجرت» while its panel answers, «نجات» when it does not —, the latest moves with how far each got and what holds one
  * up or ended it; the open one paused, resumed, cancelled or carried on as a rescue (the last two asked first, in the
  * panel's words); the services a move could not carry; and the clients moves left on its panel, removed now or
- * forgotten (asked first). «🔄 پیشبرد» works a turn of the move under way, as the panel's card does while open.
+ * forgotten (asked first). «⏩ پیشبرد» works a turn of the move under way, as the panel's card does while open.
  *
  * Actions: `run` (job), `pause` (job), `resume` (job), `cancel` (job: asks), `cancelled` (job), `rescue` (job: asks),
- * `rescued` (job), `clean`, `forget` (asks), `forgot`.
+ * `rescued` (job), `clean` (server), `forget` (server: asks), `forgot` (server).
  */
 final class ServerMigrationsScreen extends BaseScreen
 {
     public const ID = 'svm';
+
+    public const TITLE = '🔀 انتقال سرویس‌ها';
 
     /** The two ways services move (MIGRATION_MODE). */
     public const MODES = ['migrate' => 'مهاجرت', 'rescue' => 'نجات'];
@@ -50,13 +53,13 @@ final class ServerMigrationsScreen extends BaseScreen
         if ($id === 0) {
             return $admin->open(ServersScreen::ID);
         }
-        $admin->remember(ServerScreen::ID, ['id' => $id]);
+        ServerWords::opened($admin, $id);
         $server = (array) ($admin->api->get("/servers/{$id}")['server'] ?? []);
         $answer = $admin->api->get("/servers/{$id}/migrations");
         $jobs = Json::rows($answer, 'migrations');
         $leftovers = (array) ($answer['leftovers'] ?? []);
 
-        $view = View::make('🔀 انتقال سرویس‌ها', 'مدیریت', 'سرورها', (string) ($server['name'] ?? ''))
+        $view = View::make(self::TITLE, UiWords::ROOT, Fmt::bare(ServersScreen::TITLE), (string) ($server['name'] ?? ''))
             ->line('همه سرویس‌های این سرور، از همه فروشگاه‌ها، به یک سرور دیگر؛ برای خالی کردن سرور، یا نجات سرویس‌ها وقتی پنلش از دسترس خارج شده است.');
         $pending = (int) ($leftovers['pending'] ?? 0);
         if ($pending > 0) {
@@ -64,7 +67,7 @@ final class ServerMigrationsScreen extends BaseScreen
             if (is_string($leftovers['last_error'] ?? null)) {
                 $view->line('آخرین تلاش: ' . Fmt::e($leftovers['last_error']));
             }
-            $view->row(Button::to('🧹 حذف همین حالا', self::ID, 'clean'), Button::to('🫥 فراموش کردن', self::ID, 'forget'));
+            $view->row(Button::to('🧹 حذف همین حالا', self::ID, 'clean', $id), Button::to('🫥 فراموش کردن', self::ID, 'forget', $id)->danger());
         }
 
         $open = null;
@@ -75,10 +78,10 @@ final class ServerMigrationsScreen extends BaseScreen
             if (in_array($status, ['queued', 'running', 'paused'], true)) {
                 $open = $job;
                 $view->row(
-                    in_array($status, ['queued', 'running'], true) ? Button::to('🔄 پیشبرد', self::ID, 'run', $jobId) : null,
+                    in_array($status, ['queued', 'running'], true) ? Button::to('⏩ پیشبرد', self::ID, 'run', $jobId)->primary() : null,
                     in_array($status, ['queued', 'running'], true) ? Button::to('⏸ توقف موقت', self::ID, 'pause', $jobId) : null,
                     $status === 'paused' ? Button::to('▶️ ادامه', self::ID, 'resume', $jobId) : null,
-                    Button::to('🚫 لغو انتقال', self::ID, 'cancel', $jobId),
+                    Button::to('🚫 لغو انتقال', self::ID, 'cancel', $jobId)->danger(),
                 );
                 // A rescue goes on without the source alone: a target out of reach holds it as well.
                 if (($job['waiting_on'] ?? null) === 'source') {
@@ -90,16 +93,23 @@ final class ServerMigrationsScreen extends BaseScreen
             }
         }
         if ($open === null) {
-            $view->row(Button::to('🔀 انتقال سرویس‌ها', ServerMigrationFormScreen::ID, 'new', $id));
+            $view->row(Button::to(self::TITLE, ServerMigrationFormScreen::ID, 'new', $id)->success());
         }
 
-        return $view->back(ServerScreen::ID, 'show', $id);
+        return $view->back(ServerScreen::ID, 'show', $id)->refresh(self::ID, 'show', $id);
     }
 
     public function act(Admin $admin, string $action, array $args): View
     {
-        $id = ServerWords::current($admin, []);
-        $job = self::id($args);
+        // A move's actions name it, which the API finds on its own server only; the leftovers' name their server — an
+        // older window's own, whichever server's page was opened since (one of an older version: the one last opened).
+        $leftovers = in_array($action, ['clean', 'forget', 'forgot'], true);
+        $id = ServerWords::current($admin, $leftovers ? $args : []);
+        $job = $leftovers ? 0 : self::id($args);
+        if ($id === 0) {
+            return $admin->open(ServersScreen::ID);
+        }
+        ServerWords::opened($admin, $id);
         switch ($action) {
             case 'run':
                 $row = (array) ($admin->api->post("/servers/{$id}/migrations/{$job}/run")['migration'] ?? []);
@@ -120,15 +130,16 @@ final class ServerMigrationsScreen extends BaseScreen
             case 'cancel':
                 return $admin->confirm(
                     'انتقال لغو شود؟',
-                    Button::to('🚫 بله، لغو شود', self::ID, 'cancelled', $job),
-                    Button::to('✖️ انصراف', self::ID),
+                    Button::to(UiWords::yes('لغو شود', '🚫'), self::ID, 'cancelled', $job),
+                    Button::to(UiWords::CANCEL, self::ID),
                     $this->target($admin, $id, $job) . 'سرویس‌هایی که منتقل شده‌اند روی سرور مقصد می‌مانند و بقیه روی همین سرور.',
+                    danger: true,
                 );
             case 'rescue':
                 return $admin->confirm(
                     'ادامه با حالت نجات؟',
-                    Button::to('🛟 ادامه با حالت نجات', self::ID, 'rescued', $job),
-                    Button::to('✖️ انصراف', self::ID),
+                    Button::to(UiWords::yes('با حالت نجات ادامه پیدا کند', '🛟'), self::ID, 'rescued', $job),
+                    Button::to(UiWords::CANCEL, self::ID),
                     $this->target($admin, $id, $job) . 'از این به بعد پنل این سرور پرسیده نمی‌شود: هر سرویس با آخرین اطلاعاتی که فروشگاه از آن دارد روی سرور مقصد ساخته می‌شود و کلاینت قبلی روی پنل این سرور می‌ماند تا وقتی دوباره جواب بدهد حذف شود.',
                 );
             case 'clean':
@@ -138,9 +149,10 @@ final class ServerMigrationsScreen extends BaseScreen
             case 'forget':
                 return $admin->confirm(
                     'کلاینت‌های مانده فراموش شوند؟',
-                    Button::to('🫥 بله، فراموش شوند', self::ID, 'forgot'),
-                    Button::to('✖️ انصراف', self::ID),
+                    Button::to(UiWords::yes('فراموش شوند', '🫥'), self::ID, 'forgot', $id),
+                    Button::to(UiWords::CANCEL, self::ID, 'show', $id),
                     'فقط برای پنلی که دیگر برنمی‌گردد: این کلاینت‌ها دیگر حذف نمی‌شوند و اگر پنل دوباره جواب بدهد، کار می‌کنند.',
+                    danger: true,
                 );
             case 'forgot':
                 $admin->api->delete("/servers/{$id}/leftovers");
@@ -148,7 +160,7 @@ final class ServerMigrationsScreen extends BaseScreen
                 break;
         }
 
-        return $this->show($admin, []);
+        return $this->show($admin, [(string) $id]);
     }
 
     /**

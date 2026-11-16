@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature\BotAdmin;
 
+use App\Core\Scheduling\Scheduler;
 use App\Modules\Auth\Principal;
 use App\Modules\Auth\PrincipalKind;
 use App\Modules\Bots\CurrentBot;
@@ -12,10 +13,14 @@ use App\Modules\Telegram\Admin\AdminSeat;
 use App\Modules\Telegram\Admin\Door\ApiRefusal;
 use App\Modules\Telegram\Admin\Door\PanelBridge;
 use App\Modules\Telegram\Admin\SeatKind;
+use App\Modules\Telegram\Admin\Sections\Sales\Sales;
+use App\Modules\Telegram\Admin\Sections\Support\Words;
 use App\Modules\Telegram\Admin\Ui\Nav;
+use App\Modules\Telegram\Admin\Ui\Words as UiWords;
+use App\Modules\Telegram\BotState;
 use App\Modules\Users\Enums\UserRole;
-use App\Modules\Users\Models\User;
 use App\Support\Persian;
+use App\Support\PhpVersion;
 use Tests\BotTestCase;
 
 /**
@@ -48,9 +53,15 @@ final class SupportDashboardTest extends BotTestCase
         self::assertStringContainsString('۳۰ روز گذشته', $said, 'the panel\'s range at first');
         self::assertStringContainsString('درآمد: <b>۱۲۰٬۰۰۰ تومان</b>', $said);
         self::assertStringContainsString('کاربران جدید', $said);
-        self::assertStringContainsString('نیازمند توجه</b> · ۱ مورد منتظر اقدام شماست', $said);
-        self::assertStringContainsString('تیکت‌های در انتظار پاسخ: <b>۱</b>', $said);
-        self::assertStringContainsString('وضعیت سیستم', $said, 'the owner\'s system card');
+        self::assertStringContainsString('<b>🔔 در انتظار</b> · ۱ کار', $said);
+        self::assertContains('🎧 تیکت‌ها (۱)', $this->buttonLabels(0), 'what waits, a button with its count — not said again in the text');
+        self::assertStringNotContainsString('تیکت', $said);
+        self::assertSame(1, mb_substr_count($said, Words::NO_BASELINE), 'no figure before: said once, not beside each');
+        self::assertContains('● ۳۰ روز', $this->buttonLabels(0), 'the range in force, marked');
+        self::assertStringContainsString('وضعیت سیستم', $said, 'the owner\'s system: here it needs fixing');
+        self::assertStringContainsString('کارهای زمان‌بندی‌شده هنوز اجرا نشده‌اند', $said);
+        self::assertContains(Nav::to('ppv'), $this->callbacks(0), 'the fix a tap away');
+        self::assertContains(Nav::to('db'), $this->callbacks(0), 'live: «🔄 تازه‌سازی»');
         self::assertContains(Nav::to('db', 'q', 'open_tickets'), $this->callbacks(0), 'the count leads to its list on its tab');
         self::assertContains(Nav::to('db', 'r', 7), $this->callbacks(0));
 
@@ -61,13 +72,46 @@ final class SupportDashboardTest extends BotTestCase
         $this->send($this->message('چیزی که نیست', chat: 7001));
 
         $this->send($this->tap(Nav::to('db', 'q', 'open_tickets'), chat: 7001));
-        self::assertStringContainsString('● ⏳ در انتظار پاسخ', (string) json_encode($this->inlineKeyboard(0), JSON_UNESCAPED_UNICODE), 'on the count\'s tab');
+        self::assertStringContainsString('● 🟡 در انتظار پاسخ', (string) json_encode($this->inlineKeyboard(0), JSON_UNESCAPED_UNICODE), 'on the count\'s tab');
         self::assertStringNotContainsString('🔎', $this->said()[0], 'no search left on it');
         self::assertContains(Nav::to('tkv', 'show', $ticket->id), $this->callbacks(0), 'every one the count counted');
 
         $this->send($this->tap(Nav::to('db', 'r', 7), chat: 7001));
         self::assertStringContainsString('۷ روز گذشته', $this->said()[0]);
         self::assertContains(Nav::to('db', 'r', 30), $this->callbacks(0));
+    }
+
+    public function testEachFigureIsAgainstTheRangeBeforeWhereThatHadOne(): void
+    {
+        $this->owner();
+        $before = $this->customer(['telegram_id' => 9002, 'first_name' => 'Old']);
+        $before->forceFill(['created_at' => now()->subDays(40)])->save();
+        $this->customer(['telegram_id' => 9003, 'first_name' => 'New']);
+
+        $this->send($this->tap(Nav::to('db'), chat: 7001));
+        $said = $this->said()[0];
+        self::assertStringContainsString('کاربران جدید: <b>۲</b> · 📈 +۱۰۰٪', $said, 'two this range against one the range before');
+        self::assertStringContainsString('درآمد: <b>۰ تومان</b> · —', $said, 'none the range before: «—»');
+        self::assertStringContainsString('درصدها نسبت به ۳۰ روز قبل از آن؛ «—»: ' . Words::NO_BASELINE, $said);
+        self::assertSame(1, mb_substr_count($said, Words::NO_BASELINE));
+    }
+
+    public function testTheSystemIsSaidOnlyWhenSomethingNeedsFixing(): void
+    {
+        $this->owner();
+        $this->service(BotState::class)->webhookSet('https://shop.example/webhooks/telegram/secret');
+        $this->service(Scheduler::class)->run(force: true);
+        $fixes = [Nav::to('ppw'), Nav::to('ppv'), Nav::to('ppt'), Nav::to('ppu')];
+
+        $this->send($this->tap(Nav::to('db'), chat: 7001));
+        self::assertStringNotContainsString('وضعیت سیستم', $this->said()[0], 'all well: nothing said');
+        self::assertSame([], array_intersect($fixes, $this->callbacks(0)));
+
+        // A host PHP with known holes: said, as the panel says it over every page.
+        PhpVersion::setTestHost('8.4.1');
+        $this->send($this->tap(Nav::to('db'), chat: 7001));
+        self::assertStringContainsString('وضعیت سیستم', $this->said()[0]);
+        self::assertStringContainsString('حفره امنیتی جدی دارد', $this->said()[0]);
     }
 
     public function testTheCurveIsAMetricAtATimeOverTheRange(): void
@@ -98,15 +142,15 @@ final class SupportDashboardTest extends BotTestCase
         $order = $this->topUpOrder($sara, '70000');
 
         $this->send($this->tap(Nav::to('dbr', 'show', 'o'), chat: 7001));
-        $said = $this->said()[0];
-        self::assertStringContainsString('آخرین سفارش‌ها', $said);
-        self::assertStringContainsString('<b>#' . Persian::digits($order->id) . '</b>', $said);
-        self::assertStringContainsString('شارژ کیف پول · ۷۰٬۰۰۰ تومان', $said);
-        self::assertStringContainsString('در انتظار پرداخت', $said);
+        self::assertStringContainsString('آخرین سفارش‌ها', $this->said()[0]);
+        self::assertStringContainsString('۱ سفارش آخر، تازه‌ترین اول', $this->said()[0], 'the latest, not how many there are');
+        self::assertContains(Sales::mark(Sales::ORDER_STATUS, 'pending') . ' #' . Persian::digits($order->id) . ' · شارژ کیف پول · ۷۰٬۰۰۰ تومان · Sara', $this->buttonLabels(0), 'a row: its state, number, what, amount and customer');
+        self::assertContains(Nav::to('orv', 'show', $order->id), $this->callbacks(0));
 
         $this->send($this->tap(Nav::to('dbr', 'show', 'u'), chat: 7001));
-        self::assertStringContainsString('مشتریان جدید', $this->said()[0]);
-        self::assertStringContainsString('Sara', $this->said()[0]);
+        self::assertStringContainsString('کاربران جدید', $this->said()[0]);
+        self::assertContains(Nav::to('usv', 'show', $sara->id), $this->callbacks(0));
+        self::assertContains('👤 Sara · همین حالا', $this->buttonLabels(0));
     }
 
     public function testAShopsAdminSeesTheDailyWorkWithoutTheSystem(): void
@@ -118,7 +162,7 @@ final class SupportDashboardTest extends BotTestCase
         $this->send($this->tap(Nav::to('db'), chat: 7100));
 
         self::assertStringContainsString('📊 داشبورد', $this->said()[0]);
-        self::assertStringContainsString('همه‌چیز مرتب است', $this->said()[0]);
+        self::assertStringContainsString(UiWords::NOTHING_WAITING, $this->said()[0]);
         self::assertStringNotContainsString('وضعیت سیستم', $this->said()[0], 'the installation is the owner\'s');
 
         $staff = $this->service(PanelBridge::class)->for(new AdminSeat(SeatKind::Staff, new Principal(PrincipalKind::Staff, 'tg:7100', CurrentBot::main(), $admin, []), $admin));
@@ -145,14 +189,5 @@ final class SupportDashboardTest extends BotTestCase
         self::assertStringNotContainsString('وضعیت سیستم', $said);
         self::assertContains(Nav::to('acc'), $this->callbacks(0), 'their account a tap away');
         self::assertContains('https://t.me/amo_shop_bot', array_column(array_merge(...$this->inlineKeyboard(0)), 'url'), 'where traffic is bought');
-    }
-
-    /** The account 7001 linked as the owner. */
-    private function owner(): User
-    {
-        $owner = User::query()->where('telegram_id', 7001)->first() ?? $this->customer(['telegram_id' => 7001, 'first_name' => 'Amir']);
-        $this->linkOwner(7001);
-
-        return $owner;
     }
 }

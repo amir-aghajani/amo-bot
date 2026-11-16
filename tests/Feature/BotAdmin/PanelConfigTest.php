@@ -8,7 +8,8 @@ use App\Core\Config\ConfigFile;
 use App\Core\Database\Drivers\ProbeFailedException;
 use App\Core\Database\Drivers\ProbeResult;
 use App\Modules\Telegram\Admin\Ui\Nav;
-use App\Modules\Users\Models\User;
+use App\Modules\Telegram\Admin\Ui\Words;
+use App\Modules\Telegram\BotState;
 use Tests\BotTestCase;
 use Tests\Fakes\ProbedDriver;
 
@@ -20,8 +21,6 @@ use Tests\Fakes\ProbedDriver;
  */
 final class PanelConfigTest extends BotTestCase
 {
-    private const OWNER = 7001;
-
     private const TOKEN = '123456789:AAF' . 'yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy';
 
     private ConfigFile $file;
@@ -95,6 +94,20 @@ final class PanelConfigTest extends BotTestCase
         self::assertStringNotContainsString(self::TOKEN, implode("\n", $this->said()));
     }
 
+    public function testTheBotsCardSaysWhenASaveReachesTheMainBot(): void
+    {
+        $this->tapAs(Nav::to('ppt'));
+        self::assertStringContainsString('ربات الان پیامی نمی‌گیرد', $this->said()[0], 'offline: no messages until the webhook is set');
+
+        $this->service(BotState::class)->heartbeat();
+        $this->tapAs(Nav::to('ppt'));
+        self::assertStringContainsString('ربات با پولینگ کار می‌کند', $this->said()[0], 'polling: read again when it restarts');
+
+        $this->service(BotState::class)->webhookSet('https://shop.example/webhooks/telegram/secret');
+        $this->tapAs(Nav::to('ppt'));
+        self::assertStringContainsString('ربات روی Webhook است و مقادیر تازه از پیام بعدی به کار می‌روند', $this->said()[0], 'on a webhook: from the next message');
+    }
+
     public function testADriverIsPickedWithItsFormAndEachRefusalIsSaidUnderItsField(): void
     {
         $mail = $this->mail();
@@ -157,6 +170,25 @@ final class PanelConfigTest extends BotTestCase
 
         $this->tapAs(Nav::to('ppv'));
         self::assertStringNotContainsString('cron-token-0123456789abcdef', $this->said()[0], 'kept nowhere');
+
+        $this->tapAs(Nav::to('ppv', 'cron'));
+        self::assertContains(['text' => '📋 کپی آدرس', 'copy_text' => ['text' => 'http://localhost/cron/cron-token-0123456789abcdef']], array_merge(...$this->inlineKeyboard(0)), 'copied at a tap, on the view that shows it');
+    }
+
+    public function testADraftsSwitchSaysAndCarriesTheStateItSets(): void
+    {
+        $this->file->setMany(['APP_DEBUG' => 'false']);
+
+        $this->tapAs(Nav::to('ppa'));
+        self::assertStringContainsString("حالت \u{2068}Debug\u{2069}: <b>" . Words::OFF . '</b>', $this->said()[0], 'its state in the summary, once');
+        self::assertContains(['text' => "▶️ روشن کردن «حالت \u{2068}Debug\u{2069}»", 'callback_data' => Nav::to('ppa', 'e', 3, 1)], array_merge(...$this->inlineKeyboard(0)));
+
+        $this->tapAs(Nav::to('ppa', 'e', 3, 1));
+        $this->tapAs(Nav::to('ppa', 'e', 3, 1));
+        self::assertStringContainsString("حالت \u{2068}Debug\u{2069}: <b>" . Words::ON . '</b>', $this->said()[0], 'a second tap of the same button sets what it said');
+        self::assertStringContainsString('تغییرها هنوز ذخیره نشده‌اند', $this->said()[0]);
+        self::assertSame('false', $this->file->get('APP_DEBUG'), 'a draft until saved');
+        self::assertContains(['text' => Words::SAVE, 'callback_data' => Nav::to('ppa', 'save'), 'style' => 'success'], array_merge(...$this->inlineKeyboard(0)));
     }
 
     public function testAnAgentHasNoneOfTheFileButTheirBackups(): void
@@ -183,19 +215,5 @@ final class PanelConfigTest extends BotTestCase
         }
 
         self::fail("No button holds «{$label}».");
-    }
-
-    private function tapAs(string $data): void
-    {
-        $this->send($this->tap($data, chat: self::OWNER));
-    }
-
-    /** The account 7001 linked as the owner. */
-    private function owner(): User
-    {
-        $owner = User::query()->where('telegram_id', self::OWNER)->first() ?? $this->customer(['telegram_id' => self::OWNER, 'first_name' => 'Amir']);
-        $this->linkOwner(self::OWNER);
-
-        return $owner;
     }
 }

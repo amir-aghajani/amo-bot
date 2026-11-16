@@ -12,18 +12,21 @@ use App\Modules\Telegram\Admin\Ui\Button;
 use App\Modules\Telegram\Admin\Ui\Fmt;
 use App\Modules\Telegram\Admin\Ui\Json;
 use App\Modules\Telegram\Admin\Ui\View;
+use App\Modules\Telegram\Admin\Ui\Words as UiWords;
 
 /**
  * «🎁 افزودن زمان و حجم» on a server (the panel's grants card): days and traffic for the services running on it, the
  * latest grants with how far each got — what holds one up, the last service its panel refused —, a new one (not while
  * one runs: ServerGrantFormScreen), and stopping the one under way, asked first. The panel works the grant under way
- * while its page is open; here «🔄 پیشبرد» works a batch of it and shows where it is (the scheduler carries on anyway).
+ * while its page is open; here «⏩ پیشبرد» works a batch of it and shows where it is (the scheduler carries on anyway).
  *
  * Actions: `run` (grant id), `stop` (grant id: asks), `stopped` (grant id: cancels).
  */
 final class ServerGrantsScreen extends BaseScreen
 {
     public const ID = 'svg';
+
+    public const TITLE = '🎁 افزودن زمان و حجم';
 
     /** The status words of a grant. */
     private const STATUS = ['running' => '⏳ در حال انجام', 'done' => '✅ انجام‌شده', 'cancelled' => '🚫 لغوشده'];
@@ -42,11 +45,11 @@ final class ServerGrantsScreen extends BaseScreen
         if ($id === 0) {
             return $admin->open(ServersScreen::ID);
         }
-        $admin->remember(ServerScreen::ID, ['id' => $id]);
+        ServerWords::opened($admin, $id);
         $server = (array) ($admin->api->get("/servers/{$id}")['server'] ?? []);
         $grants = Json::rows($admin->api->get("/servers/{$id}/grants"), 'grants');
 
-        $view = View::make('🎁 افزودن زمان و حجم', 'مدیریت', 'سرورها', (string) ($server['name'] ?? ''))
+        $view = View::make(self::TITLE, UiWords::ROOT, Fmt::bare(ServersScreen::TITLE), (string) ($server['name'] ?? ''))
             ->line('روز و حجم اضافه برای سرویس‌های فعال این سرور، مثلا برای جبران قطعی.');
         if ($grants === []) {
             $view->line()->line('هنوز موردی نیست.');
@@ -59,12 +62,12 @@ final class ServerGrantsScreen extends BaseScreen
             }
         }
         if ($running !== null) {
-            $view->row(Button::to('🔄 پیشبرد', self::ID, 'run', (int) $running['id']), Button::to('🚫 لغو افزودن زمان و حجم', self::ID, 'stop', (int) $running['id']));
+            $view->row(Button::to('⏩ پیشبرد', self::ID, 'run', (int) $running['id'])->primary(), Button::to('🚫 لغو افزودن زمان و حجم', self::ID, 'stop', (int) $running['id'])->danger());
         } else {
-            $view->row(Button::to('🎁 افزودن به سرویس‌ها', ServerGrantFormScreen::ID, 'new', $id));
+            $view->row(Button::to('🎁 افزودن به سرویس‌ها', ServerGrantFormScreen::ID, 'new', $id)->success());
         }
 
-        return $view->back(ServerScreen::ID, 'show', $id);
+        return $view->back(ServerScreen::ID, 'show', $id)->refresh(self::ID, 'show', $id);
     }
 
     public function act(Admin $admin, string $action, array $args): View
@@ -85,9 +88,10 @@ final class ServerGrantsScreen extends BaseScreen
 
                 return $admin->confirm(
                     'افزودن زمان و حجم لغو شود؟',
-                    Button::to('🚫 بله، لغو شود', self::ID, 'stopped', $grant),
-                    Button::to('✖️ انصراف', self::ID),
+                    Button::to(UiWords::yes('لغو شود', '🚫'), self::ID, 'stopped', $grant),
+                    Button::to(UiWords::CANCEL, self::ID),
                     Fmt::e(self::gift($row)) . ' به بقیه سرویس‌ها اضافه نمی‌شود.' . "\n" . 'سرویس‌هایی که تا این لحظه گرفته‌اند همان را نگه می‌دارند.',
+                    danger: true,
                 );
             case 'stopped':
                 $admin->api->post("/servers/{$id}/grants/{$grant}/cancel");

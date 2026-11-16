@@ -7,6 +7,7 @@ namespace App\Modules\Telegram\Admin\Sections\Panel\Schedule;
 use App\Modules\Telegram\Admin\AdminSeat;
 use App\Modules\Telegram\Admin\Door\ApiRefusal;
 use App\Modules\Telegram\Admin\Sections\Panel\Access;
+use App\Modules\Telegram\Admin\Sections\Panel\PanelSettingsScreen;
 use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\Answer;
 use App\Modules\Telegram\Admin\Ui\BaseScreen;
@@ -15,6 +16,7 @@ use App\Modules\Telegram\Admin\Ui\Fmt;
 use App\Modules\Telegram\Admin\Ui\Json;
 use App\Modules\Telegram\Admin\Ui\Prompt;
 use App\Modules\Telegram\Admin\Ui\View;
+use App\Modules\Telegram\Admin\Ui\Words;
 
 /**
  * One scheduled task (ScheduleScreen's, by its place): what it does, when it last ran and is next due, how often it runs
@@ -41,25 +43,28 @@ final class ScheduleTaskScreen extends BaseScreen
             return $admin->open(ScheduleScreen::ID);
         }
         $next = Fmt::moment(is_string($task['next_run_at'] ?? null) ? $task['next_run_at'] : null);
-        $view = View::make('⚙️ ' . (string) ($task['title'] ?? ''), 'مدیریت', 'تنظیمات پنل', 'زمان‌بندی کارها');
-        if (Json::on($task, 'each_shop')) {
-            $view->line('🏪 در هر فروشگاه');
-        }
-        $view->line(Fmt::e((string) ($task['description'] ?? '')))
-            ->line('<i>' . (is_string($task['last_ran_at'] ?? null) ? 'آخرین اجرا: ' . Fmt::date($task['last_ran_at'], true) : 'هنوز اجرا نشده') . ' · اجرای بعدی: '
-                . ($next !== null && $next->isFuture() ? Fmt::date($next->toIso8601String(), true) : "در نوبت بعدی \u{2068}Cron\u{2069}") . '</i>');
-
+        $view = View::make((Json::on($task, 'each_shop') ? '🏪 ' : '⚙️ ') . (string) ($task['title'] ?? ''), ...PanelSettingsScreen::under(Fmt::bare(ScheduleScreen::TITLE)))
+            ->line(Fmt::e((string) ($task['description'] ?? '')));
+        $facts = [
+            'اجرا' => Json::on($task, 'each_shop') ? 'در هر فروشگاه' : 'یک بار برای همه',
+            'آخرین اجرا' => is_string($task['last_ran_at'] ?? null) ? Fmt::date($task['last_ran_at'], true) : 'هنوز اجرا نشده',
+            'اجرای بعدی' => $next !== null && $next->isFuture() ? Fmt::date($next->toIso8601String(), true) : "در نوبت بعدی \u{2068}Cron\u{2069}",
+        ];
+        $hints = [];
         $buttons = [];
         foreach (ScheduleScreen::fields($task) as $place => $field) {
-            $view->line()->line('• <b>' . Fmt::e((string) ($field['label'] ?? '')) . '</b>: ' . self::amount($field, (int) ($field['value'] ?? 0), $place === 0)
-                . ' <i>(پیش‌فرض: ' . self::amount($field, (int) ($field['default'] ?? 0), false) . ')</i>');
+            $label = (string) ($field['label'] ?? '');
+            $value = (int) ($field['value'] ?? 0);
+            $default = (int) ($field['default'] ?? 0);
+            // The value, and the default beside it while it differs: what «↩️ پیش‌فرض» would put back.
+            $facts[$label] = self::amount($field, $value, $place === 0) . ($value === $default ? '' : ' ✏️ (پیش‌فرض: ' . self::amount($field, $default, false) . ')');
             if (is_string($field['hint'] ?? null) && $field['hint'] !== '') {
-                $view->line('<i>' . Fmt::e($field['hint']) . '</i>');
+                $hints[] = '<b>' . Fmt::e($label) . '</b>: ' . Fmt::e($field['hint']);
             }
-            $buttons[] = Button::to('✏️ ' . (string) ($field['label'] ?? '') . ': ' . Fmt::plain(self::amount($field, (int) ($field['value'] ?? 0), false)), self::ID, 'e', $index, $place);
+            $buttons[] = Button::to(Words::edit($label), self::ID, 'e', $index, $place);
         }
 
-        return $view->grid(1, ...$buttons)->back(ScheduleScreen::ID);
+        return $view->card($facts)->tiles(...$buttons)->help(implode("\n\n", $hints))->back(ScheduleScreen::ID);
     }
 
     public function act(Admin $admin, string $action, array $args): View
@@ -70,15 +75,13 @@ final class ScheduleTaskScreen extends BaseScreen
             return $this->show($admin, $args);
         }
         if ($action === 'e') {
-            $hint = [];
-            if (is_string($field['hint'] ?? null) && $field['hint'] !== '') {
-                $hint[] = Fmt::e($field['hint']);
-            }
-            $hint[] = 'الان: ' . self::amount($field, (int) ($field['value'] ?? 0), false) . ' · پیش‌فرض: ' . self::amount($field, (int) ($field['default'] ?? 0), false);
-            $hint[] = 'یک عدد بنویسید (' . Fmt::e((string) ($field['unit'] ?? '')) . ').';
-            $prompt = new Prompt((string) ($field['label'] ?? ''), self::ID, 'e', [self::id($args), self::id($args, 1)], implode("\n", $hint), Button::to('✖️ لغو', self::ID, 'show', self::id($args)));
+            $prompt = (new Prompt((string) ($field['label'] ?? ''), self::ID, 'e', [self::id($args), self::id($args, 1)], Fmt::e(is_string($field['hint'] ?? null) ? $field['hint'] : ''), Button::to(Words::CANCEL, self::ID, 'show', self::id($args))))
+                ->current(Fmt::digits((int) ($field['value'] ?? 0)))
+                ->limits(is_int($field['min'] ?? null) && is_int($field['max'] ?? null)
+                    ? 'از ' . Fmt::number($field['min']) . ' تا ' . Fmt::number($field['max']) . ' ' . (string) ($field['unit'] ?? '')
+                    : 'یک عدد، به ' . (string) ($field['unit'] ?? ''));
             if ((int) ($field['value'] ?? 0) !== (int) ($field['default'] ?? 0)) {
-                $prompt->choices(Button::to('↩️ پیش‌فرض: ' . Fmt::plain(self::amount($field, (int) ($field['default'] ?? 0), false)), self::ID, 'df', self::id($args), self::id($args, 1)));
+                $prompt->resettable(self::ID, 'df', self::id($args), self::id($args, 1));
             }
 
             return $admin->ask($prompt);
@@ -95,7 +98,7 @@ final class ScheduleTaskScreen extends BaseScreen
         $tasks = ScheduleScreen::tasks(ScheduleScreen::read($admin));
         $field = ScheduleScreen::fields($tasks[self::id($args)] ?? [])[self::id($args, 1)] ?? null;
         if ($action === 'e' && $field !== null) {
-            $value = $answer->integer() ?? throw new ApiRefusal(422, 'یک عدد بنویسید.');
+            $value = $answer->integer() ?? throw new ApiRefusal(422, Words::NOT_NUMBER);
             $this->save($admin, $tasks, (string) ($field['name'] ?? ''), $value);
         }
 

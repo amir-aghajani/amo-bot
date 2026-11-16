@@ -78,33 +78,31 @@ final class SmsScreen extends ConfigScreen
     protected function extra(View $view, Admin $admin, DraftForm $form, string $driver, array $values): void
     {
         $state = $admin->state(self::ID);
-        $view->line()->line('<b>📱 ارسال پیامک آزمایشی</b>')
-            ->line('<i>یک کد آزمایشی با تنظیمات ذخیره‌شده و همان الگوی کد ورود فرستاده می‌شود و هزینه‌اش از اعتبار حساب کم می‌شود؛ تغییرات را اول ذخیره کنید.</i>');
-        if (is_string($state['sent'] ?? null)) {
-            $view->line('✅ کد آزمایشی ' . Fmt::code($state['sent']) . ' فرستاده شد؛ همین کد باید با پیامک روی گوشی برسد.');
-        }
-        if ($form->saved !== DraftForm::NONE && is_string($state['credit'] ?? null)) {
-            $view->line($state['credit']);
-        }
-        $view->row(
-            Button::to('📱 ارسال پیامک آزمایشی', self::ID, 'st'),
-            ...($form->saved !== DraftForm::NONE ? [Button::to('💰 اعتبار حساب', self::ID, 'credit')] : []),
-        );
+        $view->section('📱 ارسال پیامک آزمایشی')
+            ->card([
+                'آخرین کد آزمایشی' => is_string($state['sent'] ?? null) ? Fmt::code($state['sent']) . ' — همین کد باید با پیامک روی گوشی برسد' : null,
+                'اعتبار حساب' => $form->saved !== DraftForm::NONE && is_string($state['credit'] ?? null) ? $state['credit'] : null,
+            ])
+            ->note('یک کد آزمایشی با تنظیمات ذخیره‌شده و همان الگوی کد ورود فرستاده می‌شود و هزینه‌اش از اعتبار حساب کم می‌شود؛ تغییرات را اول ذخیره کنید.')
+            ->row(
+                Button::to('📱 ارسال پیامک آزمایشی', self::ID, 'st'),
+                $form->saved !== DraftForm::NONE ? Button::to('💰 اعتبار حساب', self::ID, 'credit') : null,
+            );
     }
 
     protected function action(Admin $admin, string $action, array $args, DraftForm $form, string $driver, array $values): View
     {
         switch ($action) {
             case 'st':
-                return $admin->ask(new Prompt('شماره موبایل گیرنده', self::ID, 'st', [], "کد آزمایشی به کدام شماره برود؟ مثل \u{2068}09121234567\u{2069}"));
+                return $admin->ask((new Prompt('شماره موبایل گیرنده', self::ID, 'st', [], 'کد آزمایشی به کدام شماره برود؟'))->example('09121234567'));
             case 'credit':
                 try {
                     $credit = $admin->api->get('/settings/config/sms/credit')['credit'] ?? null;
                     $line = is_array($credit)
-                        ? '💰 <b>اعتبار حساب:</b> ' . Fmt::number((int) ($credit['amount'] ?? 0)) . ' ' . Fmt::e((string) ($credit['unit'] ?? ''))
-                        : '💰 این سامانه پیامک اعتبار حساب را نمی‌گوید.';
+                        ? Fmt::number((int) ($credit['amount'] ?? 0)) . ' ' . Fmt::e((string) ($credit['unit'] ?? ''))
+                        : 'این سامانه پیامک اعتبار حساب را نمی‌گوید';
                 } catch (ApiRefusal $refusal) {
-                    $line = '⚠️ اعتبار حساب خوانده نشد: ' . Fmt::e($refusal->getMessage());
+                    $line = '⚠️ خوانده نشد: ' . Fmt::e($refusal->getMessage());
                 }
                 $admin->remember(self::ID, ['credit' => $line]);
                 break;

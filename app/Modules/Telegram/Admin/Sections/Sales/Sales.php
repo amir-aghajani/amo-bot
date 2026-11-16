@@ -8,26 +8,58 @@ use App\Modules\Telegram\Admin\Door\ApiRefusal;
 use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\Button;
 use App\Modules\Telegram\Admin\Ui\Fmt;
+use App\Modules\Telegram\Admin\Ui\Icons;
 use App\Modules\Telegram\Admin\Ui\Json;
 use App\Modules\Telegram\Admin\Ui\View;
+use App\Modules\Telegram\Admin\Ui\Words;
 use App\Modules\Telegram\Messages;
 
 /**
- * What the sales screens share: the panel's words for each state of an order, a payment, a service and a bank SMS
- * (the panel's lib/statuses.ts), each led by the mark a row's button starts with; how a customer and whoever decided
- * something are said; and the screen of a decision with more than one way to make it (with a note or without).
+ * What the sales screens share: the section's name and its lists' (under()), the panel's words for each state of an
+ * order, a payment, a service and a bank SMS (the panel's lib/statuses.ts), each led by its chip — the one a row's
+ * button starts with —, the icons of the actions they take, how a customer and whoever decided something are said, a
+ * bar of what is used, and the question before a decision with more than one way to make it (with a note or without),
+ * facts quoted in it.
  */
 final class Sales
 {
+    /** The section, as the paths say it («مدیریت › فروش › …»). */
+    public const TITLE = 'فروش';
+
+    /** The section's lists, as their titles and the paths under them say them. */
+    public const PAYMENTS = 'پرداخت‌ها';
+    public const ORDERS = 'سفارش‌ها';
+    public const SERVICES = 'اشتراک‌ها';
+    public const DEPOSITS = 'واریزهای پیامکی';
+
     /** The customer's own screen (the Customers section's): a row's customer opens it. */
     public const CUSTOMER = 'usv';
 
+    // The icons of what the sales screens do: one each, so no two buttons of a screen look alike.
+
+    public const APPROVE = '✅';
+    public const REJECT = '❌';
+    public const CANCEL = '🚫';
+    public const CHECK = '🔍';
+    public const RETRY = '🔁';
+    public const REMIND = '📨';
+    public const REFUND = '↩️';
+    public const ATTACH = '📎';
+    public const FILE = '📄';
+    public const NEXT = '⏭';
+    public const MOVE = '🔀';
+    public const HAND_OVER = '📤';
+    public const EXTEND = '🎁';
+    public const SYNC = '📥';
+    public const CHAT = '💬';
+    public const LINK = '🔗';
+
     public const ORDER_STATUS = [
         'pending' => '⏳ در انتظار پرداخت',
-        'paid' => '💳 پرداخت‌شده',
-        'processing' => '⚙️ در حال ساخت',
+        'paid' => '🟡 پرداخت‌شده',
+        'processing' => '🟡 در حال ساخت',
         'fulfilled' => '✅ تکمیل‌شده',
-        'failed' => '⚠️ ناموفق',
+        'failed' => '🔴 ناموفق',
         'cancelled' => '🚫 لغوشده',
         'refunded' => '↩️ بازپرداخت‌شده',
     ];
@@ -47,21 +79,21 @@ final class Sales
         'pending' => '⏳ در انتظار پرداخت',
         'awaiting_review' => '🧾 در انتظار بررسی',
         'paid' => '✅ پرداخت‌شده',
-        'failed' => '⚠️ ناموفق',
+        'failed' => '🔴 ناموفق',
         'cancelled' => '🚫 لغوشده',
         'refunded' => '↩️ بازپرداخت‌شده',
     ];
 
     public const SUBSCRIPTION_STATUS = [
-        'active' => '🟢 فعال',
+        'active' => Words::ACTIVE,
         'expired' => '⌛️ منقضی‌شده',
-        'disabled' => '⏸ غیرفعال',
+        'disabled' => Words::INACTIVE,
         'deleted' => '🗑 حذف‌شده',
     ];
 
     /** What came of a bank SMS the phone app forwarded. */
     public const DEPOSIT_STATUS = [
-        'received' => '🔄 در حال بررسی',
+        'received' => '🟡 در حال بررسی',
         'matched' => '✅ تایید شده',
         'unmatched' => '❓ بدون پرداخت',
         'ambiguous' => '⚖️ چند پرداخت',
@@ -69,18 +101,21 @@ final class Sales
         'test' => '🧪 آزمایشی',
     ];
 
-    /** Under a paid payment that came after its order had closed. */
-    public const TO_WALLET = 'به کیف پول مشتری رفت';
-
     /** Under an online payment held for support. */
     public const HELD = 'نگه داشته شده برای پشتیبانی';
 
+    /** The chip of a payment held for support (paymentMark()), over its status's. */
+    public const HELD_MARK = '✋';
+
     /** The longest note the panel takes with a decision (Input::NOTE_MAX). */
-    public const NOTE_HINT = 'اختیاری؛ حداکثر ۳۰۰ نویسه.';
+    public const NOTE_LIMIT = 'اختیاری؛ حداکثر ۳۰۰ نویسه';
 
     /** A decision with an optional note (choose()): with one — asked, then done —, or done at once. */
-    public const WITH_NOTE = '✍️ با توضیح';
-    public const WITHOUT_NOTE = '⏭ بدون توضیح';
+    public const WITH_NOTE = '✍️ بله، با توضیح';
+    public const WITHOUT_NOTE = '✔️ بله، بدون توضیح';
+
+    /** The cells of a bar (bar()). */
+    private const BAR = 10;
 
     /** The price an order was made at, when not its plan's own. */
     private const PRICING = ['first_purchase' => 'قیمت خرید اول', 'agent' => 'قیمت نماینده', 'gift' => 'هدیه'];
@@ -95,6 +130,16 @@ final class Sales
     private const BANK_SMS_REVIEWER = 'پیامک بانک';
 
     /**
+     * The path of a screen in the section: «مدیریت › فروش» and the sections `$more` under it.
+     *
+     * @return list<string>
+     */
+    public static function under(string ...$more): array
+    {
+        return [Words::ROOT, self::TITLE, ...array_values($more)];
+    }
+
+    /**
      * A word of `$words` for `$key` (an API value), the value itself when the panel has none.
      *
      * @param array<string, string> $words
@@ -107,13 +152,34 @@ final class Sales
     }
 
     /**
-     * The mark a state's words start with (its emoji).
+     * The chip a state's words start with (its emoji).
      *
      * @param array<string, string> $words
      */
     public static function mark(array $words, mixed $key): string
     {
         return strtok(self::word($words, $key), ' ') ?: '•';
+    }
+
+    /**
+     * A payment's chip, as its row's button starts with it: ✋ held for support, else its status's.
+     *
+     * @param array<string, mixed> $payment
+     */
+    public static function paymentMark(array $payment): string
+    {
+        return Json::on($payment, 'held') ? self::HELD_MARK : self::mark(self::PAYMENT_STATUS, $payment['status'] ?? '');
+    }
+
+    /**
+     * A payment as its row's button says it after its chip: the amount and the customer — what a row is looked for by
+     * —, the number last.
+     *
+     * @param array<string, mixed> $payment
+     */
+    public static function paymentRow(array $payment): string
+    {
+        return Fmt::money(Json::text($payment, 'amount')) . ' · ' . Fmt::cut(self::customer(Json::part($payment, 'user')), 16) . ' · ' . Fmt::id((int) ($payment['id'] ?? 0));
     }
 
     /**
@@ -131,7 +197,7 @@ final class Sales
     }
 
     /**
-     * A customer's facts as a row's details show them: who, and their Telegram id (copyable) or their email.
+     * A customer's facts as a row's card shows them: who, and their Telegram id (copyable) or their email.
      *
      * @param array<string, mixed> $user
      * @return array<string, string|null>
@@ -161,9 +227,9 @@ final class Sales
     public static function customerButtons(array $user): array
     {
         $handle = Json::text($user, 'username');
-        $buttons = [Button::to('👤 ' . self::customer($user), self::CUSTOMER, 'show', (int) ($user['id'] ?? 0))];
+        $buttons = [Button::to(Icons::CUSTOMER . ' ' . self::customer($user), self::CUSTOMER, 'show', (int) ($user['id'] ?? 0))];
         if ($handle !== null) {
-            $buttons[] = Button::url('💬 گفتگو در تلگرام', 'https://t.me/' . rawurlencode($handle));
+            $buttons[] = Button::url(self::CHAT . ' گفتگو در تلگرام', 'https://t.me/' . rawurlencode($handle));
         }
 
         return $buttons;
@@ -260,25 +326,66 @@ final class Sales
         }
         $code = Json::text(Json::part($order, 'discount_code'), 'code');
 
-        return Fmt::money((string) $order['discount_amount']) . ($lines === [] ? '' : ' (' . implode('، ', $lines) . ')') . ($code !== null ? ' · ' . Fmt::code($code) : '');
+        return '<b>' . Fmt::money((string) $order['discount_amount']) . '</b>' . ($lines === [] ? '' : ' (' . implode('، ', $lines) . ')') . ($code !== null ? ' · ' . Fmt::code($code) : '');
     }
 
     /**
-     * A decision that may go more than one way (with a note for the customer, or without — WITH_NOTE, WITHOUT_NOTE):
-     * `$question`, what it does (HTML), and each way a row of its own — a null one left out, «✖️ انصراف» the last. A
-     * typed note is never the confirmation by itself: a tap here chose to write one.
+     * The question before a decision that may go more than one way (with a note for the customer, or without —
+     * WITH_NOTE, WITHOUT_NOTE —; a move with its previous server or without): `$question`, what it does (HTML), where it
+     * is asked from, then each way — two a row while their labels are short —, «✖️ انصراف» (a way labelled so) last on
+     * its own. A way not given its own colour is red for a decision that destroys (`$danger`), else green. A typed note
+     * is never the decision by itself: a tap here chose to write one.
      */
-    public static function choose(string $question, string $detail, ?Button ...$ways): View
+    public static function choose(Admin $admin, string $question, string $detail, bool $danger, ?Button ...$ways): View
     {
-        $view = View::make('❓ ' . $question);
+        $view = View::make('❓ ' . $question, ...$admin->trail())->transient();
         if ($detail !== '') {
             $view->line($detail);
         }
+        $doing = [];
+        $cancel = null;
         foreach ($ways as $way) {
-            $view->row($way);
+            if ($way === null) {
+                continue;
+            }
+            if ($way->label === Words::CANCEL) {
+                $cancel = $way;
+
+                continue;
+            }
+            $doing[] = $way->style === null ? ($danger ? $way->danger() : $way->success()) : $way;
         }
 
-        return $view;
+        return $view->tiles(...$doing)->row($cancel);
+    }
+
+    /**
+     * Facts as a quote in a question's words (what it is asked of): «label: value» a line — the value HTML, left as it
+     * is (a summary card's would be bold) —, a null one left out.
+     *
+     * @param array<string, string|null> $facts
+     */
+    public static function quote(array $facts): string
+    {
+        $lines = [];
+        foreach ($facts as $label => $value) {
+            if ($value !== null) {
+                $lines[] = Fmt::e((string) $label) . ': ' . $value;
+            }
+        }
+
+        return '<blockquote>' . implode("\n", $lines) . '</blockquote>';
+    }
+
+    /** A bar of `$part` of `$whole` used: «▰▰▰▱▱▱▱▱▱▱»; empty for no whole. */
+    public static function bar(int $part, int $whole): string
+    {
+        if ($whole <= 0) {
+            return '';
+        }
+        $filled = max(0, min(self::BAR, intdiv(max(0, $part) * self::BAR, $whole)));
+
+        return str_repeat('▰', $filled) . str_repeat('▱', self::BAR - $filled);
     }
 
     /**
@@ -318,11 +425,40 @@ final class Sales
         return Fmt::id($id);
     }
 
+    /**
+     * The servers a service (or several) may be moved to, as a picker's buttons — each to `$screen`'s `$action` with
+     * `$args` and the server's id, its running services beside it —, and the lines of those that cannot take one now,
+     * with the server's reason; the servers in `$skip` (where they are already) left out.
+     *
+     * @param list<int> $skip
+     * @param list<int|string> $args
+     * @return array{0: list<Button>, 1: list<string>}
+     * @throws ApiRefusal
+     */
+    public static function targets(Admin $admin, array $skip, string $screen, string $action, array $args): array
+    {
+        $choices = [];
+        $closed = [];
+        foreach (self::servers($admin) as $server) {
+            if (in_array($server['id'], $skip, true)) {
+                continue;
+            }
+            if ($server['reason'] !== null) {
+                $closed[] = '⛔️ ' . Fmt::e($server['name']) . ': ' . Fmt::e($server['reason']);
+
+                continue;
+            }
+            $choices[] = Button::to(Icons::SERVERS . ' ' . $server['name'] . ($server['active'] !== null ? ' · ' . Fmt::number($server['active']) . ' فعال' : ''), $screen, $action, ...[...$args, $server['id']]);
+        }
+
+        return [$choices, $closed];
+    }
+
     /** How long until a moment the panel wrote: «۳ روز مانده», «۵ ساعت مانده» within a day, «تمام شده» once past. */
     public static function left(string $iso): string
     {
         $moment = Fmt::moment($iso);
-        $seconds = $moment === null ? 0 : $moment->getTimestamp() - time();
+        $seconds = $moment === null ? 0 : $moment->getTimestamp() - now()->getTimestamp();
 
         return match (true) {
             $seconds <= 0 => 'تمام شده',

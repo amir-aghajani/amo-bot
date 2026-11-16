@@ -86,7 +86,7 @@ composer analyse    # PHPStan alone
 pnpm check          # the panels: API types + settings index current + typecheck + oxlint + knip + prettier + tests
 pnpm format         # prettier: import order, Tailwind's class order
 pnpm api:types      # regenerate the panels' API types after changing resources/api/openapi.yaml
-pnpm settings:index # regenerate the settings search's index after changing a settings section
+pnpm settings:index # regenerate the settings search's index (the panels' and the bot's) after changing a settings section
 php scripts/docs.php          # regenerate the documentation's generated pages
 php scripts/docs.php --check  # the documentation current, and every link between its pages leading somewhere
 ```
@@ -98,9 +98,13 @@ php scripts/docs.php --check  # the documentation current, and every link betwee
 جستجوی تنظیمات پنل‌ها («جستجوی تنظیمات»، <code dir="ltr">lib/settings-search/*</code>، که `components/settings-search` آن را
 می‌کشد) هر تک‌تنظیم را با فهرستی پیدا می‌کند که از سورس خود بخش‌های تنظیمات ساخته می‌شود: `pnpm settings:index`
 (`scripts/settings-index.mjs`، با parser خود TypeScript) فایل `lib/settings-search/settings.generated.ts` را می‌نویسد —
-کارت‌ها، فیلدها، کلیدها و بخش‌های جمع‌شونده هر بخش با عنوان و راهنمایشان، همان‌طور که سورس نوشته — و `pnpm check`
-(<code dir="ltr">node scripts/settings-index.mjs --check</code>) تا وقتی آن فایل با سورس‌ها جور نیست شکست می‌خورد. پس بعد از
-تغییر کلمه‌های یک بخش تنظیمات، آن را اجرا کنید و آنچه نوشت را commit کنید ([گسترش](Extending.md#تنظیم)).
+کارت‌ها، فیلدها، کلیدها و بخش‌های جمع‌شونده هر بخش با عنوان و راهنمایشان، همان‌طور که سورس نوشته —، و همان فهرست را برای
+«🔎 جستجوی تنظیمات» ربات، یعنی `app/Modules/Telegram/Admin/Sections/Panel/Search/PanelSettings.php` (نسخه منتشرشده سورس پنل
+را ندارد)؛ و `pnpm check` (<code dir="ltr">node scripts/settings-index.mjs --check</code>) تا وقتی هر کدام با سورس‌ها جور نیست
+شکست می‌خورد. پس بعد از تغییر کلمه‌های یک بخش تنظیمات، آن را اجرا کنید و آنچه نوشت را commit کنید
+([گسترش](Extending.md#تنظیم)). ربات هر تنظیم پنل را در `Sections/Panel/Search/SettingsIndex.php` به صفحه‌های خودش وصل می‌کند،
+و `tests/Feature/BotAdmin/SettingsParityTest.php` تا وقتی بخشی از پنل آنجا جایی ندارد، یا جایی صفحه، فیلد یا بخشی را نام
+می‌برد که ربات ندارد، شکست می‌خورد: تنظیم تازه تا وقتی ربات هم آن را تنظیم نکند تمام نیست.
 
 ## ساختار پروژه
 

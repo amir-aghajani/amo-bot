@@ -25,8 +25,6 @@ use Tests\Support\FakeRikhtam;
  */
 final class OwnerGatewayFormsTest extends BotTestCase
 {
-    private const OWNER = 7001;
-
     protected function setUp(): void
     {
         parent::setUp();
@@ -47,7 +45,7 @@ final class OwnerGatewayFormsTest extends BotTestCase
         $this->send($this->message(FakeRikhtam::KEY, chat: self::OWNER));
         self::assertContains('deleteMessage', $this->calls(), 'the typed key taken away');
         $rows = $this->inlineKeyboard($this->window());
-        self::assertSame('● انتخاب مشتری در صفحه ریختم', $rows[0][0]['text'], 'the customer\'s pick by default, marked');
+        self::assertSame('✅ انتخاب مشتری در صفحه ریختم', $rows[0][0]['text'], 'the customer\'s pick by default, marked');
         foreach (array_slice($rows, 0, 5) as $row) {
             self::assertCount(1, $row, 'a coin a row: «تتر روی شبکه ترون (TRC20)» is too long for half a phone\'s row');
         }
@@ -55,8 +53,8 @@ final class OwnerGatewayFormsTest extends BotTestCase
 
         $this->send($this->tap(Nav::to('pmf', 'c', 4, 3), chat: self::OWNER));
         $card = $this->said()[0];
-        self::assertStringContainsString('ارز پرداخت: تتر روی شبکه ترون (TRC20)', $card, 'the walk ends on the card');
-        self::assertStringContainsString('کلید امنیتی درگاه: •••• (تازه نوشته شده)', $card);
+        self::assertStringContainsString('ارز پرداخت: <b>تتر روی شبکه ترون (TRC20)</b>', $card, 'the walk ends on the card');
+        self::assertStringContainsString('کلید امنیتی درگاه: <b>•••• (تازه نوشته شده)</b>', $card);
         self::assertStringContainsString('ℹ️ پول مستقیم به کیف پول خود شما می‌رود', $card, 'its notes over the form');
         self::assertStringNotContainsString(FakeRikhtam::KEY, $card);
 
@@ -67,9 +65,9 @@ final class OwnerGatewayFormsTest extends BotTestCase
         self::assertStringContainsString('ارز: تتر روی شبکه ترون (TRC20)', $this->said()[0], 'its summary on its page');
 
         $this->send($this->tap(Nav::to('pmf', 'edit', $method->id), chat: self::OWNER));
-        self::assertStringContainsString('کلید امنیتی درگاه: ذخیره شده', $this->said()[0]);
+        self::assertStringContainsString('کلید امنیتی درگاه: <b>ذخیره شده', $this->said()[0]);
         $this->send($this->tap(Nav::to('pmf', 'e', 4), chat: self::OWNER));
-        self::assertStringContainsString('الان: تتر روی شبکه ترون (TRC20)', $this->said()[0]);
+        self::assertContains('✅ تتر روی شبکه ترون (TRC20)', array_column(array_merge(...$this->inlineKeyboard($this->window())), 'text'), 'the coin in force marked');
         self::assertContains(Nav::to('pmf', 'show'), $this->callbacks(0), 'back to the card, the draft kept');
         $this->send($this->tap(Nav::to('pmf', 'c', 4, 0), chat: self::OWNER));
         $this->send($this->tap(Nav::to('pmf', 'save'), chat: self::OWNER));
@@ -86,13 +84,13 @@ final class OwnerGatewayFormsTest extends BotTestCase
         self::assertStringContainsString('پیامتان بعد از خواندن پاک می‌شود', $this->said()[0]);
         $this->send($this->message('sk live with spaces', chat: self::OWNER));
         $card = $this->said()[0];
-        self::assertStringContainsString("مرچنت آیدی (merchant_id): \u{2068}" . FakeBluepal::MERCHANT . "\u{2069}", $card, 'typed in Persian digits, kept in Latin');
+        self::assertStringContainsString("مرچنت آیدی (merchant_id): <b>\u{2068}" . FakeBluepal::MERCHANT . "\u{2069}</b>", $card, 'typed in Persian digits, kept in Latin');
         self::assertStringContainsString('ℹ️ اگر در داشبورد بلو پال «دامنه‌های مجاز» را پر کرده‌اید', $card);
 
         $this->send($this->tap(Nav::to('pmf', 'save'), chat: self::OWNER));
         self::assertSame(0, PaymentMethod::query()->where('driver', 'bluepal')->count());
         self::assertStringContainsString('فاصله و حروف فارسی ندارد', (string) $this->popup(), 'the API\'s words');
-        self::assertStringContainsString('⚠️ کلید API را همان‌طور که داشبورد بلو پال نشان می‌دهد کپی کنید', $this->said()[0], 'under its field, the draft kept');
+        self::assertStringContainsString('⚠️ کلید API: کلید API را همان‌طور که داشبورد بلو پال نشان می‌دهد کپی کنید', $this->said()[0], 'under its field, the draft kept');
 
         $this->send($this->tap(Nav::to('pmf', 'e', 4), chat: self::OWNER));
         $this->send($this->message(FakeBluepal::KEY, chat: self::OWNER));
@@ -109,7 +107,7 @@ final class OwnerGatewayFormsTest extends BotTestCase
         $this->send($this->message(FakeRialit::KEY, chat: self::OWNER));
         $card = $this->said()[0];
         self::assertStringContainsString('<code>https://shop.example/payments/webhooks/rialit</code>', $card, 'the address in its note, copied at a tap');
-        self::assertStringContainsString('کلید API: •••• (تازه نوشته شده)', $card);
+        self::assertStringContainsString('کلید API: <b>•••• (تازه نوشته شده)</b>', $card);
         self::assertStringNotContainsString(FakeRialit::KEY, $card);
 
         $this->send($this->tap(Nav::to('pmf', 'save'), chat: self::OWNER));

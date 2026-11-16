@@ -12,12 +12,12 @@ use Illuminate\Support\Carbon;
 /**
  * How the management screens say things — the way the bot's other messages do (Persian digits, Toman, gigabytes, Jalali
  * dates) — from the panels' JSON: money as decimal strings, moments as ISO 8601, bytes as integers. Everything returned
- * is HTML-safe.
+ * is HTML-safe, but for plain(), bare() and cut(): plain text, for a button's label or a title.
  */
 final class Fmt
 {
-    /** What is said for a value there is none of. */
-    public const NONE = '—';
+    /** What is said for a value there is none of (Words'). */
+    public const NONE = Words::NONE;
 
     /** Text as HTML: what a person wrote, a name, anything from the panel. */
     public static function e(?string $text): string
@@ -113,10 +113,22 @@ final class Fmt
         return $value === null || $value === '' ? self::NONE : Persian::digits(rtrim(rtrim(number_format((float) $value, 2, '.', ''), '0'), '.')) . '٪';
     }
 
-    /** A switch as it stands: «✅ روشن» / «⛔️ خاموش». */
+    /** A switch as it stands: «🟢 روشن» / «⏸ خاموش» (Words' chips). */
     public static function onOff(bool $on): string
     {
-        return $on ? '✅ روشن' : '⛔️ خاموش';
+        return $on ? Words::ON : Words::OFF;
+    }
+
+    /** A row that sells or works as it stands (a plan, a code, a server): «🟢 فعال» / «⏸ غیرفعال». */
+    public static function active(bool $active): string
+    {
+        return $active ? Words::ACTIVE : Words::INACTIVE;
+    }
+
+    /** A title without the emoji it starts with (a screen's name in another's path): «📦 یک‌ماهه» → «یک‌ماهه». */
+    public static function bare(string $title): string
+    {
+        return trim(preg_replace('/^[\p{So}\p{Sk}\p{Mn}\x{200D}\s]+/u', '', $title) ?? $title);
     }
 
     /** «بله» / «خیر». */

@@ -6,82 +6,100 @@ namespace App\Modules\Telegram\Admin\Sections\Support;
 
 use App\Modules\Telegram\Admin\Door\ApiRefusal;
 use App\Modules\Telegram\Admin\Sections\Bot\Keyboards\KeyboardScreen;
+use App\Modules\Telegram\Admin\Sections\Bot\Settings\ReferralCard;
+use App\Modules\Telegram\Admin\Sections\Sales\Sales;
 use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\BaseScreen;
 use App\Modules\Telegram\Admin\Ui\Button;
 use App\Modules\Telegram\Admin\Ui\Fmt;
+use App\Modules\Telegram\Admin\Ui\Icons;
 use App\Modules\Telegram\Admin\Ui\Json;
+use App\Modules\Telegram\Admin\Ui\Nav;
 use App\Modules\Telegram\Admin\Ui\View;
+use App\Modules\Telegram\Admin\Ui\Words as UiWords;
 
 /**
- * «🔗 زیرمجموعه‌گیری» (the panel's referrals page, GET /referrals): the program's numbers — referrers, invitees, the
- * commissions paid and what they add up to, with the rules they were paid by —, whether the program is off or the
- * bot's menu lacks its button, and the four lists: referrers, invitees, commissions and alerts. The rules themselves are
- * the bot settings' («قوانین پورسانت»).
+ * «🔗 زیرمجموعه‌گیری» (the panel's referrals page, GET /referrals): the program in one card — what a payment earns, how
+ * many referrers and invitees, the commissions paid and what they add up to —, whether it is off or the bot's menu
+ * lacks its button (each with its way to fix it), the four lists (the alerts' with their count: a queue), and its rules
+ * (ReferralCard, «🔗 قوانین زیرمجموعه‌گیری»), which live here.
  */
 final class ReferralsScreen extends BaseScreen
 {
     public const ID = 'rf';
 
+    public const TITLE = Icons::REFERRALS . ' زیرمجموعه‌گیری';
+
     /** The menu it is in (Screens: «🛍 فروش»). */
     public const PARENT = 'hl';
 
-    /** The bot settings' referral card, where the program's rules are, and the menu of the cards (Sections\Bot). */
-    private const RULES = 'bsf';
-    private const BOT_SETTINGS = 'bs';
+    /** Its place in the menus, for the path over its lists and rows (under()). */
+    private const PATH = [UiWords::ROOT, Sales::TITLE, 'زیرمجموعه‌گیری'];
 
-    /** The keyboards' screen, where a missing button is added (Sections\Bot). */
-    private const KEYBOARDS = 'kb';
+    /** The lists' icons, one each (Icons'; an alert's the general mark): on their buttons, titles and rows' titles. */
+    public const REFERRER = Icons::REFERRERS;
+    public const INVITEE = Icons::INVITEES;
+    public const COMMISSION = Icons::COMMISSIONS;
+    public const ALERT = '⚠️';
+
+    /** The lists' names, as their buttons and titles say them. */
+    public const REFERRERS = self::REFERRER . ' معرف‌ها';
+    public const INVITEES = self::INVITEE . ' زیرمجموعه‌ها';
+    public const COMMISSIONS = self::COMMISSION . ' پورسانت‌ها';
+    public const ALERTS = self::ALERT . ' هشدارها';
 
     /** The program in a paragraph (the panel's header's ⓘ). */
     public const PROGRAM = 'هر مشتری در ربات لینک دعوت خودش را دارد؛ کسی که اولین بار با آن لینک وارد ربات شود زیرمجموعه اوست و از پرداخت‌هایش پورسانتی به کیف پول معرف اضافه می‌شود؛ کسی که از قبل در ربات ثبت شده باشد، زیرمجموعه کسی نمی‌شود.';
+
+    /**
+     * The sections the program's lists and rows are under, then `$more`: «مدیریت › فروش › زیرمجموعه‌گیری › …».
+     *
+     * @return list<string>
+     */
+    public static function under(string ...$more): array
+    {
+        return [...self::PATH, ...array_values($more)];
+    }
 
     public function show(Admin $admin, array $args): View
     {
         $summary = (array) ($admin->api->get('/referrals')['summary'] ?? []);
         $enabled = Json::on($summary, 'enabled');
         $alerts = (int) ($summary['alerts'] ?? 0);
+        $paid = Words::figure($summary['paid'] ?? null);
+        $lacksButton = $enabled && $this->menuLacksButton($admin);
+        $rules = Links::to($admin, ReferralCard::TITLE, ReferralCard::ID);
 
-        $view = View::make('🔗 زیرمجموعه‌گیری', 'مدیریت', 'فروش');
-        $fixes = [];
+        $view = View::make(self::TITLE, UiWords::ROOT, Sales::TITLE);
         if (!$enabled) {
-            $view->line('⛔️ <b>زیرمجموعه‌گیری خاموش است:</b> لینک‌های دعوت کسی را زیرمجموعه نمی‌کنند و پرداختی پورسانت ندارد. زیرمجموعه‌ها و پورسانت‌های قبلی سر جایشان می‌مانند.')->line();
-            $fixes[] = $this->rules($admin, '▶️ روشن کردن در تنظیمات ربات');
-        } elseif ($this->menuLacksButton($admin)) {
-            $view->line('⚠️ دکمه «زیرمجموعه‌گیری» در منوی ربات نیست؛ مشتری‌ها به صفحه لینک دعوتشان راهی ندارند.')->line();
-            $fixes[] = Links::to($admin, '⌨️ افزودن دکمه در کیبوردها', self::KEYBOARDS);
+            $view->line('⛔️ <b>زیرمجموعه‌گیری خاموش است:</b> لینک‌های دعوت کسی را زیرمجموعه نمی‌کنند و پرداختی پورسانت ندارد. زیرمجموعه‌ها و پورسانت‌های قبلی سر جایشان می‌مانند.' . ($rules !== null ? ' روشن کردنش در «' . Fmt::e(Fmt::bare(ReferralCard::TITLE)) . '» است.' : ''));
+        } elseif ($lacksButton) {
+            $view->line('⚠️ دکمه «زیرمجموعه‌گیری» در منوی ربات نیست؛ مشتری‌ها به صفحه لینک دعوتشان راهی ندارند.');
         }
 
-        $view->lines(
-            '👥 معرف‌ها: <b>' . Fmt::number((int) ($summary['referrers'] ?? 0)) . '</b> — مشتری‌هایی که لینکشان کسی را آورده',
-            '🙋 زیرمجموعه‌ها: <b>' . Fmt::number((int) ($summary['referred'] ?? 0)) . '</b> — مشتری‌هایی که با لینک دعوت آمده‌اند',
-            '🧾 پورسانت‌های پرداخت‌شده: <b>' . Fmt::number((int) ($summary['commissions'] ?? 0)) . '</b> — هر کدام بابت یک پرداخت',
-            '💰 جمع پورسانت‌ها: <b>' . Fmt::money(is_numeric($summary['paid'] ?? null) ? (string) $summary['paid'] : '0') . '</b> — ' . self::terms($summary),
-            '⚠️ هشدارها: <b>' . Fmt::number($alerts) . '</b>' . ($alerts > 0 ? ' — هدیه شروع و جایزه دعوت این معرف‌ها نگه داشته می‌شود' : ''),
-        )->note(Fmt::e(self::PROGRAM));
+        $view->card([
+            'پورسانت' => self::terms($summary),
+            'معرف‌ها' => Fmt::number((int) ($summary['referrers'] ?? 0)),
+            'زیرمجموعه‌ها' => Fmt::number((int) ($summary['referred'] ?? 0)),
+            'پورسانت‌های پرداخت‌شده' => Fmt::number((int) ($summary['commissions'] ?? 0)),
+            'جمع پورسانت‌ها' => Fmt::money($paid),
+        ]);
 
         $view->grid(
             2,
-            Button::to('👥 معرف‌ها', ReferrersScreen::ID),
-            Button::to('🙋 زیرمجموعه‌ها', InviteesScreen::ID),
-            Button::to('🧾 پورسانت‌ها', CommissionsScreen::ID),
-            Button::to('⚠️ هشدارها' . Fmt::badge($alerts), ReferralAlertsScreen::ID),
+            Button::to(self::REFERRERS, ReferrersScreen::ID),
+            Button::to(self::INVITEES, InviteesScreen::ID),
+            Button::to(self::COMMISSIONS, CommissionsScreen::ID),
+            Button::to(self::ALERTS . Fmt::badge($alerts), ReferralAlertsScreen::ID),
         );
-        $view->grid(1, ...array_values(array_filter($fixes)));
-        if ($enabled) {
-            $rules = $this->rules($admin, '⚙️ قوانین پورسانت');
-            if ($rules !== null) {
-                $view->row($rules);
-            }
+        if ($lacksButton) {
+            $view->row(Links::to($admin, Icons::KEYBOARDS . ' افزودن دکمه در منوی ربات', KeyboardScreen::ID, Nav::SHOW, 'start')?->primary());
         }
+        $view->row($enabled ? $rules : $rules?->primary());
 
-        return $view->row(Button::to('🔄 به‌روزرسانی', self::ID))->back(self::PARENT);
-    }
-
-    /** A button to the program's rules: its bot settings card, else the menu of the cards. */
-    private function rules(Admin $admin, string $label): ?Button
-    {
-        return Links::to($admin, $label, self::RULES) ?? Links::to($admin, $label, self::BOT_SETTINGS);
+        return $view->help(Fmt::e(self::PROGRAM) . ($alerts > 0 ? "\n\n<b>" . Fmt::e(self::ALERTS) . '</b>: ' . Fmt::e(ReferralAlertsScreen::HELD) : ''))
+            ->back(self::PARENT)
+            ->refresh(self::ID);
     }
 
     /**

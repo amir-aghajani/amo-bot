@@ -7,6 +7,7 @@ namespace App\Modules\Telegram\Admin\Sections\Owner\Servers;
 use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\Fmt;
 use App\Modules\Telegram\Admin\Ui\Json;
+use App\Modules\Telegram\Admin\Ui\Words;
 
 /**
  * How the servers' screens say a server and what its panel answered — the panel's words (servers.tsx, server-status.tsx,
@@ -15,6 +16,9 @@ use App\Modules\Telegram\Admin\Ui\Json;
  */
 final class ServerWords
 {
+    /** Said of a server whose connector this installation lacks (driver(): null) — its form cannot be drawn. */
+    public const NO_FORM = 'فرم تنظیمات این کانکتور در این نسخه در دسترس نیست.';
+
     /** The panel's core («هسته»), in a word. */
     private const CORE_STATES = ['running' => 'در حال اجرا', 'stopped' => 'متوقف', 'error' => 'خطا', 'unknown' => 'نامشخص'];
 
@@ -34,6 +38,17 @@ final class ServerWords
     }
 
     /**
+     * Server `$id`'s pages are the open ones now (current()'s fallback): another server's connection test is not kept
+     * for its card.
+     */
+    public static function opened(Admin $admin, int $id): void
+    {
+        if ((int) ($admin->state(ServerScreen::ID)['id'] ?? 0) !== $id) {
+            $admin->remember(ServerScreen::ID, ['id' => $id, 'probe' => null]);
+        }
+    }
+
+    /**
      * The connector `$key` as GET /servers/drivers describes it; null while this installation lacks it.
      *
      * @return array<string, mixed>|null
@@ -50,22 +65,38 @@ final class ServerWords
     }
 
     /**
-     * A server's connection as a dot and a word (serverStatus()).
+     * A server's connection as it stands (serverStatus()): `inactive` (switched off), `failed` (its last contact failed),
+     * `active` (it answered), `pending` (not checked yet).
+     *
+     * @param array<string, mixed> $server
+     */
+    public static function state(array $server): string
+    {
+        return match (true) {
+            ($server['is_active'] ?? false) !== true => 'inactive',
+            ($server['last_error'] ?? null) !== null => 'failed',
+            ($server['last_checked_at'] ?? null) !== null => 'active',
+            default => 'pending',
+        };
+    }
+
+    /**
+     * A server's connection as a chip: «🟢 متصل», «🔴 خطا در اتصال», «🟡 بررسی نشده», «⏸ غیرفعال».
      *
      * @param array<string, mixed> $server
      */
     public static function status(array $server): string
     {
-        return match (true) {
-            ($server['is_active'] ?? false) !== true => '⚪️ غیرفعال',
-            ($server['last_error'] ?? null) !== null => '🔴 خطا در اتصال',
-            ($server['last_checked_at'] ?? null) !== null => '🟢 متصل',
+        return match (self::state($server)) {
+            'inactive' => Words::INACTIVE,
+            'failed' => Words::FAILED . ' در اتصال',
+            'active' => '🟢 متصل',
             default => '🟡 بررسی نشده',
         };
     }
 
     /**
-     * The state's dot alone, for a button.
+     * The chip's mark alone, for a button.
      *
      * @param array<string, mixed> $server
      */
@@ -107,7 +138,7 @@ final class ServerWords
             $lines[] = Fmt::ltr('CPU') . ': ' . $cpu . ' · ' . Fmt::ltr('RAM') . ': ' . $memory . ' · دیسک: ' . $disk;
         }
         foreach (array_slice($inbounds ?? [], 0, self::PROBE_INBOUNDS) as $inbound) {
-            $lines[] = (Json::on($inbound, 'enabled') ? '🟢 ' : '⚪️ ') . Fmt::e(self::inboundName($inbound)) . ' · ' . self::protocol($inbound) . ' · ' . Fmt::number((int) ($inbound['client_count'] ?? 0)) . ' کلاینت';
+            $lines[] = (Json::on($inbound, 'enabled') ? '🟢 ' : '⏸ ') . Fmt::e(self::inboundName($inbound)) . ' · ' . self::protocol($inbound) . ' · ' . Fmt::number((int) ($inbound['client_count'] ?? 0)) . ' کلاینت';
         }
         if ($inbounds !== null && count($inbounds) > self::PROBE_INBOUNDS) {
             $lines[] = 'و ' . Fmt::number(count($inbounds) - self::PROBE_INBOUNDS) . ' اینباند دیگر…';

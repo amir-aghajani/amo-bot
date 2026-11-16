@@ -10,8 +10,11 @@ use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\BaseScreen;
 use App\Modules\Telegram\Admin\Ui\Button;
 use App\Modules\Telegram\Admin\Ui\Fmt;
+use App\Modules\Telegram\Admin\Ui\Icons;
 use App\Modules\Telegram\Admin\Ui\Json;
+use App\Modules\Telegram\Admin\Ui\Nav;
 use App\Modules\Telegram\Admin\Ui\View;
+use App\Modules\Telegram\Admin\Ui\Words;
 use App\Support\Persian;
 
 /**
@@ -29,6 +32,11 @@ final class PlanServersScreen extends BaseScreen
 {
     public const ID = 'pls';
 
+    public const TITLE = Icons::SERVERS . ' سرورهای پلن';
+
+    /** The servers section (the owner's), where a shop without a server adds one. */
+    private const SERVERS = 'sv';
+
     public function allows(AdminSeat $seat): bool
     {
         return $seat->holds(StaffGrant::Catalog);
@@ -42,9 +50,7 @@ final class PlanServersScreen extends BaseScreen
         }
         $servers = PlanEditScreen::options($admin)['servers'];
         $entries = self::entries($draft);
-        $view = View::make('🖥 سرورهای پلن', 'مدیریت', 'فروشگاه', 'پلن‌ها')
-            ->line('مشتری هنگام خرید یکی از این سرورها را انتخاب می‌کند و یک اشتراک روی همه اینباندهای آن ردیف می‌گیرد.')
-            ->line()
+        $view = View::make(self::TITLE, ...PlanEditScreen::under())
             ->lines(...self::lines($admin, $draft, $servers));
         $taken = array_column($entries, 'server_id');
         $remaining = array_filter($servers, static fn(array $server): bool => !in_array((int) $server['id'], $taken, true));
@@ -53,21 +59,22 @@ final class PlanServersScreen extends BaseScreen
                 ? 'هنوز سروری ندارید؛ اول یک سرور اضافه کنید، بعد این‌جا انتخابش کنید.'
                 : 'فروشگاه هنوز سروری ندارد که پلن روی آن فروخته شود؛ از ' . self::who($admin) . ' بخواهید سروری اضافه کند.');
         } elseif ($remaining === []) {
-            $view->line()->line('همه سرورها به این پلن اضافه شده‌اند.');
+            $view->note('همه سرورها به این پلن اضافه شده‌اند.');
         }
 
-        $view->paged(1, array_map(static fn(array $entry): Button => Button::to('✖️ برداشتن ' . self::name((int) $entry['server_id'], $servers), self::ID, 'del', (int) $entry['server_id']), $entries), self::page($args), static fn(int $page): array => [self::ID, 'show', [$page]]);
+        if (PlanEditScreen::asking($admin)) {
+            $view->row(Button::to('✔️ ادامه', PlanEditScreen::ID, 'next')->primary());
+        }
         if ($remaining !== []) {
-            $view->row(Button::to('➕ افزودن سرور', self::ID, 'add'));
+            $view->row(Button::to(Words::add('سرور'), self::ID, 'add')->success());
         }
         if ($servers === [] && $admin->seat->isOwner()) {
-            $view->row(Button::to('🖥 افزودن سرور در «سرورها»', 'sv'));
+            $view->row(Button::to(Icons::SERVERS . ' افزودن سرور در «سرورها»', self::SERVERS));
         }
-        if (PlanEditScreen::asking($admin)) {
-            $view->row(Button::to('✔️ ادامه', PlanEditScreen::ID, 'next'));
-        }
+        $view->paged(1, array_map(static fn(array $entry): Button => Button::to('➖ برداشتن ' . self::name((int) $entry['server_id'], $servers), self::ID, 'del', (int) $entry['server_id'])->danger(), $entries), self::page($args), static fn(int $page): array => [self::ID, Nav::SHOW, [$page]]);
 
-        return $view->back(PlanEditScreen::ID, 'sum', 'servers');
+        return $view->help('مشتری هنگام خرید یکی از این سرورها را انتخاب می‌کند و یک اشتراک روی همه اینباندهای آن ردیف می‌گیرد. «کل سرور» یعنی هر اینباندی که روی سرور قابل فروش باشد، حالا و در آینده. تا پلن ذخیره نشود، چیزی ذخیره نمی‌شود.')
+            ->back(PlanEditScreen::ID, 'sum', 'servers');
     }
 
     public function act(Admin $admin, string $action, array $args): View
@@ -193,16 +200,21 @@ final class PlanServersScreen extends BaseScreen
      */
     private function choices(array $entries, array $servers, int $page): View
     {
-        $view = View::make('➕ افزودن سرور', 'مدیریت', 'فروشگاه', 'پلن‌ها')->line('کدام سرور؟');
+        $view = View::make(Words::add('سرور'), ...PlanEditScreen::under(Fmt::bare(self::TITLE)))->line('کدام سرور؟');
         $remaining = array_values(array_filter($servers, static fn(array $server): bool => !in_array((int) $server['id'], array_column($entries, 'server_id'), true)));
-        // The lines of the servers the page's buttons are (paged() lays CHOICES_MOST a page the same way).
+        // Why a server of the page cannot sell now: its button says only that it cannot (paged() lays CHOICES_MOST a page the same way).
         [$shown, $page] = View::slice($remaining, $page, View::CHOICES_MOST);
         foreach ($shown as $server) {
-            $sellable = count(array_filter((array) ($server['inbounds'] ?? []), static fn(mixed $inbound): bool => is_array($inbound) && self::sellable($inbound)));
-            $reason = is_string($server['unsellable_reason'] ?? null) ? $server['unsellable_reason'] : null;
-            $view->line('• ' . Fmt::e((string) $server['name']) . ': ' . Fmt::e($reason !== null ? $reason . ' تا درست نشود، مشتری این پلن را روی آن نمی‌بیند.' : Persian::number($sellable) . ' اینباند قابل فروش'));
+            if (is_string($server['unsellable_reason'] ?? null)) {
+                $view->line('⚠️ ' . Fmt::e((string) $server['name']) . ': ' . Fmt::e($server['unsellable_reason'] . ' تا درست نشود، مشتری این پلن را روی آن نمی‌بیند.'));
+            }
         }
-        $view->paged(1, array_map(static fn(array $server): Button => Button::to((is_string($server['unsellable_reason'] ?? null) ? '⚠️ ' : '🖥 ') . $server['name'], self::ID, 'pick', (int) $server['id']), $remaining), $page, static fn(int $at): array => [self::ID, 'add', [$at]]);
+        $view->paged(1, array_map(static fn(array $server): Button => Button::to(
+            (is_string($server['unsellable_reason'] ?? null) ? '⚠️ ' : CatalogFmt::emoji(Words::ACTIVE) . ' ') . Fmt::cut((string) $server['name'], 24) . ' · ' . Persian::number(self::sellableCount($server)) . ' اینباند',
+            self::ID,
+            'pick',
+            (int) $server['id'],
+        ), $remaining), $page, static fn(int $at): array => [self::ID, 'add', [$at]]);
 
         return $view->back(self::ID);
     }
@@ -214,15 +226,14 @@ final class PlanServersScreen extends BaseScreen
      */
     private function mode(Admin $admin, array $server): View
     {
-        $sellable = count(array_filter((array) ($server['inbounds'] ?? []), static fn(mixed $inbound): bool => is_array($inbound) && self::sellable($inbound)));
-        $view = View::make('🖥 ' . (string) $server['name'], 'مدیریت', 'فروشگاه', 'پلن‌ها');
+        $view = View::make(Icons::SERVERS . ' ' . (string) $server['name'], ...PlanEditScreen::under(Fmt::bare(self::TITLE)));
         if (is_string($server['unsellable_reason'] ?? null)) {
             $view->line('⚠️ ' . Fmt::e($server['unsellable_reason'] . ' تا درست نشود، مشتری این پلن را روی آن نمی‌بیند.'));
         }
-        $view->line('• کل سرور: هر اینباندی که ' . ($admin->seat->isOwner() ? 'در صفحه سرور «قابل فروش» باشد' : self::who($admin) . ' روی این سرور برای فروش گذاشته باشد') . '، حالا و در آینده، جزو این پلن است (الان ' . Persian::number($sellable) . ' مورد).')
+        $view->line('• کل سرور: هر اینباندی که ' . ($admin->seat->isOwner() ? 'در صفحه سرور «قابل فروش» باشد' : self::who($admin) . ' روی این سرور برای فروش گذاشته باشد') . '، حالا و در آینده، جزو این پلن است (الان ' . Persian::number(self::sellableCount($server)) . ' مورد).')
             ->line('• انتخاب اینباندها: فقط همان اینباندهایی که علامت می‌زنید.');
 
-        return $view->row(Button::to('🖥 کل سرور', self::ID, 'all', (int) $server['id']), Button::to('☑️ انتخاب اینباندها', self::ID, 'in', (int) $server['id']))
+        return $view->row(Button::to(Icons::SERVERS . ' کل سرور', self::ID, 'all', (int) $server['id'])->primary(), Button::to('☑️ انتخاب اینباندها', self::ID, 'in', (int) $server['id']))
             ->back(self::ID, 'add');
     }
 
@@ -235,15 +246,15 @@ final class PlanServersScreen extends BaseScreen
     {
         $pick = $admin->state(self::ID);
         $ticked = array_map(intval(...), (array) ($pick['ids'] ?? []));
-        $view = View::make('☑️ اینباندهای «' . (string) $server['name'] . '»', 'مدیریت', 'فروشگاه', 'پلن‌ها')
-            ->line('اینباندهایی را که این پلن روی آن‌ها فروخته می‌شود علامت بزنید.');
+        $view = View::make('☑️ اینباندهای «' . (string) $server['name'] . '»', ...PlanEditScreen::under(Fmt::bare(self::TITLE)))
+            ->line('اینباندهایی را که این پلن روی آن‌ها فروخته می‌شود علامت بزنید؛ 🚫 روی پنل غیرفعال است.');
         $buttons = [];
         foreach ((array) ($server['inbounds'] ?? []) as $inbound) {
             if (!is_array($inbound)) {
                 continue;
             }
             $id = (int) ($inbound['id'] ?? 0);
-            $mark = !(bool) ($inbound['enabled'] ?? false) ? '🚫 ' : (in_array($id, $ticked, true) ? '✅ ' : '◻️ ');
+            $mark = !(bool) ($inbound['enabled'] ?? false) ? '🚫 ' : Words::tick(in_array($id, $ticked, true));
             $address = implode(':', array_filter([is_string($inbound['protocol'] ?? null) ? $inbound['protocol'] : null, is_int($inbound['port'] ?? null) ? (string) $inbound['port'] : null]));
             $buttons[] = Button::to($mark . self::inboundName($inbound) . ($address !== '' ? " \u{2068}{$address}\u{2069}" : ''), self::ID, 't', $id);
         }
@@ -252,7 +263,7 @@ final class PlanServersScreen extends BaseScreen
         }
         $view->paged(1, $buttons, (int) ($pick['page'] ?? 1), static fn(int $page): array => [self::ID, 'ip', [$page]]);
         if ($buttons !== []) {
-            $view->row(Button::to('➕ افزودن به پلن (' . Persian::number(count($ticked)) . ')', self::ID, 'ok'));
+            $view->row(Button::to('➕ افزودن به پلن (' . Persian::number(count($ticked)) . ')', self::ID, 'ok')->success());
         }
 
         return $view->back(self::ID, 'pick', (int) $server['id']);
@@ -294,6 +305,16 @@ final class PlanServersScreen extends BaseScreen
     private static function sellable(array $inbound): bool
     {
         return (bool) ($inbound['enabled'] ?? false) && (bool) ($inbound['is_selectable'] ?? false);
+    }
+
+    /**
+     * How many of the server's inbounds are sold whole-server now (sellable()).
+     *
+     * @param array<string, mixed> $server
+     */
+    private static function sellableCount(array $server): int
+    {
+        return count(array_filter((array) ($server['inbounds'] ?? []), static fn(mixed $inbound): bool => is_array($inbound) && self::sellable($inbound)));
     }
 
     /**

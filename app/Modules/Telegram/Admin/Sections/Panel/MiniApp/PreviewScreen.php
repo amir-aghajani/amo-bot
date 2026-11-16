@@ -14,6 +14,7 @@ use App\Modules\Telegram\Admin\Ui\Fmt;
 use App\Modules\Telegram\Admin\Ui\Json;
 use App\Modules\Telegram\Admin\Ui\Prompt;
 use App\Modules\Telegram\Admin\Ui\View;
+use App\Modules\Telegram\Admin\Ui\Words;
 use Illuminate\Support\Carbon;
 
 /**
@@ -65,13 +66,13 @@ final class PreviewScreen extends BaseScreen
         $state = $admin->state(self::ID);
         $session = is_array($state['session'] ?? null) ? $state['session'] : null;
         $theme = ($state['theme'] ?? 'light') === 'dark' ? 'dark' : 'light';
-        $view = View::make('👁 پیش‌نمایش مینی‌اپ', 'مدیریت', 'مینی‌اپ تلگرام')
+        $view = View::make('👁 پیش‌نمایش مینی‌اپ', ...MiniAppScreen::under())
             ->line('مینی‌اپ را همان‌طور ببینید که یک مشتری در تلگرامش می‌بیند: با حساب، سرویس‌ها و کیف پول خود او.');
 
         if ($session === null) {
-            $view->line()->line('<b>یک مشتری انتخاب کنید</b>؛ مینی‌اپ با حساب او باز می‌شود، همان‌طور که در تلگرام خودش می‌بیند.');
             $search = is_string($state['search'] ?? null) ? $state['search'] : '';
             $users = array_slice(Json::rows($admin->api->get('/users', ['status' => 'active', 'search' => $search]), 'users'), 0, self::SHOWN);
+            $view->section('👤 یک مشتری انتخاب کنید');
             if ($search !== '') {
                 $view->line('🔎 «' . Fmt::e($search) . '»');
             }
@@ -84,31 +85,30 @@ final class PreviewScreen extends BaseScreen
                 $view->row(Button::to('👤 ' . self::name($user) . ' · ' . Fmt::id(is_int($user['id'] ?? null) ? $user['id'] : null), self::ID, 'pick', (int) ($user['id'] ?? 0)));
             }
             $admin->remember(self::ID, ['names' => $names]);
-            $view->row($search === '' ? Button::to('🔎 جستجوی مشتری', self::ID, 'search') : Button::to('✖️ پاک کردن جستجو', self::ID, 'clear'));
+            $view->row($search === '' ? Button::to(Words::SEARCH, self::ID, 'search') : Button::to(Words::CLEAR_SEARCH, self::ID, 'clear'));
         } else {
             $ends = Fmt::moment(is_string($session['expires_at'] ?? null) ? $session['expires_at'] : null);
             $ended = $ends === null || $ends->isPast();
-            $view->line()->facts([
+            $view->card([
                 'مشتری' => Fmt::e((string) ($session['name'] ?? '')) . ' ' . Fmt::id(is_int($session['user'] ?? null) ? $session['user'] : null),
                 'تم تلگرام' => $theme === 'dark' ? '🌙 تیره' : '☀️ روشن',
                 'باز تا' => $ends === null ? null : Fmt::date($ends->toIso8601String(), true),
             ]);
             if ($ended) {
-                $view->line()->line('⏰ <b>زمان پیش‌نمایش تمام شد.</b> هر پیش‌نمایش ۳۰ دقیقه باز می‌ماند؛ برای دیدن دوباره، آن را دوباره باز کنید.');
+                $view->line('⏰ <b>زمان پیش‌نمایش تمام شد.</b> هر پیش‌نمایش ۳۰ دقیقه باز می‌ماند؛ برای دیدن دوباره، آن را دوباره باز کنید.');
             } else {
                 $view->row(Button::url('👁 باز کردن پیش‌نمایش', self::address($app, $session, $theme)));
             }
             $view->row(
                 Button::to($theme === 'dark' ? '☀️ تم روشن' : '🌙 تم تیره', self::ID, 'theme'),
-                Button::to('🔄 باز کردن دوباره', self::ID, 'again'),
+                Button::to('🔁 باز کردن دوباره', self::ID, 'again')->primary(),
             )->row(Button::to('👤 مشتری دیگر', self::ID, 'other'));
             $view->note('لینک را با کسی به اشتراک نگذارید: تا پایان پیش‌نمایش، حساب همین مشتری را نشان می‌دهد.');
         }
 
-        $view->note('پیش‌نمایش فقط نشان می‌دهد: در آن خرید، پرداخت، تیکت یا هیچ تغییری انجام نمی‌شود. هر بار ۳۰ دقیقه باز می‌ماند.'
-            . (($app['enabled'] ?? false) !== true ? ' مینی‌اپ خاموش است، ولی پیش‌نمایش با این حال کار می‌کند؛ مشتری‌ها چیزی نمی‌بینند.' : ''));
-
-        return $view->back(MiniAppScreen::ID);
+        return $view->help('پیش‌نمایش فقط نشان می‌دهد: در آن خرید، پرداخت، تیکت یا هیچ تغییری انجام نمی‌شود. هر بار ۳۰ دقیقه باز می‌ماند.'
+            . (($app['enabled'] ?? false) !== true ? ' مینی‌اپ خاموش است، ولی پیش‌نمایش با این حال کار می‌کند؛ مشتری‌ها چیزی نمی‌بینند.' : ''))
+            ->back(MiniAppScreen::ID);
     }
 
     public function act(Admin $admin, string $action, array $args): View
@@ -130,7 +130,7 @@ final class PreviewScreen extends BaseScreen
                 $admin->remember(self::ID, ['session' => null]);
                 break;
             case 'search':
-                return $admin->ask(new Prompt('کدام مشتری؟', self::ID, 'search', [], 'نام، نام کاربری، شناسه تلگرام یا شماره موبایل.'));
+                return $admin->ask((new Prompt('کدام مشتری؟', self::ID, 'search', [], 'نام، نام کاربری، شناسه تلگرام یا شماره موبایل.'))->example('@ali_r'));
             case 'clear':
                 $admin->remember(self::ID, ['search' => '']);
                 break;

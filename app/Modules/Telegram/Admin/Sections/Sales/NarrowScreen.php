@@ -12,11 +12,12 @@ use App\Modules\Telegram\Admin\Ui\Button;
 use App\Modules\Telegram\Admin\Ui\Fmt;
 use App\Modules\Telegram\Admin\Ui\Prompt;
 use App\Modules\Telegram\Admin\Ui\View;
+use App\Modules\Telegram\Admin\Ui\Words;
 
 /**
- * «🎛 فیلتر و ترتیب» of a sales list: the panel's selects beside its tabs — each a group of chips, the one in force
- * marked —, its date filter (the presets and a range typed), and the order. A pick narrows the list at once (Narrowing),
- * from its first page.
+ * «🎛 فیلتر و ترتیب» of a sales list: what is in force in one card — each of the panel's selects beside its tabs, its date
+ * filter, the order —, then each group's chips, the one in force marked, its days' presets and a range typed. A pick
+ * narrows the list at once (Narrowing), from its first page.
  *
  * Actions: `s` (group, value: `_` for none), `d` (preset: `_` for none), `dc` (asks a range), `clr` (all off).
  */
@@ -25,13 +26,24 @@ abstract class NarrowScreen extends BaseScreen
     /** A choice's value in a button for none («همه», the list's own order). */
     private const NONE = '_';
 
+    /** The longest label of a group laid three a row; a group with a longer one goes two a row. */
+    private const THREE_MOST = 11;
+
+    /** The order of a list of sums (orders, payments), as the panel's sortable headers take it; '' the newest first. */
+    protected const SORT_BY_AMOUNT = [
+        '' => 'تازه‌ترین',
+        'created.asc' => 'قدیمی‌ترین',
+        'amount.desc' => 'بیشترین مبلغ',
+        'amount.asc' => 'کمترین مبلغ',
+    ];
+
     /** The screen's id. */
     abstract protected function screen(): string;
 
     /** The list it narrows. */
     abstract protected function list(): string;
 
-    /** The list's name, for the line over it. */
+    /** The list's name, for the path over it. */
     abstract protected function listTitle(): string;
 
     /**
@@ -43,7 +55,7 @@ abstract class NarrowScreen extends BaseScreen
      */
     abstract protected function groups(Admin $admin): array;
 
-    /** What the days are of («بر اساس زمان ثبت سفارش»), for a list narrowed by days; null for none. */
+    /** What the days are of («زمان ثبت سفارش»), for a list narrowed by days; null for none. */
     protected function days(): ?string
     {
         return null;
@@ -53,32 +65,45 @@ abstract class NarrowScreen extends BaseScreen
     {
         $state = $admin->state($this->list());
         $query = Narrowing::query($state);
-        $view = View::make('🎛 فیلتر و ترتیب', 'مدیریت', 'فروش', $this->listTitle());
-        foreach ($this->groups($admin) as $group) {
+        $groups = $this->groups($admin);
+        $days = $this->days();
+        $period = Narrowing::period($state);
+        $view = View::make(SalesList::FILTERS, ...Sales::under($this->listTitle()));
+
+        $facts = [];
+        foreach ($groups as $group) {
             $current = self::current($group['key'], $query);
-            $view->line('• ' . Fmt::e($group['label']) . ': ' . Fmt::e($group['options'][$current] ?? (string) reset($group['options'])));
+            $facts[$group['label']] = Fmt::e($group['options'][$current] ?? (string) reset($group['options']));
+        }
+        if ($days !== null) {
+            $facts['تاریخ'] = Fmt::e($period ?? 'همه روزها');
+        }
+        $view->card($facts);
+
+        foreach ($groups as $group) {
+            $current = self::current($group['key'], $query);
             $chips = [];
             foreach ($group['options'] as $value => $label) {
-                $chips[] = Button::to(($current === (string) $value ? '● ' : '') . $label, $this->screen(), 's', $group['key'], $value === '' ? self::NONE : (string) $value);
+                $chips[] = Button::to(($current === (string) $value ? Words::CHIP : '') . $label, $this->screen(), 's', $group['key'], $value === '' ? self::NONE : (string) $value);
             }
-            $view->grid(count($chips) > 4 ? 3 : 2, ...$chips);
+            $view->grid(self::perRow($group['options']), ...$chips);
         }
-        if ($this->days() !== null) {
-            $period = Narrowing::period($state);
+        if ($days !== null) {
             $preset = Narrowing::presetOf($state);
-            $view->line('• تاریخ (' . Fmt::e((string) $this->days()) . '): ' . Fmt::e($period ?? 'همه'));
-            $chips = [Button::to(($period === null ? '● ' : '') . 'همه', $this->screen(), 'd', self::NONE)];
+            $chips = [Button::to(($period === null ? Words::CHIP : '') . 'همه روزها', $this->screen(), 'd', self::NONE)];
             foreach (Narrowing::DAYS as $key => $label) {
-                $chips[] = Button::to(($preset === $key ? '● ' : '') . $label, $this->screen(), 'd', $key);
+                $chips[] = Button::to(($preset === $key ? Words::CHIP : '') . $label, $this->screen(), 'd', $key);
             }
-            $view->grid(3, ...$chips)->row(Button::to('📅 بازه دلخواه…', $this->screen(), 'dc'));
+            $chips[] = Button::to(($period !== null && $preset === null ? Words::CHIP : '') . '📅 بازه دلخواه', $this->screen(), 'dc');
+            $view->grid(3, ...$chips);
         }
-        $view->note('هر انتخاب همان لحظه روی لیست اعمال می‌شود.');
-        if ($query !== []) {
-            $view->row(Button::to('✖️ حذف همه فیلترها', $this->screen(), 'clr'));
-        }
+        $view->row(
+            Button::to('✔️ دیدن نتیجه', $this->list())->primary(),
+            $query === [] ? null : Button::to(SalesList::UNFILTER, $this->screen(), 'clr'),
+        );
 
-        return $view->row(Button::to('✔️ دیدن نتیجه', $this->list()))->back($this->list());
+        return $view->help('هر انتخاب همان لحظه روی لیست اعمال می‌شود و تا وقتی برش ندارید می‌ماند.' . ($days !== null ? ' تاریخ بر اساس ' . Fmt::e($days) . ' است.' : ''))
+            ->back($this->list());
     }
 
     public function act(Admin $admin, string $action, array $args): View
@@ -97,7 +122,10 @@ abstract class NarrowScreen extends BaseScreen
                 }
                 break;
             case 'dc':
-                return $admin->ask(new Prompt('بازه دلخواه', $this->screen(), 'dc', hint: 'روز شروع و پایان را بنویسید، مثل «۱۴۰۵/۰۷/۰۱ تا ۱۴۰۵/۰۷/۱۵»؛ یا یک تاریخ برای یک روز.'));
+                return $admin->ask((new Prompt('بازه دلخواه', $this->screen(), 'dc', hint: 'روز شروع و روز پایان را بنویسید؛ برای یک روز، یک تاریخ.'))
+                    ->current(Narrowing::period($admin->state($this->list())) ?? 'همه روزها', false)
+                    ->example('۱۴۰۵/۰۷/۰۱ تا ۱۴۰۵/۰۷/۱۵')
+                    ->limits('تاریخ شمسی یا میلادی، سال چهاررقمی'));
             case 'clr':
                 Narrowing::clear($admin, $this->list());
                 break;
@@ -135,6 +163,22 @@ abstract class NarrowScreen extends BaseScreen
 
             return;
         }
+    }
+
+    /**
+     * How many of a group's chips go a row: three while every label is short, else two.
+     *
+     * @param array<string, string> $options
+     */
+    private static function perRow(array $options): int
+    {
+        foreach ($options as $label) {
+            if (mb_strlen($label) > self::THREE_MOST) {
+                return 2;
+            }
+        }
+
+        return 3;
     }
 
     /**

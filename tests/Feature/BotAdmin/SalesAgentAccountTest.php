@@ -37,14 +37,15 @@ final class SalesAgentAccountTest extends BotTestCase
         self::assertStringContainsString('بدون اعتبار خرید', $said);
         self::assertStringContainsString("\u{2068}@agent_shop_bot\u{2069} · 🟢 فعال", $said, 'their bot and how it stands');
         self::assertStringContainsString('فروش ربات شما متوقف است', $said, 'why it sells nothing');
-        self::assertStringContainsString('فروش: متوقف: فروشگاه اصلی فروش را متوقف کرده است', $said, 'the terms of selling');
-        self::assertStringContainsString('پایان نمایندگی: بدون پایان', $said);
+        self::assertStringContainsString('فروش: <b>متوقف: فروشگاه اصلی فروش را متوقف کرده است</b>', $said, 'the terms of selling');
+        self::assertStringContainsString('پایان نمایندگی: <b>بدون پایان</b>', $said);
+
         self::assertContains(Nav::to('acc', 'l', 1), $this->callbacks(0));
         self::assertContains('https://t.me/amo_shop_bot', array_column(array_merge(...$this->inlineKeyboard(0)), 'url'), 'traffic is bought in the main bot');
 
         $this->sendTo($bot, $this->tap(Nav::to('acc', 'l', 1), chat: self::AGENT_TELEGRAM_ID));
         $ledger = $this->said()[0];
-        self::assertStringContainsString('📊 گردش حجم', $ledger);
+        self::assertStringContainsString('📒 گردش حجم', $ledger);
         self::assertStringContainsString('➕ ۱۰۰ گیگابایت', $ledger, 'the traffic the bot was given');
         self::assertStringContainsString('مانده ۱۰۰ گیگابایت', $ledger);
         self::assertContains(Nav::to('acc'), $this->callbacks(0), 'back to the account');

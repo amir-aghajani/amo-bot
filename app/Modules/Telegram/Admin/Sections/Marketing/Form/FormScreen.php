@@ -6,6 +6,7 @@ namespace App\Modules\Telegram\Admin\Sections\Marketing\Form;
 
 use App\Modules\Telegram\Admin\AdminSeat;
 use App\Modules\Telegram\Admin\Door\ApiRefusal;
+use App\Modules\Telegram\Admin\Sections\Marketing\Words as Marketing;
 use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\Answer;
 use App\Modules\Telegram\Admin\Ui\BaseScreen;
@@ -14,17 +15,24 @@ use App\Modules\Telegram\Admin\Ui\Fmt;
 use App\Modules\Telegram\Admin\Ui\Json;
 use App\Modules\Telegram\Admin\Ui\Prompt;
 use App\Modules\Telegram\Admin\Ui\View;
+use App\Modules\Telegram\Admin\Ui\Words;
 
 /**
- * A panel's create/edit dialog as a wizard in the bot: a draft kept in the screen's state, asked a field (Step) at a
- * time — «⏭ رد شدن» for an optional one —, then a summary of every field with «✏️» for each, and one save: the panel's
- * own POST or PUT, whose refusals are marked beside their fields on the summary. Editing a row starts at its summary,
- * from the row as the panel has it now (row()). A field's choices — the shop's plans, servers — come View::CHOICES_MOST
- * a page, the page each field is on kept in the state.
+ * A panel's create/edit dialog as a wizard in the bot. A new one is walked through a field (Step) at a time, each step a
+ * question — its title — with where the walk is («گام ۲ از ۶» and a bar), the field's hint, its value now when it has
+ * one, and the ways on: its choices (the one in force ✅) or a typed answer with an example, its limits and quick values;
+ * «⬅️ گام قبل» back to the step before, «⏭ رد شدن» past an optional one (or «⏭ همین بماند» keeping a value it holds),
+ * «✖️ انصراف» out. Past the last step, the review card: every field with its value — the panel's «محدودیت‌های بیشتر»
+ * (fields not walked) a section of their own —, the panel's refusals marked on their fields, «✏️» for each and one save,
+ * «✔️ ساختن»: the panel's own POST. Editing a row starts at its review, from the row as the panel has it now (row()); its
+ * save («💾 ذخیره», the panel's PUT) is offered once something changed. A field's choices — the shop's plans, servers —
+ * come View::CHOICES_MOST a page, the page each field is on kept in the state.
  *
- * Actions: `new`, `edit` (id), `sum`, `ask` (i), `skip` (i), `clr` (i), `pick` (i, n: choice n; a switch's 0 on, 1
- * off), `mt` (i, n), `all` (i), `done` (i), `q` (i, n: quick value n), `pg` (i, n: the choices' page n), `save`; the
- * answer to a typed field is `v` (i).
+ * Actions: `new`, `edit` (id), `sum` (the review), `ask` (i: asked from the review), `prev` (i: the step before step
+ * i), `skip` (i: step i left as it is), `clr` (i: emptied), `pick` (i, n: choice n; a switch's 0 on, 1 off), `mt` (i,
+ * n, 1|0: choice n ticked or not), `all` (i), `done` (i: the ticks done), `q` (i, n: quick value n), `pg` (i, n: the
+ * choices' page n), `save`; the answer to a typed field is `v` (i). A button carries the step it is on — and a tick the
+ * state it sets —, so a second tap, or one from an older window, lands where the first did.
  */
 abstract class FormScreen extends BaseScreen
 {
@@ -32,7 +40,7 @@ abstract class FormScreen extends BaseScreen
     abstract protected function screen(): string;
 
     /**
-     * The title (plain text): the panel's dialog's — «➕ ساخت …» for a new one (`$id` 0), «✏️ ویرایش …» for a row.
+     * The title (plain text): «➕ افزودن …» for a new one (`$id` 0), «✏️ ویرایش …» for a row.
      *
      * @param array<string, mixed> $draft
      */
@@ -106,12 +114,6 @@ abstract class FormScreen extends BaseScreen
         return null;
     }
 
-    /** The save of a new one: «✔️ ساختن», or «✔️ افزودن» for what the panel adds («➕ افزودن سطح»). */
-    protected function createLabel(): string
-    {
-        return '✔️ ساختن';
-    }
-
     /**
      * A row's draft, to edit it.
      *
@@ -124,7 +126,16 @@ abstract class FormScreen extends BaseScreen
     }
 
     /**
-     * Notes under the summary (HTML): what the panel says beside its form.
+     * The heading of the fields not walked on the review (the panel's «محدودیت‌های بیشتر»); '' to keep them on the one
+     * card with the rest.
+     */
+    protected function laterTitle(): string
+    {
+        return '';
+    }
+
+    /**
+     * Notes under the review (HTML): what the panel says beside its form.
      *
      * @param array<string, mixed> $draft
      * @return list<string>
@@ -137,11 +148,11 @@ abstract class FormScreen extends BaseScreen
     public function show(Admin $admin, array $args): View
     {
         if (!$this->open($admin)) {
-            return $this->leave($admin, 0);
+            return $this->leave($admin);
         }
         $admin->remember($this->screen(), ['walk' => false]);
 
-        return $this->summary($admin, $this->steps($admin));
+        return $this->review($admin, $this->steps($admin));
     }
 
     public function act(Admin $admin, string $action, array $args): View
@@ -153,28 +164,35 @@ abstract class FormScreen extends BaseScreen
             return $this->next($admin, $this->steps($admin), -1);
         }
         if ($action === 'edit') {
-            $row = $this->row($admin, self::id($args));
+            $id = self::id($args);
+            $row = $this->row($admin, $id);
             if ($row === null) {
-                return $this->leave($admin, 0);
+                return $this->leave($admin);
             }
+            $draft = $this->draftOf($row);
             $admin->forget($this->screen());
-            $admin->remember($this->screen(), ['id' => self::id($args), 'draft' => $this->draftOf($row), 'walk' => false, 'errors' => []]);
+            $admin->remember($this->screen(), ['id' => $id, 'draft' => $draft, 'was' => $draft, 'walk' => false, 'errors' => []]);
 
-            return $this->summary($admin, $this->steps($admin));
+            return $this->review($admin, $this->steps($admin));
         }
         if (!$this->open($admin)) {
-            return $this->leave($admin, 0);
+            return $this->leave($admin);
         }
 
         $steps = $this->steps($admin);
-        $index = self::id($args);
-        $step = $steps[$index] ?? null;
-        $draft = $this->draft($admin);
         if ($action === 'save') {
             return $this->save($admin, $steps);
         }
+        if ($action === 'sum') {
+            $admin->remember($this->screen(), ['walk' => false]);
+
+            return $this->review($admin, $steps);
+        }
+        $index = self::id($args);
+        $step = $steps[$index] ?? null;
+        $draft = $this->draft($admin);
         if ($step === null || !$step->shown($draft)) {
-            return $this->summary($admin, $steps);
+            return $this->review($admin, $steps);
         }
 
         switch ($action) {
@@ -182,6 +200,8 @@ abstract class FormScreen extends BaseScreen
                 $admin->remember($this->screen(), ['walk' => false]);
 
                 return $this->ask($admin, $steps, $index);
+            case 'prev':
+                return $this->ask($admin, $steps, $this->walking($admin) ? ($this->previous($steps, $draft, $index) ?? $index) : $index);
             case 'skip':
                 return $this->after($admin, $steps, $index);
             case 'clr':
@@ -198,8 +218,7 @@ abstract class FormScreen extends BaseScreen
 
                 return $this->after($admin, $steps, $index);
             case 'pg':
-                $pages = $admin->state($this->screen())['pages'] ?? [];
-                $pages = is_array($pages) ? $pages : [];
+                $pages = Json::part($admin->state($this->screen()), 'pages');
                 $pages[$index] = self::page($args, 1);
                 $admin->remember($this->screen(), ['pages' => $pages]);
 
@@ -209,7 +228,10 @@ abstract class FormScreen extends BaseScreen
                 $key = $keys[self::id($args, 1)] ?? null;
                 if ($key !== null) {
                     $chosen = is_array($draft[$step->key] ?? null) ? $draft[$step->key] : [];
-                    $chosen = in_array($key, $chosen, true) ? array_values(array_diff($chosen, [$key])) : [...$chosen, $key];
+                    // Ticked (1) or not (0) as the button said — a tap twice is one; an older window's carries neither and
+                    // turns it over.
+                    $tick = isset($args[2]) ? $args[2] === '1' : !in_array($key, $chosen, true);
+                    $chosen = $tick ? [...$chosen, $key] : array_values(array_diff($chosen, [$key]));
                     // In the choices' own order, each once.
                     $this->put($admin, $step, array_values(array_filter($keys, static fn(int|string $one): bool => in_array($one, $chosen, true))));
                 }
@@ -241,19 +263,19 @@ abstract class FormScreen extends BaseScreen
                 return $this->after($admin, $steps, $index);
         }
 
-        return $this->summary($admin, $steps);
+        return $this->review($admin, $steps);
     }
 
     public function input(Admin $admin, string $action, array $args, Answer $answer): View
     {
         if (!$this->open($admin)) {
-            return $this->leave($admin, 0);
+            return $this->leave($admin);
         }
         $steps = $this->steps($admin);
         $index = self::id($args);
         $step = $steps[$index] ?? null;
         if ($action !== 'v' || $step === null) {
-            return $this->summary($admin, $steps);
+            return $this->review($admin, $steps);
         }
         $this->put($admin, $step, $step->read($answer));
 
@@ -273,18 +295,28 @@ abstract class FormScreen extends BaseScreen
     }
 
     /**
-     * Every field as it stands, a refusal of the panel's beside its own, «✏️» for each, and the save.
+     * The review card: every field shown with its value — the panel's refusals marked on theirs and said under the card —,
+     * the fields not walked in a section of their own (laterTitle()), the notes, «✏️» for each field (a switch the state
+     * a tap sets), and the save — «✔️ ساختن» for a new one, «💾 ذخیره» for a row once something changed — beside
+     * «✖️ انصراف»; a row unchanged has the way back instead.
      *
      * @param list<Step> $steps
      */
-    private function summary(Admin $admin, array $steps): View
+    private function review(Admin $admin, array $steps): View
     {
         $state = $admin->state($this->screen());
         $id = (int) ($state['id'] ?? 0);
         $draft = $this->draft($admin);
         $errors = Json::part($state, 'errors');
         $view = View::make($this->title($id, $draft), ...$this->path());
+        if ($id === 0) {
+            $view->line(Marketing::REVIEW);
+        }
 
+        $parted = $this->laterTitle() !== '';
+        $facts = [];
+        $later = [];
+        $refused = [];
         $fields = [];
         $buttons = [];
         foreach ($steps as $index => $step) {
@@ -292,32 +324,62 @@ abstract class FormScreen extends BaseScreen
                 continue;
             }
             $fields[] = $step->field;
-            $view->line('• ' . Fmt::e($step->label) . ': ' . $step->display($draft[$step->key] ?? null));
-            if (is_string($errors[$step->field] ?? null)) {
-                $view->line('   ⚠️ ' . Fmt::e($errors[$step->field]));
+            $value = $draft[$step->key] ?? null;
+            $error = is_string($errors[$step->field] ?? null) ? $errors[$step->field] : null;
+            $label = ($error !== null ? '⚠️ ' : '') . $step->label;
+            if ($parted && !$step->walked) {
+                $later[$label] = $step->display($value);
+            } else {
+                $facts[$label] = $step->display($value);
             }
-            // A switch's button sets the other value (pick 0: on, 1: off), never "the opposite of now": a tap twice is one.
-            $on = (bool) ($draft[$step->key] ?? false);
-            $buttons[] = $step->type === Step::TOGGLE
-                ? Button::to($step->label . ': ' . ($on ? '✅' : '⛔️'), $this->screen(), 'pick', $index, $on ? 1 : 0)
-                : Button::to('✏️ ' . $step->label, $this->screen(), 'ask', $index);
+            if ($error !== null) {
+                $refused[] = '⚠️ ' . Fmt::e($step->label) . ': ' . Fmt::e($error);
+            }
+            $buttons[] = $this->button($index, $step, $value);
         }
         foreach ($errors as $field => $message) {
             if (!in_array($field, $fields, true) && is_string($message)) {
-                $view->line('⚠️ ' . Fmt::e($message));
+                $refused[] = '⚠️ ' . Fmt::e($message);
             }
+        }
+        $view->card($facts)->lines(...$refused);
+        if ($later !== []) {
+            $view->section($this->laterTitle())->card($later);
         }
         foreach ($this->notes($admin, $id, $draft) as $note) {
             $view->note($note);
         }
-        $view->grid(2, ...$buttons);
+        $changed = $id > 0 && $draft != ($state['was'] ?? null);
+        if ($id > 0) {
+            $view->line()->line($changed ? '<b>' . Fmt::e(Marketing::UNSAVED) . '</b>' : '<i>' . Fmt::e(Marketing::UNCHANGED) . '</i>');
+        }
+        $view->tiles(...$buttons);
         [$screen, $action, $args] = $this->back($id);
+        if ($id > 0 && !$changed) {
+            return $view->back($screen, $action, ...$args);
+        }
 
-        return $view->row(Button::to($id === 0 ? $this->createLabel() : '💾 ذخیره تغییرات', $this->screen(), 'save'), Button::to('✖️ انصراف', $screen, $action, ...$args));
+        return $view->row(Button::to($id === 0 ? Words::CREATE : Words::SAVE, $this->screen(), 'save')->success(), Button::to(Words::CANCEL, $screen, $action, ...$args));
     }
 
     /**
-     * Ask field `$index`: a question to type at, or its choices as buttons.
+     * A field's button on the review, saying only what it does: a switch the state a tap sets (pick 0: on, 1: off —
+     * never "the opposite of now": a tap twice is one), any other «✏️ {label}».
+     */
+    private function button(int $index, Step $step, mixed $value): Button
+    {
+        if ($step->type !== Step::TOGGLE) {
+            return Button::to(Words::edit($step->label), $this->screen(), 'ask', $index);
+        }
+        $on = (bool) $value;
+        $label = $step->active ? ($on ? Words::DEACTIVATE : Words::ACTIVATE) : Words::turn(!$on, $step->label);
+
+        return Button::to($label, $this->screen(), 'pick', $index, $on ? 1 : 0);
+    }
+
+    /**
+     * Ask field `$index`: its question, where the walk is, its hint and value now, then its choices as buttons or a typed
+     * answer — with the ways back, on and out.
      *
      * @param list<Step> $steps
      */
@@ -325,46 +387,48 @@ abstract class FormScreen extends BaseScreen
     {
         $step = $steps[$index];
         $state = $admin->state($this->screen());
-        $walk = (bool) ($state['walk'] ?? false);
+        $walk = $this->walking($admin);
+        $id = (int) ($state['id'] ?? 0);
         $draft = $this->draft($admin);
         $value = $draft[$step->key] ?? null;
+        $trail = [...$this->path(), Fmt::bare($this->title($id, $draft))];
 
         $head = [];
         if ($walk) {
-            $walked = array_keys(array_filter($steps, static fn(Step $one): bool => $one->walked && $one->shown($draft)));
-            $place = array_search($index, $walked, true);
-            $head[] = 'قدم ' . Fmt::number(($place === false ? 0 : $place) + 1) . ' از ' . Fmt::number(count($walked));
+            $head[] = $this->progress($steps, $draft, $index);
         }
         if ($step->hint !== '') {
             $head[] = Fmt::e($step->hint);
         }
-        if (!$walk || !Step::blank($value)) {
-            $head[] = 'الان: ' . $step->display($value);
-        }
-        [$screen, $action, $args] = $this->back((int) ($state['id'] ?? 0));
-        $cancel = $walk ? Button::to('✖️ انصراف', $screen, $action, ...$args) : Button::to('✖️ لغو', $this->screen(), 'sum');
-        $skip = $walk && $step->optional ? Button::to('⏭ رد شدن', $this->screen(), 'skip', $index) : null;
+        [$screen, $action, $args] = $this->back($id);
+        $cancel = $walk ? Button::to(Words::CANCEL, $screen, $action, ...$args) : Button::to(Words::CANCEL, $this->screen(), 'sum');
+        $previous = $walk && $this->previous($steps, $draft, $index) !== null ? Button::to(Words::PREVIOUS_STEP, $this->screen(), 'prev', $index) : null;
 
-        if (in_array($step->type, [Step::CHOICE, Step::TOGGLE, Step::MULTI], true)) {
-            $view = View::make('✍️ ' . $step->label)->lines(...$head);
+        if ($step->tapped()) {
+            $view = View::make('✍️ ' . $step->question, ...$trail)->transient()->lines(...$head);
             $chips = [];
             // The page first shown: the one the field was left on, else the one with its choice.
             $at = 0;
             if ($step->type === Step::TOGGLE) {
-                $chips = [Button::to(((bool) $value ? '● ' : '') . '✅ بله', $this->screen(), 'pick', $index, 0), Button::to((!(bool) $value ? '● ' : '') . '⛔️ خیر', $this->screen(), 'pick', $index, 1)];
+                $words = $step->active ? ['فعال', 'غیرفعال'] : ['بله', 'خیر'];
+                $chips = [
+                    Button::to(((bool) $value ? Words::PICKED : '') . $words[0], $this->screen(), 'pick', $index, 0),
+                    Button::to((!(bool) $value ? Words::PICKED : '') . $words[1], $this->screen(), 'pick', $index, 1),
+                ];
             } elseif ($step->type === Step::CHOICE) {
                 foreach (array_keys($step->options()) as $n => $key) {
                     $chosen = $value === null ? $key === '' : (string) $key === (string) (is_scalar($value) ? $value : '');
                     $at = $chosen ? $n : $at;
-                    $chips[] = Button::to(($chosen ? '● ' : '') . $step->options()[$key], $this->screen(), 'pick', $index, $n);
+                    $chips[] = Button::to(($chosen ? Words::PICKED : '') . $step->options()[$key], $this->screen(), 'pick', $index, $n);
                 }
             } else {
                 $chosen = is_array($value) ? $value : null;
                 if ($step->all !== '') {
-                    $view->row(Button::to(($chosen === null ? '● ' : '') . $step->all, $this->screen(), 'all', $index));
+                    $view->row(Button::to(($chosen === null ? Words::PICKED : '') . $step->all, $this->screen(), 'all', $index));
                 }
                 foreach (array_keys($step->options()) as $n => $key) {
-                    $chips[] = Button::to(($chosen !== null && in_array($key, $chosen, true) ? '✅ ' : '◻️ ') . $step->options()[$key], $this->screen(), 'mt', $index, $n);
+                    $ticked = $chosen !== null && in_array($key, $chosen, true);
+                    $chips[] = Button::to(Words::tick($ticked) . $step->options()[$key], $this->screen(), 'mt', $index, $n, $ticked ? 0 : 1);
                 }
             }
             if ($chips === []) {
@@ -374,56 +438,106 @@ abstract class FormScreen extends BaseScreen
             $page = is_int($pages[$index] ?? null) ? $pages[$index] : intdiv($at, View::CHOICES_MOST) + 1;
             $view->paged(count($chips) > 4 ? 2 : 1, $chips, $page, fn(int $to): array => [$this->screen(), 'pg', [$index, $to]]);
             if ($step->type === Step::MULTI) {
-                $view->row(Button::to('✔️ تایید', $this->screen(), 'done', $index));
+                $view->row(Button::to(Marketing::TICKED, $this->screen(), 'done', $index)->success());
             }
 
-            return $view->row($skip, $cancel);
+            return $view->row($previous)->row($cancel);
         }
 
-        $prompt = new Prompt($step->label, $this->screen(), 'v', [$index], implode("\n", $head), $cancel);
-        $choices = [];
+        $prompt = new Prompt($step->question, $this->screen(), 'v', [$index], implode("\n", $head), $cancel);
+        if (!$walk || !Step::blank($value)) {
+            $prompt->current($step->typed($value));
+        }
+        $prompt->example($step->exampleOf())->limits($step->limits());
+        $quick = [];
         foreach ($step->quick as $n => [$label]) {
-            $choices[] = Button::to($label, $this->screen(), 'q', $index, $n);
+            $quick[] = Button::to($label, $this->screen(), 'q', $index, $n);
         }
-        if ($skip !== null) {
-            $choices[] = $skip;
-        } elseif ($step->optional && !Step::blank($value)) {
-            $choices[] = Button::to('🗑 خالی: ' . $step->none, $this->screen(), 'clr', $index);
+        if ($step->optional && !Step::blank($value)) {
+            $prompt->clearable($this->screen(), 'clr', $index);
         }
+        $onward = $walk && ($step->optional || !Step::blank($value)) ? Button::to(Step::blank($value) ? Words::SKIP : Marketing::KEEP, $this->screen(), 'skip', $index) : null;
+        // A question asked from inside the form says so, whatever window came before it.
+        $admin->here($trail);
 
-        return $admin->ask($prompt->choices(...$choices));
+        return $admin->ask($prompt->choices(...$quick)->ways($previous, $onward));
     }
 
     /**
-     * After field `$index` is set: the next field on the way through, else the summary.
+     * Where the walk is at step `$index`, as its first line: «گام ۲ از ۶» and a bar.
+     *
+     * @param list<Step> $steps
+     * @param array<string, mixed> $draft
+     */
+    private function progress(array $steps, array $draft, int $index): string
+    {
+        $walked = $this->walked($steps, $draft);
+        $place = array_search($index, $walked, true);
+        $at = ($place === false ? 0 : $place) + 1;
+
+        return Fmt::e(Words::step($at, count($walked))) . '  ' . str_repeat('▰', $at) . str_repeat('▱', max(0, count($walked) - $at));
+    }
+
+    /**
+     * The places of the steps asked on the way through, as the draft stands.
+     *
+     * @param list<Step> $steps
+     * @param array<string, mixed> $draft
+     * @return list<int>
+     */
+    private function walked(array $steps, array $draft): array
+    {
+        return array_keys(array_filter($steps, static fn(Step $step): bool => $step->walked && $step->shown($draft)));
+    }
+
+    /**
+     * The step asked on the way through before step `$index`; null for the first.
+     *
+     * @param list<Step> $steps
+     * @param array<string, mixed> $draft
+     */
+    private function previous(array $steps, array $draft, int $index): ?int
+    {
+        $before = array_filter($this->walked($steps, $draft), static fn(int $at): bool => $at < $index);
+
+        return $before === [] ? null : max($before);
+    }
+
+    /** Whether the form is being walked through (a new one, before its review). */
+    private function walking(Admin $admin): bool
+    {
+        return (bool) ($admin->state($this->screen())['walk'] ?? false);
+    }
+
+    /**
+     * After field `$index` is set: the next field on the way through, else the review.
      *
      * @param list<Step> $steps
      */
     private function after(Admin $admin, array $steps, int $index): View
     {
-        return (bool) ($admin->state($this->screen())['walk'] ?? false) ? $this->next($admin, $steps, $index) : $this->summary($admin, $steps);
+        return $this->walking($admin) ? $this->next($admin, $steps, $index) : $this->review($admin, $steps);
     }
 
     /**
-     * The first field after `$index` asked on the way through, shown as the draft stands; the summary past the last.
+     * The first field after `$index` asked on the way through, shown as the draft stands; the review past the last.
      *
      * @param list<Step> $steps
      */
     private function next(Admin $admin, array $steps, int $index): View
     {
-        $draft = $this->draft($admin);
-        foreach ($steps as $at => $step) {
-            if ($at > $index && $step->walked && $step->shown($draft)) {
+        foreach ($this->walked($steps, $this->draft($admin)) as $at) {
+            if ($at > $index) {
                 return $this->ask($admin, $steps, $at);
             }
         }
         $admin->remember($this->screen(), ['walk' => false]);
 
-        return $this->summary($admin, $steps);
+        return $this->review($admin, $steps);
     }
 
     /**
-     * Save the draft: the row's screen, or the summary with the panel's refusals beside their fields.
+     * Save the draft: the row's screen, or the review with the panel's refusals marked on their fields.
      *
      * @param list<Step> $steps
      * @throws ApiRefusal anything but a form refused
@@ -443,14 +557,18 @@ abstract class FormScreen extends BaseScreen
                     $errors[$field] = $messages[0];
                 }
             }
+            // A field several steps share (a code's `value`: its percent or its amount) is labelled by the one shown.
+            $draft = $this->draft($admin);
             $labels = [];
             foreach ($steps as $step) {
-                $labels[$step->field] ??= $step->label;
+                if ($step->shown($draft)) {
+                    $labels[$step->field] ??= $step->label;
+                }
             }
             $admin->remember($this->screen(), ['errors' => $errors, 'walk' => false]);
             $admin->alert($refusal->lines($labels));
 
-            return $this->summary($admin, $steps);
+            return $this->review($admin, $steps);
         }
         // Ended the moment the panel answers, before anything that can fail after it (a file Telegram refuses, the next
         // screen's read): the chat's turn saves this whatever comes next, and a second tap finds no draft to save again.
@@ -476,10 +594,10 @@ abstract class FormScreen extends BaseScreen
         return is_array($admin->state($this->screen())['draft'] ?? null);
     }
 
-    /** Where the form's «✖️ انصراف» goes, for a form no longer open. */
-    private function leave(Admin $admin, int $id): View
+    /** For a form no longer open (or a row gone): where a new one's «✖️ انصراف» goes, the list. */
+    private function leave(Admin $admin): View
     {
-        [$screen, $action, $args] = $this->back($id);
+        [$screen, $action, $args] = $this->back(0);
 
         return $admin->open($screen, $action, $args);
     }

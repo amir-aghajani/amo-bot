@@ -6,15 +6,18 @@ namespace App\Modules\Telegram\Admin\Sections\Bot\Texts;
 
 use App\Modules\Telegram\Admin\AdminSeat;
 use App\Modules\Telegram\Admin\Door\ApiRefusal;
+use App\Modules\Telegram\Admin\Sections\Bot\BotScreens;
 use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\Answer;
 use App\Modules\Telegram\Admin\Ui\BaseScreen;
 use App\Modules\Telegram\Admin\Ui\Button;
 use App\Modules\Telegram\Admin\Ui\Fmt;
+use App\Modules\Telegram\Admin\Ui\Icons;
 use App\Modules\Telegram\Admin\Ui\Json;
 use App\Modules\Telegram\Admin\Ui\Nav;
 use App\Modules\Telegram\Admin\Ui\Prompt;
 use App\Modules\Telegram\Admin\Ui\View;
+use App\Modules\Telegram\Admin\Ui\Words;
 use App\Modules\Telegram\Api\TelegramApiException;
 use App\Modules\Telegram\Texts\PlainWording;
 use App\Modules\Telegram\Texts\TelegramHtml;
@@ -24,18 +27,19 @@ use App\Modules\Telegram\Texts\TelegramHtml;
  * plain words, a page at a time — tapped, Telegram copies it), how much of its limit it takes, and its variables; then
  * «✏️ ویرایش» — the new wording sent as a message, its formatting and premium emoji kept as the panel keeps them —,
  * «🧾 ویرایش با کد» for a wording that is HTML (sent as code), «👁 پیش‌نمایش» (sent with the variables' samples, as the
- * customer would get it: a popup's as a popup), the shop's default wording, and «↩️ بازگشت به متن پیش‌فرض», asked first.
- * A wording the panel refuses is said over the question, which still waits.
+ * customer would get it: a popup's as a popup), the shop's default wording, and «↩️ پیش‌فرض» — the default back —, asked
+ * first. A wording the panel refuses is said over the question, which still waits.
  *
- * Opened with: the text's key. Actions (the key first): `e`, `h` (ask), `empty` (a part emptied), `pv`, `vars`, `pg`
- * (page), `df` (page: the default), `rs` (asks), `rsd`.
+ * Opened with: the text's key. Actions (the key first): `e`, `h` (ask), `empty` (a part emptied), `pv` (page), `pvd`
+ * (the previewed button tapped: the window it was asked from), `vars`, `pg` (page), `df` (page: the default), `rs`
+ * (asks), `rsd`.
  */
 final class TextScreen extends BaseScreen
 {
     public const ID = 'txv';
 
     /** The most of a wording one page of the screen shows, escaped. */
-    private const PAGE_MOST = 1500;
+    private const WORDING_MOST = 1500;
 
     /** A `%name%` the bot fills in. */
     private const VARIABLE = '/%([A-Za-z_][A-Za-z0-9_]*)%/';
@@ -96,10 +100,11 @@ final class TextScreen extends BaseScreen
                 return $this->fallback($text, self::page($args, 1));
             case 'rs':
                 return $admin->confirm(
-                    'بازگشت به متن پیش‌فرض؟',
-                    Button::to('↩️ بازگشت به پیش‌فرض', self::ID, 'rsd', $key),
-                    Button::to('✖️ انصراف', self::ID, 'show', $key),
+                    'متن پیش‌فرض برگردد؟',
+                    Button::to(Words::yes('متن پیش‌فرض برگردد', '↩️'), self::ID, 'rsd', $key),
+                    Button::to(Words::CANCEL, self::ID, 'show', $key),
                     '«' . Fmt::e((string) ($text['title'] ?? '')) . '» دوباره با متن پیش‌فرض فروشگاه فرستاده می‌شود. متن فعلی شما کنار گذاشته می‌شود و برنمی‌گردد.',
+                    danger: true,
                 );
             case 'rsd':
                 $text = (array) ($admin->api->post("/bot/texts/{$key}/reset")['text'] ?? []);
@@ -162,21 +167,24 @@ final class TextScreen extends BaseScreen
         $length = $html ? TelegramHtml::visibleLength($value) : mb_strlen(PlainWording::shown($value));
         $limit = (int) ($text['limit'] ?? 0);
 
-        $view = View::make('📝 ' . (string) ($text['title'] ?? $key), 'مدیریت', 'ربات', 'متن‌های ربات', $group)
-            ->line(Fmt::e(TextsScreen::KINDS[$kind] ?? $kind) . ' · ' . (Json::on($text, 'customized') ? '✏️ تغییر یافته' : 'متن پیش‌فرض'))
-            ->line(self::tokens((string) ($text['description'] ?? '')))
-            ->line()
-            ->line('<b>متن فعلی</b>' . (count($pages) > 1 ? ' (صفحه ' . Fmt::number($page) . ' از ' . Fmt::number(count($pages)) . ')' : '') . ':')
-            ->line($value === '' ? '<i>(خالی)</i>' : '<pre>' . Fmt::e($pages[$page - 1]) . '</pre>')
-            ->line(($length > $limit ? '⚠️ ' : '') . Fmt::number($length) . ' از ' . Fmt::number($limit) . ' کاراکتر' . ($html ? '، بدون تگ‌ها' : ''));
+        $view = View::make(Icons::TEXTS . ' ' . (string) ($text['title'] ?? $key), ...[...BotScreens::PATH, Fmt::bare(TextsScreen::TITLE), $group])
+            ->line('<i>' . self::tokens((string) ($text['description'] ?? '')) . '</i>')
+            ->card([
+                'نوع' => Fmt::e(TextsScreen::KINDS[$kind] ?? $kind),
+                'وضعیت' => Json::on($text, 'customized') ? '✏️ تغییر یافته' : '📄 متن پیش‌فرض',
+                'طول' => ($length > $limit ? '⚠️ ' : '') . Fmt::number($length) . ' از ' . Fmt::number($limit) . ' کاراکتر' . ($html ? '، بدون تگ‌ها' : ''),
+                'متغیرها' => $variables === [] ? 'ندارد' : implode('، ', array_map(static fn(array $variable): string => Fmt::ltr('%' . (string) ($variable['name'] ?? '') . '%'), $variables)),
+            ]);
         $required = array_filter($variables, static fn(array $variable): bool => Json::on($variable, 'required') && !str_contains($value, '%' . (string) ($variable['name'] ?? '') . '%'));
         foreach ($required as $variable) {
             $view->line('⚠️ ' . Fmt::ltr('%' . (string) ($variable['name'] ?? '') . '%') . ' لازم است.');
         }
-        $view->pager($page, count($pages), self::ID, 'pg', $key);
-        $view->row(Button::to('✏️ ویرایش', self::ID, 'e', $key), ...($html ? [Button::to("🧾 ویرایش با کد \u{2068}HTML\u{2069}", self::ID, 'h', $key)] : []))
+        $view->section('📄 متن فعلی' . (count($pages) > 1 ? ' (' . Words::page($page, count($pages)) . ')' : ''))
+            ->line($value === '' ? '<i>(خالی)</i>' : '<pre>' . Fmt::e($pages[$page - 1]) . '</pre>');
+        $view->row(Button::to(Words::EDIT, self::ID, 'e', $key)->primary(), $html ? Button::to("🧾 ویرایش با کد \u{2068}HTML\u{2069}", self::ID, 'h', $key) : null)
             ->row(Button::to('👁 پیش‌نمایش', self::ID, 'pv', $key, $page), Button::to('🔣 متغیرها' . Fmt::badge(count($variables)), self::ID, 'vars', $key))
-            ->row(Button::to('📄 متن پیش‌فرض', self::ID, 'df', $key), ...(Json::on($text, 'customized') ? [Button::to('↩️ بازگشت به پیش‌فرض', self::ID, 'rs', $key)] : []));
+            ->row(Button::to('📄 دیدن متن پیش‌فرض', self::ID, 'df', $key), Json::on($text, 'customized') ? Button::to(Words::RESET, self::ID, 'rs', $key) : null)
+            ->pager($page, count($pages), self::ID, 'pg', $key);
         $search = (string) ($admin->state(TextsScreen::ID)['search'] ?? '');
         $groupState = $admin->state(TextGroupScreen::ID);
 
@@ -200,7 +208,6 @@ final class TextScreen extends BaseScreen
             : (self::HINTS[$kind] ?? '')];
         $names = array_map(static fn(array $variable): string => Fmt::ltr('%' . (string) ($variable['name'] ?? '') . '%') . (Json::on($variable, 'required') ? ' (لازم)' : ''), Json::rows($text, 'variables'));
         $lines[] = $names === [] ? 'این متن متغیری ندارد.' : 'متغیرها: ' . implode('، ', $names);
-        $lines[] = 'حداکثر ' . Fmt::number((int) ($text['limit'] ?? 0)) . ' کاراکتر.';
         $value = (string) ($text['value'] ?? '');
         if ($how === 'h' && $value !== '') {
             // Cut at a page's lines and escaped: a long code shows its first part, never a broken tag or entity.
@@ -209,9 +216,10 @@ final class TextScreen extends BaseScreen
             $lines[] = 'کد فعلی' . (count($pages) > 1 ? ' (بخش اول از ' . Fmt::number(count($pages)) . '؛ بقیه در صفحه متن)' : '') . '؛ با زدن رویش کپی می‌شود:';
             $lines[] = '<code>' . Fmt::e($pages[0]) . '</code>';
         }
-        $prompt = new Prompt((string) ($text['title'] ?? $key), self::ID, $how, [$key], implode("\n", $lines), anyText: true);
+        $prompt = (new Prompt((string) ($text['title'] ?? $key), self::ID, $how, [$key], implode("\n", $lines), anyText: true))
+            ->limits('حداکثر ' . Fmt::plain(Fmt::number((int) ($text['limit'] ?? 0))) . ' کاراکتر');
         if ($kind === 'part' && ($text['value'] ?? '') !== '') {
-            $prompt->choices(Button::to('🗑 خالی کردن', self::ID, 'empty', $key));
+            $prompt->clearable(self::ID, 'empty', $key);
         }
 
         return $admin->ask($prompt);
@@ -266,7 +274,7 @@ final class TextScreen extends BaseScreen
     private function variables(array $text): View
     {
         $key = (string) ($text['key'] ?? '');
-        $view = View::make('🔣 متغیرهای «' . (string) ($text['title'] ?? $key) . '»', 'مدیریت', 'ربات', 'متن‌های ربات');
+        $view = View::make('🔣 متغیرهای «' . (string) ($text['title'] ?? $key) . '»', ...[...BotScreens::PATH, Fmt::bare(TextsScreen::TITLE)]);
         $variables = Json::rows($text, 'variables');
         if ($variables === []) {
             $view->line('این متن متغیری ندارد.');
@@ -290,9 +298,9 @@ final class TextScreen extends BaseScreen
         $key = (string) ($text['key'] ?? '');
         $pages = self::pages((string) ($text['default'] ?? ''));
         $page = min(count($pages), $page);
-        $view = View::make('📄 متن پیش‌فرض «' . (string) ($text['title'] ?? $key) . '»', 'مدیریت', 'ربات', 'متن‌های ربات')
+        $view = View::make('📄 متن پیش‌فرض «' . (string) ($text['title'] ?? $key) . '»', ...[...BotScreens::PATH, Fmt::bare(TextsScreen::TITLE)])
             ->line(($pages[0] === '' ? '<i>(خالی)</i>' : '<pre>' . Fmt::e($pages[$page - 1]) . '</pre>'))
-            ->note("برای شروع از متن پیش‌فرض، آن را کپی کنید، تغییر دهید و با «🧾 ویرایش با کد \u{2068}HTML\u{2069}» یا «✏️ ویرایش» بفرستید؛ یا «↩️ بازگشت به پیش‌فرض» را بزنید.");
+            ->note("برای شروع از متن پیش‌فرض، آن را کپی کنید، تغییر دهید و با «🧾 ویرایش با کد \u{2068}HTML\u{2069}» یا «✏️ ویرایش» بفرستید؛ یا در صفحه متن «↩️ پیش‌فرض» را بزنید.");
         $view->pager($page, count($pages), self::ID, 'df', $key);
 
         return $view->back(self::ID, 'show', $key);
@@ -326,16 +334,16 @@ final class TextScreen extends BaseScreen
         $pages = [];
         $page = '';
         foreach (explode("\n", $value) as $line) {
-            while (mb_strlen(Fmt::e($line)) > self::PAGE_MOST) {
+            while (mb_strlen(Fmt::e($line)) > self::WORDING_MOST) {
                 if ($page !== '') {
                     $pages[] = $page;
                     $page = '';
                 }
-                $pages[] = mb_substr($line, 0, intdiv(self::PAGE_MOST, 2));
-                $line = mb_substr($line, intdiv(self::PAGE_MOST, 2));
+                $pages[] = mb_substr($line, 0, intdiv(self::WORDING_MOST, 2));
+                $line = mb_substr($line, intdiv(self::WORDING_MOST, 2));
             }
             $next = $page === '' ? $line : $page . "\n" . $line;
-            if (mb_strlen(Fmt::e($next)) > self::PAGE_MOST) {
+            if (mb_strlen(Fmt::e($next)) > self::WORDING_MOST) {
                 $pages[] = $page;
                 $next = $line;
             }

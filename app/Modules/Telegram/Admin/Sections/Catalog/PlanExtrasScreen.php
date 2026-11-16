@@ -7,14 +7,17 @@ namespace App\Modules\Telegram\Admin\Sections\Catalog;
 use App\Modules\Auth\StaffGrant;
 use App\Modules\Telegram\Admin\AdminSeat;
 use App\Modules\Telegram\Admin\Door\ApiRefusal;
+use App\Modules\Telegram\Admin\Sections\Bot\Settings\ExtrasCard;
 use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\Answer;
 use App\Modules\Telegram\Admin\Ui\BaseScreen;
 use App\Modules\Telegram\Admin\Ui\Button;
 use App\Modules\Telegram\Admin\Ui\Fmt;
+use App\Modules\Telegram\Admin\Ui\Nav;
 use App\Modules\Telegram\Admin\Ui\Prompt;
 use App\Modules\Telegram\Admin\Ui\Settings\BotGroupSource;
 use App\Modules\Telegram\Admin\Ui\View;
+use App\Modules\Telegram\Admin\Ui\Words;
 use App\Support\Input;
 use App\Support\Persian;
 use App\Support\Unit;
@@ -80,28 +83,34 @@ final class PlanExtrasScreen extends BaseScreen
             return $admin->open(PlansScreen::ID);
         }
         $own = is_array($draft['extras'] ?? null) ? $draft['extras'] : null;
-        $view = View::make('➕ خرید اضافه', 'مدیریت', 'فروشگاه', 'پلن‌ها');
-        if ((self::shop($admin)['extras_enabled'] ?? null) === false) {
-            $view->line('⚠️ فروش حجم، زمان و کاربر اضافه در تنظیمات ربات خاموش است؛ تا روشن نشود، مشتری‌ها هیچ‌کدام را نمی‌خرند، نه با قیمت‌های فروشگاه و نه با قیمت‌های این پلن.')->line();
+        $view = View::make(PlanDraft::TABS['extras'], ...PlanEditScreen::under());
+        $off = (self::shop($admin)['extras_enabled'] ?? null) === false;
+        if ($off) {
+            $view->line('⚠️ فروش حجم، زمان و کاربر اضافه در تنظیمات ربات خاموش است؛ تا روشن نشود، مشتری‌ها هیچ‌کدام را نمی‌خرند، نه با قیمت‌های فروشگاه و نه با قیمت‌های این پلن.');
         }
-        $view->line($own === null
-            ? 'سرویس‌های این پلن حجم، زمان و کاربر اضافه را با قیمت‌های فروشگاه می‌خرند؛ آن قیمت‌ها را در تنظیمات ربات، بخش «خرید اضافه» تعیین کنید.'
-            : 'این قیمت‌ها فقط برای سرویس‌های همین پلن است و جای قیمت‌های فروشگاه را می‌گیرد؛ چیزی که این‌جا قیمت ندارد برای این پلن فروخته نمی‌شود.');
+        $view->card(['قیمت‌ها' => CatalogFmt::extras($own !== null)]);
         if ($own !== null) {
             foreach (array_keys(self::KINDS) as $kind) {
-                $view->line()->line('<b>' . Fmt::e(self::KINDS[$kind]['title']) . '</b>')->lines(...self::offer($own, $kind));
+                $view->section(self::KINDS[$kind]['title'])->lines(...self::offer($own, $kind));
             }
         }
 
         $view->row(
-            Button::to(($own === null ? '● ' : '') . 'قیمت‌های فروشگاه', self::ID, 'mode', 'shop'),
-            Button::to(($own !== null ? '● ' : '') . 'قیمت‌های این پلن', self::ID, 'mode', 'own'),
+            Button::to(($own === null ? Words::PICKED : '') . CatalogFmt::extras(false), self::ID, 'mode', 'shop'),
+            Button::to(($own !== null ? Words::PICKED : '') . CatalogFmt::extras(true), self::ID, 'mode', 'own'),
         );
         if ($own !== null) {
-            $view->grid(1, ...array_map(static fn(string $kind): Button => Button::to(self::KINDS[$kind]['title'], self::ID, 'k', $kind), array_keys(self::KINDS)));
+            $view->tiles(...array_map(static fn(string $kind): Button => Button::to(Words::edit(Fmt::bare(self::KINDS[$kind]['title'])), self::ID, 'k', $kind), array_keys(self::KINDS)));
+        }
+        if ($off || $own === null) {
+            // Opened from here, the shop's card goes back here (Origin): the plan's draft is not left behind.
+            $view->row($admin->opens(ExtrasCard::ID) ? Button::to(ExtrasCard::TITLE, ExtrasCard::ID, Nav::SHOW, 'from.' . self::ID) : null);
         }
 
-        return $view->back(PlanEditScreen::ID, 'sum', 'extras');
+        return $view->help($own === null
+            ? 'سرویس‌های این پلن حجم، زمان و کاربر اضافه را با قیمت‌های فروشگاه می‌خرند؛ آن قیمت‌ها در تنظیمات ربات، بخش «' . Fmt::e(Fmt::bare(ExtrasCard::TITLE)) . '» است. «' . Fmt::e(CatalogFmt::extras(true)) . '» فهرستی جدا فقط برای همین پلن می‌سازد.'
+            : 'این قیمت‌ها فقط برای سرویس‌های همین پلن است و جای قیمت‌های فروشگاه را می‌گیرد؛ چیزی که این‌جا قیمت ندارد برای این پلن فروخته نمی‌شود. فهرست تا ذخیره پلن در پیش‌نویس می‌ماند.')
+            ->back(PlanEditScreen::ID, 'sum', 'extras');
     }
 
     public function act(Admin $admin, string $action, array $args): View
@@ -147,7 +156,7 @@ final class PlanExtrasScreen extends BaseScreen
         $value = match ($field) {
             'price' => (string) ($answer->amount(Unit::Toman) ?? throw self::refused($name, 'مبلغ را به تومان و بدون اعشار بنویسید، مثل ۵۰۰۰.')),
             'options' => self::options($answer, $name),
-            'min', 'max' => (string) ($answer->integer() ?? throw self::refused($name, 'یک عدد بنویسید.')),
+            'min', 'max' => (string) ($answer->integer() ?? throw self::refused($name, Words::NOT_NUMBER)),
             default => null,
         };
 
@@ -162,19 +171,25 @@ final class PlanExtrasScreen extends BaseScreen
     private function kind(Admin $admin, array $own, string $kind): View
     {
         $words = self::KINDS[$kind];
-        $view = View::make($words['title'], 'مدیریت', 'فروشگاه', 'پلن‌ها', 'خرید اضافه')
-            ->line(Fmt::e($words['about'] . ($kind === 'traffic' && !$admin->seat->shop()->isMain() ? ' در فروشگاه نماینده از حجم نمایندگی کم می‌شود، و بیشتر از حجمی که مانده پیشنهاد نمی‌شود.' : '')))
-            ->line()
-            ->lines(...self::offer($own, $kind));
         $price = (string) ($own["{$kind}_price"] ?? '');
+        $view = View::make($words['title'], ...PlanEditScreen::under(Fmt::bare(PlanDraft::TABS['extras'])))
+            ->card([
+                $words['unitPrice'] => $price === '' ? 'ندارد' : Fmt::money($price),
+                $words['options'] => Fmt::e(self::optionsWords($own, $kind)),
+                'کمترین ' . $words['typed'] => Persian::digits((string) ($own["{$kind}_min"] ?? '')) . ' ' . Fmt::e($words['unit']),
+                'بیشترین ' . $words['typed'] => Persian::digits((string) ($own["{$kind}_max"] ?? '')) . ' ' . Fmt::e($words['unit']),
+            ])
+            ->section('🛒 آنچه مشتری می‌بیند')
+            ->lines(...array_slice(self::offer($own, $kind), 1));
 
-        return $view->grid(
-            1,
-            Button::to('💰 ' . $words['unitPrice'] . ': ' . ($price === '' ? 'ندارد' : Fmt::plain(Fmt::money($price))), self::ID, 'f', $kind, 'price'),
-            Button::to('🔘 ' . $words['options'] . ' (' . Persian::number(count((array) ($own["{$kind}_options"] ?? []))) . ')', self::ID, 'f', $kind, 'options'),
-            Button::to('⬇️ کمترین ' . $words['typed'] . ': ' . Persian::digits((string) ($own["{$kind}_min"] ?? '')), self::ID, 'f', $kind, 'min'),
-            Button::to('⬆️ بیشترین ' . $words['typed'] . ': ' . Persian::digits((string) ($own["{$kind}_max"] ?? '')), self::ID, 'f', $kind, 'max'),
-        )->back(self::ID);
+        return $view->tiles(
+            Button::to(Words::edit($words['unitPrice']), self::ID, 'f', $kind, 'price'),
+            Button::to(Words::edit($words['options']), self::ID, 'f', $kind, 'options'),
+            Button::to(Words::edit('کمترین'), self::ID, 'f', $kind, 'min'),
+            Button::to(Words::edit('بیشترین'), self::ID, 'f', $kind, 'max'),
+        )
+            ->help(Fmt::e($words['about'] . ($kind === 'traffic' && !$admin->seat->shop()->isMain() ? ' در فروشگاه نماینده از حجم نمایندگی کم می‌شود، و بیشتر از حجمی که مانده پیشنهاد نمی‌شود.' : '')))
+            ->back(self::ID);
     }
 
     /**
@@ -186,19 +201,28 @@ final class PlanExtrasScreen extends BaseScreen
     {
         $words = self::KINDS[$kind];
         $priced = (string) ($own["{$kind}_price"] ?? '') !== '';
-        [$question, $hint, $current] = match ($field) {
-            'price' => [$words['unitPrice'] . ' (تومان)', "خالی: فقط {$words['options']} با قیمت خودشان فروخته می‌شوند و مشتری {$words['typed']} نمی‌نویسد.", $priced ? Fmt::money((string) $own["{$kind}_price"]) : 'ندارد'],
-            'options' => [$words['options'], "دکمه‌هایی که مشتری می‌بیند. هر مقدار در یک خط، و اگر قیمت خودش را دارد پشت سرش، مثل «۱۰» یا «۱۰ ۴۵۰۰۰»؛ قیمت خالی یعنی به {$words['unitPrice']}. حداکثر " . Persian::number(self::MOST) . ' مقدار.', self::optionsWords($own, $kind)],
-            'min' => ["کمترین {$words['typed']} ({$words['unit']})", $priced ? "مشتری می‌تواند {$words['typed']}ش را هم بنویسد، بین کمترین و بیشترین." : "تا {$words['unitPrice']} خالی است، مشتری {$words['typed']} نمی‌نویسد و این عدد به کار نمی‌آید.", Persian::digits((string) ($own["{$kind}_min"] ?? ''))],
-            'max' => ["بیشترین {$words['typed']} ({$words['unit']})", $priced ? "مشتری می‌تواند {$words['typed']}ش را هم بنویسد، بین کمترین و بیشترین." : "تا {$words['unitPrice']} خالی است، مشتری {$words['typed']} نمی‌نویسد و این عدد به کار نمی‌آید.", Persian::digits((string) ($own["{$kind}_max"] ?? ''))],
-            default => [null, '', ''],
+        // The least and the most count only while a unit price lets the customer type an amount.
+        $bounds = $priced ? "مشتری می‌تواند {$words['typed']}ش را هم بنویسد، بین کمترین و بیشترین." : "تا {$words['unitPrice']} خالی است، مشتری {$words['typed']} نمی‌نویسد و این عدد به کار نمی‌آید.";
+        [$question, $hint, $current, $example] = match ($field) {
+            'price' => [$words['unitPrice'] . ' (تومان)', "خالی: فقط {$words['options']} با قیمت خودشان فروخته می‌شوند و مشتری {$words['typed']} نمی‌نویسد.", $priced ? Fmt::plain(Fmt::money((string) $own["{$kind}_price"])) : null, '۵۰۰۰'],
+            'options' => [$words['options'], "دکمه‌هایی که مشتری می‌بیند. هر مقدار در یک خط، و اگر قیمت خودش را دارد پشت سرش؛ قیمت خالی یعنی به {$words['unitPrice']}.", self::optionsTyped($own, $kind), "۱۰\n۵۰ ۱۲۰۰۰۰"],
+            'min' => ["کمترین {$words['typed']} ({$words['unit']})", $bounds, Persian::digits((string) ($own["{$kind}_min"] ?? '')), '۱'],
+            'max' => ["بیشترین {$words['typed']} ({$words['unit']})", $bounds, Persian::digits((string) ($own["{$kind}_max"] ?? '')), '۱۰۰'],
+            default => [null, '', null, ''],
         };
         if ($question === null) {
             return $this->kind($admin, $own, $kind);
         }
-        $prompt = new Prompt($question, self::ID, 'f', [$kind, $field], Fmt::e($hint) . "\nالان: " . $current, Button::to('✖️ لغو', self::ID, 'k', $kind));
+        $prompt = (new Prompt($question, self::ID, 'f', [$kind, $field], Fmt::e($hint), Button::to(Words::CANCEL, self::ID, 'k', $kind)))
+            ->current($current)
+            ->example($example)
+            ->limits(match ($field) {
+                'options' => 'حداکثر ' . Persian::number(self::MOST) . ' مقدار',
+                'min', 'max' => 'بیش از صفر؛ بیشترین نه کمتر از کمترین',
+                default => '',
+            });
         if (($field === 'price' && $priced) || ($field === 'options' && (array) ($own["{$kind}_options"] ?? []) !== [])) {
-            $prompt->choices(Button::to('🗑 خالی کردن', self::ID, 'x', $kind, $field));
+            $prompt->clearable(self::ID, 'x', $kind, $field);
         }
 
         return $admin->ask($prompt);
@@ -311,6 +335,23 @@ final class PlanExtrasScreen extends BaseScreen
         }
 
         return $words === [] ? 'هیچ' : implode('، ', $words);
+    }
+
+    /**
+     * The amounts offered as they are typed back (options()): a line each, its own price after it; null for none.
+     *
+     * @param array<string, mixed> $own
+     */
+    private static function optionsTyped(array $own, string $kind): ?string
+    {
+        $lines = [];
+        foreach ((array) ($own["{$kind}_options"] ?? []) as $option) {
+            if (is_array($option)) {
+                $lines[] = trim((string) ($option['quantity'] ?? '') . ' ' . (string) ($option['price'] ?? ''));
+            }
+        }
+
+        return $lines === [] ? null : implode("\n", $lines);
     }
 
     /**

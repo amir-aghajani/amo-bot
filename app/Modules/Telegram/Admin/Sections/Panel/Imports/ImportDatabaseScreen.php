@@ -38,7 +38,7 @@ final class ImportDatabaseScreen extends DraftScreen
 
     protected function path(): array
     {
-        return ['مدیریت', 'تنظیمات پنل', 'انتقال از ربات دیگر'];
+        return ImportsScreen::under();
     }
 
     protected function parent(): string

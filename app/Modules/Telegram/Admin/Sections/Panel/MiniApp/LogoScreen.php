@@ -14,6 +14,7 @@ use App\Modules\Telegram\Admin\Ui\Fmt;
 use App\Modules\Telegram\Admin\Ui\Json;
 use App\Modules\Telegram\Admin\Ui\Prompt;
 use App\Modules\Telegram\Admin\Ui\View;
+use App\Modules\Telegram\Admin\Ui\Words;
 
 /**
  * The mini app's logo: the screen is the logo itself — or, with none, the app's initial it shows instead —, a picture
@@ -34,31 +35,32 @@ final class LogoScreen extends BaseScreen
     {
         $app = MiniAppSource::app($admin->api->get('/mini-app'));
         $logo = Json::on($app, 'logo');
-        $view = View::make('🖼 لوگوی مینی‌اپ', 'مدیریت', 'مینی‌اپ تلگرام')
-            ->line('نشان فروشگاه در مینی‌اپ. تصویر مربعی بهترین نتیجه را می‌دهد؛ بدون لوگو، مینی‌اپ حرف اول نامش را نشان می‌دهد.');
+        $view = View::make('🖼 لوگوی مینی‌اپ', ...MiniAppScreen::under());
         if ($logo) {
             $view->picture($admin->api->file('/mini-app/logo'))->line('☝️ لوگوی فعلی');
         } else {
             $name = trim(is_string($app['title'] ?? null) && $app['title'] !== '' ? $app['title'] : (string) ($app['shop_name'] ?? ''));
             $view->line('بدون لوگو: مینی‌اپ «' . Fmt::e(mb_substr($name, 0, 1)) . '» را روی رنگ اصلی‌اش نشان می‌دهد.');
         }
-        $view->line("<i>\u{2068}JPG\u{2069}، \u{2068}PNG\u{2069} یا \u{2068}WebP\u{2069}، حداکثر ۲ مگابایت؛ تصویر بزرگ‌تر از ۵۱۲ پیکسل کوچک می‌شود.</i>")
-            ->row(Button::to($logo ? '📤 آپلود لوگوی جدید' : '📤 آپلود لوگو', self::ID, 'up'), ...($logo ? [Button::to('🗑 حذف لوگو', self::ID, 'del')] : []));
 
-        return $view->back(MiniAppScreen::ID);
+        return $view->note('نشان فروشگاه در مینی‌اپ؛ تصویر مربعی بهترین نتیجه را می‌دهد.')
+            ->row(Button::to($logo ? '📤 آپلود لوگوی جدید' : '📤 آپلود لوگو', self::ID, 'up')->primary(), $logo ? Button::to('🗑 حذف لوگو', self::ID, 'del')->danger() : null)
+            ->back(MiniAppScreen::ID);
     }
 
     public function act(Admin $admin, string $action, array $args): View
     {
         switch ($action) {
             case 'up':
-                return $admin->ask(new Prompt('تصویر لوگو', self::ID, 'up', [], "عکس یا فایل تصویر (\u{2068}JPG\u{2069}، \u{2068}PNG\u{2069} یا \u{2068}WebP\u{2069}، حداکثر ۲ مگابایت) را همین‌جا بفرستید؛ فایل تصویر کیفیت بهتری دارد.", file: true));
+                return $admin->ask((new Prompt('تصویر لوگو', self::ID, 'up', [], 'عکس یا فایل تصویر را همین‌جا بفرستید؛ فایل تصویر کیفیت بهتری دارد.', file: true))
+                    ->limits("\u{2068}JPG\u{2069}، \u{2068}PNG\u{2069} یا \u{2068}WebP\u{2069}، حداکثر ۲ مگابایت؛ بزرگ‌تر از ۵۱۲ پیکسل کوچک می‌شود"));
             case 'del':
                 return $admin->confirm(
                     'لوگوی مینی‌اپ حذف شود؟',
-                    Button::to('🗑 بله، حذف شود', self::ID, 'gone'),
-                    Button::to('✖️ انصراف', self::ID),
+                    Button::to(Words::yes('حذف شود'), self::ID, 'gone'),
+                    Button::to(Words::CANCEL, self::ID),
                     'لوگو حذف می‌شود و مینی‌اپ به‌جای آن حرف اول نامش را نشان می‌دهد. این کار برگشت‌پذیر نیست؛ برای استفاده دوباره از همین تصویر باید آن را دوباره آپلود کنید.',
+                    danger: true,
                 );
             case 'gone':
                 $admin->api->delete('/mini-app/logo');

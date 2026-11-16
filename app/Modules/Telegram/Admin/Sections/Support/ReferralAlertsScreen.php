@@ -13,8 +13,9 @@ use App\Modules\Telegram\Admin\Ui\View;
 
 /**
  * «⚠️ هشدارها» (GET /referrals/alerts): the referrers whose referrals look made up, newest first — while an alert
- * stands, their start gifts and invite rewards are held —, each opening its own screen (ReferralAlertScreen) to clear
- * it; one referrer's alone as their screen leads here (`who`: the search «#id», as the panel's link does).
+ * stands, their start gifts and invite rewards are held —, each a row «name · why» opening its own screen
+ * (ReferralAlertScreen) to clear it; one referrer's alone as their screen leads here (`who`: the search «#id», as the
+ * panel's link does).
  *
  * Actions: `who` (referrer id).
  */
@@ -25,6 +26,9 @@ final class ReferralAlertsScreen extends ListScreen
     /** Why an alert was raised, in the admins' words: how many and of what. */
     public const REASON = ['burst' => '%s عضویت پشت سر هم با یک لینک', 'idle' => '%s زیرمجموعه بدون هیچ خرید'];
 
+    /** What an alert holds back, and what it does not. */
+    public const HELD = 'تا هشدار رفع نشود، هدیه شروع و جایزه دعوت به معرف داده نمی‌شود — و بعد از رفع هم آنچه نگه داشته شد داده نمی‌شود؛ پورسانت‌ها مثل قبل است.';
+
     protected function screen(): string
     {
         return self::ID;
@@ -32,12 +36,12 @@ final class ReferralAlertsScreen extends ListScreen
 
     protected function title(): string
     {
-        return '⚠️ هشدارها';
+        return ReferralsScreen::ALERTS;
     }
 
     protected function path(): array
     {
-        return ['مدیریت', 'فروش', 'زیرمجموعه‌گیری'];
+        return ReferralsScreen::under();
     }
 
     protected function endpoint(): string
@@ -50,6 +54,11 @@ final class ReferralAlertsScreen extends ListScreen
         return 'alerts';
     }
 
+    protected function noun(): string
+    {
+        return 'هشدار';
+    }
+
     protected function searchHint(): string
     {
         return 'نام، نام کاربری یا شناسه معرف';
@@ -57,12 +66,12 @@ final class ReferralAlertsScreen extends ListScreen
 
     protected function empty(): string
     {
-        return 'هشداری نیست. معرفی که زیرمجموعه‌هایش ساختگی به نظر برسند، این‌جا و در گروه گزارش‌ها می‌آید.';
+        return '✅ هشداری نیست. معرفی که زیرمجموعه‌هایش ساختگی به نظر برسند، این‌جا و در گروه گزارش‌ها می‌آید.';
     }
 
-    protected function summary(array $meta): array
+    protected function extra(View $view, Admin $admin): void
     {
-        return ['معرف‌هایی که زیرمجموعه‌هایشان ساختگی به نظر می‌رسد. تا هشدار رفع نشود هدیه شروع و جایزه دعوت به معرف داده نمی‌شود — و بعد از رفع هم آنچه نگه داشته شد داده نمی‌شود؛ پورسانت‌ها مثل قبل است.'];
+        $view->help('معرف‌هایی که زیرمجموعه‌هایشان ساختگی به نظر می‌رسد. ' . Fmt::e(self::HELD));
     }
 
     protected function keepsRows(): bool
@@ -79,7 +88,7 @@ final class ReferralAlertsScreen extends ListScreen
     {
         $referrer = is_array($row['referrer'] ?? null) ? $row['referrer'] : null;
 
-        return Button::to('⚠️ ' . Words::name($referrer) . ' · ' . self::reason($row), ReferralAlertScreen::ID, Nav::SHOW, (int) ($row['id'] ?? 0));
+        return Button::to(ReferralsScreen::ALERT . ' ' . Fmt::cut(Words::name($referrer), 16) . ' · ' . self::reason($row), ReferralAlertScreen::ID, Nav::SHOW, (int) ($row['id'] ?? 0));
     }
 
     protected function action(Admin $admin, string $action, array $args): View

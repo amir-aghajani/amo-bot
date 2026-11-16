@@ -68,7 +68,9 @@ final class BotAdminFlowTest extends BotTestCase
 
         $this->send($this->tap(Nav::to('ba'), chat: 7001));
         self::assertStringContainsString('مدیران ربات', $this->said()[0]);
-        self::assertContains(Nav::to('ba', 'e', 1, 1), $this->callbacks(0), 'a grant, shown while the admins are let in');
+        self::assertContains(Nav::to('ba', 'p', 0), $this->callbacks(0), 'the grants, a part of their own');
+        $this->send($this->tap(Nav::to('ba', 'p', 0), chat: 7001));
+        self::assertContains(Nav::to('ba', 'e', 1, 1), $this->callbacks(0), 'a grant, shown in its part');
 
         $this->send($this->tap(Nav::to('ba', 'e', 1, 1), chat: 7001));
         self::assertSame(['catalog'], $this->service(BotAdminSettings::class)->grants(), 'saved through the panel\'s route');
@@ -115,8 +117,9 @@ final class BotAdminFlowTest extends BotTestCase
         $review = $this->review(body: 'سرعت عالی');
 
         $this->send($this->message('/admin', chat: 7100));
-        self::assertContains(Nav::to('rv'), $this->callbacks(0), 'the reviews, with what waits counted');
-        self::assertStringContainsString('۱ نظر', $this->said()[0]);
+        self::assertContains(Nav::to('rv'), $this->callbacks(0), 'the reviews');
+        self::assertContains(Nav::to('h', 'q', 'pending_reviews'), $this->callbacks(0), 'what waits, a button straight to it');
+        self::assertContains('⭐️ نظرات (۱)', $this->buttonLabels(0), 'counted, in the panel\'s word');
 
         $this->send($this->tap(Nav::to('rv'), chat: 7100));
         self::assertContains(Nav::to('rvv', 'show', $review->id), $this->callbacks(0), 'the waiting one listed');
@@ -178,9 +181,25 @@ final class BotAdminFlowTest extends BotTestCase
         self::assertTrue($this->service(OwnerLinks::class)->opens(self::linkIn($said)), 'the one shown');
     }
 
+    public function testEveryLinkedAccountHasItsLineThoughTwoShareAName(): void
+    {
+        $this->owner();
+        foreach ([7002, 7003] as $telegramId) {
+            $this->customer(['telegram_id' => $telegramId, 'first_name' => 'Sara']);
+            $this->linkOwner($telegramId);
+        }
+
+        $this->send($this->tap(Nav::to('ol'), chat: 7001));
+        $said = $this->said()[0];
+        foreach ([7001, 7002, 7003] as $telegramId) {
+            self::assertStringContainsString('<code>' . $telegramId . '</code>', $said, "{$telegramId}: the second Sara is not written over the first");
+            self::assertContains(Nav::to('ol', 'drop', $telegramId), $this->callbacks(0));
+        }
+    }
+
     public function testUnlinkingTakesBackTheRoleTheLinkGaveAndTheManagementWithIt(): void
     {
-        $owner = $this->owner(viaStart: true);
+        $owner = $this->ownerViaStart();
         self::assertSame(UserRole::Admin, $owner->refresh()->role);
 
         $this->service(OwnerLinks::class)->unlink(7001);
@@ -206,7 +225,7 @@ final class BotAdminFlowTest extends BotTestCase
 
     public function testASixthAccountEndsTheOldestOnesLinkAndRole(): void
     {
-        $first = $this->owner(viaStart: true);
+        $first = $this->ownerViaStart();
         foreach ([7002, 7003, 7004, 7005, 7006] as $telegramId) {
             $this->customer(['telegram_id' => $telegramId]);
             $this->link($telegramId);
@@ -219,7 +238,7 @@ final class BotAdminFlowTest extends BotTestCase
     public function testTheOwnersLinkOpensWhileTheBotIsOffAndItsOwnerIsNeverShutOut(): void
     {
         $this->botSettings('general', ['enabled' => false, 'phone_required' => true]);
-        $owner = $this->owner(viaStart: true);
+        $owner = $this->ownerViaStart();
         self::assertContains(StartHandler::OWNER_LINKED, $this->said(), 'past the off switch and the phone');
 
         // The admin role taken away by hand: still the owner, and the bot's gates still let them in.
@@ -234,16 +253,11 @@ final class BotAdminFlowTest extends BotTestCase
         self::assertSame([self::text(BotText::BotOff)], $this->said());
     }
 
-    /** The account 7001 linked as the owner — by opening the link in the bot with `$viaStart`. */
-    private function owner(bool $viaStart = false): User
+    /** The owner as owner() makes them, linked the other way: by opening the panel's link in the bot (link()). */
+    private function ownerViaStart(): User
     {
         $owner = User::query()->where('telegram_id', 7001)->first() ?? $this->customer(['telegram_id' => 7001, 'first_name' => 'Amir']);
-        if ($viaStart) {
-            $this->link(7001);
-
-            return $owner;
-        }
-        $this->linkOwner(7001);
+        $this->link(7001);
 
         return $owner;
     }

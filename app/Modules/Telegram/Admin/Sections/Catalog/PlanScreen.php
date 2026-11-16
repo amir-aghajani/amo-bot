@@ -9,17 +9,20 @@ use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\BaseScreen;
 use App\Modules\Telegram\Admin\Ui\Button;
 use App\Modules\Telegram\Admin\Ui\Fmt;
+use App\Modules\Telegram\Admin\Ui\Icons;
 use App\Modules\Telegram\Admin\Ui\Json;
+use App\Modules\Telegram\Admin\Ui\Nav;
 use App\Modules\Telegram\Admin\Ui\View;
+use App\Modules\Telegram\Admin\Ui\Words;
 use App\Support\Persian;
 
 /**
- * One plan (from the panel's plans list — it has no route for one): everything its row and form show — category, quota,
- * the three prices, the servers it is sold on and why one cannot sell now, its sales, its button and badge, its extras
- * prices — and, with the catalogue's grant, what the panel's row menu does: «✏️ ویرایش» (PlanEditScreen), the
- * «قابل خرید» switch (on or off as its button says), «📄 ساخت کپی» (opened in its form at once, switched off), a place
- * up or down among its category's plans, and «🗑 حذف پلن» — asked first, or refused up front once an order or a service
- * points at it.
+ * One plan (from the panel's plans list — it has no route for one): why the bot does not show it first, then its summary
+ * card — category and place, quota, the three prices, state, sales, extras, its button and badge —, its description,
+ * and the servers it is sold on with why one cannot sell now; with the catalogue's grant, what the panel's row menu does:
+ * «✏️ ویرایش» (PlanEditScreen, the main action), the switch (on or off as its button says), «📄 ساخت کپی» (opened in
+ * its form at once, switched off), a place up or down among its category's plans, and «🗑 حذف پلن» — asked first, or
+ * refused up front once an order or a service points at it.
  *
  * Actions: `tog` (id, 1|0: the switch set), `dup` (id), `up` (id), `down` (id), `del` (id: asks), `gone` (id: deletes).
  */
@@ -52,7 +55,7 @@ final class PlanScreen extends BaseScreen
                 }
                 $on = $args[1] === '1';
                 $admin->api->patch("/plans/{$id}", ['is_active' => $on]);
-                $admin->notice($on ? '✅ فعال شد' : '⏸ غیرفعال شد');
+                $admin->notice($on ? '✅ فعال شد' : Words::INACTIVE . ' شد');
                 break;
             case 'dup':
                 $copy = (array) ($admin->api->post("/plans/{$id}/duplicate")['plan'] ?? []);
@@ -67,7 +70,7 @@ final class PlanScreen extends BaseScreen
                 $ids = $plan === null ? null : CatalogFmt::moved($plans, $id, $action === 'up' ? -1 : 1, static fn(array $row): bool => self::category($row) === $category);
                 if ($ids !== null) {
                     $admin->api->post('/plans/reorder', ['ids' => $ids]);
-                    $admin->notice($action === 'up' ? '🔼 یک جا بالاتر رفت' : '🔽 یک جا پایین‌تر رفت');
+                    $admin->notice($action === 'up' ? Words::UP . ' یک جا بالاتر رفت' : Words::DOWN . ' یک جا پایین‌تر رفت');
                 }
                 break;
             case 'del':
@@ -77,17 +80,18 @@ final class PlanScreen extends BaseScreen
                 }
                 $kept = self::inUse($plan);
                 if ($kept !== null) {
-                    return View::make('🗑 حذف پلن', 'مدیریت', 'فروشگاه', 'پلن‌ها')
-                        ->line(Fmt::e($kept))
-                        ->row((bool) ($plan['is_active'] ?? false) ? Button::to('⏸ غیرفعال کردن', self::ID, 'tog', $id, 0) : null)
-                        ->back(self::ID, 'show', $id);
+                    return View::make(Words::DELETE . ' پلن', ...CatalogFmt::under(Fmt::bare(PlansScreen::TITLE), (string) $plan['name']))
+                        ->line('⚠️ ' . Fmt::e($kept))
+                        ->row((bool) ($plan['is_active'] ?? false) ? Button::to(Words::DEACTIVATE, self::ID, 'tog', $id, 0)->danger() : null)
+                        ->back(self::ID, Nav::SHOW, $id);
                 }
 
                 return $admin->confirm(
                     'این پلن حذف شود؟',
-                    Button::to('🗑 بله، حذف شود', self::ID, 'gone', $id),
-                    Button::to('✖️ انصراف', self::ID, 'show', $id),
+                    Button::to(Words::yes('حذف شود', CatalogFmt::emoji(Words::DELETE)), self::ID, 'gone', $id),
+                    Button::to(Words::CANCEL, self::ID, Nav::SHOW, $id),
                     Fmt::e('«' . $plan['name'] . '» حذف می‌شود. این کار برگشت‌پذیر نیست.') . "\n" . Fmt::e('هنوز سفارش یا اشتراکی با این پلن ثبت نشده است؛ سرورهایش فقط از پلن جدا می‌شوند.'),
+                    danger: true,
                 );
             case 'gone':
                 $admin->api->delete("/plans/{$id}");
@@ -106,39 +110,45 @@ final class PlanScreen extends BaseScreen
     private function view(Admin $admin, array $plan, array $plans): View
     {
         $id = (int) $plan['id'];
+        $active = (bool) ($plan['is_active'] ?? false);
         $category = is_array($plan['category'] ?? null) ? $plan['category'] : null;
         $counts = Json::part($plan, 'counts');
         $badge = CatalogFmt::BADGES[(string) ($plan['badge'] ?? '')] ?? null;
-        $view = View::make('📦 ' . (string) $plan['name'], 'مدیریت', 'فروشگاه', 'پلن‌ها');
-        if (is_string($plan['description'] ?? null) && $plan['description'] !== '') {
-            $view->line('<i>' . Fmt::e(Fmt::cut($plan['description'], 300)) . '</i>');
+        $view = View::make(Icons::PLANS . ' ' . (string) $plan['name'], ...CatalogFmt::under(Fmt::bare(PlansScreen::TITLE)));
+        if ((bool) ($plan['hidden_by_owner'] ?? false)) {
+            $view->line('🚫 پنهان‌شده توسط پشتیبانی: ' . Fmt::e(is_string($plan['unsellable_reason'] ?? null) ? $plan['unsellable_reason'] : 'پشتیبانی فروشگاه اصلی این پلن را پنهان کرده است.'));
+        } elseif ($active && is_string($plan['unsellable_reason'] ?? null)) {
+            $view->line('⚠️ در ربات دیده نمی‌شود: ' . Fmt::e($plan['unsellable_reason']));
+        }
+        if ($category !== null && !(bool) ($category['is_active'] ?? true)) {
+            $view->line('⚠️ این دسته غیرفعال است؛ پلن در ربات زیر «سایر پلن‌ها» فروخته می‌شود.');
         }
         $siblings = array_values(array_filter($plans, static fn(array $row): bool => self::category($row) === self::category($plan)));
         $at = array_search($id, array_map(static fn(array $row): int => (int) $row['id'], $siblings), true);
-        $view->facts([
-            'دسته' => $category === null ? 'بدون دسته' : Fmt::e((string) $category['name']) . ((bool) ($category['is_active'] ?? true) ? '' : ' (غیرفعال)'),
-            'جایگاه' => $at === false ? null : CatalogFmt::place($at + 1, count($siblings)),
-            'برچسب' => $badge === null ? null : Fmt::e($badge),
+        $view->card([
+            'وضعیت' => Fmt::active($active),
+            'دسته' => $category === null ? 'بدون دسته' : Fmt::e(CatalogFmt::category($category)),
+            'جایگاه در دسته' => $at === false ? null : CatalogFmt::place($at + 1, count($siblings)),
             'حجم' => CatalogFmt::traffic($plan['traffic_gb'] ?? 0),
             'مدت اعتبار' => Fmt::hours((int) ($plan['duration_hours'] ?? 0)),
             'تعداد کاربر' => CatalogFmt::devices($plan['ip_limit'] ?? 0),
             'قیمت' => CatalogFmt::price(is_scalar($plan['price'] ?? null) ? (string) $plan['price'] : null),
             'قیمت خرید اول' => is_scalar($plan['first_purchase_price'] ?? null) ? CatalogFmt::price((string) $plan['first_purchase_price']) : null,
             'قیمت نماینده' => is_scalar($plan['agent_price'] ?? null) ? CatalogFmt::price((string) $plan['agent_price']) : null,
-            'وضعیت' => (bool) ($plan['is_active'] ?? false) ? '🟢 فعال' : '⏸ غیرفعال',
-            'اشتراک' => Fmt::number((int) ($counts['active_subscriptions'] ?? 0)) . ' فعال · ' . Fmt::number((int) ($counts['sales'] ?? 0)) . ' فروش',
-            'خرید اضافه' => is_array($plan['extras'] ?? null) ? 'قیمت‌های این پلن' : 'قیمت‌های فروشگاه',
+            'فروش' => Fmt::number((int) ($counts['sales'] ?? 0)) . ' بار · ' . Fmt::number((int) ($counts['active_subscriptions'] ?? 0)) . ' اشتراک فعال',
+            'خرید اضافه' => CatalogFmt::extras(is_array($plan['extras'] ?? null)),
             'دکمه در ربات' => Fmt::e((CatalogFmt::STYLES[(string) ($plan['button_style'] ?? '')] ?? CatalogFmt::STYLES['']) . ' · ' . (CatalogFmt::ROWS[(int) ($plan['button_row'] ?? 1)] ?? CatalogFmt::ROWS[1])),
+            'برچسب' => $badge === null ? null : Fmt::e($badge),
             'یادداشت پیش‌فاکتور' => is_string($plan['checkout_note'] ?? null) && $plan['checkout_note'] !== '' ? Fmt::e(Fmt::cut($plan['checkout_note'], 120)) : null,
         ]);
-        if ($category !== null && !(bool) ($category['is_active'] ?? true)) {
-            $view->line('⚠️ این دسته غیرفعال است؛ پلن در ربات زیر «سایر پلن‌ها» فروخته می‌شود.');
+        if (is_string($plan['description'] ?? null) && $plan['description'] !== '') {
+            $view->line('<i>' . Fmt::e(Fmt::cut($plan['description'], 300)) . '</i>');
         }
 
-        $view->line()->line('<b>🖥 سرورها</b>');
+        $view->section(Icons::SERVERS . ' سرورها');
         $entries = Json::part($plan, 'servers');
         if ($entries === []) {
-            $view->line(Fmt::NONE);
+            $view->line('⚠️ هنوز سروری ندارد؛ تا سروری نگیرد، فروخته نمی‌شود.');
         }
         foreach ($entries as $entry) {
             if (!is_array($entry) || !is_array($entry['server'] ?? null)) {
@@ -148,23 +158,21 @@ final class PlanScreen extends BaseScreen
             $inbounds = count(Json::part($entry, 'inbounds'));
             $view->line(is_string($entry['unsellable_reason'] ?? null)
                 ? '⚠️ ' . $name . ': ' . Fmt::e($entry['unsellable_reason'] . ' تا درست نشود، مشتری این پلن را روی «' . $entry['server']['name'] . '» نمی‌بیند.')
-                : '• ' . $name . ' · ' . ((bool) ($entry['all_inbounds'] ?? false) ? 'کل سرور: هر اینباندی که روی این سرور قابل فروش باشد (الان ' . Persian::number($inbounds) . ')' : Persian::number($inbounds) . ' اینباند انتخاب‌شده'));
-        }
-
-        if ((bool) ($plan['hidden_by_owner'] ?? false)) {
-            $view->line()->line('🚫 پنهان‌شده توسط پشتیبانی: ' . Fmt::e(is_string($plan['unsellable_reason'] ?? null) ? $plan['unsellable_reason'] : 'پشتیبانی فروشگاه اصلی این پلن را پنهان کرده است.'));
-        } elseif (is_string($plan['unsellable_reason'] ?? null)) {
-            $view->line()->line('⚠️ در ربات دیده نمی‌شود: ' . Fmt::e($plan['unsellable_reason']));
+                : '• ' . $name . ' · ' . ((bool) ($entry['all_inbounds'] ?? false) ? 'کل سرور (الان ' . Persian::number($inbounds) . ' اینباند)' : Persian::number($inbounds) . ' اینباند انتخاب‌شده'));
         }
 
         if ($admin->seat->holds(StaffGrant::Catalog)) {
-            $active = (bool) ($plan['is_active'] ?? false);
-            $view->row(Button::to('✏️ ویرایش', PlanEditScreen::ID, 'edit', $id), Button::to($active ? '⏸ غیرفعال کردن' : '▶️ فعال کردن', self::ID, 'tog', $id, $active ? 0 : 1))
-                ->row(Button::to('📄 ساخت کپی', self::ID, 'dup', $id), Button::to('🗑 حذف پلن', self::ID, 'del', $id))
+            // The main action first, the switch beside it; the copy and the places after; the delete last.
+            $view->row(
+                Button::to(Words::EDIT, PlanEditScreen::ID, 'edit', $id)->primary(),
+                $active ? Button::to(Words::DEACTIVATE, self::ID, 'tog', $id, 0)->danger() : Button::to(Words::ACTIVATE, self::ID, 'tog', $id, 1)->success(),
+            )
+                ->row(Button::to('📄 ساخت کپی', self::ID, 'dup', $id))
                 ->row(
-                    $at !== false && $at > 0 ? Button::to('🔼 بالاتر', self::ID, 'up', $id) : null,
-                    $at !== false && $at < count($siblings) - 1 ? Button::to('🔽 پایین‌تر', self::ID, 'down', $id) : null,
-                );
+                    $at !== false && $at > 0 ? Button::to(Words::UP . ' بالاتر', self::ID, 'up', $id) : null,
+                    $at !== false && $at < count($siblings) - 1 ? Button::to(Words::DOWN . ' پایین‌تر', self::ID, 'down', $id) : null,
+                )
+                ->row(Button::to(Words::DELETE . ' پلن', self::ID, 'del', $id)->danger());
         }
 
         return $view->back(PlansScreen::ID);

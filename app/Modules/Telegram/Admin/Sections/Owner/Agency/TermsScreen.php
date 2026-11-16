@@ -6,6 +6,7 @@ namespace App\Modules\Telegram\Admin\Sections\Owner\Agency;
 
 use App\Modules\Telegram\Admin\AdminSeat;
 use App\Modules\Telegram\Admin\Door\ApiRefusal;
+use App\Modules\Telegram\Admin\Sections\Owner\Words as OwnerWords;
 use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\Answer;
 use App\Modules\Telegram\Admin\Ui\BaseScreen;
@@ -14,24 +15,36 @@ use App\Modules\Telegram\Admin\Ui\Fmt;
 use App\Modules\Telegram\Admin\Ui\Json;
 use App\Modules\Telegram\Admin\Ui\Prompt;
 use App\Modules\Telegram\Admin\Ui\View;
+use App\Modules\Telegram\Admin\Ui\Words;
 use App\Support\Unit;
 
 /**
  * An agent's terms as a card (the panel's AgencyTermsFields and SellingTermsFields): the level they are on, the credit
  * their wallet may go below zero by, when their agency ends and the traffic they buy each Jalali month at least — each
  * changed by a tap or a typed answer, then one save: approving a request (AgencyApproveScreen) or changing an agent
- * (AgentTermsScreen).
+ * (AgentTermsScreen). Its one way out, as a form's: «⬅️ بازگشت» while the terms are as they started, else «🗑 کنار
+ * گذاشتن», asked first.
  *
  * State (the screen's): `for` (the request's or the agent's id), `level_id`, `credit`, `expires` (a moment, or null for
- * none), `minimum`, `selling` (whether the end and the minimum are set here: an agent without a shop has none).
+ * none), `minimum`, `selling` (whether the end and the minimum are set here: an agent without a shop has none), `was`
+ * (the terms as the card first showed them: what a change is measured against).
  *
  * Actions: `lv` (the levels), `lvp` (level id), `cr` (asks the credit), `crz` (no credit), `ex` (asks the end), `exn`
- * (no end), `exd` (days from now), `mn` (asks the minimum), `mnz` (no minimum), `save`, `quit`.
+ * (no end), `exd` (days from now), `mn` (asks the minimum), `mnz` (no minimum), `save`, `quit` (the way out — an older
+ * window's «⬅️ بازگشت» too —: changed terms asked first), `gone` (the terms dropped).
  */
 abstract class TermsScreen extends BaseScreen
 {
+    /** A credit and a monthly minimum of 0, as the terms say them (the agency's rules too: AgencySettingsScreen). */
+    public const NO_CREDIT = 'بدون اعتبار';
+
+    public const NO_MINIMUM = 'بدون کف خرید';
+
     /** The ends a tap sets, in days from now. */
     private const DAYS = [30, 90, 180, 365];
+
+    /** A credit or a minimum typed as no sum of Toman. */
+    private const NOT_TOMAN = 'مبلغ را به تومان بنویسید، مثل ۵۰۰۰۰۰ یا «۵۰۰ هزار تومان».';
 
     /** The screen's id, as Screens registers it. */
     abstract protected function screen(): string;
@@ -110,17 +123,29 @@ abstract class TermsScreen extends BaseScreen
             case 'lv':
                 return $this->levels($admin, $state);
             case 'cr':
-                return $admin->ask((new Prompt('اعتبار (تومان)', $this->screen(), 'cr', [], 'موجودی کیف پول تا این اندازه منفی می‌شود. بدون اعتبار: فقط با موجودی کیف پول.' . "\n" . 'الان: ' . Fmt::money($state['credit'] ?? '0')))
-                    ->choices(Button::to('بدون اعتبار', $this->screen(), 'crz')));
+                return $admin->ask((new Prompt('اعتبار (تومان)', $this->screen(), 'cr', [], 'موجودی کیف پول نماینده تا این اندازه منفی می‌شود.', Button::to(Words::CANCEL, $this->screen())))
+                    ->current((int) ($state['credit'] ?? 0) > 0 ? Fmt::digits((string) $state['credit']) : self::NO_CREDIT, (int) ($state['credit'] ?? 0) > 0)
+                    ->example('۵۰۰۰۰۰')
+                    ->limits('۰ یا بیشتر؛ ۰ یعنی فقط با موجودی کیف پول')
+                    ->choices(Button::to(self::NO_CREDIT, $this->screen(), 'crz')));
             case 'ex':
-                return $admin->ask((new Prompt('پایان نمایندگی', $this->screen(), 'ex', [], 'روزهای مانده از امروز را بنویسید (مثل ۳۰)، یا روز پایان را به تاریخ شمسی (مثل ۱۴۰۵/۰۷/۲۰). بعد از آن فروش رباتش متوقف می‌شود.' . "\n" . 'الان: ' . AgencyEnd::words(self::moment($state))))
-                    ->choices(Button::to('بدون پایان', $this->screen(), 'exn'), ...array_map(fn(int $days): Button => Button::to(Fmt::number($days) . ' روز دیگر', $this->screen(), 'exd', $days), self::DAYS)));
+                return $admin->ask((new Prompt('پایان نمایندگی', $this->screen(), 'ex', [], 'روزهای مانده از امروز، یا روز پایان به تاریخ شمسی. بعد از آن فروش رباتش متوقف می‌شود.', Button::to(Words::CANCEL, $this->screen())))
+                    ->current(Fmt::plain(AgencyEnd::words(self::moment($state))), false)
+                    ->example('۳۰ یا ۱۴۰۵/۰۷/۲۰')
+                    ->choices(Button::to(AgencyEnd::NONE, $this->screen(), 'exn'), ...array_map(fn(int $days): Button => Button::to(Fmt::number($days) . ' روز دیگر', $this->screen(), 'exd', $days), self::DAYS)));
             case 'mn':
-                return $admin->ask((new Prompt('کف خرید ماهانه (تومان)', $this->screen(), 'mn', [], 'خرید حجم در هر ماه شمسی؛ کمتر از آن، فروش ربات از ماه بعد متوقف می‌شود. ۰: بدون کف خرید.' . "\n" . 'الان: ' . self::minimum($state)))
-                    ->choices(Button::to('بدون کف خرید', $this->screen(), 'mnz')));
+                return $admin->ask((new Prompt('کف خرید ماهانه (تومان)', $this->screen(), 'mn', [], 'خرید حجم در هر ماه شمسی؛ کمتر از آن، فروش ربات از ماه بعد متوقف می‌شود.', Button::to(Words::CANCEL, $this->screen())))
+                    ->current((int) ($state['minimum'] ?? 0) > 0 ? Fmt::digits((string) $state['minimum']) : self::NO_MINIMUM, (int) ($state['minimum'] ?? 0) > 0)
+                    ->example('۱۰۰۰۰۰۰')
+                    ->limits('۰ یا بیشتر؛ ۰ یعنی بدون کف خرید')
+                    ->choices(Button::to(self::NO_MINIMUM, $this->screen(), 'mnz')));
             case 'save':
                 return $this->save($admin, $state);
             case 'quit':
+            case 'gone':
+                if ($action === 'quit' && self::edited($state)) {
+                    return OwnerWords::discard($admin, $this->screen(), false);
+                }
                 $admin->forget($this->screen());
 
                 return $this->leave($admin, $state);
@@ -136,8 +161,8 @@ abstract class TermsScreen extends BaseScreen
             return $this->leave($admin, $state);
         }
         $changes = match ($action) {
-            'cr' => ['credit' => (string) ($answer->amount(Unit::Toman) ?? throw new ApiRefusal(422, 'مبلغ را به تومان بنویسید، مثل ۵۰۰۰۰۰ یا «۵۰۰ هزار تومان».'))],
-            'mn' => ['minimum' => (string) ($answer->amount(Unit::Toman) ?? throw new ApiRefusal(422, 'مبلغ را به تومان بنویسید، مثل ۵۰۰۰۰۰ یا «۵۰۰ هزار تومان».'))],
+            'cr' => ['credit' => (string) ($answer->amount(Unit::Toman) ?? throw new ApiRefusal(422, self::NOT_TOMAN))],
+            'mn' => ['minimum' => (string) ($answer->amount(Unit::Toman) ?? throw new ApiRefusal(422, self::NOT_TOMAN))],
             'ex' => ['expires' => AgencyEnd::typed($answer->text()) ?? throw new ApiRefusal(422, 'روزهای مانده را به عدد بنویسید (مثل ۳۰)، یا تاریخ شمسی را مثل ۱۴۰۵/۰۷/۲۰.')],
             default => [],
         };
@@ -164,30 +189,58 @@ abstract class TermsScreen extends BaseScreen
      */
     protected function card(Admin $admin, array $state): View
     {
-        $view = View::make($this->title($state), 'مدیریت', 'نمایندگان');
+        if (!is_array($state['was'] ?? null)) {
+            // The card first shown, as its start left it: what a change is measured against.
+            $state['was'] = self::terms($state);
+            $admin->remember($this->screen(), ['was' => $state['was']]);
+        }
+        $view = View::make($this->title($state), ...AgencyScreen::path());
         $this->intro($view, $admin, $state);
         $level = $this->level($admin, (int) ($state['level_id'] ?? 0));
-        $levelWords = $level === null ? 'انتخاب سطح' : (string) ($level['name'] ?? '') . ' · هر گیگابایت ' . Fmt::plain(Fmt::money((string) ($level['price_per_gb'] ?? '0')));
         $selling = Json::on($state, 'selling');
-        $view->line()
-            ->line('• سطح: ' . Fmt::e($levelWords))
-            ->line('• اعتبار: ' . ((int) ($state['credit'] ?? 0) > 0 ? Fmt::money($state['credit']) : 'بدون اعتبار: فقط با موجودی کیف پول'));
-        if ($selling) {
-            $view->line('• پایان نمایندگی: ' . AgencyEnd::words(self::moment($state)))
-                ->line('• کف خرید ماهانه: ' . self::minimum($state));
-        }
+        $view->card([
+            'سطح' => $level === null ? '⚠️ انتخاب نشده' : Fmt::e((string) ($level['name'] ?? '')) . ' · هر گیگابایت ' . Fmt::money((string) ($level['price_per_gb'] ?? '0')),
+            'اعتبار' => (int) ($state['credit'] ?? 0) > 0 ? Fmt::money($state['credit']) : 'بدون اعتبار: فقط با موجودی کیف پول',
+            'پایان نمایندگی' => $selling ? AgencyEnd::words(self::moment($state)) : null,
+            'کف خرید ماهانه' => $selling ? self::minimum($state) : null,
+        ]);
         if ($this->note($state) !== '') {
             $view->note($this->note($state));
         }
-        $view->row(Button::to('🏷 سطح: ' . $levelWords, $this->screen(), 'lv'))
-            ->row(Button::to('💳 اعتبار: ' . ((int) ($state['credit'] ?? 0) > 0 ? Fmt::plain(Fmt::money($state['credit'])) : 'ندارد'), $this->screen(), 'cr'));
-        if ($selling) {
-            $view->row(Button::to('📅 پایان: ' . Fmt::plain(AgencyEnd::words(self::moment($state))), $this->screen(), 'ex'))
-                ->row(Button::to('📉 کف خرید ماهانه: ' . Fmt::plain(self::minimum($state)), $this->screen(), 'mn'));
-        }
+        $view->tiles(
+            Button::to(Words::edit('سطح'), $this->screen(), 'lv')->styled($level === null ? 'primary' : null),
+            Button::to(Words::edit('اعتبار'), $this->screen(), 'cr'),
+            $selling ? Button::to(Words::edit('پایان نمایندگی'), $this->screen(), 'ex') : null,
+            $selling ? Button::to(Words::edit('کف خرید ماهانه'), $this->screen(), 'mn') : null,
+        );
 
-        return $view->row(Button::to($this->saveLabel($state), $this->screen(), 'save'), Button::to('✖️ انصراف', $this->screen(), 'quit'))
-            ->back($this->screen(), 'quit');
+        return OwnerWords::wayOut($view, $this->screen(), self::edited($state), Button::to($this->saveLabel($state), $this->screen(), 'save')->success());
+    }
+
+    /**
+     * The terms a card edits, as a change to them is measured.
+     *
+     * @param array<string, mixed> $state
+     * @return array<string, string|null>
+     */
+    private static function terms(array $state): array
+    {
+        return [
+            'level_id' => (string) ($state['level_id'] ?? ''),
+            'credit' => (string) ($state['credit'] ?? '0'),
+            'expires' => is_scalar($state['expires'] ?? null) ? (string) $state['expires'] : null,
+            'minimum' => (string) ($state['minimum'] ?? '0'),
+        ];
+    }
+
+    /**
+     * Whether the terms are no longer as the card first showed them: its way out asks first.
+     *
+     * @param array<string, mixed> $state
+     */
+    private static function edited(array $state): bool
+    {
+        return is_array($state['was'] ?? null) && $state['was'] !== self::terms($state);
     }
 
     /**
@@ -197,12 +250,12 @@ abstract class TermsScreen extends BaseScreen
      */
     private function levels(Admin $admin, array $state): View
     {
-        $view = View::make('🏷 سطح', 'مدیریت', 'نمایندگان', $this->title($state))
+        $view = View::make('🏷 سطح', ...[...AgencyScreen::path(), Fmt::bare($this->title($state))])
             ->line('قیمتی که نماینده هر گیگابایت حجم رباتش را با آن می‌خرد.');
         $buttons = [];
         foreach ($this->all($admin) as $level) {
             $chosen = (int) ($level['id'] ?? 0) === (int) ($state['level_id'] ?? 0);
-            $buttons[] = Button::to(($chosen ? '● ' : '') . (string) ($level['name'] ?? '') . ' · هر گیگابایت ' . Fmt::plain(Fmt::money((string) ($level['price_per_gb'] ?? '0'))), $this->screen(), 'lvp', (int) ($level['id'] ?? 0));
+            $buttons[] = Button::to(($chosen ? Words::PICKED : '') . (string) ($level['name'] ?? '') . ' · هر گیگابایت ' . Fmt::plain(Fmt::money((string) ($level['price_per_gb'] ?? '0'))), $this->screen(), 'lvp', (int) ($level['id'] ?? 0));
         }
         if ($buttons === []) {
             $view->line('هنوز سطحی ندارید؛ از بخش «سطح‌ها» بسازید.');
@@ -252,6 +305,6 @@ abstract class TermsScreen extends BaseScreen
     /** @param array<string, mixed> $state */
     private static function minimum(array $state): string
     {
-        return (int) ($state['minimum'] ?? 0) > 0 ? Fmt::money((string) $state['minimum']) : 'بدون کف خرید';
+        return (int) ($state['minimum'] ?? 0) > 0 ? Fmt::money((string) $state['minimum']) : self::NO_MINIMUM;
     }
 }

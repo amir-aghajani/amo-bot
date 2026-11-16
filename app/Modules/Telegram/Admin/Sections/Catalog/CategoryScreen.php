@@ -11,8 +11,11 @@ use App\Modules\Telegram\Admin\Ui\Answer;
 use App\Modules\Telegram\Admin\Ui\BaseScreen;
 use App\Modules\Telegram\Admin\Ui\Button;
 use App\Modules\Telegram\Admin\Ui\Fmt;
+use App\Modules\Telegram\Admin\Ui\Icons;
+use App\Modules\Telegram\Admin\Ui\Nav;
 use App\Modules\Telegram\Admin\Ui\Prompt;
 use App\Modules\Telegram\Admin\Ui\View;
+use App\Modules\Telegram\Admin\Ui\Words;
 use App\Support\Persian;
 
 /**
@@ -51,7 +54,7 @@ final class CategoryScreen extends BaseScreen
     {
         $id = self::id($args);
         if ($action === 'new') {
-            return $admin->ask(new Prompt('نام دسته', self::ID, 'new', [], Fmt::e(self::NAME_HINT), Button::to('✖️ لغو', CategoriesScreen::ID)));
+            return $admin->ask((new Prompt('نام دسته', self::ID, 'new', [], Fmt::e(self::NAME_HINT), Button::to(Words::CANCEL, CategoriesScreen::ID)))->example('ماهانه'));
         }
         $categories = CategoriesScreen::categories($admin);
         $category = CatalogFmt::find($categories, $id);
@@ -60,15 +63,16 @@ final class CategoryScreen extends BaseScreen
         }
         switch ($action) {
             case 'name':
-                return $admin->ask(new Prompt('نام تازه دسته', self::ID, 'name', [$id], Fmt::e(self::NAME_HINT) . "\nالان: " . Fmt::e((string) $category['name'])));
+                return $admin->ask((new Prompt('نام دسته', self::ID, 'name', [$id], Fmt::e(self::NAME_HINT), Button::to(Words::CANCEL, self::ID, Nav::SHOW, $id)))->current((string) $category['name'])->example('ماهانه'));
             case 'emo':
-                return $admin->ask(new Prompt(
+                return $admin->ask((new Prompt(
                     'ایموجی پرمیوم نام',
                     self::ID,
                     'emo',
                     [$id],
                     'یک ایموجی پرمیوم بفرستید: جای ایموجی اول نام می‌نشیند و ربات آن را پرمیوم نشان می‌دهد؛ روی دکمه به شکل آیکون. فقط وقتی دیده می‌شود که حسابی که ربات را در ' . Fmt::ltr('@BotFather') . ' ساخته تلگرام پرمیوم داشته باشد.',
-                ));
+                    Button::to(Words::CANCEL, self::ID, Nav::SHOW, $id),
+                ))->current(CatalogFmt::hasPremium(is_string($category['emoji_id'] ?? null)), false));
             case 'emx':
                 $admin->api->put("/plans/categories/{$id}", ['name' => (string) $category['name'], 'emoji_id' => null, 'is_active' => (bool) $category['is_active']]);
                 $admin->notice('✅ ایموجی پرمیوم برداشته شد');
@@ -79,18 +83,18 @@ final class CategoryScreen extends BaseScreen
                 }
                 $on = $args[1] === '1';
                 $admin->api->patch("/plans/categories/{$id}", ['is_active' => $on]);
-                $admin->notice($on ? '✅ فعال شد' : '⏸ غیرفعال شد');
+                $admin->notice($on ? '✅ فعال شد' : Words::INACTIVE . ' شد');
                 break;
             case 'up':
             case 'down':
                 $ids = CatalogFmt::moved($categories, $id, $action === 'up' ? -1 : 1, static fn(array $row): bool => true);
                 if ($ids !== null) {
                     $admin->api->post('/plans/categories/reorder', ['ids' => $ids]);
-                    $admin->notice($action === 'up' ? '🔼 یک جا بالاتر رفت' : '🔽 یک جا پایین‌تر رفت');
+                    $admin->notice($action === 'up' ? Words::UP . ' یک جا بالاتر رفت' : Words::DOWN . ' یک جا پایین‌تر رفت');
                 }
                 break;
             case 'plans':
-                $admin->remember(PlansScreen::ID, ['cat' => (string) $id, 'page' => 1]);
+                $admin->remember(PlansScreen::ID, ['cat' => (string) $id, 'q' => '', 'page' => 1]);
 
                 return $admin->open(PlansScreen::ID);
             case 'del':
@@ -98,13 +102,14 @@ final class CategoryScreen extends BaseScreen
 
                 return $admin->confirm(
                     'این دسته حذف شود؟',
-                    Button::to('🗑 بله، حذف شود', self::ID, 'gone', $id),
-                    Button::to('✖️ انصراف', self::ID, 'show', $id),
+                    Button::to(Words::yes('حذف شود', CatalogFmt::emoji(Words::DELETE)), self::ID, 'gone', $id),
+                    Button::to(Words::CANCEL, self::ID, Nav::SHOW, $id),
                     Fmt::e('«' . $category['name'] . '» حذف می‌شود.') . "\n" . Fmt::e(match (true) {
                         $plans === 0 => 'این دسته پلنی ندارد.',
                         $plans === 1 => 'پلن این دسته حذف نمی‌شود؛ بدون دسته می‌ماند و زیر «سایر پلن‌ها» فروخته می‌شود.',
                         default => Persian::number($plans) . ' پلن این دسته حذف نمی‌شوند؛ بدون دسته می‌مانند و زیر «سایر پلن‌ها» فروخته می‌شوند.',
                     }),
+                    danger: true,
                 );
             case 'gone':
                 $admin->api->delete("/plans/categories/{$id}");
@@ -153,28 +158,31 @@ final class CategoryScreen extends BaseScreen
         $id = (int) $category['id'];
         $at = array_search($id, array_map(static fn(array $row): int => (int) $row['id'], $categories), true);
         $active = (bool) ($category['is_active'] ?? false);
-        $view = View::make('🗂 ' . (string) $category['name'], 'مدیریت', 'فروشگاه', 'دسته‌بندی‌ها')
-            ->facts([
+        $premium = is_string($category['emoji_id'] ?? null);
+        $view = View::make(Icons::CATEGORIES . ' ' . (string) $category['name'], ...CatalogFmt::under(Fmt::bare(CategoriesScreen::TITLE)))
+            ->card([
+                'وضعیت' => Fmt::active($active),
                 'پلن‌ها' => Fmt::number((int) (($category['counts'] ?? [])['plans'] ?? 0)) . ' پلن',
-                'وضعیت' => $active ? '🟢 فعال' : '⏸ غیرفعال',
-                'ایموجی پرمیوم نام' => is_string($category['emoji_id'] ?? null) ? '✨ دارد' : 'ندارد',
+                'ایموجی پرمیوم نام' => CatalogFmt::hasPremium($premium),
                 'جایگاه' => $at === false ? null : CatalogFmt::place($at + 1, count($categories)),
             ]);
         if (!$active) {
-            $view->line('<i>دسته غیرفعال از لیست خرید کنار می‌رود؛ پلن‌هایش زیر «سایر پلن‌ها» می‌مانند.</i>');
+            $view->note('دسته غیرفعال از لیست خرید کنار می‌رود؛ پلن‌هایش زیر «سایر پلن‌ها» می‌مانند.');
         }
-        $view->row(Button::to('📦 پلن‌های این دسته', self::ID, 'plans', $id));
         if ($admin->seat->holds(StaffGrant::Catalog)) {
-            $view->row(Button::to('✏️ نام دسته', self::ID, 'name', $id), Button::to($active ? '⏸ غیرفعال کردن' : '▶️ فعال کردن', self::ID, 'tog', $id, $active ? 0 : 1))
+            $view->row(Button::to(Words::edit('نام دسته'), self::ID, 'name', $id)->primary(), $active ? Button::to(Words::DEACTIVATE, self::ID, 'tog', $id, 0)->danger() : Button::to(Words::ACTIVATE, self::ID, 'tog', $id, 1)->success());
+        }
+        $view->row(Button::to(Icons::PLANS . ' پلن‌های این دسته', self::ID, 'plans', $id));
+        if ($admin->seat->holds(StaffGrant::Catalog)) {
+            $view->row(
+                Button::to(Words::edit('ایموجی پرمیوم'), self::ID, 'emo', $id),
+                $premium ? Button::to('🚫 برداشتن ایموجی پرمیوم', self::ID, 'emx', $id) : null,
+            )
                 ->row(
-                    Button::to('✨ ایموجی پرمیوم', self::ID, 'emo', $id),
-                    is_string($category['emoji_id'] ?? null) ? Button::to('🚫 برداشتن ایموجی پرمیوم', self::ID, 'emx', $id) : null,
+                    $at !== false && $at > 0 ? Button::to(Words::UP . ' بالاتر', self::ID, 'up', $id) : null,
+                    $at !== false && $at < count($categories) - 1 ? Button::to(Words::DOWN . ' پایین‌تر', self::ID, 'down', $id) : null,
                 )
-                ->row(
-                    $at !== false && $at > 0 ? Button::to('🔼 بالاتر', self::ID, 'up', $id) : null,
-                    $at !== false && $at < count($categories) - 1 ? Button::to('🔽 پایین‌تر', self::ID, 'down', $id) : null,
-                )
-                ->row(Button::to('🗑 حذف دسته', self::ID, 'del', $id));
+                ->row(Button::to(Words::DELETE . ' دسته', self::ID, 'del', $id)->danger());
         }
 
         return $view->back(CategoriesScreen::ID);

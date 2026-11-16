@@ -9,21 +9,25 @@ use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\BaseScreen;
 use App\Modules\Telegram\Admin\Ui\Button;
 use App\Modules\Telegram\Admin\Ui\Fmt;
+use App\Modules\Telegram\Admin\Ui\Icons;
 use App\Modules\Telegram\Admin\Ui\Json;
 use App\Modules\Telegram\Admin\Ui\Screens;
 use App\Modules\Telegram\Admin\Ui\View;
+use App\Modules\Telegram\Admin\Ui\Words;
 
 /**
- * «🖥 سرورها» (the owner's, the panel's «سرورها»): the panels the shop sells on, in the owner's order — each with its
- * connector, address and state, what of it is for sale, its active services against its capacity, its last check and
- * why nothing is sold on it now —, a button each to its page (ServerScreen), and «➕ افزودن سرور». The panel lists them
- * whole: the pages here are cut from that.
+ * «🖥 سرورها» (the owner's, the panel's «سرورها»): the panels the shop sells on, in the owner's order — a button each to
+ * its page (ServerScreen), the button the row: its state as a chip (🟢 connected, 🔴 an error, 🟡 not checked yet, ⏸ off),
+ * its name, its active services against its capacity and its inbounds for sale —; over them how many there are and, for
+ * a server nothing is sold on now, why; «➕ افزودن سرور». The panel lists them whole: the pages here are cut from that.
  *
  * Actions: `page` (n).
  */
 final class ServersScreen extends BaseScreen
 {
     public const ID = 'sv';
+
+    public const TITLE = Icons::SERVERS . ' سرورها';
 
     public function allows(AdminSeat $seat): bool
     {
@@ -37,31 +41,27 @@ final class ServersScreen extends BaseScreen
         $servers = Json::rows($admin->api->get('/servers'), 'servers');
         [$shown, $page, $pages] = View::slice($servers, (int) ($admin->state(self::ID)['page'] ?? 1));
 
-        $view = View::make('🖥 سرورها', 'مدیریت')
-            ->line('پنل‌هایی که کانفیگ‌ها روی آن‌ها ساخته می‌شوند؛ هر سرور را باز کنید تا اینباندها، اتصال و افزودن زمان و حجم را ببینید.');
+        $view = View::make(self::TITLE, Words::ROOT);
         if ($servers === []) {
-            $view->line()->line('<b>هنوز سروری اضافه نشده است</b>')->line('اولین پنل را وصل کنید تا بتوانید پلن بسازید و اشتراک بفروشید.');
+            $view->line('<b>هنوز سروری اضافه نشده است.</b> اولین پنل را وصل کنید تا بتوانید پلن بسازید و اشتراک بفروشید.');
         } else {
-            $view->line(Fmt::number(count($servers)) . ' سرور' . ($pages > 1 ? ' · صفحه ' . Fmt::number($page) . ' از ' . Fmt::number($pages) : ''));
+            $failing = count(array_filter($servers, static fn(array $server): bool => ServerWords::state($server) === 'failed'));
+            $view->total(count($servers), 'سرور', $failing > 0 ? Fmt::plain(Fmt::number($failing)) . ' با خطا' : '');
         }
-
-        $buttons = [];
         foreach ($shown as $server) {
-            $counts = Json::part($server, 'counts');
-            $capacity = is_int($server['capacity'] ?? null) ? ' / ' . Fmt::number($server['capacity']) : '';
-            $view->line()
-                ->line('<b>' . Fmt::e((string) ($server['name'] ?? '')) . '</b> · ' . Fmt::ltr((string) ($server['driver_label'] ?? '')) . ' · ' . ServerWords::status($server))
-                ->line('   ' . Fmt::ltr(Fmt::cut((string) ($server['base_url'] ?? ''), 50)))
-                ->line('   اینباند: ' . Fmt::number((int) ($counts['selectable_inbounds'] ?? 0)) . ' از ' . Fmt::number((int) ($counts['inbounds'] ?? 0)) . ' برای فروش · اشتراک فعال: ' . Fmt::number((int) ($counts['active_subscriptions'] ?? 0)) . $capacity)
-                ->line('   آخرین بررسی: ' . Fmt::date(is_string($server['last_checked_at'] ?? null) ? $server['last_checked_at'] : null, true));
             if (is_string($server['unsellable_reason'] ?? null)) {
-                $view->line('   ⚠️ ' . Fmt::e($server['unsellable_reason']));
+                $view->line('⚠️ <b>' . Fmt::e((string) ($server['name'] ?? '')) . '</b>: ' . Fmt::e($server['unsellable_reason']));
             }
-            $buttons[] = Button::to(ServerWords::dot($server) . ' ' . (string) ($server['name'] ?? '') . ' · ' . (string) ($server['driver_label'] ?? ''), ServerScreen::ID, 'show', (int) ($server['id'] ?? 0));
         }
-        $view->grid(1, ...$buttons)->pager($page, $pages, self::ID, 'page');
+        foreach ($shown as $server) {
+            $view->row(Button::to(self::label($server), ServerScreen::ID, 'show', (int) ($server['id'] ?? 0)));
+        }
+        $view->row(Button::to(Words::add('سرور'), ServerDriversScreen::ID)->success())
+            ->pager($page, $pages, self::ID, 'page');
 
-        return $view->row(Button::to('➕ افزودن سرور', ServerDriversScreen::ID))->back(Screens::HOME);
+        return $view->help('هر سرور یک پنل (مثل ' . Fmt::ltr('3x-ui') . ' یا ' . Fmt::ltr('Marzban') . ') است که کانفیگ‌های مشتری‌ها روی آن ساخته می‌شود. در صفحه هر سرور: بررسی اتصال، اینباندهای فروش، تنظیمات اتصال، اکانت تست، افزودن زمان و حجم به سرویس‌ها و انتقال سرویس‌ها به سرور دیگر.')
+            ->back(Screens::HOME)
+            ->refresh(self::ID);
     }
 
     public function act(Admin $admin, string $action, array $args): View
@@ -71,5 +71,18 @@ final class ServersScreen extends BaseScreen
         }
 
         return $this->show($admin, []);
+    }
+
+    /**
+     * A server's row: its chip, its name, its active services (of its capacity) and its inbounds for sale.
+     *
+     * @param array<string, mixed> $server
+     */
+    private static function label(array $server): string
+    {
+        $counts = Json::part($server, 'counts');
+        $active = Fmt::plain(Fmt::number((int) ($counts['active_subscriptions'] ?? 0))) . (is_int($server['capacity'] ?? null) ? '/' . Fmt::plain(Fmt::number($server['capacity'])) : '');
+
+        return ServerWords::dot($server) . ' ' . Fmt::cut((string) ($server['name'] ?? ''), 20) . ' · ' . $active . ' سرویس · ' . Fmt::plain(Fmt::number((int) ($counts['selectable_inbounds'] ?? 0))) . '/' . Fmt::plain(Fmt::number((int) ($counts['inbounds'] ?? 0))) . ' اینباند';
     }
 }

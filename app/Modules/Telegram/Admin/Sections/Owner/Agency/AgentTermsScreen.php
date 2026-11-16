@@ -9,6 +9,7 @@ use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\Fmt;
 use App\Modules\Telegram\Admin\Ui\Json;
 use App\Modules\Telegram\Admin\Ui\View;
+use App\Modules\Telegram\Admin\Ui\Words as UiWords;
 
 /**
  * «✏️ سطح، اعتبار و شرایط فروش» of an agent (the panel's AgentModal): their level, credit, end and monthly minimum — the
@@ -38,23 +39,23 @@ final class AgentTermsScreen extends TermsScreen
 
     protected function title(array $state): string
     {
-        return '✏️ نماینده ' . (string) ($state['name'] ?? '');
+        return UiWords::edit('نماینده ' . (string) ($state['name'] ?? ''));
     }
 
     protected function saveLabel(array $state): string
     {
-        return '💾 ذخیره تغییرات';
+        return UiWords::SAVE;
     }
 
     protected function intro(View $view, Admin $admin, array $state): void
     {
         $row = AgentScreen::row($admin, (int) ($state['for'] ?? 0)) ?? [];
         $bot = is_array($row['bot'] ?? null) ? $row['bot'] : null;
-        $view->facts([
-            'ربات' => $bot === null ? 'هنوز ندارد' : (is_string($bot['username'] ?? null) ? Fmt::ltr('@' . $bot['username']) : 'بدون توکن'),
-            'حجم باقی‌مانده' => $bot === null ? null : Fmt::bytes((int) ($bot['traffic_balance'] ?? 0)),
-            'موجودی کیف پول' => Fmt::money((string) ($row['balance'] ?? '0')),
-        ]);
+        $view->line('<i>' . implode(' · ', array_filter([
+            '🤖 ' . ($bot === null ? 'هنوز ربات ندارد' : (is_string($bot['username'] ?? null) ? Fmt::ltr('@' . $bot['username']) : 'بدون توکن')),
+            $bot === null ? null : 'حجم ' . Fmt::bytes((int) ($bot['traffic_balance'] ?? 0)),
+            'موجودی ' . Fmt::money((string) ($row['balance'] ?? '0')),
+        ])) . '</i>');
     }
 
     protected function start(Admin $admin, string $action, array $args): View

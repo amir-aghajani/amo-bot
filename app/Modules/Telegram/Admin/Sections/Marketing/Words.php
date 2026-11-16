@@ -6,18 +6,35 @@ namespace App\Modules\Telegram\Admin\Sections\Marketing;
 
 use App\Modules\Telegram\Admin\Door\ApiRefusal;
 use App\Modules\Telegram\Admin\Ui\Admin;
+use App\Modules\Telegram\Admin\Ui\Button;
 use App\Modules\Telegram\Admin\Ui\Fmt;
+use App\Modules\Telegram\Admin\Ui\Icons;
+use App\Modules\Telegram\Admin\Ui\Json;
 use App\Modules\Telegram\Admin\Ui\View;
+use App\Modules\Telegram\Admin\Ui\Words as Ui;
 
 /**
- * How the «تخفیف و جوایز» screens say things — the panel's own words for order kinds, states and prizes —, the shop's
- * rows their forms pick from (plans, servers, customer groups, payment methods) and the lists the panel answers whole,
- * read from the panel's API.
+ * How the «تخفیف و جوایز» screens say things — the panel's own words for order kinds, states and prizes, each program's
+ * name and icon, a row's delete asked first —, the shop's rows their forms pick from (plans, servers, customer groups,
+ * payment methods) and the lists the panel answers whole, read from the panel's API. Screens
+ * import it as `Marketing` beside the management's own Words.
  */
 final class Words
 {
-    /** Where every screen of the section is. */
-    public const PATH = ['مدیریت', 'تخفیف و جوایز'];
+    /** The menu every program's list goes back to (Screens' hub). */
+    public const MENU = 'hm';
+
+    /** Where every screen of the section is: the management, then the menu. */
+    public const PATH = [Ui::ROOT, 'تخفیف و جوایز'];
+
+    // The programs, as the menu names them (Screens' hub MENU) — a screen's title is `Icons::X . ' ' . name`.
+    public const DISCOUNTS = 'کدهای تخفیف';
+    public const SALES = 'فروش ویژه';
+    public const LOYALTY = 'سطوح وفاداری';
+    public const CASHBACK = 'کش‌بک';
+    public const GIFT_CODES = 'کدهای هدیه';
+    public const WHEEL = 'گردونه شانس';
+    public const LOTTERY = 'قرعه‌کشی';
 
     /** The orders a customer places for themselves, as the panel words them (OWN_ORDER_TYPE), in its order. */
     public const KINDS = ['purchase' => 'خرید', 'renewal' => 'تمدید', 'extra_traffic' => 'حجم اضافه', 'extra_time' => 'زمان اضافه', 'extra_devices' => 'کاربر اضافه'];
@@ -28,24 +45,40 @@ final class Words
     /** What a prize gives (WHEEL_PRIZE_KIND), in the order its form offers them. */
     public const PRIZES = ['wallet' => 'شارژ کیف پول', 'traffic' => 'حجم', 'days' => 'زمان', 'plan' => 'سرویس رایگان', 'nothing' => 'پوچ'];
 
-    /** How a discount code or a sale stands now (DISCOUNT_STATE). */
-    private const STATES = ['active' => '🟢 فعال', 'scheduled' => '🕒 شروع نشده', 'ended' => '⚪️ تمام‌شده', 'used_up' => '🟠 ظرفیت پر', 'off' => '⏸ غیرفعال'];
+    /** How a discount code or a sale stands now (DISCOUNT_STATE), in the order a list's chips offer them. */
+    public const STATES = ['active' => Ui::ACTIVE, 'scheduled' => '🕒 شروع نشده', 'ended' => '⚪️ تمام‌شده', 'used_up' => '🟠 ظرفیت پر', 'off' => Ui::INACTIVE];
 
-    /** A row switched on or off (a cashback rule, a wheel slice), in the management's words for records. */
-    public static function onOff(bool $on): string
-    {
-        return $on ? '🟢 فعال' : '⏸ غیرفعال';
-    }
+    // A wizard's own words (Form\FormScreen).
+
+    /** A step left as it is on the way through: a value it has kept. */
+    public const KEEP = '⏭ همین بماند';
+
+    /** Several ticked: the step done. */
+    public const TICKED = '✔️ تایید';
+
+    /** The way through over: every field once more before the save. */
+    public const REVIEW = 'همه را یک بار ببینید؛ هر کدام را می‌شود عوض کرد، بعد بسازید.';
+
+    /** A row's form opened to edit, nothing changed yet. */
+    public const UNCHANGED = 'هنوز چیزی را عوض نکرده‌اید.';
+
+    /** A row's form with changes the save has not sent. */
+    public const UNSAVED = '✏️ تغییرها هنوز ذخیره نشده‌اند.';
 
     /**
-     * A list's «❔ راهنما»: the panel's ⓘ beside the page's title, under the program it explains, back to its list.
+     * The path of a program's own screens: the section, then the program.
      *
-     * @param string $program The program's name (plain text, no emoji): «فروش ویژه»
-     * @param string $text What the panel's ⓘ says (plain text)
+     * @return list<string>
      */
-    public static function help(string $screen, string $program, string $text): View
+    public static function in(string $program): array
     {
-        return View::make('❔ ' . $program, ...[...self::PATH, $program])->line(Fmt::e($text))->back($screen);
+        return [...self::PATH, $program];
+    }
+
+    /** The settings card of a program: «⚙️ تنظیمات کش‌بک». */
+    public static function settings(string $of): string
+    {
+        return Icons::SETTINGS . ' تنظیمات ' . $of;
     }
 
     /**
@@ -56,7 +89,7 @@ final class Words
      */
     public static function all(Admin $admin, string $endpoint, string $key): array
     {
-        return array_values(array_filter((array) ($admin->api->get($endpoint)[$key] ?? []), is_array(...)));
+        return Json::rows($admin->api->get($endpoint), $key);
     }
 
     /**
@@ -67,13 +100,44 @@ final class Words
      */
     public static function one(Admin $admin, string $endpoint, string $key, int $id): ?array
     {
-        foreach (self::all($admin, $endpoint, $key) as $row) {
+        return self::find(self::all($admin, $endpoint, $key), $id);
+    }
+
+    /**
+     * Row `$id` among `$rows`; null when it is not there.
+     *
+     * @param list<array<string, mixed>> $rows
+     * @return array<string, mixed>|null
+     */
+    public static function find(array $rows, int $id): ?array
+    {
+        foreach ($rows as $row) {
             if ((int) ($row['id'] ?? 0) === $id) {
                 return $row;
             }
         }
 
         return null;
+    }
+
+
+    /**
+     * The ids of the rows a discount or a sale names (its plans, its servers); null for every one.
+     *
+     * @return list<int>|null
+     */
+    public static function ids(mixed $rows): ?array
+    {
+        return is_array($rows) ? array_values(array_map(static fn(mixed $row): int => is_array($row) ? (int) ($row['id'] ?? 0) : 0, $rows)) : null;
+    }
+
+    /**
+     * A row's «🗑 حذف», asked first: `$question`, what it does (`$detail`, HTML), «🗑 بله، حذف شود» to `$screen`'s `gone`
+     * and «✖️ انصراف» back to the row's own page — both with its id.
+     */
+    public static function deletion(Admin $admin, string $screen, int $id, string $question, string $detail): View
+    {
+        return $admin->confirm($question, Button::to(Ui::yes('حذف شود', '🗑'), $screen, 'gone', $id), Button::to(Ui::CANCEL, $screen, 'show', $id), $detail, danger: true);
     }
 
     /** Latin text in a button's label, isolated so a Persian label keeps its order (no HTML there). */
@@ -114,16 +178,22 @@ final class Words
         };
     }
 
-    /** A code's or a sale's state, with its mark. */
+    /** A code's or a sale's state, as its chip. */
     public static function state(mixed $state): string
     {
         return self::STATES[is_string($state) ? $state : ''] ?? (is_string($state) ? $state : Fmt::NONE);
     }
 
-    /** Its mark alone, for a list's row. */
+    /** Its chip's mark alone, for a list's row. */
     public static function mark(mixed $state): string
     {
         return explode(' ', self::state($state))[0];
+    }
+
+    /** A row switched on or off (a rule, a slice) as its chip's mark, for a list's row: «🟢», «⏸». */
+    public static function dot(bool $active): string
+    {
+        return explode(' ', Fmt::active($active))[0];
     }
 
     /**
@@ -151,7 +221,10 @@ final class Words
         return str_contains($decimal, '.') ? rtrim(rtrim($decimal, '0'), '.') : $decimal;
     }
 
-    /** A customer as a list names them (UserDirectory::presentRef()): «علی · @ali»; a deleted account said so. */
+    /**
+     * A customer as a list names them (UserDirectory::presentRef()): «علی · @ali», the handle isolated (iso()) so it keeps
+     * its order in a Persian line or label; a deleted account said so.
+     */
     public static function customer(mixed $ref): string
     {
         if (!is_array($ref)) {
@@ -159,7 +232,7 @@ final class Words
         }
         $name = is_string($ref['name'] ?? null) && $ref['name'] !== '' ? $ref['name'] : 'بی‌نام';
 
-        return $name . (is_string($ref['username'] ?? null) && $ref['username'] !== '' ? ' · @' . $ref['username'] : '');
+        return $name . (is_string($ref['username'] ?? null) && $ref['username'] !== '' ? ' · ' . self::iso('@' . $ref['username']) : '');
     }
 
     /**
@@ -171,6 +244,17 @@ final class Words
     public static function plans(Admin $admin, string $off = 'غیرفعال'): array
     {
         return self::rows($admin->api->get('/plans')['plans'] ?? [], 'name', $off);
+    }
+
+    /**
+     * The plans a gift may give (a gift code, a wheel slice, the draw's prize): a plan off sale too, said to be for gifts.
+     *
+     * @return array<int, string>
+     * @throws ApiRefusal
+     */
+    public static function giftPlans(Admin $admin): array
+    {
+        return self::plans($admin, 'غیرفعال؛ فقط برای هدیه');
     }
 
     /**

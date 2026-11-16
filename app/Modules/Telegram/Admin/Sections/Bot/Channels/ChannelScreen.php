@@ -5,16 +5,19 @@ declare(strict_types=1);
 namespace App\Modules\Telegram\Admin\Sections\Bot\Channels;
 
 use App\Modules\Telegram\Admin\AdminSeat;
+use App\Modules\Telegram\Admin\Sections\Bot\BotScreens;
 use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\BaseScreen;
 use App\Modules\Telegram\Admin\Ui\Button;
 use App\Modules\Telegram\Admin\Ui\Fmt;
+use App\Modules\Telegram\Admin\Ui\Icons;
 use App\Modules\Telegram\Admin\Ui\Json;
 use App\Modules\Telegram\Admin\Ui\View;
+use App\Modules\Telegram\Admin\Ui\Words;
 
 /**
  * One required channel (from the panel's list of them — it has no route for one): its name, its link, whether the bot is
- * still its admin and when that was last looked at; «🔄 بررسی دوباره», moved up or down the list, and «🗑 حذف», asked
+ * still its admin and when that was last looked at; «🔍 بررسی دوباره», moved up or down the list, and «🗑 حذف», asked
  * first with the panel's words.
  *
  * Actions: `check`, `up`, `down`, `del` (asks), `gone` — each with the id.
@@ -71,8 +74,8 @@ final class ChannelScreen extends BaseScreen
             case 'del':
                 return $admin->confirm(
                     'این کانال حذف شود؟',
-                    Button::to('🗑 بله، حذف شود', self::ID, 'gone', $id),
-                    Button::to('✖️ انصراف', self::ID, 'show', $id),
+                    Button::to(Words::yes('حذف شود', '🗑'), self::ID, 'gone', $id),
+                    Button::to(Words::CANCEL, self::ID, 'show', $id),
                     '«' . Fmt::e($title) . '» از لیست کانال‌های اجباری برداشته می‌شود. ربات از کانال بیرون نمی‌رود؛ فقط عضویت در آن دیگر شرط استفاده از ربات نیست.',
                 );
             case 'gone':
@@ -94,23 +97,24 @@ final class ChannelScreen extends BaseScreen
         $id = (int) ($channel['id'] ?? 0);
         $link = is_string($channel['link'] ?? null) ? $channel['link'] : null;
         $admin = Json::on($channel, 'bot_is_admin');
-        $view = View::make('📢 ' . (string) ($channel['title'] ?? ''), 'مدیریت', 'ربات', 'کانال‌های اجباری')
-            ->facts([
-                'لینک' => $link === null ? '⚠️ لینک عضویت ندارد و از کسی خواسته نمی‌شود' : Fmt::ltr(is_string($channel['username'] ?? null) ? '@' . $channel['username'] : $link),
-                'نوع' => ($channel['type'] ?? null) === 'channel' ? 'کانال' : 'گروه',
-                'وضعیت ربات' => $admin ? '✅ مدیر است' : '⚠️ مدیر نیست',
-                'بررسی' => Fmt::date(is_string($channel['checked_at'] ?? null) ? $channel['checked_at'] : null, true),
-                'جای در لیست' => Fmt::number($at + 1) . ' از ' . Fmt::number(count($channels)),
-            ]);
+        $view = View::make(Icons::CHANNELS . ' ' . (string) ($channel['title'] ?? ''), ...[...BotScreens::PATH, Fmt::bare(ChannelsScreen::TITLE)]);
         if (!$admin) {
-            $view->line()->line('⚠️ تا وقتی ربات مدیر این کانال نشود، کانال بررسی نمی‌شود و جلوی کسی را نمی‌گیرد. بعد از درست کردن، «بررسی دوباره» را بزنید.');
+            $view->line('⚠️ تا وقتی ربات مدیر این کانال نشود، کانال بررسی نمی‌شود و جلوی کسی را نمی‌گیرد. بعد از درست کردن، «🔍 بررسی دوباره» را بزنید.');
         }
-        $view->row(Button::to('🔄 بررسی دوباره', self::ID, 'check', $id), ...($link !== null && str_starts_with($link, 'https://') ? [Button::url('🔗 باز کردن', $link)] : []))
+        $view->card([
+            'وضعیت ربات' => $admin ? '🟢 مدیر است' : '⚠️ مدیر نیست',
+            'لینک' => $link === null ? '⚠️ لینک عضویت ندارد و از کسی خواسته نمی‌شود' : Fmt::code(is_string($channel['username'] ?? null) ? '@' . $channel['username'] : $link),
+            'نوع' => ($channel['type'] ?? null) === 'channel' ? 'کانال' : 'گروه',
+            'آخرین بررسی' => Fmt::date(is_string($channel['checked_at'] ?? null) ? $channel['checked_at'] : null, true),
+            'جای در لیست' => Fmt::number($at + 1) . ' از ' . Fmt::number(count($channels)),
+        ]);
+        $view->row(Button::to('🔍 بررسی دوباره', self::ID, 'check', $id)->styled($admin ? null : 'primary'), $link !== null && str_starts_with($link, 'https://') ? Button::url('🔗 باز کردن', $link) : null)
             ->row(
-                $at > 0 ? Button::to('🔼 بالاتر', self::ID, 'up', $id) : null,
-                $at < count($channels) - 1 ? Button::to('🔽 پایین‌تر', self::ID, 'down', $id) : null,
+                $at > 0 ? Button::to(Words::UP . ' بالاتر', self::ID, 'up', $id) : null,
+                $at < count($channels) - 1 ? Button::to(Words::DOWN . ' پایین‌تر', self::ID, 'down', $id) : null,
+                $link !== null ? Button::copy(Words::copy('لینک'), $link) : null,
             )
-            ->row(Button::to('🗑 حذف کانال', self::ID, 'del', $id));
+            ->row(Button::to(Words::DELETE . ' کانال', self::ID, 'del', $id)->danger());
 
         return $view->back(ChannelsScreen::ID, ChannelsScreen::VIEW);
     }

@@ -26,12 +26,12 @@ final class OrderFilters extends NarrowScreen
 
     protected function listTitle(): string
     {
-        return 'سفارش‌ها';
+        return Sales::ORDERS;
     }
 
     protected function days(): string
     {
-        return 'بر اساس زمان ثبت سفارش';
+        return 'زمان ثبت سفارش';
     }
 
     protected function groups(Admin $admin): array
@@ -43,7 +43,7 @@ final class OrderFilters extends NarrowScreen
 
         return [
             ['key' => 'type', 'label' => 'نوع', 'options' => ['' => 'همه'] + $types],
-            ['key' => 'sort', 'label' => 'ترتیب', 'options' => ['' => 'تازه‌ترین', 'created.asc' => 'قدیمی‌ترین', 'amount.desc' => 'بیشترین مبلغ', 'amount.asc' => 'کمترین مبلغ']],
+            ['key' => 'sort', 'label' => 'ترتیب', 'options' => self::SORT_BY_AMOUNT],
         ];
     }
 }

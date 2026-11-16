@@ -9,7 +9,7 @@ use App\Modules\Telegram\Admin\Sections\Panel\Forms\DraftForm;
 use App\Modules\Telegram\Admin\Sections\Panel\Forms\DraftScreen;
 use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\Json;
-use App\Modules\Telegram\Admin\Ui\View;
+use App\Modules\Telegram\Admin\Ui\Words;
 
 /**
  * «تایید امنیتی» of the website (under «ورود با ایمیل», as the panel has it): none, or a captcha driver with its form drawn
@@ -32,15 +32,16 @@ final class CaptchaScreen extends DraftScreen
     }
 
     /**
-     * The captcha the website uses, by name: its driver's label, «خاموش» for none.
+     * The captcha the website uses, as its chip (plain text): «🟢 روشن · {driver}», «⏸ خاموش» for none.
      *
      * @param array<string, mixed> $captcha The website's `captcha`
      */
     public static function driverLabel(array $captcha): string
     {
         $driver = $captcha['driver'] ?? DraftForm::NONE;
+        $label = DraftForm::drivers(Json::rows($captcha, 'drivers'))[$driver]['label'] ?? null;
 
-        return DraftForm::drivers(Json::rows($captcha, 'drivers'))[$driver]['label'] ?? self::NONE['label'];
+        return $driver === DraftForm::NONE || $label === null ? Words::OFF : Words::ON . ' · ' . $label;
     }
 
     protected function screen(): string
@@ -55,7 +56,7 @@ final class CaptchaScreen extends DraftScreen
 
     protected function path(): array
     {
-        return ['مدیریت', 'تنظیمات وب‌سایت', 'ورود با ایمیل'];
+        return WebsiteScreen::under('ورود با ایمیل');
     }
 
     protected function parent(): string
@@ -98,15 +99,17 @@ final class CaptchaScreen extends DraftScreen
         return ['فرم‌های وب‌سایت را در برابر درخواست‌های خودکار ربات‌ها نگه می‌دارد.'];
     }
 
-    protected function extra(View $view, Admin $admin, DraftForm $form, string $driver, array $values): void
+    /** For the site's developer, with a captcha picked: which forms send its token, and how the others ask. */
+    protected function notes(Admin $admin, DraftForm $form, string $driver): array
     {
         if ($driver === DraftForm::NONE) {
-            return;
+            return [];
         }
-        $view->line()->line(
-            "<i>ثبت‌نام، ورود با رمز عبور، بازیابی رمز عبور، درخواست کد پیامکی و ثبت نظر از وب‌سایت، توکن ویجت را هم می‌خواهند (فیلد \u{2068}captcha\u{2069})، هر کدام برای \u{2068}action\u{2069} خودش: "
+
+        return [
+            "ثبت‌نام، ورود با رمز عبور، بازیابی رمز عبور، درخواست کد پیامکی و ثبت نظر از وب‌سایت، توکن ویجت را هم می‌خواهند (فیلد \u{2068}captcha\u{2069})، هر کدام برای \u{2068}action\u{2069} خودش: "
             . "\u{2068}sign_up\u{2069}، \u{2068}sign_in\u{2069}، \u{2068}password_reset\u{2069}، \u{2068}phone_sign_in\u{2069} و \u{2068}review\u{2069}. "
-            . "فرم‌های دیگر وب‌سایت، مثل فرم تماس با ما، را سرور وب‌سایت با \u{2068}POST /captcha/verify\u{2069} از فروشگاه می‌پرسد؛ کلید مخفی فقط نزد فروشگاه است.</i>",
-        );
+            . "فرم‌های دیگر وب‌سایت، مثل فرم تماس با ما، را سرور وب‌سایت با \u{2068}POST /captcha/verify\u{2069} از فروشگاه می‌پرسد؛ کلید مخفی فقط نزد فروشگاه است.",
+        ];
     }
 }

@@ -80,7 +80,7 @@ live: there is no need to reload.
 | Page | What it covers |
 |---|---|
 | [The panels](Panels.md) | Signing in, the shop on screen, the menu, the dashboard, lists, live updates, failures |
-| [Managing the shop from the bot](Bot-Management.md) | «⚙️ مدیریت» in the bot's private chat: your Telegram account linked, an agent's, the shop's admins and their grants, the menus, typed answers |
+| [Managing the shop from the bot](Bot-Management.md) | «⚙️ مدیریت» in the bot's private chat: your Telegram account linked, an agent's, the shop's admins and their grants, the home and its queues, the search and the settings search, the menus, typed answers |
 | [Servers](Servers.md) | The VPN panels the shop sells on: adding one, its inbounds, its health, days and traffic for its services, moving them all to another server |
 | [Plans](Plans.md) | Plans, the servers they are sold on, and their categories |
 | [Payment methods](Payment-Methods.md) | The wallet, card-to-card, the automatic approval of receipts, and the online gateways |

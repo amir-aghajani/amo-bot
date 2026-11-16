@@ -10,6 +10,7 @@ use App\Modules\Telegram\Admin\Ui\BaseScreen;
 use App\Modules\Telegram\Admin\Ui\Fmt;
 use App\Modules\Telegram\Admin\Ui\Json;
 use App\Modules\Telegram\Admin\Ui\View;
+use App\Modules\Telegram\Admin\Ui\Words;
 
 /**
  * «سرویس‌های ناموفق» of a move (the panel's failures dialog): the services it could not carry, the latest first — which
@@ -45,7 +46,7 @@ final class ServerMigrationFailuresScreen extends BaseScreen
         $failures = Json::rows($answer, 'failures');
         [$shown, $page, $pages] = View::slice($failures, $page, self::PER_PAGE);
 
-        $view = View::make('❌ سرویس‌های ناموفق', 'مدیریت', 'سرورها', 'انتقال سرویس‌ها')
+        $view = View::make('❌ سرویس‌های ناموفق', Words::ROOT, Fmt::bare(ServersScreen::TITLE), Fmt::bare(ServerMigrationsScreen::TITLE))
             ->line('انتقال به «' . Fmt::e((string) ($answer['migration']['target']['name'] ?? '')) . '» · ' . Fmt::number(count($failures)) . ' سرویس');
         foreach ($shown as $failure) {
             $shop = is_array($failure['shop'] ?? null) ? ' · ' . Fmt::e((string) ($failure['shop']['name'] ?? '')) : '';

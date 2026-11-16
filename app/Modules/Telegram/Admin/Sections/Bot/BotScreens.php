@@ -33,10 +33,17 @@ use App\Modules\Telegram\Admin\Sections\Bot\Texts\PremiumEmojisScreen;
 use App\Modules\Telegram\Admin\Sections\Bot\Texts\TextGroupScreen;
 use App\Modules\Telegram\Admin\Sections\Bot\Texts\TextScreen;
 use App\Modules\Telegram\Admin\Sections\Bot\Texts\TextsScreen;
+use App\Modules\Telegram\Admin\Ui\Words;
 
 /** The management screens of keyboards, bot texts, broadcasts, mass gifts and the bot settings cards: their ids (Telegram\Admin\Ui\Screens) and classes. */
 final class BotScreens
 {
+    /** The sections the bot's screens are in: «مدیریت › ربات» (the «🤖 ربات» menu, `hb`). */
+    public const PATH = [Words::ROOT, 'ربات'];
+
+    /** The «🤖 ربات» menu (Ui\Screens::hub()), where the bot's screens go back to. */
+    public const MENU = 'hb';
+
     /**
      * @var array<string, class-string<\App\Modules\Telegram\Admin\Ui\Screen>>
      */

@@ -6,12 +6,15 @@ namespace App\Modules\Telegram\Admin\Sections\Owner\Payments;
 
 use App\Core\Security\Encrypter;
 use App\Modules\Telegram\Admin\AdminSeat;
+use App\Modules\Telegram\Admin\Sections\Catalog\CatalogFmt;
 use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\BaseScreen;
 use App\Modules\Telegram\Admin\Ui\Button;
 use App\Modules\Telegram\Admin\Ui\Fmt;
 use App\Modules\Telegram\Admin\Ui\Json;
+use App\Modules\Telegram\Admin\Ui\Nav;
 use App\Modules\Telegram\Admin\Ui\View;
+use App\Modules\Telegram\Admin\Ui\Words;
 
 /**
  * One card of a card method (a row of the panel's CardsEditor): its number, holder, bank, switch, daily cap and today's
@@ -49,9 +52,10 @@ final class PaymentCardScreen extends BaseScreen
         $cards = Methods::cards($method);
         switch ($action) {
             case 'on':
-                $cards[$index]['enabled'] = self::id($args, 1) === 1;
+                $on = self::id($args, 1) === 1;
+                $cards[$index]['enabled'] = $on;
                 $method = Methods::saveCards($admin, $this->crypt, $method, $cards);
-                $admin->notice(self::id($args, 1) === 1 ? '✅ کارت فعال شد' : '⏸ کارت غیرفعال شد');
+                $admin->notice($on ? '✅ کارت فعال شد' : CatalogFmt::emoji(Words::INACTIVE) . ' کارت غیرفعال شد');
                 break;
             case 'up':
             case 'down':
@@ -59,15 +63,22 @@ final class PaymentCardScreen extends BaseScreen
                 if (isset($cards[$other])) {
                     [$cards[$index], $cards[$other]] = [$cards[$other], $cards[$index]];
                     $method = Methods::saveCards($admin, $this->crypt, $method, $cards);
-                    $admin->notice('✅ جابه‌جا شد');
+                    $admin->notice($action === 'up' ? Words::UP . ' یک جا بالاتر رفت' : Words::DOWN . ' یک جا پایین‌تر رفت');
                 }
                 break;
             case 'del':
+                // A card shown to a payment keeps its number (a window from before it was, a button forged): said, not asked.
+                if ((int) ($method['cards'][$index]['payments'] ?? 0) > 0) {
+                    $admin->alert('با این کارت پرداخت شده و برای حفظ تاریخچه حذف نمی‌شود؛ اگر نمی‌خواهید به مشتری نشان داده شود، غیرفعالش کنید.');
+                    break;
+                }
+
                 return $admin->confirm(
                     'این کارت حذف شود؟',
-                    Button::to('🗑 بله، حذف شود', self::ID, 'gone', $id),
-                    Button::to('✖️ انصراف', self::ID, 'show', $id),
-                    PaymentWords::summary((string) ($method['cards'][$index]['summary'] ?? '')),
+                    Button::to(Words::yes('حذف شود', CatalogFmt::emoji(Words::DELETE)), self::ID, 'gone', $id),
+                    Button::to(Words::CANCEL, self::ID, Nav::SHOW, $id),
+                    PaymentWords::summary((string) ($method['cards'][$index]['summary'] ?? '')) . "\n" . 'هنوز پرداختی به این کارت نشان داده نشده است.',
+                    danger: true,
                 );
             case 'gone':
                 array_splice($cards, $index, 1);
@@ -92,30 +103,36 @@ final class PaymentCardScreen extends BaseScreen
         $id = (int) ($card['id'] ?? 0);
         $on = Json::on($card, 'enabled');
         $paid = (int) ($card['payments'] ?? 0) > 0;
-        $view = View::make('💳 کارت ' . Fmt::number($index + 1), 'مدیریت', 'فروشگاه', 'روش‌های پرداخت', (string) ($method['label'] ?? ''))
-            ->facts([
-                'شماره کارت' => Fmt::code(trim(chunk_split((string) ($card['number'] ?? ''), 4, ' '))),
-                'نام صاحب کارت' => Fmt::e((string) ($card['holder'] ?? '')),
-                'بانک' => is_string($card['bank'] ?? null) && $card['bank'] !== '' ? Fmt::e($card['bank']) : Fmt::NONE,
-                'وضعیت' => $on ? '🟢 فعال' : '⏸ غیرفعال',
-                'سقف روزانه' => is_scalar($card['daily_cap'] ?? null) ? Fmt::money((string) $card['daily_cap']) : 'بدون سقف',
-                'امروز' => Fmt::money((string) ($card['today'] ?? '0')),
-                'پرداخت‌ها' => Fmt::number((int) ($card['payments'] ?? 0)),
-            ]);
+        $number = (string) ($card['number'] ?? '');
+        $view = View::make('💳 کارت ' . Fmt::number($index + 1), ...PaymentWords::under((string) ($method['label'] ?? '')));
+        if ($on && PaymentWords::full($card) && !Json::on($method, 'to_support')) {
+            $view->line('⚠️ سقف روزانه این کارت امروز پر شده؛ تا فردا به پرداخت تازه‌ای نشان داده نمی‌شود.');
+        }
+        $view->card([
+            'شماره کارت' => Fmt::code(trim(chunk_split($number, 4, ' '))),
+            'نام صاحب کارت' => Fmt::e((string) ($card['holder'] ?? '')),
+            'بانک' => is_string($card['bank'] ?? null) ? Fmt::e($card['bank']) : '',
+            'وضعیت' => Fmt::active($on),
+            'سقف روزانه' => is_scalar($card['daily_cap'] ?? null) ? Fmt::money((string) $card['daily_cap']) : 'بدون سقف',
+            'امروز' => Fmt::money((string) ($card['today'] ?? '0')),
+            'پرداخت‌ها' => Fmt::number((int) ($card['payments'] ?? 0)),
+            'جای آن' => CatalogFmt::place($index + 1, count($cards)),
+        ]);
         if ($paid) {
-            $view->note('با این کارت پرداخت شده؛ شماره‌اش عوض نمی‌شود و حذف نمی‌شود — اگر کارت عوض شده، کارت تازه‌ای اضافه و این را غیرفعال کنید.');
+            $view->note('با این کارت پرداخت شده؛ شماره‌اش عوض و حذف نمی‌شود. اگر کارت عوض شده، کارت تازه‌ای اضافه و این را غیرفعال کنید.');
         }
 
-        $view->row(Button::to('✏️ ویرایش', PaymentCardFormScreen::ID, 'edit', $id), Button::to($on ? '⏸ غیرفعال کردن' : '▶️ فعال کردن', self::ID, 'on', $id, $on ? 0 : 1))
+        $view->row(Button::to(Words::EDIT, PaymentCardFormScreen::ID, 'edit', $id)->primary(), $on ? Button::to(Words::DEACTIVATE, self::ID, 'on', $id, 0)->danger() : Button::to(Words::ACTIVATE, self::ID, 'on', $id, 1)->success())
+            ->row(Button::copy(Words::copy('شماره کارت'), $number))
             ->row(
-                $index > 0 ? Button::to('🔼 بالاتر', self::ID, 'up', $id) : null,
-                $index < count($cards) - 1 ? Button::to('🔽 پایین‌تر', self::ID, 'down', $id) : null,
+                $index > 0 ? Button::to(Words::UP . ' بالاتر', self::ID, 'up', $id) : null,
+                $index < count($cards) - 1 ? Button::to(Words::DOWN . ' پایین‌تر', self::ID, 'down', $id) : null,
             );
         if (!$paid) {
-            $view->row(Button::to('🗑 حذف کارت', self::ID, 'del', $id));
+            $view->row(Button::to(Words::DELETE . ' کارت', self::ID, 'del', $id)->danger());
         }
 
-        return $view->back(PaymentCardsScreen::ID, 'show', (int) ($method['id'] ?? 0));
+        return $view->back(PaymentCardsScreen::ID, Nav::SHOW, (int) ($method['id'] ?? 0));
     }
 
     /**

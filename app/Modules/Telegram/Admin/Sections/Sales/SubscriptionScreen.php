@@ -12,19 +12,22 @@ use App\Modules\Telegram\Admin\Ui\Answer;
 use App\Modules\Telegram\Admin\Ui\BaseScreen;
 use App\Modules\Telegram\Admin\Ui\Button;
 use App\Modules\Telegram\Admin\Ui\Fmt;
+use App\Modules\Telegram\Admin\Ui\Icons;
 use App\Modules\Telegram\Admin\Ui\Json;
 use App\Modules\Telegram\Admin\Ui\Prompt;
 use App\Modules\Telegram\Admin\Ui\View;
+use App\Modules\Telegram\Admin\Ui\Words;
 use App\Modules\Telegram\Messages;
 
 /**
- * One service (the panel's service dialog, GET /subscriptions/{id}): its link — tapped, copied —, its facts as of the
- * panel's last answer (usage, end, the shop's own removal, term, renewal, devices, moments), and every operation its
- * state allows (`actions`): «🔄 به‌روزرسانی از پنل», «🎁 افزایش زمان و حجم» (the grant; ExtendScreen), switch it off
- * (asked first, a note for the customer or none) or on, move it to another server (a server picked, asked first; a
- * previous server that does not answer asks whether to move without it), hand it to another customer (the grant: their
- * Telegram id, whom it names shown before anything is sent) and delete it (the grant: asked first — a claimed one may
- * leave the shop alone, its client kept; a panel that does not answer asks whether to delete without it).
+ * One service (the panel's service dialog, GET /subscriptions/{id}): its summary card as of the panel's last answer
+ * (who, plan, server, devices, renewal, moments), its traffic and its time each with a bar of what is used, its link —
+ * tapped or «📋 کپی لینک», copied —, and every operation its state allows (`actions`): «📥 به‌روزرسانی از پنل»,
+ * «🎁 افزایش زمان و حجم» (the grant; ExtendScreen), switch it off (asked first, a note for the customer or none) or on,
+ * move it to another server (a server picked, asked first; a previous server that does not answer asks whether to move
+ * without it), hand it to another customer (the grant: their Telegram id, whom it names shown before anything is sent)
+ * and delete it (the grant: asked first — a claimed one may leave the shop alone, its client kept; a panel that does not
+ * answer asks whether to delete without it).
  *
  * Actions (each with the service's id): `sy`, `en`, `di` (asks) → `dig` | `din`; `mv` (servers) → `mvs` (server: asks)
  * → `mvg` (server) → `mvl` (server: without the previous one); `tr` (asks the id) → `trg` (Telegram id); `de` (asks)
@@ -33,6 +36,9 @@ use App\Modules\Telegram\Messages;
 final class SubscriptionScreen extends BaseScreen
 {
     public const ID = 'sbv';
+
+    /** The way to move a service, and the picker's title. */
+    public const MOVE = Sales::MOVE . ' انتقال به سرور دیگر';
 
     /** What moving a service does (the panel's move dialog). */
     private const MOVING = 'سرویس با زمان و حجم باقی‌مانده‌اش روی سرور مقصد ساخته و از سرور قبلی حذف می‌شود؛ لینکش عوض می‌شود و لینک جدید در تلگرام یا با ایمیل برای مشتری می‌رود. اگر سرور قبلی جواب ندهد، می‌پرسیم بدون حذف از آن ادامه دهیم یا انتقال لغو شود.';
@@ -56,7 +62,7 @@ final class SubscriptionScreen extends BaseScreen
                 if (($service['status'] ?? '') === 'deleted') {
                     $admin->alert('کلاینت ' . self::name($service) . ' روی پنل پیدا نشد؛ اشتراک حذف‌شده علامت خورد.');
                 } else {
-                    $admin->notice('🔄 سرویس ' . self::name($service) . ' از پنل به‌روز شد');
+                    $admin->notice(Sales::SYNC . ' سرویس ' . self::name($service) . ' از پنل به‌روز شد');
                 }
 
                 return $this->view($admin, $service);
@@ -69,16 +75,20 @@ final class SubscriptionScreen extends BaseScreen
                 $service = self::service($admin, $id);
 
                 return Sales::choose(
+                    $admin,
                     'سرویس ' . self::name($service) . ' غیرفعال شود؟',
                     'کلاینت روی پنل خاموش می‌شود و تا فعال شدن دوباره وصل نمی‌شود. مشتری در تلگرام یا با ایمیل خبردار می‌شود.',
+                    true,
                     Button::to(Sales::WITH_NOTE, self::ID, 'din', $id),
                     Button::to(Sales::WITHOUT_NOTE, self::ID, 'dig', $id),
-                    Button::to('✖️ انصراف', self::ID, 'show', $id),
+                    Button::to(Words::CANCEL, self::ID, 'show', $id),
                 );
             case 'dig':
                 return $this->disabled($admin, $id, null);
             case 'din':
-                return $admin->ask(new Prompt('توضیح برای مشتری', self::ID, 'din', [$id], 'مثلا: استفاده خارج از قوانین. ' . Sales::NOTE_HINT));
+                return $admin->ask((new Prompt('توضیح برای مشتری', self::ID, 'din', [$id], 'مشتری این متن را با خبر غیرفعال شدن سرویسش می‌بیند.'))
+                    ->example('استفاده خارج از قوانین')
+                    ->limits(Sales::NOTE_LIMIT));
             case 'mv':
                 return $this->servers($admin, self::service($admin, $id));
             case 'mvs':
@@ -86,19 +96,23 @@ final class SubscriptionScreen extends BaseScreen
                 $target = Sales::serverName($admin, self::id($args, 1));
 
                 return Sales::choose(
+                    $admin,
                     'سرویس ' . self::name($service) . ' به «' . $target . '» منتقل شود؟',
                     Fmt::e(self::MOVING),
-                    Button::to('🔀 انتقال', self::ID, 'mvg', $id, self::id($args, 1)),
-                    Button::to('✖️ انصراف', self::ID, 'show', $id),
+                    false,
+                    Button::to(Words::yes('منتقل شود'), self::ID, 'mvg', $id, self::id($args, 1)),
+                    Button::to(Words::CANCEL, self::ID, 'show', $id),
                 );
             case 'mvg':
             case 'mvl':
                 return $this->moved($admin, $id, self::id($args, 1), $action === 'mvl');
             case 'tr':
-                return $admin->ask(new Prompt('شناسه عددی تلگرام مشتری جدید', self::ID, 'tr', [$id], 'مشتری باید یک بار ربات این فروشگاه را استارت کرده باشد.'));
+                return $admin->ask((new Prompt('شناسه عددی تلگرام مشتری جدید', self::ID, 'tr', [$id], 'مشتری باید یک بار ربات این فروشگاه را استارت کرده باشد؛ پیش از انتقال، نامش را می‌بینید.'))
+                    ->example('123456789')
+                    ->limits('فقط عدد'));
             case 'trg':
                 $service = self::row($admin->api->post("/subscriptions/{$id}/transfer", ['telegram_id' => self::id($args, 1)]));
-                $admin->notice('📤 سرویس ' . self::name($service) . ' به ' . Sales::customer(Json::part($service, 'user')) . ' منتقل شد');
+                $admin->notice(Sales::HAND_OVER . ' سرویس ' . self::name($service) . ' به ' . Sales::customer(Json::part($service, 'user')) . ' منتقل شد');
 
                 return $this->view($admin, $service);
             case 'de':
@@ -106,7 +120,9 @@ final class SubscriptionScreen extends BaseScreen
             case 'deg':
                 return $this->deleted($admin, $id, null, false);
             case 'den':
-                return $admin->ask(new Prompt('توضیح برای مشتری', self::ID, 'den', [$id], 'اختیاری؛ فقط برای سرویسی که هنوز فعال است فرستاده می‌شود — حداکثر ۳۰۰ نویسه.'));
+                return $admin->ask((new Prompt('توضیح برای مشتری', self::ID, 'den', [$id], 'فقط برای سرویسی که هنوز فعال است فرستاده می‌شود.'))
+                    ->example('درخواست خود مشتری')
+                    ->limits(Sales::NOTE_LIMIT));
             case 'dek':
                 return $this->deleted($admin, $id, null, true);
             case 'dex':
@@ -175,25 +191,18 @@ final class SubscriptionScreen extends BaseScreen
     private function servers(Admin $admin, array $service): View
     {
         $id = (int) ($service['id'] ?? 0);
-        $current = (int) (Json::part($service, 'server')['id'] ?? 0);
-        $view = View::make('🔀 انتقال به سرور دیگر', 'مدیریت', 'فروش', 'اشتراک‌ها', self::name($service))->line(Fmt::e(self::MOVING));
-        $choices = [];
-        foreach (Sales::servers($admin) as $server) {
-            if ($server['id'] === $current) {
-                continue;
-            }
-            if ($server['reason'] !== null) {
-                $view->line('⛔️ ' . Fmt::e($server['name']) . ': ' . Fmt::e($server['reason']));
-
-                continue;
-            }
-            $choices[] = Button::to('🖥 ' . $server['name'] . ($server['active'] !== null ? ' (' . Fmt::number($server['active']) . ' سرویس فعال)' : ''), self::ID, 'mvs', $id, $server['id']);
+        $server = Json::part($service, 'server');
+        [$choices, $closed] = Sales::targets($admin, [(int) ($server['id'] ?? 0)], self::ID, 'mvs', [$id]);
+        $view = View::make(self::MOVE, ...Sales::under(Sales::SERVICES, self::name($service)))
+            ->card(['سرور فعلی' => Fmt::e((string) ($server['name'] ?? ''))]);
+        if ($closed !== []) {
+            $view->section('⛔️ سرورهایی که الان سرویس نمی‌گیرند')->lines(...$closed);
         }
         if ($choices === []) {
             $view->line()->line('سروری نیست که این سرویس الان به آن منتقل شود.');
         }
 
-        return $view->grid(1, ...$choices)->back(self::ID, 'show', $id);
+        return $view->grid(1, ...$choices)->help(Fmt::e(self::MOVING))->back(self::ID, 'show', $id);
     }
 
     /**
@@ -214,14 +223,16 @@ final class SubscriptionScreen extends BaseScreen
             $from = (string) (Json::part($service, 'server')['name'] ?? '');
 
             return Sales::choose(
+                $admin,
                 'سرور قبلی جواب نداد',
-                Fmt::e($previous) . "\n" . Fmt::e('بدون حذف از «' . $from . '» منتقل شود؟ کلاینت قبلی روی آن سرور می‌ماند تا سرور دوباره جواب بدهد، بعد خودکار حذف می‌شود.'),
-                Button::to('🔀 انتقال بدون حذف از سرور قبلی', self::ID, 'mvl', $id, $server),
-                Button::to('✖️ انصراف', self::ID, 'show', $id),
+                '⚠️ ' . Fmt::e($previous) . "\n" . Fmt::e('بدون حذف از «' . $from . '» منتقل شود؟ کلاینت قبلی روی آن سرور می‌ماند تا سرور دوباره جواب بدهد، بعد خودکار حذف می‌شود.'),
+                false,
+                Button::to(Sales::MOVE . ' انتقال بدون حذف از سرور قبلی', self::ID, 'mvl', $id, $server),
+                Button::to(Words::CANCEL, self::ID, 'show', $id),
             );
         }
         $to = (string) (Json::part($service, 'server')['name'] ?? '');
-        $admin->notice('🔀 سرویس ' . self::name($service) . ' به «' . $to . '» منتقل شد' . ($leave ? '؛ کلاینت قبلی روی سرور قبلی ماند' : ''));
+        $admin->notice(Sales::MOVE . ' سرویس ' . self::name($service) . ' به «' . $to . '» منتقل شد' . ($leave ? '؛ کلاینت قبلی روی سرور قبلی ماند' : ''));
 
         return $this->view($admin, $service);
     }
@@ -235,18 +246,14 @@ final class SubscriptionScreen extends BaseScreen
         $recipient = Json::part($admin->api->get("/subscriptions/{$id}/transfer", ['telegram_id' => $telegram]), 'recipient');
         $service = self::service($admin, $id);
         $to = (int) ($recipient['telegram_id'] ?? 0);
-        $facts = [];
-        foreach (Sales::customerFacts($recipient) as $label => $value) {
-            if ($value !== null) {
-                $facts[] = Fmt::e($label) . ': ' . $value;
-            }
-        }
 
         return Sales::choose(
+            $admin,
             'سرویس ' . self::name($service) . ' به ' . Sales::customer($recipient) . ' منتقل شود؟',
-            implode("\n", $facts) . "\n\n" . Fmt::e('سرویس با همین لینک، زمان و حجم به حساب مشتری دیگری می‌رود و «تمدید خودکار» آن خاموش می‌شود. هر دو مشتری در تلگرام یا با ایمیل خبردار می‌شوند. دستگاه‌های مشتری قبلی تا وقتی مشتری جدید «تغییر لینک» را نزند وصل می‌مانند.'),
-            Button::to('📤 انتقال به مشتری دیگر', self::ID, 'trg', $id, $to),
-            Button::to('✖️ انصراف', self::ID, 'show', $id),
+            Sales::quote(Sales::customerFacts($recipient)) . "\n" . Fmt::e('سرویس با همین لینک، زمان و حجم به حساب مشتری دیگری می‌رود و «تمدید خودکار» آن خاموش می‌شود. هر دو مشتری در تلگرام یا با ایمیل خبردار می‌شوند. دستگاه‌های مشتری قبلی تا وقتی مشتری جدید «تغییر لینک» را نزند وصل می‌مانند.'),
+            false,
+            Button::to(Words::yes('به این مشتری منتقل شود'), self::ID, 'trg', $id, $to),
+            Button::to(Words::CANCEL, self::ID, 'show', $id),
         );
     }
 
@@ -269,12 +276,14 @@ final class SubscriptionScreen extends BaseScreen
         }
 
         return Sales::choose(
+            $admin,
             'سرویس ' . self::name($service) . ' حذف شود؟',
             Fmt::e($detail),
+            true,
             $gone ? null : Button::to(Sales::WITH_NOTE, self::ID, 'den', $id),
-            Button::to($gone ? '🗑 بله، حذف شود' : Sales::WITHOUT_NOTE, self::ID, 'deg', $id),
+            Button::to($gone ? Words::yes('حذف شود') : Sales::WITHOUT_NOTE, self::ID, 'deg', $id),
             $keeps ? Button::to('🗑 فقط از فروشگاه حذف شود (کلاینت روی پنل می‌ماند)', self::ID, 'dek', $id) : null,
-            Button::to('✖️ انصراف', self::ID, 'show', $id),
+            Button::to(Words::CANCEL, self::ID, 'show', $id),
         );
     }
 
@@ -297,10 +306,12 @@ final class SubscriptionScreen extends BaseScreen
             $admin->remember(self::ID, ['note' => $note]);
 
             return Sales::choose(
+                $admin,
                 'پنل جواب نداد',
-                Fmt::e($panel) . "\n" . Fmt::e('سرویس بدون حذف از سرور، فقط در فروشگاه حذف شود؟ کلاینتش روی «' . $server . '» می‌ماند و اگر سرور دوباره در دسترس باشد، تا ' . ($agentShop ? 'پشتیبانی حذفش نکند' : 'خودتان حذفش نکنید') . ' کار می‌کند.'),
-                Button::to('🗑 بله، فقط از فروشگاه حذف شود', self::ID, 'dex', $id),
-                Button::to('✖️ انصراف', self::ID, 'show', $id),
+                '⚠️ ' . Fmt::e($panel) . "\n" . Fmt::e('سرویس بدون حذف از سرور، فقط در فروشگاه حذف شود؟ کلاینتش روی «' . $server . '» می‌ماند و اگر سرور دوباره در دسترس باشد، تا ' . ($agentShop ? 'پشتیبانی حذفش نکند' : 'خودتان حذفش نکنید') . ' کار می‌کند.'),
+                true,
+                Button::to(Words::yes('فقط از فروشگاه حذف شود'), self::ID, 'dex', $id),
+                Button::to(Words::CANCEL, self::ID, 'show', $id),
             );
         }
         $list = CustomerRowsScreen::back($admin, self::ID, $id, SubscriptionsScreen::ID);
@@ -315,40 +326,63 @@ final class SubscriptionScreen extends BaseScreen
     }
 
     /**
-     * When a service ends, as the bot words it: its date and what is left, its term while it waits for the first
-     * connection, never — or, deleted, the date on record.
+     * The service's time (HTML lines): when it ends, as the bot words it — its date and what is left, a bar of the term
+     * used while it runs —, its term while it waits for the first connection, never — or, deleted, the date on record —;
+     * then the period it was renewed into and the shop's own removal of it, when they are coming.
      *
      * @param array<string, mixed> $service
+     * @return list<string>
      */
-    private static function expiry(array $service): string
+    private static function time(array $service): array
     {
         $expires = Json::text($service, 'expires_at');
         $hours = (int) ($service['duration_hours'] ?? 0);
+        $next = Json::part($service, 'next_period');
+        $removes = Json::text($service, 'removes_at');
+        $removal = $removes === null ? null : Fmt::moment($removes);
+        $lines = [];
         if (($service['status'] ?? '') === 'deleted') {
-            return $expires === null ? Fmt::NONE : Fmt::date($expires);
+            $lines[] = 'پایان: ' . ($expires === null ? Fmt::NONE : Fmt::date($expires));
+        } elseif ($expires === null) {
+            $lines[] = $hours > 0 ? 'در انتظار اولین اتصال · ' . Fmt::hours($hours) . ' از اولین اتصال' : 'بدون تاریخ پایان (نامحدود)';
+        } else {
+            $end = Fmt::moment($expires);
+            $start = Fmt::moment(Json::text($service, 'starts_at'));
+            $lines[] = 'پایان: <b>' . Fmt::e(Messages::expiry($end, $hours)) . '</b>' . (Json::on($service, 'expiring_soon') ? ' ⏳' : '');
+            if ($end !== null && $start !== null && $end > $start) {
+                $lines[] = Sales::bar(now()->getTimestamp() - $start->getTimestamp(), $end->getTimestamp() - $start->getTimestamp()) . ' · مدت ' . Fmt::hours($hours);
+            } elseif ($hours > 0) {
+                $lines[] = 'مدت: ' . Fmt::hours($hours);
+            }
         }
-        if ($expires === null) {
-            return $hours > 0 ? 'در انتظار اولین اتصال · ' . Fmt::hours($hours) . ' از اولین اتصال' : 'نامحدود';
+        if ($next !== []) {
+            $lines[] = 'دوره بعدی: از ' . Fmt::date(Json::text($next, 'starts_at')) . '، حداکثر ' . Fmt::bytes((int) ($next['traffic'] ?? 0)) . ' <i>(تمدید شده؛ حجم مصرف‌نشده دوره فعلی تا آن روز قابل استفاده است)</i>';
+        }
+        if ($removes !== null) {
+            $lines[] = 'حذف خودکار: ' . Fmt::date($removes, true) . ' (' . ($removal !== null && $removal->isFuture() ? Sales::left($removes) : 'در نوبت حذف') . ')';
         }
 
-        return Fmt::e(Messages::expiry(Fmt::moment($expires), $hours)) . ((bool) ($service['expiring_soon'] ?? false) ? ' ⏳' : '');
+        return $lines;
     }
 
     /**
-     * Traffic used against the quota: the amounts, the share and a bar — or unlimited.
+     * Traffic used against the quota (HTML lines): the amounts and the share, and a bar — or unlimited.
      *
      * @param array<string, mixed> $traffic
+     * @return list<string>
      */
-    private static function usage(array $traffic): string
+    private static function usage(array $traffic): array
     {
         $used = (int) ($traffic['used'] ?? 0);
         $limit = (int) ($traffic['limit'] ?? 0);
         if ($limit <= 0) {
-            return Fmt::bytes($used) . ' · حجم نامحدود';
+            return ['<b>' . Fmt::bytes($used) . '</b> مصرف · حجم نامحدود'];
         }
-        $filled = min(10, intdiv($used * 10, $limit));
 
-        return Fmt::bytes($used) . ' از ' . Fmt::bytes($limit) . ' (' . Messages::percent($used, $limit) . ')' . "\n" . str_repeat('▰', $filled) . str_repeat('▱', 10 - $filled);
+        return [
+            '<b>' . Fmt::bytes($used) . '</b> از ' . Fmt::bytes($limit) . ' · ' . Fmt::bytes(max(0, $limit - $used)) . ' مانده',
+            Sales::bar($used, $limit) . ' ' . Messages::percent($used, $limit),
+        ];
     }
 
     /** @param array<string, mixed> $service */
@@ -358,60 +392,57 @@ final class SubscriptionScreen extends BaseScreen
         $status = (string) ($service['status'] ?? '');
         $plan = Json::text(Json::part($service, 'plan'), 'name');
         $claimed = Json::text($service, 'claimed_at') !== null;
-        $next = Json::part($service, 'next_period');
         $devices = Json::part($service, 'next_devices');
-        $removes = Json::text($service, 'removes_at');
-        $removal = $removes === null ? null : Fmt::moment($removes);
         $hours = (int) ($service['duration_hours'] ?? 0);
         $test = Json::on($service, 'is_test');
         $link = (string) ($service['link'] ?? '');
         $dead = $status === 'deleted';
+        $server = Json::part($service, 'server');
 
-        $view = View::make('📡 ' . (string) ($service['name'] ?? ''), 'مدیریت', 'فروش', 'اشتراک‌ها')
-            ->line('اشتراک ' . Fmt::id($id))
-            ->line('🔗 لینک اشتراک' . ($dead ? '' : ' (لمس کنید تا کپی شود)') . ':')
-            ->line($dead ? Fmt::ltr($link) . "\n" . 'این لینک دیگر کار نمی‌کند.' : Fmt::code($link))
-            ->line()
-            ->facts([
-                'وضعیت' => Fmt::e(Sales::word(Sales::SUBSCRIPTION_STATUS, $status)) . ($status === 'disabled' && Json::text($service, 'disabled_at') !== null ? ' · از ' . Fmt::date(Json::text($service, 'disabled_at'), true) : ''),
-            ])
-            ->facts(Sales::customerFacts(Json::part($service, 'user')))
-            ->facts([
-                'پلن' => $test ? 'اکانت تست رایگان' : ($plan !== null ? Fmt::e($plan) : ($claimed ? 'بدون پلن (مشتری هنگام تمدید یکی از پلن‌هایی را که روی سرور این سرویس فروخته می‌شوند انتخاب می‌کند)' : 'سرویس دلخواه')),
-                'سرور' => Fmt::e((string) (Json::part($service, 'server')['name'] ?? '')),
-                'مصرف' => self::usage(Json::part($service, 'traffic')),
-                'پایان' => self::expiry($service),
-                'حذف خودکار' => $removes === null ? null : Fmt::date($removes, true) . ' (' . ($removal !== null && $removal->isFuture() ? Sales::left($removes) : 'در نوبت حذف') . ')',
-                'مدت' => Fmt::hours($hours),
-                'تمدید خودکار' => $hours > 0 && !$test ? (Json::on($service, 'auto_renew') ? 'روشن' : 'خاموش') : null,
-                'دوره بعدی' => $next === [] ? null : 'از ' . Fmt::date(Json::text($next, 'starts_at')) . '، حداکثر ' . Fmt::bytes((int) ($next['traffic'] ?? 0)) . ' (تمدید شده؛ حجم مصرف‌نشده دوره فعلی تا آن روز قابل استفاده است)',
-                'کاربر هم‌زمان' => Messages::devices((int) ($service['ip_limit'] ?? 0)) . ($devices === [] ? '' : ' · از ' . Fmt::date(Json::text($devices, 'from')) . ': ' . Messages::devices((int) ($devices['devices'] ?? 0))),
-                'اولین اتصال' => Sales::when($service, 'starts_at'),
-                ($claimed ? 'افزودن با لینک' : 'خرید') => Sales::when($service, $claimed ? 'claimed_at' : 'created_at'),
-                'آخرین پرسش از پنل' => Sales::when($service, 'last_synced_at') ?? 'هنوز نه',
-            ]);
+        $view = View::make(Icons::SERVICES . ' ' . (string) ($service['name'] ?? ''), ...Sales::under(Sales::SERVICES))->card([
+            'وضعیت' => Fmt::e(Sales::word(Sales::SUBSCRIPTION_STATUS, $status)) . ($status === 'disabled' && Json::text($service, 'disabled_at') !== null ? ' · از ' . Fmt::date(Json::text($service, 'disabled_at'), true) : ''),
+            ...Sales::customerFacts(Json::part($service, 'user')),
+            'پلن' => $test ? 'اکانت تست رایگان' : ($plan !== null ? Fmt::e($plan) : ($claimed ? 'بدون پلن' : 'سرویس دلخواه')),
+            'سرور' => Fmt::e((string) ($server['name'] ?? '')),
+            'کاربر هم‌زمان' => Messages::devices((int) ($service['ip_limit'] ?? 0)) . ($devices === [] ? '' : ' · از ' . Fmt::date(Json::text($devices, 'from')) . ': ' . Messages::devices((int) ($devices['devices'] ?? 0))),
+            'تمدید خودکار' => $hours > 0 && !$test ? Fmt::onOff(Json::on($service, 'auto_renew')) : null,
+            ($claimed ? 'افزودن با لینک' : 'خرید') => Sales::when($service, $claimed ? 'claimed_at' : 'created_at'),
+            'اولین اتصال' => Sales::when($service, 'starts_at'),
+            'آخرین پرسش از پنل' => Sales::when($service, 'last_synced_at') ?? 'هنوز نه',
+            'شماره' => Fmt::id($id),
+        ]);
+        $view->section('📶 حجم')->lines(...self::usage(Json::part($service, 'traffic')))
+            ->section('⏳ زمان')->lines(...self::time($service))
+            ->section(Sales::LINK . ' لینک اشتراک')
+            ->line($dead ? Fmt::ltr($link) . "\n<i>این لینک دیگر کار نمی‌کند.</i>" : Fmt::code($link));
+        if ($claimed && $plan === null && !$test) {
+            $view->note('بدون پلن: مشتری هنگام تمدید یکی از پلن‌هایی را که روی سرور این سرویس فروخته می‌شوند انتخاب می‌کند.');
+        }
 
         $actions = Json::part($service, 'actions');
         $seat = $admin->seat;
         $view->row(
-            Json::on($actions, 'sync') ? Button::to('🔄 به‌روزرسانی از پنل', self::ID, 'sy', $id) : null,
-            Json::on($actions, 'extend') && $seat->holds(StaffGrant::Extend) ? Button::to('🎁 افزایش زمان و حجم', ExtendScreen::ID, 'new', $id) : null,
+            Json::on($actions, 'enable') ? Button::to(Words::ACTIVATE, self::ID, 'en', $id)->success() : null,
+            Json::on($actions, 'extend') && $seat->holds(StaffGrant::Extend) ? Button::to(ExtendScreen::TITLE, ExtendScreen::ID, 'new', $id)->primary() : null,
         );
-        $view->row(
-            Json::on($actions, 'enable') ? Button::to('▶️ فعال کردن', self::ID, 'en', $id) : null,
-            Json::on($actions, 'disable') ? Button::to('⏸ غیرفعال کردن', self::ID, 'di', $id) : null,
-            Json::on($actions, 'move') ? Button::to('🔀 انتقال به سرور دیگر', self::ID, 'mv', $id) : null,
-        );
-        $view->row(
-            Json::on($actions, 'transfer') && $seat->holds(StaffGrant::Delete) ? Button::to('📤 انتقال به مشتری دیگر', self::ID, 'tr', $id) : null,
-            Json::on($actions, 'delete') && $seat->holds(StaffGrant::Delete) ? Button::to('🗑 حذف سرویس', self::ID, 'de', $id) : null,
+        $view->grid(
+            2,
+            Json::on($actions, 'sync') ? Button::to(Sales::SYNC . ' به‌روزرسانی از پنل', self::ID, 'sy', $id) : null,
+            Json::on($actions, 'move') ? Button::to(self::MOVE, self::ID, 'mv', $id) : null,
+            Json::on($actions, 'transfer') && $seat->holds(StaffGrant::Delete) ? Button::to(Sales::HAND_OVER . ' انتقال به مشتری دیگر', self::ID, 'tr', $id) : null,
+            // A link of nothing, or too long to copy whole, is left out (Button::fits()).
+            $dead ? null : Button::copy(Words::copy('لینک'), $link),
         );
         $view->row(...Sales::customerButtons(Json::part($service, 'user')));
-        $server = Json::part($service, 'server');
         if ($admin->opens(self::SERVER)) {
-            $view->row(Button::to('🖥 سرور ' . (string) ($server['name'] ?? ''), self::SERVER, 'show', (int) ($server['id'] ?? 0)));
+            $view->row(Button::to(Icons::SERVERS . ' سرور ' . (string) ($server['name'] ?? ''), self::SERVER, 'show', (int) ($server['id'] ?? 0)));
         }
+        // What switches it off or ends it, last.
+        $view->row(
+            Json::on($actions, 'disable') ? Button::to(Words::DEACTIVATE, self::ID, 'di', $id)->danger() : null,
+            Json::on($actions, 'delete') && $seat->holds(StaffGrant::Delete) ? Button::to(Words::DELETE . ' سرویس', self::ID, 'de', $id)->danger() : null,
+        );
 
-        return $view->back(CustomerRowsScreen::back($admin, self::ID, $id, SubscriptionsScreen::ID));
+        return $view->back(CustomerRowsScreen::back($admin, self::ID, $id, SubscriptionsScreen::ID))->refresh(self::ID, 'show', $id);
     }
 }

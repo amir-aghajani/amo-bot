@@ -37,22 +37,24 @@ final class ImportChoicesScreen extends BaseScreen
             return $admin->open(ImportsScreen::ID);
         }
         $choices = Words::choices($import);
-        $view = View::make('✅ چه چیزهایی منتقل شود', 'مدیریت', 'انتقال از ربات دیگر', 'بررسی')
-            ->line('آنچه از قبل با همین انتقال یا انتقال قبلی آمده، دوباره نمی‌آید؛ موجودی هر مشتری فقط یک بار اضافه می‌شود.');
+        $view = View::make('✅ چه چیزهایی منتقل شود', ...ImportsScreen::under())
+            ->line('هر دکمه یک بخش است و حالتش را نشان می‌دهد: 🟢 منتقل می‌شود، ⏸ نه، 🔒 تا بخشی که به آن وابسته است روشن نشود. با یک ضربه عوض می‌شود.');
         $buttons = [];
+        $about = ['آنچه از قبل با همین انتقال یا انتقال قبلی آمده، دوباره نمی‌آید؛ موجودی هر مشتری فقط یک بار اضافه می‌شود.'];
         $n = 0;
-        foreach (Words::parts((array) $import['survey']) as [$title, $about, $switches]) {
-            $view->line()->line('<b>' . Fmt::e($title) . '</b>')->line('<i>' . Fmt::e($about) . '</i>');
+        // Many switches: each button its chip and the switch (DESIGN §3), what each brings — counted — in the folded help.
+        foreach (Words::parts((array) $import['survey']) as [$title, $words, $switches]) {
+            $about[] = '<b>' . Fmt::e($title) . '</b>: ' . Fmt::e($words);
             foreach ($switches as $switch) {
                 $held = isset($switch['needs']) && ($choices[$switch['needs'][0]] ?? false) !== true;
                 $on = !$held && ($choices[$switch['name']] ?? false) === true;
-                $view->line(($held ? '⏸' : ($on ? '✅' : '⛔️')) . ' <b>' . Fmt::e($switch['label']) . '</b>: ' . Fmt::e($held && isset($switch['needs']) ? $switch['needs'][1] : $switch['hint']));
-                $buttons[] = Button::to(($held ? '⏸ ' : ($on ? '✅ ' : '⛔️ ')) . $switch['label'], self::ID, 't', $n, $on ? 0 : 1);
+                $about[] = '• <b>' . Fmt::e($switch['label']) . '</b>: ' . Fmt::e($held && isset($switch['needs']) ? $switch['needs'][1] : $switch['hint']);
+                $buttons[] = Button::to(($held ? '🔒 ' : ($on ? '🟢 ' : '⏸ ')) . $switch['label'], self::ID, 't', $n, $on ? 0 : 1);
                 $n++;
             }
         }
 
-        return $view->grid(2, ...$buttons)->back(ImportsScreen::ID);
+        return $view->tiles(...$buttons)->help(implode("\n", $about))->back(ImportsScreen::ID);
     }
 
     public function act(Admin $admin, string $action, array $args): View
@@ -80,7 +82,7 @@ final class ImportChoicesScreen extends BaseScreen
         // What goes with it: kept as it was while it is off, given back when it is on again.
         $id = (int) ($import['id'] ?? 0);
         $state = $admin->state(self::ID);
-        $kept = ($state['import'] ?? null) === $id && Json::part($state, 'kept');
+        $kept = ($state['import'] ?? null) === $id ? Json::part($state, 'kept') : [];
         foreach ($switches as $other) {
             if (($other['needs'][0] ?? null) !== $switch['name']) {
                 continue;
@@ -94,7 +96,7 @@ final class ImportChoicesScreen extends BaseScreen
         }
         $admin->api->put('/imports/' . $id . '/choices', ['choices' => Words::shown($choices)]);
         $admin->remember(self::ID, ['import' => $id, 'kept' => $kept]);
-        $admin->notice(($choices[$switch['name']] ? '✅ ' : '⛔️ ') . '«' . $switch['label'] . '» ذخیره شد.');
+        $admin->notice('✅ «' . $switch['label'] . '» ذخیره شد');
 
         return $this->show($admin, []);
     }

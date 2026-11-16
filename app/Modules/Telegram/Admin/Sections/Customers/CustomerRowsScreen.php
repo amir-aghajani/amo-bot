@@ -6,15 +6,18 @@ namespace App\Modules\Telegram\Admin\Sections\Customers;
 
 use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\Button;
+use App\Modules\Telegram\Admin\Ui\Fmt;
 use App\Modules\Telegram\Admin\Ui\ListScreen;
 use App\Modules\Telegram\Admin\Ui\Nav;
 use App\Modules\Telegram\Admin\Ui\View;
 
 /**
  * One of a customer's lists on their page — services, payments, orders, tickets —: the shop's list narrowed to them
- * (`user=`), as the panel's cards read it and its «همه …» link opens it, newest first, each row opening the screen the
- * list's own section has for it — whose «⬅️ بازگشت» then comes back here (open(), opened(), back()), not to the shop's
- * whole list. Opened with the customer's id (none: the one it was last on); «⬅️ بازگشت» goes to their page.
+ * (`user=`), as the panel's cards read it and its «همه …» link opens it, newest first, how many over the rows, each row a
+ * button opening the screen the list's own section has for it — whose «⬅️ بازگشت» then comes back here (open(),
+ * opened(), back()), not to the shop's whole list —, what its rows' marks mean folded under them (legend()). Opened with
+ * the customer's id (none: the one it was last on; another customer's: from its first page, unfiltered); «⬅️ بازگشت»
+ * goes to their page.
  */
 abstract class CustomerRowsScreen extends ListScreen
 {
@@ -25,7 +28,7 @@ abstract class CustomerRowsScreen extends ListScreen
     private const KEPT = '_list';
 
     /** The lists a row's screen may go back to. */
-    private const LISTS = ['usls', 'uslp', 'uslo', 'uslt'];
+    private const LISTS = [CustomerServicesScreen::ID, CustomerPaymentsScreen::ID, CustomerOrdersScreen::ID, CustomerTicketsScreen::ID];
 
     /** The customer whose rows are drawn now. */
     private int $customer = 0;
@@ -37,7 +40,7 @@ abstract class CustomerRowsScreen extends ListScreen
     {
         $id = self::id($args);
         if ($id > 0 && $id !== ($admin->state($this->screen())['user'] ?? null)) {
-            $admin->remember($this->screen(), ['user' => $id, 'page' => 1]);
+            $admin->remember($this->screen(), ['user' => $id, 'page' => 1, 'f' => []]);
         }
         $user = $admin->state($this->screen())['user'] ?? 0;
         $this->customer = is_int($user) ? $user : 0;
@@ -54,7 +57,7 @@ abstract class CustomerRowsScreen extends ListScreen
 
     protected function path(): array
     {
-        return ['مدیریت', 'فروش', 'کاربران', $this->name];
+        return Customer::under($this->name);
     }
 
     protected function parent(): string
@@ -70,6 +73,19 @@ abstract class CustomerRowsScreen extends ListScreen
     protected function searchable(): bool
     {
         return false;
+    }
+
+    /** What the rows' marks mean, folded under them (plain text); '' for none. */
+    protected function legend(): string
+    {
+        return '';
+    }
+
+    protected function extra(View $view, Admin $admin): void
+    {
+        if ($this->legend() !== '') {
+            $view->help(Fmt::e($this->legend()));
+        }
     }
 
     /**

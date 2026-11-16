@@ -6,6 +6,7 @@ namespace Tests\Feature\BotAdmin;
 
 use App\Modules\Admin\Services\ScheduleScreen;
 use App\Modules\Telegram\Admin\Ui\Nav;
+use App\Modules\Telegram\Admin\Ui\Words;
 use App\Modules\Users\Models\User;
 use GuzzleHttp\Psr7\Response;
 use Tests\BotTestCase;
@@ -19,8 +20,6 @@ use Tests\Support\FakeTelegram;
  */
 final class PanelOperationsTest extends BotTestCase
 {
-    private const OWNER = 7001;
-
     protected function setUp(): void
     {
         parent::setUp();
@@ -61,8 +60,8 @@ final class PanelOperationsTest extends BotTestCase
     public function testABackupIsSentHereAndTheInstallationRestoredFromItOnAYes(): void
     {
         $this->tapAs(Nav::to('ppb'));
-        self::assertStringContainsString('پشتیبان کل نصب', $this->said()[0]);
-        self::assertStringContainsString('✅ روشن', $this->said()[0], 'its sending to the report group');
+        self::assertStringContainsString('کل نصب: همه فروشگاه‌ها', $this->said()[0], 'a backup of the whole installation');
+        self::assertStringContainsString(Words::ON, $this->said()[0], 'its sending to the report group');
 
         $this->tapAs(Nav::to('ppb', 'dl'));
         $sent = array_search('sendDocument', $this->calls(), true);
@@ -74,10 +73,10 @@ final class PanelOperationsTest extends BotTestCase
         $this->tapAs(Nav::to('ppb'));
         self::assertContains(Nav::to('ppb', 'auto', 0), $this->callbacks(0), 'the switch carries the value it sets');
         $this->tapAs(Nav::to('ppb', 'auto', 0));
-        self::assertStringContainsString('⛔️ خاموش', $this->said()[1] ?? $this->said()[0], 'switched through PUT /backups/auto');
+        self::assertStringContainsString(Words::OFF, $this->said()[1] ?? $this->said()[0], 'switched through PUT /backups/auto');
         $this->tapAs(Nav::to('ppb', 'auto', 0));
         self::assertStringContainsString('همین حالا خاموش است', (string) $this->popup(), 'tapped twice, it changes nothing');
-        self::assertStringContainsString('⛔️ خاموش', $this->said()[0]);
+        self::assertStringContainsString(Words::OFF, $this->said()[0]);
 
         // A file Telegram refuses is said, never called sent.
         $this->telegram()->on('sendDocument', static fn(): Response => FakeTelegram::error(413, 'Request Entity Too Large'));
@@ -112,6 +111,41 @@ final class PanelOperationsTest extends BotTestCase
         self::assertContains(Nav::to('ppu'), $this->callbacks(0));
     }
 
+    public function testTheWebhookIsSetFromAnHttpsAddressAndTheAddressFixedFirstElse(): void
+    {
+        $file = $this->configFile(['APP_NAME' => 'AmoBot', 'APP_URL' => 'https://shop.example', 'APP_KEY' => 'base64:x', 'LOG_LEVEL' => 'info']);
+        $this->config(['app.url' => 'https://shop.example']);
+
+        $this->tapAs(Nav::to('ppw'));
+        self::assertStringNotContainsString('فقط روی آدرس https', $this->said()[0], 'the shop is on https: nothing to fix');
+        self::assertStringNotContainsString('دریافت پیام‌های ربات اصلی', $this->said()[0], 'the shop\'s bot is the main one: how it gets its messages said once');
+        self::assertContains(['text' => '🔗 ثبت Webhook', 'callback_data' => Nav::to('ppw', 'on'), 'style' => 'success'], array_merge(...$this->inlineKeyboard(0)));
+        $this->tapAs(Nav::to('ppw', 'on'));
+        self::assertContains(Nav::to('ppw', 'onn'), $this->callbacks(0), 'asked first');
+        $this->tapAs(Nav::to('ppw', 'onn'));
+        self::assertContains('setWebhook', $this->calls(), 'every bot put on its webhook');
+        self::assertStringContainsString('نتیجه برای هر ربات', implode("\n", $this->said()));
+
+        // The bot switched off in its settings: its line says so, and the way it still gets its messages is said apart.
+        $this->botSettings('general', ['enabled' => false]);
+        $this->tapAs(Nav::to('ppw'));
+        self::assertStringContainsString('غیرفعال از تنظیمات', $this->said()[0]);
+        self::assertStringContainsString("دریافت پیام‌های ربات اصلی: <b>\u{2068}Webhook\u{2069}</b>", $this->said()[0]);
+        $this->botSettings('general', ['enabled' => true]);
+
+        $file->setMany(['APP_URL' => 'http://shop.example']);
+        $this->tapAs(Nav::to('ppw'));
+        self::assertStringContainsString('فقط روی آدرس https', $this->said()[0], 'Telegram takes no http address: said');
+        self::assertNotContains(Nav::to('ppw', 'on'), $this->callbacks(0));
+        self::assertContains(Nav::to('ppa'), $this->callbacks(0), 'the address a tap away');
+
+        // In an agent's shop: its own bot, and the main bot's way apart.
+        $this->tapAs(Nav::to('shop', 'pick', $this->agentBot()->id));
+        $this->tapAs(Nav::to('ppw'));
+        self::assertStringContainsString('ربات این فروشگاه', $this->said()[0]);
+        self::assertStringContainsString('دریافت پیام‌های ربات اصلی', $this->said()[0]);
+    }
+
     /**
      * Field `$field` of task `$task`, as the schedule now has it.
      *
@@ -122,19 +156,5 @@ final class PanelOperationsTest extends BotTestCase
         $fields = $this->service(ScheduleScreen::class)->present()['tasks'][$task]['fields'] ?? [];
 
         return is_array($fields[$field] ?? null) ? $fields[$field] : [];
-    }
-
-    private function tapAs(string $data): void
-    {
-        $this->send($this->tap($data, chat: self::OWNER));
-    }
-
-    /** The account 7001 linked as the owner. */
-    private function owner(): User
-    {
-        $owner = User::query()->where('telegram_id', self::OWNER)->first() ?? $this->customer(['telegram_id' => self::OWNER, 'first_name' => 'Amir']);
-        $this->linkOwner(self::OWNER);
-
-        return $owner;
     }
 }

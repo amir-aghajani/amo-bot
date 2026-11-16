@@ -4,22 +4,41 @@ declare(strict_types=1);
 
 namespace App\Modules\Telegram\Admin\Sections\Owner\Payments;
 
+use App\Modules\Telegram\Admin\Sections\Catalog\CatalogFmt;
 use App\Modules\Telegram\Admin\Ui\Fmt;
+use App\Modules\Telegram\Admin\Ui\Icons;
 use App\Modules\Telegram\Admin\Ui\Json;
+use App\Modules\Telegram\Admin\Ui\Words;
 use App\Support\Persian;
 
 /**
  * How the payment methods' screens say a method — the panel's words (payment-methods.tsx, kinds.ts, method-summary.tsx,
  * gateways/index.tsx): how it settles, the amounts it is offered for, a card method's cards with today's take against
- * each one's cap, and what the list says beside a method (a card's automatic approval, an online gateway's own word).
+ * each one's cap, why a method is offered to nobody now, and a driver's description in one line.
  */
 final class PaymentWords
 {
     /** How a method settles (KIND_LABELS). */
     public const KINDS = ['instant' => 'تسویه آنی', 'manual' => 'تایید دستی', 'online' => 'درگاه آنلاین'];
 
+    /** The list's title: the shop menu's «روش‌های پرداخت». */
+    public const TITLE = Icons::METHODS . ' روش‌های پرداخت';
+
     /** A card method's line while the shop takes card payments in support's private chat. */
     private const TO_SUPPORT = 'پرداخت کارت به کارت به پیوی پشتیبانی می‌رود؛ کارت‌ها به مشتری نشان داده نمی‌شوند و سقف روزانه‌شان پر نمی‌شود.';
+
+    /** The longest one-line description of a driver (gist()). */
+    private const GIST_MOST = 90;
+
+    /**
+     * The path of a screen under the methods' list — «مدیریت › فروشگاه › روش‌های پرداخت» and the sections `$more`.
+     *
+     * @return list<string>
+     */
+    public static function under(string ...$more): array
+    {
+        return CatalogFmt::under(Fmt::bare(self::TITLE), ...$more);
+    }
 
     /**
      * How the method settles; «درایور نصب نیست» for one whose driver is gone.
@@ -32,59 +51,77 @@ final class PaymentWords
     }
 
     /**
-     * The amounts a method is offered for, as the customer is told them; null while it takes any.
+     * The amounts a method is offered for, short: «۱۰٬۰۰۰ تا ۵۰۰٬۰۰۰ تومان», «از …», «تا …», «هر مبلغی».
      *
      * @param array<string, mixed> $method
      */
-    public static function bounds(array $method): ?string
+    public static function bounds(array $method): string
     {
         $min = is_scalar($method['min_amount'] ?? null) ? (string) $method['min_amount'] : null;
         $max = is_scalar($method['max_amount'] ?? null) ? (string) $method['max_amount'] : null;
 
         return match (true) {
-            $min !== null && $max !== null => 'برای مبلغ‌های بین ' . Fmt::money($min) . ' و ' . Fmt::money($max),
-            $min !== null => 'برای مبلغ‌های از ' . Fmt::money($min) . ' به بالا',
-            $max !== null => 'برای مبلغ‌های تا ' . Fmt::money($max),
+            $min !== null && $max !== null => Fmt::money($min) . ' تا ' . Fmt::money($max),
+            $min !== null => 'از ' . Fmt::money($min) . ' به بالا',
+            $max !== null => 'تا ' . Fmt::money($max),
+            default => 'هر مبلغی',
+        };
+    }
+
+    /**
+     * Why a method switched on is offered to no customer now (plain text): its driver gone, a card method with no card
+     * left to show; null when it is offered (or off: its chip says so).
+     *
+     * @param array<string, mixed> $method
+     */
+    public static function unoffered(array $method): ?string
+    {
+        if (!Json::on($method, 'enabled')) {
+            return null;
+        }
+        if (($method['kind'] ?? null) === null) {
+            return 'درایورش نصب نیست؛ به مشتری پیشنهاد نمی‌شود.';
+        }
+        if (($method['driver'] ?? null) !== 'manual' || Json::on($method, 'to_support')) {
+            return null;
+        }
+        $cards = array_values(array_filter((array) ($method['cards'] ?? []), is_array(...)));
+        $on = array_filter($cards, static fn(array $card): bool => Json::on($card, 'enabled'));
+
+        return match (true) {
+            $cards === [] => 'کارتی ندارد؛ به مشتری پیشنهاد نمی‌شود.',
+            $on === [] => 'همه کارت‌ها غیرفعال‌اند؛ به مشتری پیشنهاد نمی‌شود.',
+            array_filter($on, static fn(array $card): bool => !self::full($card)) === [] => 'سقف روزانه کارت‌های فعال پر شده؛ تا فردا به مشتری پیشنهاد نمی‌شود.',
             default => null,
         };
     }
 
     /**
-     * What the method's line says of it besides its name (HTML lines): its summary, a card method's cards, its note, its
-     * bounds — or that no checkout offers it, its driver gone.
+     * What a method's card says of how it works besides its facts (HTML lines): an online gateway's own word, a card
+     * method's automatic approval.
      *
      * @param array<string, mixed> $method
-     * @return list<string>
+     * @return array<string, string>
      */
-    public static function details(array $method): array
+    public static function facts(array $method): array
     {
-        if (($method['kind'] ?? null) === null) {
-            return ['⚠️ به مشتری پیشنهاد نمی‌شود؛ درایورش نصب نیست.'];
+        $facts = [];
+        if (is_string($method['summary'] ?? null) && $method['summary'] !== '' && ($method['driver'] ?? null) !== 'manual') {
+            $facts['تنظیم'] = self::summary($method['summary']);
         }
-        $lines = [];
-        if (is_string($method['summary'] ?? null) && $method['summary'] !== '') {
-            $lines[] = self::summary($method['summary']);
-        }
-        if (($method['driver'] ?? null) === 'manual' && is_array($method['cards'] ?? null)) {
-            $lines = [...$lines, ...self::cards($method['cards'], Json::on($method, 'to_support'))];
+        if (($method['driver'] ?? null) === 'manual') {
             $after = (int) ($method['config']['auto_approve_after'] ?? 0);
-            if ($after > 0) {
-                $lines[] = '⏱ تایید خودکار بعد از ' . Persian::minutes($after);
-            }
+            $facts['تایید خودکار رسید'] = $after > 0 ? 'بعد از ' . Fmt::e(Persian::minutes($after)) : Words::OFF;
         } elseif (($method['kind'] ?? null) === 'online') {
-            $lines[] = '☑️ پرداخت در صفحه ' . Fmt::e((string) ($method['driver_label'] ?? '')) . '، بدون رسید و با تایید خود درگاه';
-        }
-        $bounds = self::bounds($method);
-        if ($bounds !== null) {
-            $lines[] = $bounds;
+            $facts['پرداخت'] = 'در صفحه ' . Fmt::e((string) ($method['driver_label'] ?? '')) . '، بدون رسید';
         }
 
-        return $lines;
+        return $facts;
     }
 
     /**
-     * A card method's cards, a line each — switched off, or its cap taken today, said —, and when none is left to show,
-     * that the method is offered to nobody; while card payments go to support's private chat, that instead.
+     * A card method's cards, a line each — switched off, or its cap taken today, said; while card payments go to
+     * support's private chat, that instead.
      *
      * @param array<mixed> $cards
      * @return list<string>
@@ -92,28 +129,40 @@ final class PaymentWords
     public static function cards(array $cards, bool $toSupport): array
     {
         $cards = array_values(array_filter($cards, is_array(...)));
-        if ($cards === []) {
-            return [$toSupport ? self::TO_SUPPORT : '⚠️ کارتی ندارد؛ به مشتری پیشنهاد نمی‌شود.'];
-        }
         $lines = [];
-        $on = array_filter($cards, static fn(array $card): bool => Json::on($card, 'enabled'));
         foreach ($cards as $card) {
-            $line = '💳 ' . self::summary((string) ($card['summary'] ?? ''));
-            if (($card['enabled'] ?? false) !== true) {
-                $line .= ' (غیرفعال)';
-            } elseif (!$toSupport && is_scalar($card['daily_cap'] ?? null)) {
-                $line .= ' — امروز ' . Fmt::money((string) ($card['today'] ?? '0')) . ' از ' . Fmt::money((string) $card['daily_cap']) . (self::full($card) ? '؛ پر شده' : '');
+            $line = self::dot($card, $toSupport) . ' ' . self::summary((string) ($card['summary'] ?? ''));
+            if (!$toSupport && Json::on($card, 'enabled') && is_scalar($card['daily_cap'] ?? null)) {
+                $line .= ' — امروز ' . Fmt::money((string) ($card['today'] ?? '0')) . ' از ' . Fmt::money((string) $card['daily_cap']);
             }
             $lines[] = $line;
         }
-        $lines[] = match (true) {
-            $toSupport => self::TO_SUPPORT,
-            $on === [] => '⚠️ همه کارت‌ها غیرفعال‌اند؛ به مشتری پیشنهاد نمی‌شود.',
-            array_filter($on, static fn(array $card): bool => !self::full($card)) === [] => '⚠️ سقف روزانه کارت‌های فعال پر شده؛ تا فردا به مشتری پیشنهاد نمی‌شود.',
-            default => '',
-        };
+        if ($toSupport) {
+            $lines[] = 'ℹ️ ' . self::TO_SUPPORT;
+        }
 
-        return array_values(array_filter($lines, static fn(string $line): bool => $line !== ''));
+        return $lines;
+    }
+
+    /**
+     * A card's chip: 🟢 on, ⏸ off, ⚠️ its cap taken today.
+     *
+     * @param array<string, mixed> $card
+     */
+    public static function dot(array $card, bool $toSupport = false): string
+    {
+        return CatalogFmt::dot(Json::on($card, 'enabled'), !$toSupport && self::full($card));
+    }
+
+    /**
+     * A driver's description in one line: what comes before its first «:», «؛» or «.» — what it is, not how to set it
+     * up —, cut to fit a line.
+     */
+    public static function gist(string $description): string
+    {
+        $first = preg_split('/[:؛.]\s/u', $description . ' ', 2)[0] ?? $description;
+
+        return Fmt::cut(trim($first), self::GIST_MOST);
     }
 
     /**
@@ -130,7 +179,7 @@ final class PaymentWords
      *
      * @param array<string, mixed> $card
      */
-    private static function full(array $card): bool
+    public static function full(array $card): bool
     {
         return is_scalar($card['daily_cap'] ?? null) && (float) ($card['today'] ?? 0) >= (float) $card['daily_cap'];
     }

@@ -4,16 +4,25 @@ declare(strict_types=1);
 
 namespace App\Modules\Telegram\Admin\Sections\Customers;
 
+use App\Modules\Telegram\Admin\Sections\Sales\Sales;
 use App\Modules\Telegram\Admin\Ui\Button;
+use App\Modules\Telegram\Admin\Ui\Fmt;
+use App\Modules\Telegram\Admin\Ui\Icons;
 use App\Modules\Telegram\Admin\Ui\Json;
 
-/** «📡 سرویس‌ها» of a customer's page: their services, newest first, each opening the service's screen (`sbv`). */
+/**
+ * «📡 سرویس‌ها» of a customer's page: their services, newest first, narrowed by state (chips: the shop's service list's
+ * own, which say what the rows' marks mean), each a button — its state, name, plan and what is left of a running one —
+ * opening the service's screen (`sbv`).
+ */
 final class CustomerServicesScreen extends CustomerRowsScreen
 {
     public const ID = 'usls';
 
-    /** A service's state as the panel's badge says it, by its status. */
-    private const STATUS = ['active' => '🟢', 'expired' => '⌛️', 'disabled' => '⏸', 'deleted' => '🗑'];
+    public const TITLE = Icons::SERVICES . ' سرویس‌ها';
+
+    /** The states its chips narrow it to: the shop's service list's, «همه» first. */
+    private const STATES = ['active', 'expired', 'disabled'];
 
     protected function screen(): string
     {
@@ -22,7 +31,7 @@ final class CustomerServicesScreen extends CustomerRowsScreen
 
     protected function title(): string
     {
-        return '📡 سرویس‌ها';
+        return self::TITLE;
     }
 
     protected function endpoint(): string
@@ -35,24 +44,39 @@ final class CustomerServicesScreen extends CustomerRowsScreen
         return 'subscriptions';
     }
 
-    protected function empty(): string
+    protected function noun(): string
     {
-        return 'هنوز سرویسی نخریده است. سرویس‌هایی که این مشتری بخرد این‌جا می‌آیند.';
+        return 'سرویس';
     }
 
-    protected function summary(array $meta): array
+    protected function filters(): array
     {
-        return ['🟢 فعال · ⌛️ منقضی‌شده · ⏸ غیرفعال · 🗑 حذف‌شده'];
+        $states = [self::ANY => 'همه'];
+        foreach (self::STATES as $state) {
+            $states[$state] = Sales::word(Sales::SUBSCRIPTION_STATUS, $state);
+        }
+
+        return ['status' => $states];
+    }
+
+    protected function empty(): string
+    {
+        return 'سرویسی پیدا نشد. سرویس‌هایی که این مشتری بخرد این‌جا می‌آیند.';
     }
 
     protected function item(array $row): Button
     {
-        $plan = is_array($row['plan'] ?? null) ? Customer::text($row['plan'], 'name') : null;
-        $server = is_array($row['server'] ?? null) ? Customer::text($row['server'], 'name') : null;
-        $what = Json::on($row, 'is_test') ? 'اکانت تست' : ($plan ?? 'بدون پلن');
+        $plan = Customer::text(Json::part($row, 'plan'), 'name');
+        $expires = Customer::text($row, 'expires_at');
+        $left = ($row['status'] ?? null) === 'active' && $expires !== null ? Sales::left($expires) : null;
 
         return $this->open(
-            (self::STATUS[(string) ($row['status'] ?? '')] ?? '•') . ' ' . Customer::isolate((string) ($row['name'] ?? '')) . ' · ' . $what . ($server !== null ? ' · ' . $server : ''),
+            Sales::mark(Sales::SUBSCRIPTION_STATUS, $row['status'] ?? '') . ' ' . implode(' · ', array_filter([
+                // The name and the plan cut, so what is left of it stays whole on the button.
+                Customer::isolate(Fmt::cut((string) ($row['name'] ?? ''), 16)),
+                Json::on($row, 'is_test') ? 'اکانت تست' : Fmt::cut($plan ?? 'بدون پلن', 14),
+                $left === null ? null : Fmt::plain($left),
+            ])),
             'sbv',
             Customer::int($row, 'id'),
         );

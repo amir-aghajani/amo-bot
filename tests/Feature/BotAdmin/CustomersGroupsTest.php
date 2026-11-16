@@ -17,7 +17,6 @@ use Tests\BotTestCase;
  */
 final class CustomersGroupsTest extends BotTestCase
 {
-    private const OWNER = 7001;
     private const STAFF = 7100;
 
     protected function setUp(): void
@@ -29,7 +28,7 @@ final class CustomersGroupsTest extends BotTestCase
 
     public function testManyGroupsGoByPagesInTheirPickers(): void
     {
-        $this->owner();
+        $this->owner(UserRole::Admin);
         $ali = $this->customer(['telegram_id' => 1111, 'first_name' => 'Ali']);
         $groups = array_map(fn(int $n): CustomerGroup => $this->customerGroup('گروه ' . $n), range(1, 110));
         $last = $groups[109];
@@ -43,6 +42,9 @@ final class CustomersGroupsTest extends BotTestCase
         $this->send($this->tap(Nav::to('usg', 'sw', $ali->id, $last->id, 1), chat: self::OWNER));
         self::assertTrue($ali->groups()->whereKey($last->id)->exists());
         self::assertContains(Nav::to('usg', 'sw', $ali->id, $last->id, 0), $this->window(), 'still on the page it was switched on');
+        self::assertStringNotContainsString('گروه 110', $this->screen(), 'said by its switch on this page, not again');
+        $this->send($this->tap(Nav::to('usg', 'pg', $ali->id, 1), chat: self::OWNER));
+        self::assertStringContainsString('عضو ۱ · در صفحه‌های دیگر: گروه 110', $this->screen(), 'a page shows some switches: the groups they are in elsewhere named');
 
         $this->send($this->tap(Nav::to('usf', 'show', 'g'), chat: self::OWNER));
         self::assertLessThan(100, count($this->window()));
@@ -53,7 +55,7 @@ final class CustomersGroupsTest extends BotTestCase
 
     public function testTheOwnerAddsAPartnerGroupThenRenamesMovesAndDeletesIt(): void
     {
-        $this->owner();
+        $this->owner(UserRole::Admin);
         $vip = $this->customerGroup('VIP');
 
         $this->send($this->tap(Nav::to('hs'), chat: self::OWNER));
@@ -98,15 +100,35 @@ final class CustomersGroupsTest extends BotTestCase
 
     public function testAGroupsCustomersOpenOnTheUsersList(): void
     {
-        $this->owner();
+        $this->owner(UserRole::Admin);
         $ali = $this->customer(['telegram_id' => 1111, 'first_name' => 'Ali']);
         $sara = $this->customer(['telegram_id' => 2222, 'first_name' => 'Sara']);
         $vip = $this->customerGroup('VIP', [$ali]);
+        // The users list left searched and narrowed by a pill: the group's customers are shown whole all the same.
+        $this->send($this->tap(Nav::to('us', 'f', 'status', 'banned'), chat: self::OWNER));
+        $this->send($this->tap(Nav::to('us', 'search'), chat: self::OWNER));
+        $this->send($this->message('sara', chat: self::OWNER));
 
         $this->send($this->tap(Nav::to('ugv', 'users', $vip->id), chat: self::OWNER));
-        self::assertStringContainsString('فقط گروه «VIP»', $this->screen());
+        self::assertStringContainsString('۱ کاربر · گروه: VIP', $this->screen(), 'as many as the group\'s card counts');
+        self::assertStringNotContainsString('«sara»', $this->screen());
         self::assertContains(Nav::to('usv', 'show', $ali->id), $this->window());
         self::assertNotContains(Nav::to('usv', 'show', $sara->id), $this->window());
+    }
+
+    public function testACustomersGroupsOpenOnTheirOwnFirstPage(): void
+    {
+        $this->owner(UserRole::Admin);
+        $ali = $this->customer(['telegram_id' => 1111, 'first_name' => 'Ali']);
+        $sara = $this->customer(['telegram_id' => 2222, 'first_name' => 'Sara']);
+        $groups = array_map(fn(int $n): CustomerGroup => $this->customerGroup('گروه ' . $n), range(1, 50));
+
+        $this->send($this->tap(Nav::to('usg', 'pg', $ali->id, 2), chat: self::OWNER));
+        self::assertContains(Nav::to('usg', 'sw', $ali->id, $groups[49]->id, 1), $this->window(), 'Ali\'s second page');
+        $this->send($this->tap(Nav::to('usg', 'show', $sara->id), chat: self::OWNER));
+        self::assertContains(Nav::to('usg', 'sw', $sara->id, $groups[0]->id, 1), $this->window(), 'Sara\'s groups from their first page');
+        $this->send($this->tap(Nav::to('usg', 'show', $ali->id), chat: self::OWNER));
+        self::assertContains(Nav::to('usg', 'sw', $ali->id, $groups[0]->id, 1), $this->window());
     }
 
     public function testAShopsAdminChangesTheGroupsOnlyWithTheCatalogue(): void
@@ -127,13 +149,6 @@ final class CustomersGroupsTest extends BotTestCase
         $this->botSettings('bot_admins', ['bot_admins_grant_catalog' => true]);
         $this->send($this->tap(Nav::to('ugv', 'show', $vip->id), chat: self::STAFF));
         self::assertContains(Nav::to('ugv', 'del', $vip->id), $this->window(), 'granted');
-    }
-
-    /** The account OWNER linked as the owner — the bot's admin too, as the link makes it. */
-    private function owner(): void
-    {
-        $this->customer(['telegram_id' => self::OWNER, 'first_name' => 'Amir', 'role' => UserRole::Admin]);
-        $this->linkOwner(self::OWNER);
     }
 
     /** @return list<string> The window's buttons, as the last screen drew them. */

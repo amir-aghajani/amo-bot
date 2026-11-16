@@ -34,8 +34,6 @@ use Tests\Support\FakeRikhtam;
  */
 final class RikhtamDepositsTest extends BotTestCase
 {
-    private const OWNER = 7001;
-
     private const STAFF = 7100;
 
     private FakeRikhtam $rikhtam;
@@ -116,6 +114,11 @@ final class RikhtamDepositsTest extends BotTestCase
 
         self::assertStringContainsString('ریختم فقط به آدرس', $this->said()[0]);
         self::assertNotContains(Nav::to('pmd', 'rk'), $this->callbacks(0), 'no key asked that Rikhtam would refuse');
+
+        $this->send($this->tap(Nav::to('pmd', 'rk'), chat: self::OWNER));
+        self::assertStringContainsString('ریختم فقط به آدرس', (string) $this->popup(), 'a window from before the address changed: told so');
+        self::assertStringNotContainsString('✍️', implode("\n", $this->said()), 'not asked the key');
+        self::assertNotContains(Nav::to('pmd', 'rk'), $this->callbacks($this->windowCall()));
     }
 
     public function testAConnectedRikhtamTakesANewKeyAndARefusedRegistrationPointsToIt(): void
@@ -422,12 +425,5 @@ final class RikhtamDepositsTest extends BotTestCase
             }
         }
         self::fail("No «{$action}» button for deposit {$n} of payment {$payment}.");
-    }
-
-    /** The account 7001 linked as the owner. */
-    private function owner(): void
-    {
-        $this->customer(['telegram_id' => self::OWNER, 'first_name' => 'Amir']);
-        $this->linkOwner(self::OWNER);
     }
 }

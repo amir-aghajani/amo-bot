@@ -6,26 +6,32 @@ namespace App\Modules\Telegram\Admin\Sections\Bot\Texts;
 
 use App\Modules\Telegram\Admin\AdminSeat;
 use App\Modules\Telegram\Admin\Door\ApiRefusal;
+use App\Modules\Telegram\Admin\Sections\Bot\BotScreens;
 use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\Answer;
 use App\Modules\Telegram\Admin\Ui\BaseScreen;
 use App\Modules\Telegram\Admin\Ui\Button;
 use App\Modules\Telegram\Admin\Ui\Fmt;
+use App\Modules\Telegram\Admin\Ui\Icons;
 use App\Modules\Telegram\Admin\Ui\Json;
 use App\Modules\Telegram\Admin\Ui\Prompt;
 use App\Modules\Telegram\Admin\Ui\View;
+use App\Modules\Telegram\Admin\Ui\Words;
 
 /**
- * «📝 متن‌های ربات» (the owner's and an agent's): every text the bot sends, by where it shows — the panel's tabs «همه» and
- * «تغییر یافته» as chips, each with what it counts —, a group opening its texts (TextGroupScreen); and the panel's search
- * (title, what it is for, its wording, its key; Persian as typed: Arabic ی/ک, the half-space and the direction marks
- * ignored), whose finds are listed here, paged. The texts are the panel's one answer (GET /bot/texts).
+ * «📝 متن‌های ربات» (the owner's and an agent's): every text the bot sends, by where it shows — its groups a short list,
+ * two a row where both fit, each its name and how many texts (✏️ where some are reworded), opening its texts paged
+ * (TextGroupScreen); under them the panel's tabs «همه» and «تغییر یافته» as chips, each with what it counts —; and the
+ * panel's search (title, what it is for, its wording, its key; Persian as typed: Arabic ی/ک, the half-space and the
+ * direction marks ignored), whose finds are listed here, paged. The texts are the panel's one answer (GET /bot/texts).
  *
  * Actions: `f` (all|changed), `search` (asks), `clear`, `page` (n).
  */
 final class TextsScreen extends BaseScreen
 {
     public const ID = 'tx';
+
+    public const TITLE = Icons::TEXTS . ' متن‌های ربات';
 
     /** The kinds' names (the panel's KIND_LABELS). */
     public const KINDS = ['message' => 'پیام', 'caption' => 'کپشن عکس', 'popup' => 'اعلان', 'button' => 'دکمه', 'part' => 'بخشی از پیام'];
@@ -42,19 +48,11 @@ final class TextsScreen extends BaseScreen
         $search = (string) ($state['search'] ?? '');
         $groups = self::groups($admin);
         $found = array_merge(...array_map(static fn(array $group): array => array_values(array_filter($group['texts'], static fn(array $text): bool => self::matches($text, $search))), $groups));
-        $customized = count(array_filter($found, static fn(array $text): bool => Json::on($text, 'customized')));
+        $customized = count(self::reworded($found));
 
-        $view = View::make('📝 متن‌های ربات', 'مدیریت', 'ربات')
-            ->line("هر پیامی که ربات برای مشتری می‌فرستد، با متن خودتان. متغیرهایی مثل \u{2068}%name%\u{2069} هنگام ارسال با مقدار واقعی پر می‌شوند.");
-        if ($search !== '') {
-            $view->line('🔎 «' . Fmt::e($search) . '»');
-        }
-        $view->row(
-            Button::to(($changed ? '' : '● ') . 'همه (' . Fmt::plain(Fmt::number(count($found))) . ')', self::ID, 'f', 'all'),
-            Button::to(($changed ? '● ' : '') . 'تغییر یافته (' . Fmt::plain(Fmt::number($customized)) . ')', self::ID, 'f', 'changed'),
-        );
-
-        $shown = $changed ? array_values(array_filter($found, static fn(array $text): bool => Json::on($text, 'customized'))) : $found;
+        $shown = $changed ? self::reworded($found) : $found;
+        $view = View::make(self::TITLE, ...BotScreens::PATH)
+            ->total(count($shown), 'متن', $changed ? 'فقط تغییر یافته' : ($customized > 0 ? Fmt::plain(Fmt::number($customized)) . ' تغییر یافته' : ''), $search !== '' ? '🔎 «' . $search . '»' : '');
         if ($shown === []) {
             $view->line()->line($changed && $search === ''
                 ? '<b>هنوز متنی تغییر نکرده است.</b> ربات همه متن‌ها را با متن پیش‌فرض فروشگاه می‌فرستد.'
@@ -62,19 +60,29 @@ final class TextsScreen extends BaseScreen
         } elseif ($search !== '') {
             $this->found($view, $admin, $shown);
         } else {
+            // The groups, a short list: each its name and how many texts, ✏️ where some are reworded — two a row where both fit.
+            $buttons = [];
             foreach ($groups as $group) {
-                $texts = $changed ? array_filter($group['texts'], static fn(array $text): bool => Json::on($text, 'customized')) : $group['texts'];
+                $texts = $changed ? self::reworded($group['texts']) : $group['texts'];
                 if ($texts === []) {
                     continue;
                 }
-                $mine = count(array_filter($texts, static fn(array $text): bool => Json::on($text, 'customized')));
-                $view->row(Button::to($group['title'] . ' · ' . Fmt::plain(Fmt::number(count($texts))) . ' متن' . ($mine > 0 ? ' · ' . Fmt::plain(Fmt::number($mine)) . ' تغییر یافته' : ''), TextGroupScreen::ID, 'show', $group['key']));
+                $mine = count(self::reworded($texts));
+                $buttons[] = Button::to(($mine > 0 ? '✏️ ' : '') . $group['title'] . Fmt::badge(count($texts)), TextGroupScreen::ID, 'show', $group['key']);
             }
+            $view->tiles(...$buttons);
         }
 
-        $view->row($search === '' ? Button::to('🔎 جستجو', self::ID, 'search') : Button::to('✖️ پاک کردن جستجو', self::ID, 'clear'), Button::to('✨ ایموجی‌های پرمیوم', PremiumEmojisScreen::ID));
+        $view->row(
+            Button::to((!$changed ? Words::CHIP : '') . 'همه' . Fmt::badge(count($found)), self::ID, 'f', 'all'),
+            Button::to(($changed ? Words::CHIP : '') . 'تغییر یافته' . Fmt::badge($customized), self::ID, 'f', 'changed'),
+        )->row(
+            $search === '' ? Button::to(Words::SEARCH, self::ID, 'search') : Button::to(Words::CLEAR_SEARCH, self::ID, 'clear'),
+            Button::to(PremiumEmojisScreen::TITLE, PremiumEmojisScreen::ID),
+        );
 
-        return $view->back('hb');
+        return $view->help("هر پیامی که ربات برای مشتری می‌فرستد، با متن خودتان. متغیرهایی مثل \u{2068}%name%\u{2069} هنگام ارسال با مقدار واقعی پر می‌شوند. ✏️ کنار یک گروه یعنی متنی از آن تغییر کرده است؛ جستجو در عنوان، کاربرد، خود متن و کلید هر متن می‌گردد.")
+            ->back(BotScreens::MENU);
     }
 
     public function act(Admin $admin, string $action, array $args): View
@@ -84,7 +92,7 @@ final class TextsScreen extends BaseScreen
                 $admin->remember(self::ID, ['f' => ($args[0] ?? '') === 'changed' ? 'changed' : 'all', 'page' => 1]);
                 break;
             case 'search':
-                return $admin->ask(new Prompt('چه چیزی جستجو شود؟', self::ID, 'search', hint: 'عنوان یا بخشی از متن'));
+                return $admin->ask((new Prompt('چه چیزی جستجو شود؟', self::ID, 'search', hint: 'عنوان، بخشی از متن یا کلید آن'))->example('خوش‌آمد'));
             case 'clear':
                 $admin->remember(self::ID, ['search' => '', 'page' => 1]);
                 break;
@@ -121,6 +129,17 @@ final class TextsScreen extends BaseScreen
         }
 
         return $groups;
+    }
+
+    /**
+     * The texts of `$texts` that are reworded: the panel's tab «تغییر یافته».
+     *
+     * @param list<array<string, mixed>> $texts
+     * @return list<array<string, mixed>>
+     */
+    public static function reworded(array $texts): array
+    {
+        return array_values(array_filter($texts, static fn(array $text): bool => Json::on($text, 'customized')));
     }
 
     /**

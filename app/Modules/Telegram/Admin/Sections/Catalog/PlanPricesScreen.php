@@ -15,6 +15,7 @@ use App\Modules\Telegram\Admin\Ui\Fmt;
 use App\Modules\Telegram\Admin\Ui\Json;
 use App\Modules\Telegram\Admin\Ui\Prompt;
 use App\Modules\Telegram\Admin\Ui\View;
+use App\Modules\Telegram\Admin\Ui\Words;
 use App\Support\Persian;
 use App\Support\Unit;
 
@@ -22,16 +23,27 @@ use App\Support\Unit;
  * «تغییر گروهی قیمت» (the panel's bulk price change): several plans' prices raised or lowered at once by a percent or
  * an amount, rounded — the plans, the direction, the kind, the value, the rounding and which prices moved, each set
  * here —, previewed first (each plan's prices before and after and why one cannot take it, a page of plans at a time),
- * and applied exactly as previewed: any change to the choices drops the preview, and the change goes with the prices the
- * preview showed, which the API makes it on or refuses (a plan's prices moved since, the change sent twice). Refused,
- * the preview stays with why under it, to be previewed again.
+ * and applied exactly as previewed: any change to the choices drops the preview, the apply carries the digest of the
+ * preview it is drawn under (a window left from another preview, or an older version's bare apply, makes nothing and
+ * shows the preview in force), and the change goes with the prices the preview showed, which the API makes it on or
+ * refuses (a plan's prices moved since, the change sent twice). Refused, the preview stays with why under it, to be
+ * previewed again.
  *
  * Actions: `new`, `plans` (page), `tg` (plan id, page), `all` (page), `dir` (increase|decrease), `mode`
- * (percent|amount), `val` (asks), `rnd` (step), `pr` (price field), `pv` (preview), `pg` (preview page), `ok` (apply).
+ * (percent|amount), `val` (asks), `rnd` (step), `pr` (price field), `pv` (preview), `pg` (preview page), `ok` (the
+ * preview's digest: apply).
  */
 final class PlanPricesScreen extends BaseScreen
 {
     public const ID = 'plp';
+
+    public const TITLE = '💹 تغییر گروهی قیمت';
+
+    /** The preview: its button and its section. */
+    private const PREVIEW = '👁 پیش‌نمایش';
+
+    /** The apply's button. */
+    private const APPLY = '✔️ اعمال تغییر';
 
     private const DIRECTIONS = ['increase' => '⬆️ افزایش', 'decrease' => '⬇️ کاهش'];
     private const MODES = ['percent' => '٪ درصد', 'amount' => '💰 مبلغ ثابت'];
@@ -64,31 +76,27 @@ final class PlanPricesScreen extends BaseScreen
         $round = (int) ($state['round'] ?? 1000);
         $prices = array_map(strval(...), (array) ($state['prices'] ?? []));
 
-        $view = View::make('💹 تغییر گروهی قیمت', 'مدیریت', 'فروشگاه', 'پلن‌ها')
-            ->line('قیمت چند پلن را یک‌جا بالا یا پایین ببرید؛ اول پیش‌نمایش را ببینید، بعد اعمال کنید.')
-            ->facts([
+        $view = View::make(self::TITLE, ...PlanEditScreen::under())
+            ->card([
                 'پلن‌ها' => count($ids) === count($plans) ? 'همه (' . Fmt::number(count($plans)) . ')' : Fmt::number(count($ids)) . ' از ' . Fmt::number(count($plans)),
                 'جهت تغییر' => Fmt::e(self::DIRECTIONS[(string) $state['dir']] ?? ''),
-                'نوع تغییر' => Fmt::e(self::MODES[(string) ($state['mode'] ?? 'percent')] ?? ''),
-                $percent ? 'درصد تغییر' : 'مبلغ تغییر' => $value === '' ? Fmt::NONE : ($percent ? Fmt::percent($value) : Fmt::money($value)),
+                $percent ? 'درصد تغییر' : 'مبلغ تغییر' => $value === '' ? '' : ($percent ? Fmt::percent($value) : Fmt::money($value)),
                 'گرد کردن به' => self::rounding($round),
                 'قیمت‌هایی که تغییر می‌کنند' => $prices === [] ? 'هیچ‌کدام' : Fmt::e(implode('، ', array_map(static fn(string $field): string => self::PRICES[$field] ?? $field, $prices))),
-            ])
-            ->line('<i>پلنی که قیمت خرید اول یا قیمت نماینده ندارد، بعد از تغییر هم ندارد.</i>')
-            ->line();
+            ]);
 
         $preview = is_array($state['pv'] ?? null) ? $state['pv'] : null;
         [$changed, $blocked] = $preview === null ? [0, 0] : self::tally($preview);
         $refused = array_values(array_filter((array) ($state['rf'] ?? []), is_string(...)));
         [$page, $pages] = [1, 1];
         if ($preview === null) {
-            $view->line('پیش از اعمال، «پیش‌نمایش» را بزنید تا قیمت‌های تازه هر پلن را ببینید.');
+            $view->note('پیش از اعمال، «' . self::PREVIEW . '» را بزنید تا قیمت تازه هر پلن را ببینید.');
         } else {
             [$rows, $page, $pages] = View::slice(self::problemsFirst($preview), (int) ($state['pg'] ?? 1));
-            $view->lines(...self::previewLines($preview, $rows, $changed, $blocked, $page, $pages));
+            $view->section(self::PREVIEW)->lines(...self::previewLines($preview, $rows, $changed, $blocked));
         }
         if ($refused !== []) {
-            $view->line()->line('<b>⛔️ اعمال نشد</b>');
+            $view->section('⛔️ اعمال نشد');
             foreach (array_slice($refused, 0, self::REFUSED_MOST) as $line) {
                 $view->line('• ' . Fmt::e(Fmt::cut($line, 300)));
             }
@@ -98,19 +106,22 @@ final class PlanPricesScreen extends BaseScreen
             $view->line('هیچ قیمتی تغییر نکرد. پیش‌نمایش را دوباره بگیرید تا قیمت‌های الان هر پلن را ببینید.');
         }
 
-        $view->row(Button::to('📦 پلن‌ها: ' . (count($ids) === count($plans) ? 'همه' : Persian::number(count($ids)) . ' پلن'), self::ID, 'plans', 1));
-        $view->row(...array_map(static fn(string $dir): Button => Button::to(($state['dir'] === $dir ? '● ' : '') . self::DIRECTIONS[$dir], self::ID, 'dir', $dir), array_keys(self::DIRECTIONS)));
-        $view->row(...array_map(static fn(string $mode): Button => Button::to((($state['mode'] ?? 'percent') === $mode ? '● ' : '') . self::MODES[$mode], self::ID, 'mode', $mode), array_keys(self::MODES)));
-        $view->row(Button::to('✏️ ' . ($percent ? 'درصد تغییر' : 'مبلغ تغییر') . ': ' . ($value === '' ? Fmt::NONE : Fmt::plain($percent ? Fmt::percent($value) : Fmt::money($value))), self::ID, 'val'));
-        $view->grid(2, ...array_map(static fn(int $step): Button => Button::to(($round === $step ? '● ' : '') . ($step === 1 ? 'بدون گرد کردن' : 'گرد به ' . Fmt::plain(Fmt::money($step))), self::ID, 'rnd', $step), self::ROUNDINGS));
-        $view->grid(3, ...array_map(static fn(string $field): Button => Button::to((in_array($field, $prices, true) ? '✅ ' : '◻️ ') . self::PRICES[$field], self::ID, 'pr', $field), array_keys(self::PRICES)));
+        // The preview's pages under its lines, then what it is made of — each choice marked —, then the preview and the apply.
         $view->pager($page, $pages, self::ID, 'pg');
+        $view->row(Button::to(Words::edit('پلن‌ها'), self::ID, 'plans', 1), Button::to(Words::edit($percent ? 'درصد تغییر' : 'مبلغ تغییر'), self::ID, 'val'));
+        $view->row(...array_map(static fn(string $dir): Button => Button::to(($state['dir'] === $dir ? Words::PICKED : '') . self::DIRECTIONS[$dir], self::ID, 'dir', $dir), array_keys(self::DIRECTIONS)));
+        $view->row(...array_map(static fn(string $mode): Button => Button::to((($state['mode'] ?? 'percent') === $mode ? Words::PICKED : '') . self::MODES[$mode], self::ID, 'mode', $mode), array_keys(self::MODES)));
+        $view->grid(2, ...array_map(static fn(int $step): Button => Button::to(($round === $step ? Words::PICKED : '') . ($step === 1 ? 'بدون گرد کردن' : 'گرد به ' . Fmt::plain(Fmt::money($step))), self::ID, 'rnd', $step), self::ROUNDINGS));
+        $view->grid(3, ...array_map(static fn(string $field): Button => Button::to(Words::tick(in_array($field, $prices, true)) . self::PRICES[$field], self::ID, 'pr', $field), array_keys(self::PRICES)));
+        $ready = $preview !== null && $refused === [] && $blocked === 0 && $changed > 0;
         $view->row(
-            Button::to($refused !== [] ? '🔄 پیش‌نمایش دوباره' : '👁 پیش‌نمایش', self::ID, 'pv'),
-            $preview !== null && $refused === [] && $blocked === 0 && $changed > 0 ? Button::to('✔️ اعمال تغییر', self::ID, 'ok') : null,
+            // The apply names the preview it is drawn under: a window left from another preview applies nothing.
+            $ready ? Button::to(self::APPLY, self::ID, 'ok', self::digest($preview))->success() : null,
+            $preview === null || $refused !== [] ? Button::to($refused !== [] ? '🔄 پیش‌نمایش دوباره' : self::PREVIEW, self::ID, 'pv')->primary() : Button::to(self::PREVIEW, self::ID, 'pv'),
         );
 
-        return $view->back(PlansScreen::ID);
+        return $view->help('قیمت چند پلن را یک‌جا بالا یا پایین ببرید؛ اول پیش‌نمایش را ببینید، بعد اعمال کنید. هر تغییری در انتخاب‌ها پیش‌نمایش را پاک می‌کند، و تغییر درست با همان قیمت‌هایی اعمال می‌شود که پیش‌نمایش نشان داد. پلنی که قیمت خرید اول یا قیمت نماینده ندارد، بعد از تغییر هم ندارد.')
+            ->back(PlansScreen::ID);
     }
 
     public function act(Admin $admin, string $action, array $args): View
@@ -162,13 +173,18 @@ final class PlanPricesScreen extends BaseScreen
                 break;
             case 'val':
                 $percent = ($state['mode'] ?? 'percent') === 'percent';
+                $value = (string) ($state['value'] ?? '');
 
-                return $admin->ask(new Prompt(
+                return $admin->ask((new Prompt(
                     $percent ? 'درصد تغییر' : 'مبلغ تغییر (تومان)',
                     self::ID,
                     'val',
-                    hint: Fmt::e($percent ? 'اعشار هم می‌شود؛ حداکثر ۱۰۰۰ درصد، در کاهش حداکثر ۱۰۰.' : 'به تومان و بدون اعشار.'),
-                ));
+                    [],
+                    Fmt::e($percent ? 'اعشار هم می‌شود.' : 'به تومان و بدون اعشار.'),
+                    Button::to(Words::CANCEL, self::ID),
+                ))->current($value === '' ? null : Fmt::digits($value))
+                    ->example($percent ? '۱۰' : '۵۰۰۰')
+                    ->limits($percent ? 'تا ۱۰۰۰ درصد؛ در کاهش تا ۱۰۰' : 'بیش از صفر'));
             case 'pv':
                 $body = self::body($state);
                 $changes = Json::rows($admin->api->post('/plans/prices/preview', $body), 'changes');
@@ -184,6 +200,12 @@ final class PlanPricesScreen extends BaseScreen
                 }
                 [$changed, $blocked] = self::tally($preview);
                 if ($blocked > 0 || $changed === 0) {
+                    break;
+                }
+                if ($arg !== self::digest($preview)) {
+                    // Tapped under another preview (a window left from before, an older version's button): nothing is
+                    // made; the preview in force is shown, to apply from it.
+                    $admin->alert('پیش‌نمایش عوض شده است؛ پیش‌نمایش الان را ببینید و اگر درست است، دوباره «' . self::APPLY . '» را بزنید.');
                     break;
                 }
                 try {
@@ -230,12 +252,13 @@ final class PlanPricesScreen extends BaseScreen
     {
         $ids = array_map(intval(...), (array) ($admin->state(self::ID)['ids'] ?? []));
         [$rows, $page, $pages] = View::slice($plans, $page);
-        $view = View::make('📦 پلن‌ها', 'مدیریت', 'فروشگاه', 'پلن‌ها', 'تغییر گروهی قیمت')
-            ->line('پلن‌هایی که قیمتشان تغییر می‌کند: ' . Fmt::number(count($ids)) . ' از ' . Fmt::number(count($plans)));
-        $view->row(Button::to((count($ids) === count($plans) ? '✅ ' : '◻️ ') . 'همه پلن‌ها', self::ID, 'all', $page));
+        $view = View::make(PlansScreen::TITLE, ...PlanEditScreen::under(Fmt::bare(self::TITLE)))
+            ->total(count($plans), 'پلن', Fmt::number(count($ids)) . ' انتخاب‌شده')
+            ->note('پلن‌هایی را که قیمتشان تغییر می‌کند علامت بزنید.');
         foreach ($rows as $plan) {
-            $view->row(Button::to((in_array((int) $plan['id'], $ids, true) ? '✅ ' : '◻️ ') . Fmt::cut((string) $plan['name'], 26) . ' · ' . Fmt::plain(Fmt::money(is_scalar($plan['price'] ?? null) ? (string) $plan['price'] : '0')), self::ID, 'tg', (int) $plan['id'], $page));
+            $view->row(Button::to(Words::tick(in_array((int) $plan['id'], $ids, true)) . Fmt::cut((string) $plan['name'], 26) . ' · ' . Fmt::plain(Fmt::money(is_scalar($plan['price'] ?? null) ? (string) $plan['price'] : '0')), self::ID, 'tg', (int) $plan['id'], $page));
         }
+        $view->row(Button::to(Words::tick(count($ids) === count($plans)) . 'همه پلن‌ها', self::ID, 'all', $page));
         $view->pager($page, $pages, self::ID, 'plans');
 
         return $view->back(self::ID);
@@ -301,6 +324,17 @@ final class PlanPricesScreen extends BaseScreen
         }
 
         return (array) ($preview['body'] ?? []) + ['previewed' => $previewed];
+    }
+
+    /**
+     * What names a preview — its request and every plan's prices before and after it —, short, for the apply drawn under
+     * it to carry: the apply goes only with the preview the window showed.
+     *
+     * @param array<string, mixed> $preview
+     */
+    private static function digest(array $preview): string
+    {
+        return hash('crc32b', (string) json_encode([$preview['body'] ?? [], $preview['changes'] ?? []]));
     }
 
     /**
@@ -370,13 +404,11 @@ final class PlanPricesScreen extends BaseScreen
      * @param list<array<string, mixed>> $rows The page's plans
      * @return list<string>
      */
-    private static function previewLines(array $preview, array $rows, int $changed, int $blocked, int $page, int $pages): array
+    private static function previewLines(array $preview, array $rows, int $changed, int $blocked): array
     {
-        $count = count((array) ($preview['changes'] ?? []));
-        $lines = ['<b>👁 پیش‌نمایش</b>', $changed === 0 && $blocked === 0
+        $lines = [$changed === 0 && $blocked === 0
             ? 'با این تغییر قیمت هیچ پلنی عوض نمی‌شود.'
-            : 'قیمت ' . Persian::number($changed) . ' پلن تغییر می‌کند' . ($blocked > 0 ? '؛ ' . Persian::number($blocked) . ' پلن این تغییر را نمی‌پذیرد و تا درست نشود، هیچ قیمتی تغییر نمی‌کند.' : '.'),
-            Fmt::number($count) . ' پلن' . ($pages > 1 ? ' · صفحه ' . Fmt::number($page) . ' از ' . Fmt::number($pages) : ''),
+            : ($blocked > 0 ? '⛔️ ' : '') . 'قیمت ' . Persian::number($changed) . ' پلن تغییر می‌کند' . ($blocked > 0 ? '؛ ' . Persian::number($blocked) . ' پلن این تغییر را نمی‌پذیرد و تا درست نشود، هیچ قیمتی تغییر نمی‌کند.' : '.'),
         ];
         $columns = array_map(strval(...), (array) (((array) ($preview['body'] ?? []))['prices'] ?? []));
         foreach ($rows as $change) {

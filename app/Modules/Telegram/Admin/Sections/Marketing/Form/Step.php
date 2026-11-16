@@ -5,17 +5,21 @@ declare(strict_types=1);
 namespace App\Modules\Telegram\Admin\Sections\Marketing\Form;
 
 use App\Modules\Telegram\Admin\Door\ApiRefusal;
+use App\Modules\Telegram\Admin\Sections\Marketing\Words as Marketing;
 use App\Modules\Telegram\Admin\Ui\Answer;
 use App\Modules\Telegram\Admin\Ui\Fmt;
+use App\Modules\Telegram\Admin\Ui\Words;
+use App\Support\Persian;
 use App\Support\Unit;
 
 /**
  * One field of a form the bot asks as a wizard (FormScreen), as the panel's form has it: the draft's key for it, the API's
- * field it is sent as, its label and hint — the panel's words —, and how it is set: typed (text, a code, a count, a
- * percent, an amount of money, a decimal, a day and hour), a choice among buttons, several of them (`all`: none named
- * is every one), or a switch. `when` shows it only while another field's value is one of those; `optional` lets it be
- * left empty (`none`: what empty means); a field not `walked` is set from the summary alone (the panel's «محدودیت‌های
- * بیشتر»); `quick` offers values at a tap.
+ * field it is sent as, its label — the review card's — and its question — the step's title, a question («چند درصد؟») —,
+ * its hint, and how it is set: typed (text, a code, a count, a percent, an amount of money, a decimal, a day and hour), a
+ * choice among buttons, several of them (`all`: none named is every one), or a switch — a record's «فعال» one said as its
+ * chip (active()). `when` shows it only while another field's value is one of those; `optional` lets it be left empty
+ * (`none`: what empty means); a field not `walked` is set from the review alone (the panel's «محدودیت‌های بیشتر»);
+ * `quick` offers values at a tap; a typed one says its limits (range()) and an example.
  */
 final class Step
 {
@@ -32,6 +36,9 @@ final class Step
 
     /** The API's field it is sent as (a refusal names it). */
     public string $field;
+
+    /** The step's title: what it asks. */
+    public string $question;
 
     /**
      * @var array<string, list<int|string|null>>
@@ -54,6 +61,12 @@ final class Step
     public ?int $min = null;
 
     public ?int $max = null;
+
+    /** TOGGLE: a record's «فعال» switch, said «🟢 فعال» / «⏸ غیرفعال» (else «🟢 روشن» / «⏸ خاموش»). */
+    public bool $active = false;
+
+    /** What an answer looks like, plain text; '' for the type's own (a moment's). */
+    public string $example = '';
 
     /**
      * @var list<array{0: string, 1: int|string|null}> Values offered at a tap: [label, value]
@@ -80,6 +93,7 @@ final class Step
         public readonly string $unit = '',
     ) {
         $this->field = $key;
+        $this->question = $label;
     }
 
     public static function text(string $key, string $label, string $hint = ''): self
@@ -134,6 +148,15 @@ final class Step
         return new self(self::TOGGLE, $key, $label, $hint);
     }
 
+    /** A record's «فعال» switch: «وضعیت» on the review, its chip «🟢 فعال» / «⏸ غیرفعال». */
+    public static function active(string $key, string $hint = ''): self
+    {
+        $step = new self(self::TOGGLE, $key, 'وضعیت', $hint);
+        $step->active = true;
+
+        return $step;
+    }
+
     /** One end of a window: a Jalali day and an hour (Moment), `$hour` for a day typed alone. */
     public static function moment(string $key, string $label, int $hour, string $hint = ''): self
     {
@@ -141,6 +164,14 @@ final class Step
         $step->hour = $hour;
 
         return $step;
+    }
+
+    /** The step's title, a question: «چند درصد تخفیف؟». */
+    public function asks(string $question): self
+    {
+        $this->question = $question;
+
+        return $this;
     }
 
     /**
@@ -164,7 +195,7 @@ final class Step
         return $this;
     }
 
-    /** Set from the summary alone, not asked on the way through. */
+    /** Set from the review alone, not asked on the way through. */
     public function later(): self
     {
         $this->walked = false;
@@ -193,6 +224,14 @@ final class Step
     {
         $this->min = $min;
         $this->max = $max;
+
+        return $this;
+    }
+
+    /** What an answer looks like (plain text). */
+    public function example(string $example): self
+    {
+        $this->example = $example;
 
         return $this;
     }
@@ -227,6 +266,12 @@ final class Step
         return $this->resolved ??= is_array($this->options) ? $this->options : ($this->options)();
     }
 
+    /** Whether it is set at a tap (its choices, or a switch), not typed. */
+    public function tapped(): bool
+    {
+        return in_array($this->type, [self::CHOICE, self::TOGGLE, self::MULTI], true);
+    }
+
     /**
      * Whether it shows with `$draft` as it is (its `when`).
      *
@@ -249,7 +294,46 @@ final class Step
         return $value === null || $value === '';
     }
 
-    /** Its value as the summary says it (HTML). */
+    /** What a typed answer may be, plain text: «از ۱ تا ۱۰۰ درصد»; '' for no bounds. */
+    public function limits(): string
+    {
+        if ($this->min === null || $this->max === null) {
+            return '';
+        }
+        $unit = match (true) {
+            $this->unit !== '' => ' ' . $this->unit,
+            $this->type === self::PERCENT => ' درصد',
+            default => '',
+        };
+
+        return 'از ' . Fmt::number($this->min) . ' تا ' . Fmt::number($this->max) . $unit;
+    }
+
+    /** What a typed answer looks like (plain text): the step's own example, else the type's (a moment's). */
+    public function exampleOf(): string
+    {
+        return match (true) {
+            $this->example !== '' => $this->example,
+            $this->type === self::MOMENT => Moment::example(),
+            default => '',
+        };
+    }
+
+    /** Its value as it would be typed back (its question's value now, to copy); '' for none. */
+    public function typed(mixed $value): string
+    {
+        if (self::blank($value) || !is_scalar($value)) {
+            return '';
+        }
+
+        return match ($this->type) {
+            self::MOMENT => Moment::typed((string) $value),
+            self::COUNT, self::PERCENT, self::MONEY, self::DECIMAL => Persian::digits((string) $value),
+            default => (string) $value,
+        };
+    }
+
+    /** Its value as the review says it (HTML). */
     public function display(mixed $value): string
     {
         if ($this->says !== null) {
@@ -259,7 +343,7 @@ final class Step
             }
         }
         if ($this->type === self::TOGGLE) {
-            return (bool) $value ? '✅ بله' : '⛔️ خیر';
+            return $this->active ? Fmt::active((bool) $value) : Fmt::onOff((bool) $value);
         }
         if ($this->type === self::MULTI) {
             if (!is_array($value)) {
@@ -298,9 +382,9 @@ final class Step
         return match ($this->type) {
             self::CODE => mb_strtoupper(str_replace(' ', '', $answer->latin())),
             self::COUNT, self::PERCENT => $this->whole($answer->integer()),
-            self::MONEY => $answer->amount(Unit::Toman) ?? throw $this->refused('مبلغ را به تومان بنویسید، مثل ۵۰۰۰۰ یا «۵۰ هزار تومان».'),
+            self::MONEY => $answer->amount(Unit::Toman) ?? throw $this->refused(Words::NOT_TOMAN),
             self::DECIMAL => self::positive($answer->decimal()) ?? throw $this->refused('یک عدد بنویسید، مثل ۵ یا ۲.۵.'),
-            self::MOMENT => Moment::parse($answer->text(), $this->hour) ?? throw $this->refused('روز را به شکل ۱۴۰۵/۰۷/۲۰ بنویسید؛ ساعت را هم اگر بخواهید بعدش، مثل ۱۴۰۵/۰۷/۲۰ ۱۸.'),
+            self::MOMENT => Moment::parse($answer->text(), $this->hour) ?? throw $this->refused('روز را به تقویم شمسی بنویسید، مثل ' . Moment::example() . ' (ساعت بعد از روز، اگر بخواهید).'),
             default => $answer->text(),
         };
     }
@@ -308,7 +392,7 @@ final class Step
     /** A whole number in its range. */
     private function whole(?int $value): int
     {
-        $range = $this->min !== null && $this->max !== null ? 'عددی بین ' . Fmt::number($this->min) . ' تا ' . Fmt::number($this->max) . ' بنویسید.' : 'یک عدد بنویسید.';
+        $range = $this->min !== null && $this->max !== null ? 'عددی بین ' . Fmt::number($this->min) . ' تا ' . Fmt::number($this->max) . ' بنویسید.' : Words::NOT_NUMBER;
         if ($value === null || ($this->min !== null && $value < $this->min) || ($this->max !== null && $value > $this->max)) {
             throw $this->refused($range);
         }
@@ -319,11 +403,7 @@ final class Step
     /** A decimal above zero, without trailing zeros ("2.50" → "2.5"); null for none. */
     private static function positive(?string $value): ?string
     {
-        if ($value === null || (float) $value <= 0) {
-            return null;
-        }
-
-        return str_contains($value, '.') ? rtrim(rtrim($value, '0'), '.') : $value;
+        return $value === null || (float) $value <= 0 ? null : Marketing::trim($value);
     }
 
     private function refused(string $message): ApiRefusal

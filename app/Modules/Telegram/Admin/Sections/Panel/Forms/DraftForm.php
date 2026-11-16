@@ -256,21 +256,6 @@ final class DraftForm
         return self::isLatin($field) ? Fmt::ltr(Fmt::cut($text, 80)) : Fmt::e(Fmt::cut($text, 80));
     }
 
-    /**
-     * A field's value as its button shows it (plain text, short).
-     *
-     * @param array<string, mixed> $field
-     * @param array<string, string|bool> $values
-     */
-    public function brief(array $field, string $driver, array $values): string
-    {
-        if (($field['type'] ?? '') === 'toggle') {
-            return ($values[self::name($field)] ?? false) === true ? '✅' : '⛔️';
-        }
-
-        return Fmt::plain($this->display($field, $driver, $values));
-    }
-
     /** @param array<string, mixed> $field */
     public static function label(array $field): string
     {

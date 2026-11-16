@@ -12,8 +12,10 @@ use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\BaseScreen;
 use App\Modules\Telegram\Admin\Ui\Button;
 use App\Modules\Telegram\Admin\Ui\Fmt;
+use App\Modules\Telegram\Admin\Ui\Icons;
 use App\Modules\Telegram\Admin\Ui\Json;
 use App\Modules\Telegram\Admin\Ui\View;
+use App\Modules\Telegram\Admin\Ui\Words as Vocabulary;
 
 /**
  * «انتقال از ربات دیگر» (the owner's, in the main shop): another bot's data brought into the shop. With none under way,
@@ -28,6 +30,18 @@ final class ImportsScreen extends BaseScreen
 {
     public const ID = 'ppi';
 
+    public const TITLE = Icons::IMPORTS . ' انتقال از ربات دیگر';
+
+    /**
+     * The path of a screen under it — «… › تنظیمات پنل › انتقال از ربات دیگر» and the sections `$more` between.
+     *
+     * @return list<string>
+     */
+    public static function under(string ...$more): array
+    {
+        return PanelSettingsScreen::under(Fmt::bare(self::TITLE), ...$more);
+    }
+
     public function allows(AdminSeat $seat): bool
     {
         return Access::main($seat);
@@ -37,7 +51,7 @@ final class ImportsScreen extends BaseScreen
     {
         $page = $admin->api->get('/imports');
         $current = is_array($page['current'] ?? null) ? $page['current'] : null;
-        $view = View::make('🔀 انتقال از ربات دیگر', 'مدیریت', 'تنظیمات', 'تنظیمات پنل');
+        $view = View::make(self::TITLE, ...PanelSettingsScreen::under());
         if ($current === null) {
             return $this->start($view, $page);
         }
@@ -62,8 +76,8 @@ final class ImportsScreen extends BaseScreen
             case 'start':
                 return $admin->confirm(
                     'انتقال شروع شود؟',
-                    Button::to('▶️ شروع انتقال', self::ID, 'go'),
-                    Button::to('✖️ انصراف', self::ID),
+                    Button::to(Vocabulary::yes('شروع شود'), self::ID, 'go'),
+                    Button::to(Vocabulary::CANCEL, self::ID),
                     'داده‌های انتخاب‌شده در این فروشگاه نوشته می‌شود. روی پنل‌های VPN و ربات قبلی چیزی تغییر نمی‌کند و به مشتری‌ها پیامی فرستاده نمی‌شود. انتقال ممکن است چند دقیقه طول بکشد؛ تا تمام شود، «▶️ ادامه» را بزنید. اگر این فروشگاه از قبل مشتری یا سرویس دارد، اول از «💾 پشتیبان‌گیری» یک پشتیبان بگیرید تا در صورت نیاز به همین حالت برگردید.',
                 );
             case 'go':
@@ -75,11 +89,12 @@ final class ImportsScreen extends BaseScreen
             case 'cancel':
                 return $admin->confirm(
                     'انتقال لغو شود؟',
-                    Button::to('🛑 لغو انتقال', self::ID, 'cancelled'),
-                    Button::to('✖️ ادامه انتقال', self::ID),
+                    Button::to(Vocabulary::yes('لغو شود'), self::ID, 'cancelled'),
+                    Button::to('▶️ ادامه انتقال', self::ID),
                     (($current['phase'] ?? '') === 'importing' ? 'آنچه تا این لحظه منتقل شده در فروشگاه می‌ماند و بقیه منتقل نمی‌شود. ' : 'هنوز چیزی در فروشگاه نوشته نشده است. ')
                     . (($current['source'] ?? '') === 'database' ? 'داده‌هایی که از دیتابیس ربات قبلی خوانده شده پاک می‌شود' : 'فایل پشتیبان و داده‌هایی که از آن خوانده شده پاک می‌شود')
                     . '؛ هر وقت خواستید دوباره منتقل کنید، آنچه آمده دوباره نمی‌آید.',
+                    danger: true,
                 );
             case 'cancelled':
                 $admin->api->delete("/imports/{$id}");
@@ -122,8 +137,8 @@ final class ImportsScreen extends BaseScreen
     private function start(View $view, array $page): View
     {
         $view->line(Words::ABOUT)
-            ->row(Button::to('➕ انتقال تازه', ImportStartScreen::ID))
-            ->line()->line('<b>انتقال‌های قبلی</b>: گزارش هر انتقال، با آنچه آمد و آنچه نیامد.');
+            ->row(Button::to('➕ انتقال تازه', ImportStartScreen::ID)->primary())
+            ->section('🗂 انتقال‌های قبلی');
         $history = array_values(array_filter(Json::part($page, 'history'), is_array(...)));
         if ($history === []) {
             $view->line('<i>هنوز انتقالی انجام نشده است.</i>');
@@ -154,12 +169,12 @@ final class ImportsScreen extends BaseScreen
         $label = Fmt::ltr((string) ($import['migrator_label'] ?? ''));
         if (($import['phase'] ?? '') === 'reading') {
             $count = static fn(int $value): string => ($import['source'] ?? '') === 'backup' ? Fmt::bytes($value) : Fmt::number($value) . ' ردیف';
-            $view->line('<b>🔄 در حال خواندن داده‌ها</b>')
+            $view->section('📖 در حال خواندن داده‌ها')
                 ->line('داده‌های ' . $label . ' از ' . Words::source($import) . ' خوانده می‌شود. هنوز چیزی در فروشگاه نوشته نشده است.')
                 ->line()
                 ->line(($total === null ? $count($done) . ' خوانده شد' : $count($done) . ' از ' . $count($total) . ' خوانده شد') . ($total !== null && $total > 0 ? ' · ' . Fmt::percent(min(100, intdiv($done * 100, $total))) : ''));
         } else {
-            $view->line('<b>⏳ در حال انتقال</b>')
+            $view->section('⏳ در حال انتقال')
                 ->line('داده‌های ' . $label . ' در فروشگاه نوشته می‌شود. روی پنل‌ها و ربات قبلی چیزی تغییر نمی‌کند و به مشتری‌ها پیامی فرستاده نمی‌شود.')
                 ->line();
             $stage = (string) ($progress['stage'] ?? '');
@@ -181,9 +196,10 @@ final class ImportsScreen extends BaseScreen
         }
         $view->note('هر بار که «▶️ ادامه» را بزنید، یک قدم (حدود ۱۵ ثانیه کار سرور) جلو می‌رود؛ تا تمام شود ادامه دهید. اگر رها کنید، با برگشتن به همین‌جا از همان‌جایی که مانده ادامه پیدا می‌کند.');
 
-        return $view->row(Button::to('▶️ ادامه', self::ID, 'step'), Button::to('🔄 تازه‌سازی', self::ID))
-            ->row(Button::to('✖️ لغو انتقال', self::ID, 'cancel'))
-            ->back(PanelSettingsScreen::ID);
+        return $view->row(Button::to('▶️ ادامه', self::ID, 'step')->primary())
+            ->row(Button::to('⏹ لغو انتقال', self::ID, 'cancel')->danger())
+            ->back(PanelSettingsScreen::ID)
+            ->refresh(self::ID);
     }
 
     /**
@@ -198,10 +214,9 @@ final class ImportsScreen extends BaseScreen
         $counts = Json::part($survey, 'counts');
         $count = static fn(string $kind): string => Fmt::number((int) ($counts[$kind] ?? 0));
         $version = is_string($import['version'] ?? null) ? $import['version'] : (is_string($survey['version'] ?? null) ? $survey['version'] : null);
-        $view->line('<b>📝 آنچه در ربات قبلی پیدا شد</b>')
+        $view->section('📝 آنچه در ربات قبلی پیدا شد')
             ->line('داده‌های ' . Fmt::ltr((string) ($import['migrator_label'] ?? '')) . ($version !== null ? ' نسخه ' . Fmt::ltr($version) : '') . ' از ' . Words::source($import) . ' خوانده شد. هنوز چیزی در فروشگاه نوشته نشده است؛ انتخاب کنید چه چیزهایی منتقل شود.')
-            ->line()
-            ->facts([
+            ->card([
                 'مشتری‌ها' => $count('customers') . ((int) ($counts['resellers'] ?? 0) > 0 ? ' (' . $count('resellers') . ' نفر از ربات‌های نماینده)' : ''),
                 'سرویس‌های فعال' => $count('services') . ((int) ($counts['tests'] ?? 0) > 0 ? ' و ' . $count('tests') . ' اکانت تست' : ''),
                 'موجودی کیف پول‌ها' => Fmt::money(is_scalar($survey['balance_total'] ?? null) ? (string) $survey['balance_total'] : '0') . ' (' . $count('balances') . ' مشتری موجودی دارند)',
@@ -213,7 +228,7 @@ final class ImportsScreen extends BaseScreen
             ]);
         $left = array_values(array_filter(Json::part($survey, 'left'), is_array(...)));
         if ($left !== []) {
-            $view->line()->line('<b>آنچه منتقل نمی‌شود</b>: این‌ها در ربات قبلی می‌مانند؛ اگر لازمشان دارید، پیش از کنار گذاشتن ربات قبلی از آن‌ها نسخه بگیرید.');
+            $view->section('🚫 آنچه منتقل نمی‌شود')->line('این‌ها در ربات قبلی می‌مانند؛ اگر لازمشان دارید، پیش از کنار گذاشتن ربات قبلی از آن‌ها نسخه بگیرید.');
             foreach ($left as $each) {
                 $view->line('• ' . Fmt::e((string) ($each['what'] ?? '')) . ': ' . Fmt::number((int) ($each['count'] ?? 0)));
             }
@@ -235,7 +250,7 @@ final class ImportsScreen extends BaseScreen
         }
 
         return $view->row(Button::to('✅ چه چیزهایی منتقل شود', ImportChoicesScreen::ID))
-            ->row(Button::to('▶️ شروع انتقال', self::ID, 'start'), Button::to('✖️ لغو انتقال', self::ID, 'cancel'))
+            ->row(Button::to('▶️ شروع انتقال', self::ID, 'start')->primary(), Button::to('⏹ لغو انتقال', self::ID, 'cancel')->danger())
             ->back(PanelSettingsScreen::ID);
     }
 }

@@ -5,55 +5,56 @@ declare(strict_types=1);
 namespace App\Modules\Telegram\Admin\Sections\Bot;
 
 use App\Modules\Telegram\Admin\AdminSeat;
+use App\Modules\Telegram\Admin\Sections\Bot\Settings\ClientNamesCard;
+use App\Modules\Telegram\Admin\Sections\Bot\Settings\ExpiredServicesCard;
+use App\Modules\Telegram\Admin\Sections\Bot\Settings\ExtrasCard;
+use App\Modules\Telegram\Admin\Sections\Bot\Settings\GeneralCard;
+use App\Modules\Telegram\Admin\Sections\Bot\Settings\PaymentsCard;
+use App\Modules\Telegram\Admin\Sections\Bot\Settings\QrCard;
+use App\Modules\Telegram\Admin\Sections\Bot\Settings\RemindersCard;
+use App\Modules\Telegram\Admin\Sections\Bot\Settings\RenewalCard;
+use App\Modules\Telegram\Admin\Sections\Bot\Settings\ServiceClaimsCard;
+use App\Modules\Telegram\Admin\Sections\Bot\Settings\ServiceTransfersCard;
+use App\Modules\Telegram\Admin\Sections\Bot\Settings\WalletCard;
+use App\Modules\Telegram\Admin\Sections\Bot\Settings\WalletTransfersCard;
 use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\BaseScreen;
 use App\Modules\Telegram\Admin\Ui\Button;
 use App\Modules\Telegram\Admin\Ui\Fmt;
+use App\Modules\Telegram\Admin\Ui\Icons;
 use App\Modules\Telegram\Admin\Ui\Settings\BotGroupSource;
-use App\Modules\Telegram\Admin\Ui\Settings\Origin;
 use App\Modules\Telegram\Admin\Ui\View;
+use App\Modules\Telegram\Admin\Ui\Words;
 
 /**
- * «🤖 تنظیمات ربات» (the owner's and an agent's): every card of the panel's page, in its order — each its own screen
- * (Settings\*), the channels, the report group and «🛡 مدیران ربات» the sections that have them —, then the cards of the
- * sections that keep theirs on their own pages (discount codes, gift codes, the wheel, cashback, the draw, tests, custom
- * services). Each entry carries this menu as its origin (Origin), so its «⬅️ بازگشت» comes back here. An entry whose
- * screen is not there, or that the seat may not open (the claims and custom services: the main shop's), is left out.
- * The bot switched off is said first, as the panel says it over every section.
+ * «🤖 تنظیمات ربات» (the owner's and an agent's): the bot's own cards, each its own screen (Settings\*) under its title,
+ * two a row and grouped as the owner looks for them — the bot itself, the wallet and the card payment, a service's life.
+ * A card of a feature lives with that feature (the channels and the report group in «🤖 ربات», the referral rules in
+ * «🔗 زیرمجموعه‌گیری», the tests', the custom services' and the rewards' with them, «🛡 مدیران ربات» in «⚙️ تنظیمات»),
+ * which the folded help says. An entry the seat may not open (the claims: the main shop's) is left out. The bot switched
+ * off is said first, as the panel says it over every section.
  */
 final class BotSettingsMenu extends BaseScreen
 {
     public const ID = 'bs';
 
-    /** The page's sections, in its order: [screen, label]. */
-    private const CARDS = [
-        ['bsg', '⚙️ عمومی'],
-        ['bsn', '🪪 نام کاربری سرویس'],
-        ['ch', '📢 کانال‌ها'],
-        ['bsw', '👛 کیف پول'],
-        ['bst', '💸 انتقال موجودی'],
-        ['bsp', '💳 پرداخت کارت به کارت'],
-        ['bsr', '🔁 تمدید سرویس'],
-        ['bsx', '➕ خرید اضافه'],
-        ['bsm', '⏰ یادآوری'],
-        ['bse', '🗑 سرویس‌های منقضی‌شده'],
-        ['bsc', '🔗 افزودن سرویس با لینک'],
-        ['bsv', '🔀 انتقال سرویس'],
-        ['bsf', '🤝 زیرمجموعه‌گیری'],
-        ['rg', '📋 گروه گزارش‌ها'],
-        ['bsq', "🔳 کد \u{2068}QR\u{2069}"],
-        ['ba', '🛡 مدیران ربات'],
-    ];
+    /** The menu's name, as the cards' path says it too. */
+    public const TITLE = 'تنظیمات ربات';
 
-    /** The cards other sections keep on their own pages: [screen, label]. */
-    private const ELSEWHERE = [
-        ['dcs', '🏷 کدهای تخفیف'],
-        ['gcs', '🎁 کدهای هدیه'],
-        ['whs', '🎡 گردونه شانس'],
-        ['cbs', '💰 کش‌بک'],
-        ['lts', '🎲 قرعه‌کشی'],
-        ['tss', '🧪 اکانت تست'],
-        ['css', '🛠 سرویس دلخواه'],
+    /** The cards, in rows of two: the bot itself, the money, a service's life. */
+    private const CARDS = [
+        [GeneralCard::ID, GeneralCard::TITLE],
+        [ClientNamesCard::ID, ClientNamesCard::TITLE],
+        [WalletCard::ID, WalletCard::TITLE],
+        [WalletTransfersCard::ID, WalletTransfersCard::TITLE],
+        [PaymentsCard::ID, PaymentsCard::TITLE],
+        [QrCard::ID, QrCard::TITLE],
+        [RenewalCard::ID, RenewalCard::TITLE],
+        [ExtrasCard::ID, ExtrasCard::TITLE],
+        [RemindersCard::ID, RemindersCard::TITLE],
+        [ExpiredServicesCard::ID, ExpiredServicesCard::TITLE],
+        [ServiceTransfersCard::ID, ServiceTransfersCard::TITLE],
+        [ServiceClaimsCard::ID, ServiceClaimsCard::TITLE],
     ];
 
     public function allows(AdminSeat $seat): bool
@@ -63,37 +64,18 @@ final class BotSettingsMenu extends BaseScreen
 
     public function show(Admin $admin, array $args): View
     {
-        $settings = BotGroupSource::settings($admin);
-        $view = View::make('🤖 تنظیمات ربات', 'مدیریت', 'تنظیمات')
-            ->line('رفتار ربات برای مشتری‌ها. تغییرات همان لحظه روی ربات اعمال می‌شود؛ نیازی به اجرای دوباره نیست.');
-        if (($settings['enabled'] ?? true) === false) {
+        $view = View::make(Icons::BOT . ' ' . self::TITLE, Words::ROOT, Fmt::bare(Words::SETTINGS))
+            ->line('رفتار ربات برای مشتری‌ها؛ هر تغییر همان لحظه روی ربات اعمال می‌شود.');
+        if ((BotGroupSource::settings($admin)['enabled'] ?? true) === false) {
             $view->line()->line('⚠️ <b>ربات خاموش است.</b> مشتری‌ها به جای منو فقط پیام «ربات فعلا غیرفعال است» می‌بینند. مدیریت فروشگاه (مالک، نماینده و مدیران ربات) همچنان از ربات استفاده می‌کند.');
         }
-        $view->grid(2, ...self::buttons($admin, self::CARDS));
-        $elsewhere = self::buttons($admin, self::ELSEWHERE);
-        if ($elsewhere !== []) {
-            $view->line()->line('<i>ردیف‌های آخر، از «' . Fmt::e($elsewhere[0]->label) . '» به بعد: تنظیمات بخش‌هایی که در پنل صفحه خودشان را دارند.</i>');
-            $view->grid(2, ...$elsewhere);
-        }
-
-        return $view->back('hc');
-    }
-
-    /**
-     * The entries the seat may open, as buttons that come back here.
-     *
-     * @param list<array{0: string, 1: string}> $entries
-     * @return list<Button>
-     */
-    private static function buttons(Admin $admin, array $entries): array
-    {
         $buttons = [];
-        foreach ($entries as [$id, $label]) {
-            if ($admin->opens($id)) {
-                $buttons[] = Origin::button($label, $id, self::ID);
-            }
+        foreach (self::CARDS as [$id, $label]) {
+            $buttons[] = $admin->opens($id) ? Button::to($label, $id) : null;
         }
 
-        return $buttons;
+        return $view->grid(2, ...$buttons)
+            ->help('تنظیمات هر بخش کنار خود آن بخش است: کانال‌های اجباری و گروه گزارش‌ها در «' . Fmt::e(Icons::BOT . ' ربات') . '»، قوانین زیرمجموعه‌گیری در «' . Fmt::e(Icons::REFERRALS . ' زیرمجموعه‌گیری') . '»، تنظیمات اکانت تست، سرویس دلخواه، کدهای تخفیف و هدیه، کش‌بک، گردونه و قرعه‌کشی در صفحه خودشان، و «' . Fmt::e(Icons::BOT_ADMINS . ' مدیران ربات') . '» در «' . Fmt::e(Words::SETTINGS) . '». هر تنظیمی را با «' . Fmt::e(Icons::SEARCH . ' جستجوی تنظیمات') . '» هم پیدا کنید.')
+            ->back('hc');
     }
 }

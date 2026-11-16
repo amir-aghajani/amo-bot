@@ -6,12 +6,14 @@ namespace App\Modules\Telegram\Admin\Sections\Bot\Texts;
 
 use App\Modules\Bots\CurrentBot;
 use App\Modules\Telegram\Admin\AdminSeat;
+use App\Modules\Telegram\Admin\Sections\Bot\BotScreens;
 use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\BaseScreen;
 use App\Modules\Telegram\Admin\Ui\Button;
 use App\Modules\Telegram\Admin\Ui\Fmt;
 use App\Modules\Telegram\Admin\Ui\Nav;
 use App\Modules\Telegram\Admin\Ui\View;
+use App\Modules\Telegram\Admin\Ui\Words;
 use App\Modules\Telegram\Handlers\CustomEmojiHandler;
 use App\Modules\Telegram\Messages;
 
@@ -28,6 +30,8 @@ final class PremiumEmojisScreen extends BaseScreen
 {
     public const ID = 'txe';
 
+    public const TITLE = '✨ ایموجی‌های پرمیوم';
+
     private const PER_PAGE = 24;
 
     public function allows(AdminSeat $seat): bool
@@ -42,8 +46,8 @@ final class PremiumEmojisScreen extends BaseScreen
         $status = is_array($answer['status'] ?? null) ? $answer['status'] : null;
         [$shown, $page, $pages] = View::slice($emojis, self::page($args), self::PER_PAGE);
 
-        $view = View::make('✨ ایموجی‌های پرمیوم', 'مدیریت', 'ربات', 'متن‌های ربات')
-            ->line('ایموجی‌هایی که ربات می‌شناسد. در «متن‌های ربات» و «کیبوردها» ایموجی پرمیوم را همان‌طور که می‌خواهید بفرستید؛ این‌جا فهرست آن‌هاست.');
+        $view = View::make(self::TITLE, ...[...BotScreens::PATH, Fmt::bare(TextsScreen::TITLE)])
+            ->total(count($emojis), 'ایموجی');
         if (($status['ok'] ?? null) === false) {
             $view->line()->line("⚠️ آخرین بار تلگرام ایموجی‌های پرمیوم را از پیام ربات برداشت. ربات فقط وقتی ایموجی پرمیوم می‌فرستد که حسابی که آن را در \u{2068}@BotFather\u{2069} ساخته تلگرام پرمیوم داشته باشد؛ تا آن موقع مشتری‌ها جایشان ایموجی معمولی می‌بینند.");
         }
@@ -57,12 +61,12 @@ final class PremiumEmojisScreen extends BaseScreen
         $view->grid(4, ...array_map(static fn(array $emoji): Button => Button::to('🗑 ' . (string) ($emoji['emoji'] ?? ''), self::ID, 'del', (string) $emoji['id'], $page), $shown));
         $view->pager($page, $pages, self::ID, 'page');
         if (self::here($admin)) {
-            $view->row(Button::to('✨ افزودن ایموجی تازه', self::ID, 'add'));
+            $view->row(Button::to('✨ افزودن ایموجی تازه', self::ID, 'add')->success());
         } else {
             $view->line()->line('<i>ایموجی تازه را از ربات همین فروشگاه اضافه کنید: هر ربات ایموجی‌های خودش را دارد.</i>');
         }
 
-        return $view->back(TextsScreen::ID);
+        return $view->help('ایموجی‌هایی که ربات می‌شناسد. در «متن‌های ربات» و «کیبوردها» ایموجی پرمیوم را همان‌طور که می‌خواهید بفرستید؛ این‌جا فهرست آن‌هاست.')->back(TextsScreen::ID);
     }
 
     public function act(Admin $admin, string $action, array $args): View
@@ -81,8 +85,8 @@ final class PremiumEmojisScreen extends BaseScreen
 
                 return $admin->confirm(
                     'این ایموجی از فهرست حذف شود؟',
-                    Button::to('🗑 بله، حذف شود', self::ID, 'deld', $id, $page),
-                    Button::to('✖️ انصراف', self::ID, 'page', $page),
+                    Button::to(Words::yes('حذف شود', '🗑'), self::ID, 'deld', $id, $page),
+                    Button::to(Words::CANCEL, self::ID, 'page', $page),
                     '<tg-emoji emoji-id="' . $id . '">' . Fmt::e((string) ($emoji['emoji'] ?? '')) . '</tg-emoji> از فهرست ایموجی‌های پنل برداشته می‌شود. متن‌هایی که از آن استفاده کرده‌اند آن را نگه می‌دارند؛ برای برگرداندنش، پیامی با همین ایموجی را دوباره بفرستید.',
                 );
             case 'deld':
@@ -98,9 +102,9 @@ final class PremiumEmojisScreen extends BaseScreen
                 }
                 CustomEmojiHandler::await($admin->ctx, (int) $admin->ctx->update->messageId(), Nav::to(self::ID));
 
-                return View::make('✨ افزودن ایموجی تازه', 'مدیریت', 'ربات', 'متن‌های ربات')
+                return View::make('✨ افزودن ایموجی تازه', ...[...BotScreens::PATH, Fmt::bare(TextsScreen::TITLE)])
                     ->line(Messages::EMOJI_ASK)
-                    ->row(Button::to('✖️ انصراف', self::ID));
+                    ->row(Button::to(Words::CANCEL, self::ID));
             case 'page':
                 return $this->show($admin, [(string) self::page($args)]);
         }

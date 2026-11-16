@@ -23,8 +23,6 @@ use Tests\Support\FakeRialit;
  */
 final class OwnerRialitWebhookTest extends BotTestCase
 {
-    private const OWNER = 7001;
-
     /** The shop's address for Rialit's webhooks. */
     private const OURS = 'https://shop.example/payments/webhooks/rialit';
 
@@ -87,7 +85,7 @@ final class OwnerRialitWebhookTest extends BotTestCase
         $screen = $this->said()[0];
         self::assertStringStartsWith('<b>⚠️ ' . GatewayWebhooks::TAKEN_ELSEWHERE . "</b>\n<b>" . self::SWAP_HINT . '</b>', $screen, 'over the screen, pointing to the button');
         self::assertSame(1, substr_count($screen, GatewayWebhooks::TAKEN_ELSEWHERE), 'said once');
-        self::assertStringContainsString("🔗 وب‌هوک ریالیت: 🟠 به آدرس دیگری می‌رود\n<code>" . self::OTHER . '</code>', $screen, 'the other address, copied at a tap');
+        self::assertStringContainsString("🔗 وب‌هوک ریالیت: ⚠️ به آدرس دیگری می‌رود\n<code>" . self::OTHER . '</code>', $screen, 'the other address, copied at a tap');
         self::assertContains(Nav::to('pmv', 'swap', $method->id), $this->callbacks($this->window()));
 
         $this->send($this->tap(Nav::to('pmv', 'show', $method->id), chat: self::OWNER));
@@ -101,7 +99,7 @@ final class OwnerRialitWebhookTest extends BotTestCase
         self::assertStringContainsString('<code>' . self::OURS . '</code>', $asked);
         self::assertStringContainsString('آن آدرس دیگر وب‌هوک‌های ریالیت را نمی‌گیرد', $asked);
         self::assertStringContainsString('ریالیت این تغییر را در تلگرام و ایمیل به صاحب حساب خبر می‌دهد', $asked);
-        self::assertSame([Nav::to('pmv', 'swapped', $method->id), Nav::to('pmv', 'show', $method->id)], $this->callbacks($this->window()));
+        self::assertSame([Nav::to('pmv', 'show', $method->id), Nav::to('pmv', 'swapped', $method->id)], $this->callbacks($this->window()), 'the yes on the right, as a Persian reader reads');
         self::assertSame(self::OTHER, $this->rialit->webhookUrl, 'asked first');
 
         $this->send($this->tap(Nav::to('pmv', 'show', $method->id), chat: self::OWNER));
@@ -124,7 +122,7 @@ final class OwnerRialitWebhookTest extends BotTestCase
         $this->send($this->tap(Nav::to('pmv', 'hook', $method->id), chat: self::OWNER));
         self::assertNull($this->rialit->webhookUrl);
         self::assertStringStartsWith('<b>⚠️ ' . GatewayWebhooks::TOO_MANY_CHANGES . '</b>', $this->said()[0]);
-        self::assertStringContainsString('🔗 وب‌هوک ریالیت: ⚪️ ثبت نشده', $this->said()[0]);
+        self::assertStringContainsString('🔗 وب‌هوک ریالیت: ⏸ ثبت نشده', $this->said()[0]);
         self::assertContains(Nav::to('pmv', 'hook', $method->id), $this->callbacks($this->window()), 'to try again later');
 
         $this->rialit->webhookUrl = self::OTHER;
@@ -133,7 +131,7 @@ final class OwnerRialitWebhookTest extends BotTestCase
         self::assertSame(0, $this->rialit->notices);
         $screen = $this->said()[0];
         self::assertStringStartsWith('<b>⚠️ ' . GatewayWebhooks::TOO_MANY_CHANGES . "</b>\n\n<b>🏦 ", $screen, 'why, and no pointer to the button just tapped');
-        self::assertStringContainsString('🔗 وب‌هوک ریالیت: 🟠 به آدرس دیگری می‌رود', $screen);
+        self::assertStringContainsString('🔗 وب‌هوک ریالیت: ⚠️ به آدرس دیگری می‌رود', $screen);
         self::assertContains(Nav::to('pmv', 'swap', $method->id), $this->callbacks($this->window()));
     }
 
@@ -145,7 +143,7 @@ final class OwnerRialitWebhookTest extends BotTestCase
         $this->send($this->tap(Nav::to('pmv', 'show', $method->id), chat: self::OWNER));
         $screen = $this->said()[0];
         self::assertStringContainsString('🔗 وب‌هوک ریالیت: ⚠️ ' . GatewayWebhooks::OUT_OF_REACH, $screen, 'why, on its line');
-        self::assertStringContainsString('وضعیت: 🟢 فعال', $screen, 'the screen still whole');
+        self::assertStringContainsString('وضعیت: <b>🟢 فعال</b>', $screen, 'the screen still whole');
         self::assertContains(Nav::to('pmv', 'on', $method->id, 0), $this->callbacks($this->window()));
         self::assertContains(Nav::to('pmv', 'look', $method->id), $this->callbacks($this->window()));
 
@@ -155,7 +153,7 @@ final class OwnerRialitWebhookTest extends BotTestCase
         $this->rialit->failing = null;
         $this->send($this->tap(Nav::to('pmv', 'look', $method->id), chat: self::OWNER));
         self::assertNull($this->popup());
-        self::assertStringContainsString('🔗 وب‌هوک ریالیت: ⚪️ ثبت نشده', $this->said()[0]);
+        self::assertStringContainsString('🔗 وب‌هوک ریالیت: ⏸ ثبت نشده', $this->said()[0]);
         self::assertContains(Nav::to('pmv', 'hook', $method->id), $this->callbacks($this->window()));
         self::assertSame([], $this->rialit->webhookCalls('POST'), 'never set by reading it');
 
@@ -180,7 +178,7 @@ final class OwnerRialitWebhookTest extends BotTestCase
         $bot = $this->agentBot();
         $agentMethod = CurrentBot::run($bot, fn(): PaymentMethod => $this->rialitMethod('ریالیت نماینده'));
         $this->sendTo($bot, $this->tap(Nav::to('pmv', 'show', $agentMethod->id), chat: self::AGENT_TELEGRAM_ID));
-        self::assertStringContainsString('🔗 وب‌هوک ریالیت: ⚪️ ثبت نشده', $this->said()[0]);
+        self::assertStringContainsString('🔗 وب‌هوک ریالیت: ⏸ ثبت نشده', $this->said()[0]);
         self::assertContains(Nav::to('pmv', 'hook', $agentMethod->id), $this->callbacks($this->window()));
 
         $this->rialit->webhookUrl = self::OTHER;

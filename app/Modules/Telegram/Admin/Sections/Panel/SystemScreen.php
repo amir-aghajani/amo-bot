@@ -13,11 +13,13 @@ use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\BaseScreen;
 use App\Modules\Telegram\Admin\Ui\Button;
 use App\Modules\Telegram\Admin\Ui\Fmt;
+use App\Modules\Telegram\Admin\Ui\Icons;
 use App\Modules\Telegram\Admin\Ui\Json;
 use App\Modules\Telegram\Admin\Ui\View;
+use App\Modules\Telegram\Admin\Ui\Words;
 
 /**
- * «📡 دریافت پیام‌ها و وضعیت سیستم» (the owner's): whether the machinery behind the shop is alive — the version and PHP
+ * «🛰 دریافت پیام‌ها و وضعیت سیستم» (the owner's): whether the machinery behind the shop is alive — the version and PHP
  * (an unsafe PHP said, as the panel says it over every page), the shop's bot and how it gets its messages, the scheduled
  * tasks — and every bot put on webhooks or taken off them (the panel's «دریافت پیام‌ها»), each asked first, with what
  * happened to each bot after.
@@ -27,6 +29,8 @@ use App\Modules\Telegram\Admin\Ui\View;
 final class SystemScreen extends BaseScreen
 {
     public const ID = 'ppw';
+
+    public const TITLE = Icons::SYSTEM . ' دریافت پیام‌ها و وضعیت سیستم';
 
     /** How a bot gets its messages, as the panel's statuses word it. */
     private const MODE = ['webhook' => "\u{2068}Webhook\u{2069}", 'polling' => 'پولینگ', 'offline' => 'مشکل دارد'];
@@ -50,59 +54,57 @@ final class SystemScreen extends BaseScreen
         $main = Json::part($system, 'main_bot');
         $cron = Json::part($system, 'cron');
         $config = Access::main($admin->seat) ? $admin->api->get('/settings/config') : null;
-        $groups = $config !== null && Json::part($config, 'groups');
+        $groups = $config !== null ? Json::part($config, 'groups') : [];
         $appUrl = $config === null ? null : (is_array($groups['app'] ?? null) && is_string($groups['app']['url'] ?? null) ? $groups['app']['url'] : '');
 
-        $view = View::make('📡 دریافت پیام‌ها و وضعیت سیستم', 'مدیریت', 'تنظیمات', 'تنظیمات پنل')
-            ->line('نسخه ' . Fmt::ltr((string) ($system['version'] ?? '')) . ' · ' . Fmt::ltr('PHP ' . (string) ($system['php'] ?? '')));
+        $view = View::make(self::TITLE, ...PanelSettingsScreen::under());
         if (($system['php_safe'] ?? true) === false) {
-            $view->line("⚠️ <b>\u{2068}PHP\u{2069} این هاست (" . Fmt::ltr((string) ($system['php'] ?? '')) . ') حفره امنیتی جدی دارد.</b> آن را از تنظیمات هاست (مثلا «Select PHP Version» در cPanel) به ' . Fmt::ltr('PHP ' . (string) ($system['php_required'] ?? '')) . ' یا بالاتر ببرید؛ تا آن وقت به‌روزرسانی فروشگاه نصب نمی‌شود.');
-        }
-
-        $isMain = ($bot['id'] ?? null) === Bot::MAIN;
-        $name = ($isMain ? 'ربات اصلی' : 'ربات این فروشگاه') . (is_string($bot['username'] ?? null) ? ' ' . Fmt::ltr('@' . $bot['username']) : '');
-        $mode = is_string($bot['mode'] ?? null) ? $bot['mode'] : 'offline';
-        $view->line()->line('🤖 <b>' . $name . '</b>: ' . match (true) {
-            ($bot['configured'] ?? false) !== true => 'وصل نشده',
-            $mode !== 'offline' && ($bot['enabled'] ?? true) === false => 'غیرفعال از تنظیمات',
-            default => self::MODE[$mode] ?? Fmt::e($mode),
-        })->line('<i>' . match (true) {
-            ($bot['configured'] ?? false) !== true => $isMain ? 'توکن ربات تنظیم نشده است.' : 'نماینده هنوز توکن رباتش را از ربات اصلی نفرستاده است.',
-            $mode === 'offline' => 'پیامی نمی‌رسد: Webhook ثبت نشده است.',
-            default => (is_string($bot['username'] ?? null) ? '' : 'توکن تنظیم شده · ') . 'آخرین پیام: ' . Fmt::date(is_string($bot['last_update_at'] ?? null) ? $bot['last_update_at'] : null, true),
-        } . '</i>');
-        $ran = is_string($cron['last_run_at'] ?? null) ? $cron['last_run_at'] : null;
-        $view->line('⏱ <b>کارهای زمان‌بندی‌شده</b>: ' . ($ran !== null ? 'فعال' : 'تنظیم نشده'))
-            ->line('<i>' . ($ran !== null ? 'آخرین اجرا: ' . Fmt::date($ran, true) . ' · ' . Fmt::number((int) ($cron['tasks'] ?? 0)) . ' وظیفه' : 'هنوز اجرا نشده‌اند؛ Cron را در «پیشرفته» راه بیندازید.') . '</i>');
-
-        $mainMode = is_string($main['mode'] ?? null) ? $main['mode'] : 'offline';
-        $view->line()
-            ->line('<b>📡 دریافت پیام‌ها</b>: ' . (self::MODE[$mainMode] ?? Fmt::e($mainMode)))
-            ->line('<i>با Webhook، تلگرام پیام‌ها را مستقیم به آدرس فروشگاه می‌فرستد و چیزی لازم نیست روی سرور اجرا بماند؛ راه هاست‌های اشتراکی. بدون آن، پیام‌ها فقط با پولینگ روی سرور گرفته می‌شوند. ثبت و برداشتن برای ربات اصلی و ربات همه نماینده‌ها با هم انجام می‌شود.</i>');
-        $webhook = $config === null ? null : (((array) ($config['meta'] ?? []))['webhook_url'] ?? null);
-        if ($mainMode === 'webhook' && is_string($webhook)) {
-            $view->line("آدرس \u{2068}Webhook\u{2069} ربات اصلی: " . Fmt::ltr($webhook));
+            $view->line("⚠️ <b>\u{2068}PHP\u{2069} این هاست (" . Fmt::ltr((string) ($system['php'] ?? '')) . ") حفره امنیتی جدی دارد.</b> آن را از تنظیمات هاست (مثلا «\u{2068}Select PHP Version\u{2069}» در \u{2068}cPanel\u{2069}) به " . Fmt::ltr('PHP ' . (string) ($system['php_required'] ?? '')) . ' یا بالاتر ببرید؛ تا آن وقت به‌روزرسانی فروشگاه نصب نمی‌شود.');
         }
         $https = $appUrl === null || str_starts_with($appUrl, 'https://');
         if (!$https) {
-            $view->line("⚠️ تلگرام \u{2068}Webhook\u{2069} را فقط روی آدرس https می‌پذیرد و آدرس فروشگاه " . Fmt::ltr($appUrl === '' ? null : $appUrl) . ' است؛ آن را در «🏷 برنامه» درست کنید.');
+            $view->line("⚠️ تلگرام \u{2068}Webhook\u{2069} را فقط روی آدرس https می‌پذیرد و آدرس فروشگاه " . Fmt::ltr($appUrl === '' ? null : $appUrl) . ' است؛ آن را در «' . AppScreen::TITLE . '» درست کنید.');
         }
+
+        $isMain = ($bot['id'] ?? null) === Bot::MAIN;
+        $mode = is_string($bot['mode'] ?? null) ? $bot['mode'] : 'offline';
+        $mainMode = is_string($main['mode'] ?? null) ? $main['mode'] : 'offline';
+        $ran = is_string($cron['last_run_at'] ?? null) ? $cron['last_run_at'] : null;
+        $webhook = $config === null ? null : (((array) ($config['meta'] ?? []))['webhook_url'] ?? null);
+        // Whether the shop's bot's line says how it gets its messages: not while it has no token, or is off in settings.
+        $saysMode = ($bot['configured'] ?? false) === true && !($mode !== 'offline' && ($bot['enabled'] ?? true) === false);
+        $view->card([
+            'نسخه' => Fmt::ltr((string) ($system['version'] ?? '')) . ' · ' . Fmt::ltr('PHP ' . (string) ($system['php'] ?? '')),
+            ($isMain ? 'ربات اصلی' : 'ربات این فروشگاه') . (is_string($bot['username'] ?? null) ? ' ' . Fmt::plain(Fmt::ltr('@' . $bot['username'])) : '') => match (true) {
+                ($bot['configured'] ?? false) !== true => 'وصل نشده — ' . ($isMain ? 'توکن ربات تنظیم نشده است' : 'نماینده هنوز توکن رباتش را از ربات اصلی نفرستاده است'),
+                $mode !== 'offline' && ($bot['enabled'] ?? true) === false => 'غیرفعال از تنظیمات',
+                $mode === 'offline' => self::MODE['offline'] . ' — Webhook ثبت نشده است',
+                default => (self::MODE[$mode] ?? Fmt::e($mode)) . ' · آخرین پیام: ' . Fmt::date(is_string($bot['last_update_at'] ?? null) ? $bot['last_update_at'] : null, true),
+            },
+            'کارهای زمان‌بندی‌شده' => $ran !== null ? 'فعال · آخرین اجرا: ' . Fmt::date($ran, true) . ' · ' . Fmt::number((int) ($cron['tasks'] ?? 0)) . ' وظیفه' : 'هنوز اجرا نشده‌اند؛ Cron را در «پیشرفته» راه بیندازید',
+            // The main bot's way, said once: left out when the line above is the main bot's and says it already.
+            'دریافت پیام‌های ربات اصلی' => $isMain && $saysMode ? null : self::MODE[$mainMode] ?? Fmt::e($mainMode),
+            "آدرس \u{2068}Webhook\u{2069} ربات اصلی" => $mainMode === 'webhook' && is_string($webhook) ? Fmt::code($webhook) : null,
+        ]);
         if ($this->shownFor === $admin && $this->outcomes !== null) {
-            $view->line()->lines(...self::outcomes($this->outcomes));
+            $view->section('نتیجه برای هر ربات')->lines(...self::outcomes($this->outcomes));
         }
 
         $view->row(
-            $https ? Button::to($mainMode === 'webhook' ? '🔗 ثبت دوباره Webhook' : '🔗 ثبت Webhook', self::ID, 'on') : null,
-            $mainMode === 'webhook' ? Button::to('⛓ برداشتن Webhook', self::ID, 'off') : null,
+            $https ? Button::to($mainMode === 'webhook' ? '🔗 ثبت دوباره Webhook' : '🔗 ثبت Webhook', self::ID, 'on')->success() : null,
+            $mainMode === 'webhook' ? Button::to('⛓ برداشتن Webhook', self::ID, 'off')->danger() : null,
         );
         if (!$https && Access::main($admin->seat)) {
-            $view->row(Button::to('🏷 برنامه', AppScreen::ID));
+            $view->row(Button::to(AppScreen::TITLE, AppScreen::ID)->primary());
         }
         if (Access::main($admin->seat)) {
-            $view->row(Button::to('🤖 ربات تلگرام', TelegramScreen::ID), Button::to('🛠 پیشرفته', AdvancedScreen::ID));
+            $view->row(Button::to(TelegramScreen::TITLE, TelegramScreen::ID), Button::to(AdvancedScreen::TITLE, AdvancedScreen::ID));
         }
 
-        return $view->row(Button::to('⬆️ به‌روزرسانی', UpdateScreen::ID), Button::to('🔄 تازه‌سازی', self::ID))->back(PanelSettingsScreen::ID);
+        return $view->row(Button::to(UpdateScreen::TITLE, UpdateScreen::ID))
+            ->help('با Webhook، تلگرام پیام‌ها را مستقیم به آدرس فروشگاه می‌فرستد و چیزی لازم نیست روی سرور اجرا بماند؛ راه هاست‌های اشتراکی. بدون آن، پیام‌ها فقط با پولینگ روی سرور گرفته می‌شوند. ثبت و برداشتن برای ربات اصلی و ربات همه نماینده‌ها با هم انجام می‌شود.')
+            ->back(PanelSettingsScreen::ID)
+            ->refresh(self::ID);
     }
 
     public function act(Admin $admin, string $action, array $args): View
@@ -111,16 +113,18 @@ final class SystemScreen extends BaseScreen
             case 'on':
                 return $admin->confirm(
                     "\u{2068}Webhook\u{2069} ثبت شود؟",
-                    Button::to('🔗 ثبت Webhook', self::ID, 'onn'),
-                    Button::to('✖️ انصراف', self::ID),
+                    Button::to(Words::yes('ثبت شود'), self::ID, 'onn'),
+                    Button::to(Words::CANCEL, self::ID),
                     'ربات اصلی و ربات همه نماینده‌ها روی آدرس فروشگاه ثبت می‌شوند و تلگرام پیام‌ها را مستقیم به فروشگاه می‌فرستد. اگر پولینگ روی سرور اجراست، متوقف می‌شود.',
+                    danger: false,
                 );
             case 'off':
                 return $admin->confirm(
                     "\u{2068}Webhook\u{2069} برداشته شود؟",
-                    Button::to('⛓ برداشتن Webhook', self::ID, 'offf'),
-                    Button::to('✖️ انصراف', self::ID),
+                    Button::to(Words::yes('برداشته شود'), self::ID, 'offf'),
+                    Button::to(Words::CANCEL, self::ID),
                     'Webhook ربات اصلی و ربات همه نماینده‌ها برداشته می‌شود و از این به بعد فقط وقتی پیامی می‌رسد که پولینگ روی سرور اجرا باشد؛ روی هاست اشتراکی معمولا این امکان نیست. این پیام هم ممکن است آخرین پیامی باشد که ربات تا آن وقت جواب می‌دهد.',
+                    danger: true,
                 );
             case 'onn':
             case 'offf':
@@ -146,7 +150,7 @@ final class SystemScreen extends BaseScreen
         if ($bots === []) {
             return ['ℹ️ هیچ رباتی توکن ندارد؛ اول توکن ربات را در «ربات تلگرام» ذخیره کنید.'];
         }
-        $lines = ['<b>نتیجه برای هر ربات:</b>'];
+        $lines = [];
         foreach ($bots as $each) {
             $bot = Json::part($each, 'bot');
             $name = match (true) {

@@ -11,7 +11,6 @@ use App\Modules\Telegram\Admin\Door\ApiRefusal;
 use App\Modules\Telegram\Admin\Door\PanelBridge;
 use App\Modules\Telegram\Admin\Ui\Nav;
 use App\Modules\Users\Enums\UserRole;
-use App\Modules\Users\Models\User;
 use Tests\BotTestCase;
 
 /**
@@ -22,8 +21,6 @@ use Tests\BotTestCase;
  */
 final class PanelWebsiteTest extends BotTestCase
 {
-    private const OWNER = 7001;
-
     protected function setUp(): void
     {
         parent::setUp();
@@ -99,6 +96,9 @@ final class PanelWebsiteTest extends BotTestCase
         self::assertStringContainsString('Site Key', $this->said()[0]);
         self::assertStringContainsString('ذخیره نشده', $this->said()[0], 'a draft until it is saved');
         self::assertNull($this->site()->captchaDriver());
+        // One help folded away: the fields' hints, then the note for the site's developer.
+        self::assertSame(1, substr_count($this->said()[0], '<blockquote expandable>'), 'one «❔» help');
+        self::assertMatchesRegularExpression('~<blockquote expandable>❔ [^<]*<b>Cloudflare Turnstile</b>.*<b>Site Key</b>: عمومی است.*/captcha/verify.*</blockquote>~su', $this->said()[0]);
 
         $this->tapAs(Nav::to('wsk', 'save'));
         self::assertNotNull($this->popup(), 'refused');
@@ -148,19 +148,5 @@ final class PanelWebsiteTest extends BotTestCase
     private function site(): Website
     {
         return Website::query()->sole();
-    }
-
-    private function tapAs(string $data): void
-    {
-        $this->send($this->tap($data, chat: self::OWNER));
-    }
-
-    /** The account 7001 linked as the owner. */
-    private function owner(): User
-    {
-        $owner = User::query()->where('telegram_id', self::OWNER)->first() ?? $this->customer(['telegram_id' => self::OWNER, 'first_name' => 'Amir']);
-        $this->linkOwner(self::OWNER);
-
-        return $owner;
     }
 }

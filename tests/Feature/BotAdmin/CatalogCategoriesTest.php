@@ -16,7 +16,6 @@ use Tests\BotTestCase;
  */
 final class CatalogCategoriesTest extends BotTestCase
 {
-    private const OWNER = 7001;
     private const STAFF = 7100;
 
     protected function setUp(): void
@@ -42,6 +41,7 @@ final class CatalogCategoriesTest extends BotTestCase
         self::assertContains(Nav::to('ctv', 'tog', $category->id, 0), $this->offered(), 'the switch carries what it sets');
 
         $this->tapAs(Nav::to('ctv', 'name', $category->id));
+        self::assertStringContainsString('مقدار فعلی: <code>اقتصادی</code>', $this->said()[0], 'the name it has, to copy');
         $this->send($this->message('⭐ ویژه', ['entities' => [['type' => 'custom_emoji', 'offset' => 0, 'length' => 1, 'custom_emoji_id' => '5368324170671202286']]], chat: self::OWNER));
         $category->refresh();
         self::assertSame(['⭐ ویژه', '5368324170671202286'], [$category->name, $category->emoji_id], 'the premium emoji typed is the name\'s');
@@ -99,37 +99,5 @@ final class CatalogCategoriesTest extends BotTestCase
         $this->send($this->tap(Nav::to('ctv', 'new'), chat: self::STAFF));
         $this->send($this->message('ماهانه', chat: self::STAFF));
         self::assertSame(2, PlanCategory::query()->count());
-    }
-
-    /**
-     * The buttons the window shows now, whichever call put them there (after a typed answer, its deletion comes first).
-     *
-     * @return list<string>
-     */
-    private function offered(): array
-    {
-        $offered = [];
-        foreach (array_keys($this->calls()) as $call) {
-            $offered = [...$offered, ...$this->callbacks($call)];
-        }
-
-        return $offered;
-    }
-
-    private function tapAs(string $data): void
-    {
-        $this->send($this->tap($data, chat: self::OWNER));
-    }
-
-    private function sayAs(string $text): void
-    {
-        $this->send($this->message($text, chat: self::OWNER));
-    }
-
-    /** The account 7001 linked as the owner. */
-    private function owner(): void
-    {
-        $this->customer(['telegram_id' => self::OWNER, 'first_name' => 'Amir']);
-        $this->linkOwner(self::OWNER);
     }
 }

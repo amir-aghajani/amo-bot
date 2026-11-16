@@ -22,7 +22,8 @@ use App\Modules\Telegram\Handlers\FallbackHandler;
  * One message is the management's window: a tap edits it in place; a command, the button or a typed answer sends it
  * anew at the bottom of the chat and takes the last one away. A typed answer is deleted once read — a token, a password
  * or a card number typed into a settings card does not stay in the chat. A refusal of the panel's (ApiRefusal) is said
- * in a popup for a tap, and over the question for a typed answer, which still waits.
+ * in a popup for a tap, and over the question for a typed answer, which still waits. A button of an older window — its
+ * screen gone, its data unreadable, or no longer the seat's — opens the home, saying so (Words::OLD_BUTTON).
  */
 final class AdminHandler implements Handler
 {
@@ -100,7 +101,9 @@ final class AdminHandler implements Handler
         $route = Nav::parse($ctx->update->callbackData());
         $screen = $route === null ? null : $this->screens->get($route['screen']);
         if ($route === null || $screen === null || !$screen->allows($admin->seat)) {
-            $this->show($admin, $this->screens->home()->show($admin, []), fresh: false);
+            // A button of an older window — its screen gone, its data unreadable, or no longer the seat's —: the home,
+            // never an error.
+            $this->show($admin, $this->screens->home()->show($admin, [])->notices(['⚠️ ' . Words::OLD_BUTTON]), fresh: false);
 
             return;
         }
@@ -161,7 +164,14 @@ final class AdminHandler implements Handler
     private function show(Admin $admin, View $view, bool $fresh): void
     {
         $ctx = $admin->ctx;
+        if ($view->stays()) {
+            // A tap answered by a toast alone: the window is left as it is.
+            return;
+        }
         $view->notices($admin->takeNotices());
+        if (!$view->isTransient()) {
+            $admin->here($view->trail());
+        }
         $options = ['reply_markup' => $view->keyboard(), 'link_preview_options' => ['is_disabled' => true]];
         $photo = $view->photo();
 

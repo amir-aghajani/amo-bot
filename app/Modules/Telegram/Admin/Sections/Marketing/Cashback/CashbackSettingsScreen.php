@@ -4,24 +4,24 @@ declare(strict_types=1);
 
 namespace App\Modules\Telegram\Admin\Sections\Marketing\Cashback;
 
-use App\Modules\Settings\Services\BotSettingsScreen;
-use App\Modules\Telegram\Admin\AdminSeat;
-use App\Modules\Telegram\Admin\Sections\Marketing\Words;
-use App\Modules\Telegram\Admin\Ui\Settings\BotGroupSource;
+use App\Modules\Telegram\Admin\Sections\Bot\Settings\BotCard;
+use App\Modules\Telegram\Admin\Sections\Marketing\ProgramSwitch;
+use App\Modules\Telegram\Admin\Sections\Marketing\Words as Marketing;
 use App\Modules\Telegram\Admin\Ui\Settings\FieldDef;
-use App\Modules\Telegram\Admin\Ui\Settings\SettingsScreen;
-use App\Modules\Telegram\Admin\Ui\Settings\SettingsSource;
 
-/** «⚙️ تنظیمات کش‌بک» (the panel's card over the rules, `cashback`): whether delivered orders earn cashback at all. */
-final class CashbackSettingsScreen extends SettingsScreen
+/**
+ * «⚙️ تنظیمات کش‌بک» (the panel's card over the rules, `cashback`), reached from the rules' list: whether delivered
+ * orders earn cashback at all.
+ */
+final class CashbackSettingsScreen extends BotCard
 {
+    use ProgramSwitch;
+
     public const ID = 'cbs';
 
-    public function __construct(private readonly BotSettingsScreen $settings) {}
-
-    public function allows(AdminSeat $seat): bool
+    protected function group(): string
     {
-        return $seat->configures();
+        return 'cashback';
     }
 
     protected function screen(): string
@@ -31,12 +31,12 @@ final class CashbackSettingsScreen extends SettingsScreen
 
     protected function title(): string
     {
-        return '⚙️ تنظیمات کش‌بک';
+        return Marketing::settings(Marketing::CASHBACK);
     }
 
     protected function path(): array
     {
-        return [...Words::PATH, 'کش‌بک'];
+        return Marketing::in(Marketing::CASHBACK);
     }
 
     protected function parent(): string
@@ -46,17 +46,12 @@ final class CashbackSettingsScreen extends SettingsScreen
 
     protected function intro(): string
     {
-        return 'وقتی سفارشی تحویل شد، درصدی از مبلغی که مشتری پرداخت کرده به کیف پول او برمی‌گردد و در تلگرام یا با ایمیل خبردار می‌شود؛ با هر روش پرداختی، حتی کیف پول. اگر سفارش بعدا برگشت داده شود، کش‌بک آن از مبلغ برگشتی کم می‌شود.' . "\n"
+        return 'وقتی سفارشی تحویل شد، درصدی از مبلغی که مشتری پرداخت کرده به کیف پول او برمی‌گردد و در تلگرام یا با ایمیل خبردار می‌شود؛ با هر روش پرداختی، حتی کیف پول. اگر سفارش بعدا برگشت داده شود، کش‌بک آن از مبلغ برگشتی کم می‌شود.' . "\n\n"
             . 'درصد هر سفارش بالاترین قانون فعالی است که با آن جور است، به اضافه کش‌بک سطح وفاداری مشتری؛ حداکثر ۱۰۰ درصد. خاموش که باشد، هیچ سفارشی کش‌بک نمی‌گیرد، کش‌بک سطح‌ها هم نه.';
     }
 
     protected function fields(): array
     {
         return [FieldDef::toggle('cashback_enabled', 'کش‌بک فعال باشد')];
-    }
-
-    protected function source(): SettingsSource
-    {
-        return new BotGroupSource('cashback', $this->settings);
     }
 }

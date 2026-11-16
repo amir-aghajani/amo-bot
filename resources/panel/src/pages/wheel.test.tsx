@@ -49,6 +49,21 @@ describe('the slices', () => {
     expect(within(nothing).getByRole('switch').getAttribute('aria-checked')).toBe('false')
   })
 
+  it('give a free service whose plan is gone no chance, its share going to the rest, as the wheel draws', async () => {
+    server()
+      .on('GET', '/api/admin/bot/settings', json(botSettingsResponse(botSettingsRow({ wheel_enabled: true }))))
+      .on('GET', '/api/admin/keyboards', json({ keyboards: [], actions: [], styles: [], limits: { rows: 10, per_row: 8, label: 64 } }))
+      .on('GET', '/api/admin/wheel/prizes', json({ prizes: [PRIZES[0], wheelPrizeRow({ id: 8, label: 'سرویس رایگان', kind: 'plan', amount: null, plan: null, weight: 2 })] }))
+      .on('GET', '/api/admin/wheel/spins', json({ spins: [], meta: { page: 1, per_page: 25, total: 0, last_page: 1 } } satisfies WheelSpinsResponse))
+    render(<WheelPage />, { wrapper: providers().wrapper })
+
+    const [, money, service] = within(await screen.findByRole('table', { name: 'جایزه‌ها' })).getAllByRole('row')
+    if (!money || !service) throw new Error('Two slices are listed.')
+    expect(within(money).getByText('۱۰۰٪')).toBeTruthy()
+    expect(within(service).getByText('—')).toBeTruthy()
+    expect(within(service).getByText('سرویس رایگان — پلنش حذف شده')).toBeTruthy()
+  })
+
   it('switch one on and off in place', async () => {
     open()
     server().on('PATCH', '/api/admin/wheel/prizes/7', json({ prize: { ...PRIZES[2], enabled: true } as WheelPrizeRow }))

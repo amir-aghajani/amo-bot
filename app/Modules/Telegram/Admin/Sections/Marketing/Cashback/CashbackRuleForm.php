@@ -6,14 +6,16 @@ namespace App\Modules\Telegram\Admin\Sections\Marketing\Cashback;
 
 use App\Modules\Telegram\Admin\Sections\Marketing\Form\FormScreen;
 use App\Modules\Telegram\Admin\Sections\Marketing\Form\Step;
-use App\Modules\Telegram\Admin\Sections\Marketing\Words;
+use App\Modules\Telegram\Admin\Sections\Marketing\Words as Marketing;
 use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\Json;
 use App\Modules\Telegram\Admin\Ui\View;
+use App\Modules\Telegram\Admin\Ui\Words;
 
 /**
- * «➕ افزودن قانون» / «✏️ ویرایش» (the panel's RuleForm): the rule's percent, its kinds of order (at least one), a customer
- * group and a way to pay (or every one). One save: POST /cashback/rules, or the rule's PUT — which keeps its switch.
+ * «➕ افزودن قانون کش‌بک» / «✏️ ویرایش» (the panel's RuleForm): the rule's percent, its kinds of order (at least one), a
+ * customer group and a way to pay (or every one). One save: POST /cashback/rules, or the rule's PUT — which keeps its
+ * switch (the rule's own screen sets it).
  */
 final class CashbackRuleForm extends FormScreen
 {
@@ -26,26 +28,21 @@ final class CashbackRuleForm extends FormScreen
 
     protected function title(int $id, array $draft): string
     {
-        return $id === 0 ? '➕ افزودن قانون کش‌بک' : '✏️ ویرایش قانون کش‌بک';
+        return $id === 0 ? Words::add('قانون کش‌بک') : Words::EDIT . ' قانون کش‌بک';
     }
 
     protected function path(): array
     {
-        return [...Words::PATH, 'کش‌بک'];
-    }
-
-    protected function createLabel(): string
-    {
-        return '✔️ افزودن';
+        return Marketing::in(Marketing::CASHBACK);
     }
 
     protected function steps(Admin $admin): array
     {
         return [
-            Step::percent('percent', 'درصد کش‌بک', 'از مبلغی که سفارش پرداخت کرده، بعد از تحویل به کیف پول مشتری برمی‌گردد؛ رقم به تومان پایین گرد می‌شود.')->range(1, 100)->quick('۵٪', 5)->quick('۱۰٪', 10),
-            Step::multi('order_types', 'نوع سفارش', Words::KINDS, 'شارژ کیف پول و خرید حجم نمایندگی کش‌بک نمی‌گیرند.'),
-            Step::choice('customer_group_id', 'گروه مشتری', static fn(): array => ['' => 'همه مشتری‌ها'] + Words::groups($admin), 'فقط مشتری‌های این گروه؛ گروه‌ها در صفحه کاربران ساخته می‌شوند.'),
-            Step::choice('payment_method_id', 'روش پرداخت', static fn(): array => ['' => 'همه روش‌ها'] + Words::methods($admin), 'روشی که سفارش با آن پرداخت شده است.'),
+            Step::percent('percent', 'درصد کش‌بک', 'از مبلغی که سفارش پرداخت کرده، بعد از تحویل به کیف پول مشتری برمی‌گردد؛ رقم به تومان پایین گرد می‌شود.')->asks('چند درصد برگردد؟')->range(1, 100)->quick('۵٪', 5)->quick('۱۰٪', 10),
+            Step::multi('order_types', 'نوع سفارش', Marketing::KINDS, 'شارژ کیف پول و خرید حجم نمایندگی کش‌بک نمی‌گیرند.')->asks('برای چه سفارش‌هایی باشد؟'),
+            Step::choice('customer_group_id', 'گروه مشتری', static fn(): array => ['' => 'همه مشتری‌ها'] + Marketing::groups($admin), 'گروه‌ها در «فروشگاه › گروه‌های کاربران» ساخته می‌شوند.')->asks('برای کدام مشتری‌ها باشد؟'),
+            Step::choice('payment_method_id', 'روش پرداخت', static fn(): array => ['' => 'همه روش‌ها'] + Marketing::methods($admin), 'روشی که سفارش با آن پرداخت شده است.')->asks('با کدام روش پرداخت باشد؟'),
         ];
     }
 
@@ -57,7 +54,7 @@ final class CashbackRuleForm extends FormScreen
 
     protected function row(Admin $admin, int $id): ?array
     {
-        return Words::one($admin, '/cashback/rules', 'rules', $id);
+        return Marketing::one($admin, '/cashback/rules', 'rules', $id);
     }
 
     protected function draftOf(array $row): array
@@ -94,7 +91,7 @@ final class CashbackRuleForm extends FormScreen
 
     protected function done(Admin $admin, array $row, bool $created): View
     {
-        $admin->notice($created ? '✅ قانون کش‌بک اضافه شد' : '✅ قانون کش‌بک ذخیره شد');
+        $admin->notice($created ? '✅ قانون کش‌بک اضافه شد' : '✅ تغییرهای قانون کش‌بک ذخیره شد');
 
         return $admin->open(CashbackRuleScreen::ID, 'show', [(int) ($row['id'] ?? 0)]);
     }

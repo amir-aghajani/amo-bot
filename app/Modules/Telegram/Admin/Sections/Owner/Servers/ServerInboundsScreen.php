@@ -11,17 +11,24 @@ use App\Modules\Telegram\Admin\Ui\Button;
 use App\Modules\Telegram\Admin\Ui\Fmt;
 use App\Modules\Telegram\Admin\Ui\Json;
 use App\Modules\Telegram\Admin\Ui\View;
+use App\Modules\Telegram\Admin\Ui\Words;
 
 /**
- * A server's inbounds (the panel's «اینباندها» card): what it sells — its inbounds as its panel last listed them, each
- * with its protocol, port and clients and a switch for sale (one the panel has disabled cannot be chosen, as the panel's
- * switch is held) —, and «🔄 به‌روزرسانی از پنل». Each switch answers the whole list as the API then has it.
+ * A server's inbounds (the panel's «اینباندها» card): what it sells — its inbounds as its panel last listed them, a
+ * button each, the row: its «فروش» as a chip (🟢 for sale, ⏸ not), its name, protocol, port and clients; one the panel
+ * has disabled is said without a button (it cannot be chosen, as the panel's switch is held) —, and «🔄 خواندن دوباره از
+ * پنل». Each switch answers the whole list as the API then has it; a panel that builds a user in one inbound only
+ * (Rebecca) takes one for sale at a time, and the API's refusal of a second says so. Each button names the server it
+ * shows — an older window's acts on its own server, whichever server's page was opened since —; one without it (an
+ * older version's) acts on the server last opened.
  *
- * Actions: `sell` (inbound id, 0/1), `sync`, `page` (n).
+ * Actions: `sell` (inbound id, 0/1, server id), `sync` (server id), `page` (server id, n — an older one n alone).
  */
 final class ServerInboundsScreen extends BaseScreen
 {
     public const ID = 'svi';
+
+    public const TITLE = '📡 اینباندها';
 
     private const PER_PAGE = 10;
 
@@ -36,6 +43,11 @@ final class ServerInboundsScreen extends BaseScreen
         if ($id === 0) {
             return $admin->open(ServersScreen::ID);
         }
+        ServerWords::opened($admin, $id);
+        if ((int) ($admin->state(self::ID)['server'] ?? 0) !== $id) {
+            // Another server's list starts at its first page.
+            $admin->remember(self::ID, ['server' => $id, 'page' => 1]);
+        }
         $answer = $admin->api->get("/servers/{$id}");
 
         return $this->view($admin, (array) ($answer['server'] ?? []), (array) ($answer['inbounds'] ?? []));
@@ -43,7 +55,16 @@ final class ServerInboundsScreen extends BaseScreen
 
     public function act(Admin $admin, string $action, array $args): View
     {
-        $id = ServerWords::current($admin, []);
+        // The server the button names, else the one last opened.
+        $id = ServerWords::current($admin, [match ($action) {
+            'sell' => $args[2] ?? '',
+            'page' => count($args) > 1 ? $args[0] : '',
+            default => $args[0] ?? '',
+        }]);
+        if ($id === 0) {
+            return $admin->open(ServersScreen::ID);
+        }
+        ServerWords::opened($admin, $id);
         switch ($action) {
             case 'sell':
                 $inbounds = (array) ($admin->api->patch("/servers/{$id}/inbounds/" . self::id($args), ['is_selectable' => self::id($args, 1) === 1])['inbounds'] ?? []);
@@ -56,11 +77,11 @@ final class ServerInboundsScreen extends BaseScreen
 
                 return $this->view($admin, (array) ($answer['server'] ?? []), (array) ($answer['inbounds'] ?? []));
             case 'page':
-                $admin->remember(self::ID, ['page' => self::page($args)]);
+                $admin->remember(self::ID, ['server' => $id, 'page' => self::page($args, max(0, count($args) - 1))]);
                 break;
         }
 
-        return $this->show($admin, []);
+        return $this->show($admin, [(string) $id]);
     }
 
     /**
@@ -69,36 +90,39 @@ final class ServerInboundsScreen extends BaseScreen
      */
     private function view(Admin $admin, array $server, array $inbounds): View
     {
+        $id = (int) ($server['id'] ?? 0);
         $inbounds = array_values(array_filter($inbounds, is_array(...)));
         $selling = count(array_filter($inbounds, static fn(array $row): bool => Json::on($row, 'is_selectable') && Json::on($row, 'enabled')));
         [$shown, $page, $pages] = View::slice($inbounds, (int) ($admin->state(self::ID)['page'] ?? 1), self::PER_PAGE);
 
-        $view = View::make('📡 اینباندها', 'مدیریت', 'سرورها', (string) ($server['name'] ?? ''));
+        $view = View::make(self::TITLE, Words::ROOT, Fmt::bare(ServersScreen::TITLE), (string) ($server['name'] ?? ''));
         if ($inbounds === []) {
-            $view->line('<b>اینباندی ثبت نشده است</b>')
-                ->line('با «به‌روزرسانی از پنل» لیست اینباندها را بگیرید و آن‌هایی را که می‌خواهید بفروشید علامت بزنید.');
+            $view->line('<b>اینباندی ثبت نشده است.</b> با «🔄 خواندن دوباره از پنل» فهرست اینباندها را بگیرید و آن‌هایی را که می‌خواهید بفروشید روشن کنید.');
         } else {
-            $view->line(Fmt::number($selling) . ' از ' . Fmt::number(count($inbounds)) . ' اینباند برای فروش انتخاب شده است.');
+            $view->total(count($inbounds), 'اینباند', Fmt::plain(Fmt::number($selling)) . ' برای فروش');
         }
 
         $buttons = [];
         foreach ($shown as $inbound) {
-            $enabled = Json::on($inbound, 'enabled');
             $chosen = Json::on($inbound, 'is_selectable');
             $name = ServerWords::inboundName($inbound);
-            $view->line()
-                ->line(($enabled ? '🟢 ' : '⚪️ ') . '<b>' . Fmt::e($name) . '</b>' . ($enabled ? '' : ' · غیرفعال در پنل') . ($chosen && $enabled ? ' · ✅ برای فروش' : ''))
-                ->line('   ' . ServerWords::protocol($inbound) . ' · ' . Fmt::number((int) ($inbound['client_count'] ?? 0)) . ' کلاینت · ' . Fmt::ltr('#' . (string) ($inbound['remote_key'] ?? '') . ' · ' . (string) ($inbound['tag'] ?? '')));
-            // A disabled one cannot be chosen: the panel's switch is held for it.
-            if ($enabled) {
-                $buttons[] = Button::to(($chosen ? '✅ ' : '◻️ ') . $name, self::ID, 'sell', (int) ($inbound['id'] ?? 0), $chosen ? 0 : 1);
+            // A disabled one cannot be chosen: the panel's switch is held for it — said, with no button.
+            if (!Json::on($inbound, 'enabled')) {
+                $view->line(Words::INACTIVE . ' <b>' . Fmt::e($name) . '</b> · ' . ServerWords::protocol($inbound) . ' — در پنل خاموش است؛ برای فروش، اول در پنل روشنش کنید.');
+
+                continue;
             }
+            $buttons[] = Button::to(($chosen ? '🟢 ' : '⏸ ') . $name . ' · ' . Fmt::plain(ServerWords::protocol($inbound)) . ' · ' . Fmt::plain(Fmt::number((int) ($inbound['client_count'] ?? 0))) . ' کلاینت', self::ID, 'sell', (int) ($inbound['id'] ?? 0), $chosen ? 0 : 1, $id);
         }
-        $view->grid(1, ...$buttons)->pager($page, $pages, self::ID, 'page');
+        $view->grid(1, ...$buttons)
+            ->row(Button::to('🔄 خواندن دوباره از پنل', self::ID, 'sync', $id))
+            ->pager($page, $pages, self::ID, 'page', $id);
         if ($inbounds !== []) {
-            $view->note('دکمه هر اینباند آن را برای فروش انتخاب می‌کند یا برمی‌دارد.');
+            $view->note('🟢 برای فروش · ⏸ فروخته نمی‌شود؛ دکمه هر اینباند آن را عوض می‌کند.');
         }
 
-        return $view->row(Button::to('🔄 به‌روزرسانی از پنل', self::ID, 'sync'))->back(ServerScreen::ID, 'show', (int) ($server['id'] ?? 0));
+        return $view->help('مشتری فقط روی اینباندهای «برای فروش» سرویس می‌گیرد؛ کلاینت‌های فعلی اینباندی که از فروش برداشته شود دست نمی‌خورند. بعضی پنل‌ها (مثل ' . Fmt::ltr('Rebecca') . ') هر کاربر را فقط در یک سرویس می‌سازند؛ آن‌جا یک اینباند برای فروش است و برای فروش اینباند دیگر، اول علامت فروش اینباند فعلی را بردارید.')
+            ->back(ServerScreen::ID, 'show', $id)
+            ->refresh(self::ID, 'show', $id);
     }
 }

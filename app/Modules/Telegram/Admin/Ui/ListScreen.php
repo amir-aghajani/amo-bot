@@ -7,9 +7,11 @@ namespace App\Modules\Telegram\Admin\Ui;
 use App\Modules\Telegram\Admin\Door\ApiRefusal;
 
 /**
- * A list of the panel's (payments, orders, customers…) as a management screen: PER_PAGE rows a page — each a button to
- * its own screen —, its filters as chips over them (the panel's tabs), a search, the pages under them, and what more
- * the list offers (extra(): «➕ افزودن»). It reads the panel's list route (endpoint(), its rows under key()), whose
+ * A list of the panel's (payments, orders, customers…) as a management screen: first how many and what narrows them
+ * («۲۳ پرداخت · در انتظار بررسی · تاریخ: ۷ روز اخیر», noun(), narrowedBy()), what the list adds up to under that
+ * (summary()), PER_PAGE rows a page — each a button to its own screen —, what more the list offers (extra(): «➕
+ * افزودن»), its filters as chips (the panel's tabs) and under them a search beside the list's tools (tools()), the pages
+ * last, and «🔄 تازه‌سازی» beside the way back. It reads the panel's list route (endpoint(), its rows under key()), whose
  * pages are the panel's 25: a page of this list is cut from them, two when it falls across — or from every row, for a
  * route that answers them all at once (no `meta`). The filter, the search and the page are the screen's state, so
  * coming back to the list finds it as it was left.
@@ -29,7 +31,7 @@ abstract class ListScreen extends BaseScreen
 
     /**
      * The update the list is answering (set as show(), act() and input() begin), for a hook that needs the seat or the
-     * state: filters(), fixed(), summary(), parent().
+     * state: filters(), fixed(), summary(), narrowedBy(), parent().
      */
     protected ?Admin $here = null;
 
@@ -80,6 +82,12 @@ abstract class ListScreen extends BaseScreen
         return '';
     }
 
+    /** What one row is called, in the line of how many there are («۲۳ پرداخت»). */
+    protected function noun(): string
+    {
+        return 'مورد';
+    }
+
     /** The words of an empty list. */
     protected function empty(): string
     {
@@ -87,12 +95,35 @@ abstract class ListScreen extends BaseScreen
     }
 
     /**
-     * Lines under the title before the rows: what the panel's list shows beside them (a figure from its meta).
+     * Lines under the line of how many, before the rows: what the panel's list shows beside them (a figure from its
+     * meta: «💰 ۶ پرداخت موفق · جمع …»). Read before filters() and narrowedBy(), which may say what it found.
      *
      * @param array<string, mixed> $meta
      * @return list<string>
      */
     protected function summary(array $meta): array
+    {
+        return [];
+    }
+
+    /**
+     * What else narrows the list beyond its chips and its search — the panel's selects, a range of days —, each plain
+     * text, said after them in the line of how many: «۲ سفارش · نوع: خرید · تاریخ: ۷ روز اخیر».
+     *
+     * @return list<string>
+     */
+    protected function narrowedBy(): array
+    {
+        return [];
+    }
+
+    /**
+     * Buttons beside «🔎 جستجو», after it in reading order, under the filter chips: what else narrows or orders the list
+     * («🎛 فیلتر و ترتیب», «✖️ حذف فیلترها»); a null one (not offered now) left out. Kept to one or two: a row.
+     *
+     * @return list<Button|null>
+     */
+    protected function tools(Admin $admin): array
     {
         return [];
     }
@@ -107,6 +138,20 @@ abstract class ListScreen extends BaseScreen
     protected function keepsRows(): bool
     {
         return false;
+    }
+
+    /**
+     * Row `$id` of the page list `$list` kept (keepsRows()), for the row's own screen; null when it is not there (the
+     * list moved on).
+     *
+     * @return array<string, mixed>|null
+     */
+    public static function keptRow(Admin $admin, string $list, int $id): ?array
+    {
+        $rows = (array) ($admin->state($list)['rows'] ?? []);
+        $row = $rows[$id] ?? null;
+
+        return is_array($row) ? $row : null;
     }
 
     /** Where «⬅️ بازگشت» goes: the menu the list is in. */
@@ -129,7 +174,7 @@ abstract class ListScreen extends BaseScreen
     {
         $this->here = $admin;
         $state = $admin->state($this->screen());
-        $page = max(1, (int) ($state['page'] ?? 1));
+        $page = min(max(1, (int) ($state['page'] ?? 1)), self::PAGE_MOST);
         [$rows, $meta] = $this->fetch($admin, $state, $page);
         $total = (int) ($meta['total'] ?? count($rows));
         $pages = max(1, (int) ceil($total / self::PER_PAGE));
@@ -143,45 +188,52 @@ abstract class ListScreen extends BaseScreen
             $admin->remember($this->screen(), ['rows' => array_column($rows, null, 'id')]);
         }
 
-        $view = View::make($this->title(), ...$this->path());
-        foreach ($this->summary($meta) as $line) {
-            $view->line($line);
-        }
+        // What the list adds up to is read first (a hook may keep what it found for filters(): a tab's count), and said
+        // under the line of how many.
+        $figures = $this->summary($meta);
         $said = [];
         foreach ($this->filters() as $name => $values) {
             $value = $this->filterValue($state, $name);
             if ($value !== self::ANY && isset($values[$value])) {
-                $said[] = Fmt::e($values[$value]);
+                $said[] = $values[$value];
             }
         }
         $search = (string) ($state['search'] ?? '');
         if ($search !== '') {
-            $said[] = '🔎 «' . Fmt::e($search) . '»';
+            $said[] = '🔎 «' . $search . '»';
         }
-        $view->line(($said === [] ? '' : implode(' · ', $said) . ' · ')
-            . Fmt::number($total) . ' مورد' . ($pages > 1 ? ' · صفحه ' . Fmt::number($page) . ' از ' . Fmt::number($pages) : ''));
+        // How many and what narrows them first; which page is the pages' middle button's to say.
+        $view = View::make($this->title(), ...$this->path())->total($total, $this->noun(), ...$said, ...$this->narrowedBy());
+        foreach ($figures as $line) {
+            $view->line($line);
+        }
         if ($rows === []) {
             $view->line()->line($this->empty());
         }
 
+        foreach ($rows as $row) {
+            $view->row($this->item($row));
+        }
+        $this->extra($view, $admin);
         foreach ($this->filters() as $name => $values) {
             $current = $this->filterValue($state, $name);
             $chips = [];
             foreach ($values as $value => $label) {
-                $chips[] = Button::to(($current === (string) $value ? '● ' : '') . $label, $this->screen(), 'f', $name, (string) $value);
+                $chips[] = Button::to(($current === (string) $value ? Words::CHIP : '') . $label, $this->screen(), 'f', $name, (string) $value);
             }
             $view->grid(count($chips) > 4 ? 3 : max(1, count($chips)), ...$chips);
         }
-        foreach ($rows as $row) {
-            $view->row($this->item($row));
-        }
+        $view->row(
+            match (true) {
+                !$this->searchable() => null,
+                $search === '' => Button::to(Words::SEARCH, $this->screen(), 'search'),
+                default => Button::to(Words::CLEAR_SEARCH, $this->screen(), 'clear'),
+            },
+            ...$this->tools($admin),
+        );
         $view->pager($page, $pages, $this->screen(), 'page');
-        $this->extra($view, $admin);
-        if ($this->searchable()) {
-            $view->row($search === '' ? Button::to('🔎 جستجو', $this->screen(), 'search') : Button::to('✖️ پاک کردن جستجو', $this->screen(), 'clear'));
-        }
 
-        return $view->back($this->parent());
+        return $view->back($this->parent())->refresh($this->screen());
     }
 
     public function act(Admin $admin, string $action, array $args): View
@@ -192,7 +244,8 @@ abstract class ListScreen extends BaseScreen
                 $admin->remember($this->screen(), ['page' => self::page($args)]);
                 break;
             case 'f':
-                if (isset($args[0], $args[1]) && isset($this->filters()[$args[0]])) {
+                // Only a value its chips offer: an older window's chip of a value since gone narrows nothing.
+                if (isset($args[0], $args[1]) && isset($this->filters()[$args[0]][$args[1]])) {
                     $filters = (array) ($admin->state($this->screen())['f'] ?? []);
                     $filters[$args[0]] = $args[1];
                     $admin->remember($this->screen(), ['f' => $filters, 'page' => 1]);
@@ -284,9 +337,12 @@ abstract class ListScreen extends BaseScreen
     }
 
     /**
+     * The value in force of filter `$name` in the screen's `$state`: the one picked, else its first (ANY: none) — read
+     * from filters(), so never from inside it.
+     *
      * @param array<string, mixed> $state
      */
-    private function filterValue(array $state, string $name): string
+    protected function filterValue(array $state, string $name): string
     {
         $set = (array) ($state['f'] ?? []);
         if (isset($set[$name])) {

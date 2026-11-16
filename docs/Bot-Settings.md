@@ -15,8 +15,11 @@ How the cards work:
   is held while the switch is off — unless you changed it: then it stays open, since the save still checks it.
 - **Leaving a card with unsaved changes asks first**, and a card saved elsewhere meanwhile keeps your changes and says so
   ([The panels](Panels.md#live-and-safe-to-leave)).
-- **The same cards are in the bot**, for you and an agent: «⚙️ مدیریت › ⚙️ تنظیمات › 🤖 تنظیمات ربات», each field saved
-  as it is changed ([Managing the shop from the bot](Bot-Management.md#settings)).
+- **The same cards are in the bot**, for you and an agent, each field saved as it is changed: the bot's own in
+  «⚙️ مدیریت › ⚙️ تنظیمات › 🤖 تنظیمات ربات», and a feature's with the feature — the channels and the report group in
+  «🤖 ربات», the referral rules in «🔗 زیرمجموعه‌گیری», the bot's admins in «⚙️ تنظیمات»
+  ([Managing the shop from the bot](Bot-Management.md#settings)). The bot's «🔎 جستجوی تنظیمات» finds any of them by its
+  words.
 
 Some programs keep their part of these settings on their own pages: discount codes ([Discounts](Discounts.md)),
 cashback and the nightly draw ([Loyalty, cashback and draws](Loyalty-Cashback-And-Draws.md)), gift codes and the lucky

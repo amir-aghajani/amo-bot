@@ -10,17 +10,19 @@ use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\BaseScreen;
 use App\Modules\Telegram\Admin\Ui\Button;
 use App\Modules\Telegram\Admin\Ui\Fmt;
+use App\Modules\Telegram\Admin\Ui\Icons;
 use App\Modules\Telegram\Admin\Ui\Json;
 use App\Modules\Telegram\Admin\Ui\Settings\Origin;
 use App\Modules\Telegram\Admin\Ui\View;
+use App\Modules\Telegram\Admin\Ui\Words;
 
 /**
  * «📋 گروه گزارش‌ها» (the owner's and an agent's; the panel's report group card): not connected, the steps in Telegram and
  * the "add the bot to a group" link (a one-time code) or the message to send there instead, and why the last group did
  * not connect; connected, the group, whether all is well, what waits to be sent and its topics, with «📨 پیام تست»,
- * «🔄 بررسی دوباره», another group connected, and «✂️ قطع اتصال», asked first. «🔔 بخش‌های گزارش» is the topics' switches
- * (ReportTopicsCard). Each action applies at once. Opened from «🤖 تنظیمات ربات», its «⬅️ بازگشت» goes back there
- * (Origin).
+ * «🔍 بررسی دوباره», another group connected, and «✂️ قطع اتصال», asked first. «🧵 بخش‌های گزارش» is the topics' switches
+ * (ReportTopicsCard). Each action applies at once. Opened from a 0.10.0 window's «🤖 تنظیمات ربات», its «⬅️ بازگشت»
+ * goes back there (Origin).
  *
  * Actions: `link` (a new connect link), `other` (the steps, to connect another group), `test`, `check`, `cut` (asks),
  * `cutd`, `v` (the card again, its origin kept).
@@ -28,6 +30,8 @@ use App\Modules\Telegram\Admin\Ui\View;
 final class ReportGroupScreen extends BaseScreen
 {
     public const ID = 'rg';
+
+    public const TITLE = Icons::REPORT_GROUP . ' گروه گزارش‌ها';
 
     /** The card again where it was left, its origin kept: the way back of its topics' switches. */
     public const VIEW = 'v';
@@ -78,8 +82,8 @@ final class ReportGroupScreen extends BaseScreen
 
                 return $admin->confirm(
                     'قطع اتصال گروه گزارش‌ها؟',
-                    Button::to('✂️ بله، قطع شود', self::ID, 'cutd'),
-                    Button::to('✖️ انصراف', self::ID, self::VIEW),
+                    Button::to(Words::yes('قطع شود', '✂️'), self::ID, 'cutd'),
+                    Button::to(Words::CANCEL, self::ID, self::VIEW),
                     (is_string($group['title'] ?? null) ? 'گزارش‌ها دیگر به «' . Fmt::e($group['title']) . '» فرستاده نمی‌شود و گزارش‌هایی که در صف مانده‌اند دور ریخته می‌شوند. ' : '')
                         . 'ربات در گروه می‌ماند و پیام‌های قبلی سر جایشان هستند؛ اگر نمی‌خواهید، ربات را از تلگرام از گروه بیرون کنید.',
                 );
@@ -101,9 +105,7 @@ final class ReportGroupScreen extends BaseScreen
     private function view(Admin $admin, array $group, bool $connecting): View
     {
         $main = $admin->seat->shop()->isMain();
-        $view = View::make('📋 گروه گزارش‌ها', 'مدیریت', 'ربات')
-            ->line('گزارش خریدها، تمدیدها، اکانت‌های تست، حذف سرویس‌ها، شارژ کیف پول، رسیدها، کاربران جدید، خطاها، تیکت‌ها، نظرات' . ($main ? '، پشتیبان‌ها و درخواست‌های نمایندگی' : ' و پشتیبان‌ها') . ' در یک گروه تلگرام، هر کدام در تاپیک خودش. ربات تاپیک‌ها را خودش می‌سازد و مدیرهای ربات رسیدها را همان‌جا با دکمه تایید یا رد می‌کنند و با ریپلای به تیکت‌ها پاسخ می‌دهند.')
-            ->line();
+        $view = View::make(self::TITLE, ...BotScreens::PATH);
         $connected = Json::on($group, 'connected');
         if ($connected) {
             $this->connected($view, $group);
@@ -115,14 +117,19 @@ final class ReportGroupScreen extends BaseScreen
             }
         }
         if ($connected) {
-            $view->row(Button::to('📨 پیام تست', self::ID, 'test'), Button::to('🔄 بررسی دوباره', self::ID, 'check'));
+            $view->row(Button::to('📨 پیام تست', self::ID, 'test')->primary(), Button::to('🔍 بررسی دوباره', self::ID, 'check'));
+        }
+        $view->row(Button::to(ReportTopicsCard::TITLE, ReportTopicsCard::ID));
+        if ($connected) {
             $view->row(
                 $connecting ? null : Button::to('🔗 اتصال گروه دیگر', self::ID, 'other'),
-                Button::to('✂️ قطع اتصال', self::ID, 'cut'),
+                Button::to('✂️ قطع اتصال', self::ID, 'cut')->danger(),
             );
         }
 
-        return $view->row(Button::to('🔔 بخش‌های گزارش', ReportTopicsCard::ID), Button::to('🔄 تازه‌سازی', self::ID, self::VIEW))->back(Origin::back($admin, self::ID, 'hb'));
+        return $view->help('گزارش خریدها، تمدیدها، اکانت‌های تست، حذف سرویس‌ها، شارژ کیف پول، رسیدها، کاربران جدید، خطاها، تیکت‌ها، نظرات' . ($main ? '، پشتیبان‌ها و درخواست‌های نمایندگی' : ' و پشتیبان‌ها') . ' در یک گروه تلگرام، هر کدام در تاپیک خودش. ربات تاپیک‌ها را خودش می‌سازد و مدیرهای ربات رسیدها را همان‌جا با دکمه تایید یا رد می‌کنند و با ریپلای به تیکت‌ها پاسخ می‌دهند. کدام گزارش‌ها فرستاده شوند در «' . Fmt::e(ReportTopicsCard::TITLE) . '» است.')
+            ->back(Origin::back($admin, self::ID, BotScreens::MENU))
+            ->refresh(self::ID, self::VIEW);
     }
 
     /**
@@ -133,39 +140,42 @@ final class ReportGroupScreen extends BaseScreen
     private function connected(View $view, array $group): void
     {
         $problem = is_string($group['problem'] ?? null) ? $group['problem'] : null;
-        $view->facts([
+        if ($problem !== null) {
+            $view->line('⚠️ ' . Fmt::e($problem) . ' بعد از درست کردن، «🔍 بررسی دوباره» را بزنید.');
+        }
+        $waiting = (int) ($group['waiting'] ?? 0);
+        $view->card([
+            'وضعیت' => $problem !== null ? '⚠️ مشکل دارد' : '🟢 وصل است',
             'گروه' => Fmt::e(is_string($group['title'] ?? null) ? $group['title'] : 'گروه بدون نام'),
             'شناسه' => Fmt::code(is_scalar($group['chat_id'] ?? null) ? (string) $group['chat_id'] : null),
             'وصل شده در' => Fmt::date(is_string($group['connected_at'] ?? null) ? $group['connected_at'] : null),
-            'وضعیت' => $problem !== null ? '⚠️ مشکل دارد' : '✅ وصل است',
+            'در صف ارسال' => $waiting > 0 ? Fmt::number($waiting) . ' گزارش' . (is_string($group['paused_until'] ?? null) ? ' · تلگرام تا ' . Fmt::date($group['paused_until'], true) . ' نگه داشته' : '') : null,
         ]);
-        if ($problem !== null) {
-            $view->line('⚠️ ' . Fmt::e($problem) . ' بعد از درست کردن، «بررسی دوباره» را بزنید.');
-        }
-        $waiting = (int) ($group['waiting'] ?? 0);
-        if ($waiting > 0) {
-            $view->line('📬 ' . Fmt::number($waiting) . ' گزارش در صف ارسال است'
-                . (is_string($group['paused_until'] ?? null) ? '؛ تلگرام ارسال را تا ' . Fmt::date($group['paused_until'], true) . ' نگه داشته است' : '')
-                . '. تلگرام در هر گروه بیشتر از ۲۰ پیام در دقیقه نمی‌پذیرد، پس گزارش‌ها به نوبت فرستاده می‌شوند.');
-        }
-        $view->line()->line('<b>تاپیک‌ها</b>');
-        $unmade = false;
+
+        // The topics by their state, a line each: made, not made yet (made with their first report), switched off.
+        $states = ['🟢 ساخته شده' => [], '🟡 ساخته نشده' => [], Words::OFF => []];
         foreach ((array) ($group['topics'] ?? []) as $topic) {
             if (!is_array($topic)) {
                 continue;
             }
-            $state = match (true) {
-                ($topic['enabled'] ?? true) !== true => '⛔️ خاموش',
-                Json::on($topic, 'ready') => '✅ ساخته شده',
-                default => '⏳ ساخته نشده',
-            };
-            $unmade = $unmade || (($topic['enabled'] ?? true) === true && ($topic['ready'] ?? false) !== true);
-            $view->line('• ' . Fmt::e((string) ($topic['title'] ?? '')) . ': ' . $state);
+            $states[match (true) {
+                ($topic['enabled'] ?? true) !== true => Words::OFF,
+                Json::on($topic, 'ready') => '🟢 ساخته شده',
+                default => '🟡 ساخته نشده',
+            }][] = Fmt::e((string) ($topic['title'] ?? ''));
         }
-        if ($unmade) {
+        $view->section(Icons::REPORT_TOPICS . ' تاپیک‌ها');
+        foreach ($states as $state => $titles) {
+            if ($titles !== []) {
+                $view->line($state . ': ' . implode('، ', $titles));
+            }
+        }
+        if ($states['🟡 ساخته نشده'] !== []) {
             $view->line('<i>ربات تاپیکی را که ساخته نشده با اولین گزارش همان بخش در گروه می‌سازد.</i>');
         }
-        $view->line();
+        if ($waiting > 0) {
+            $view->line('<i>تلگرام در هر گروه بیشتر از ۲۰ پیام در دقیقه نمی‌پذیرد، پس گزارش‌ها به نوبت فرستاده می‌شوند.</i>');
+        }
     }
 
     /**
@@ -177,33 +187,31 @@ final class ReportGroupScreen extends BaseScreen
     {
         $link = is_array($group['link'] ?? null) ? $group['link'] : null;
         // Step 2 names the buttons the card has now: the link to make first, or the one that adds the bot.
-        $view->line('<b>وصل کردن گروه</b>')
+        $view->section('🔗 وصل کردن گروه')
             ->line("۱. در تلگرام یک گروه بسازید (یا گروهی خالی که دارید) و از تنظیمات گروه گزینه \u{2068}Topics\u{2069} (تاپیک‌ها) را روشن کنید.")
             ->line(($link === null ? '۲. «🔗 ساخت لینک اتصال» را بزنید؛ بعد با دکمه «➕ افزودن ربات به گروه»' : '۲. با دکمه «➕ افزودن ربات به گروه»') . ' همان گروه را انتخاب کنید؛ ربات با دسترسی «مدیریت تاپیک‌ها» مدیر گروه می‌شود.')
             ->line('۳. ربات تاپیک‌ها را خودش می‌سازد؛ بعد «🔄 تازه‌سازی» را بزنید تا وصل شدن گروه همین‌جا دیده شود.');
         if (($group['bot_username'] ?? null) === null) {
-            $view->line()->line('⚠️ ' . ($main
+            $view->line('⚠️ ' . ($main
                 ? "نام کاربری ربات هنوز مشخص نیست: در «تنظیمات پنل»، بخش «ربات تلگرام»، «بررسی توکن» را بزنید و ذخیره کنید (یا \u{2068}Webhook\u{2069} را ثبت کنید) تا نامش از تلگرام گرفته شود؛ بعد لینک اتصال ساخته می‌شود."
                 : 'ربات این فروشگاه هنوز وصل نشده است: توکنش در ربات اصلی از «نمایندگی» ← «ربات من» فرستاده می‌شود؛ بعد لینک اتصال ساخته می‌شود.'));
         } elseif ($link !== null) {
             $url = is_string($link['url'] ?? null) ? $link['url'] : '';
+            $command = is_string($link['command'] ?? null) ? $link['command'] : null;
             $view->line()
                 ->line('⏳ در انتظار وصل شدن گروه… لینک فقط یک بار و تا ' . Fmt::date(is_string($link['expires_at'] ?? null) ? $link['expires_at'] : null, true) . ' کار می‌کند:')
                 ->line(Fmt::code($url))
                 ->line('<i>لینک در تلگرام باز نشد؟ ربات را خودتان مدیر گروه کنید و دسترسی «مدیریت تاپیک‌ها» را به آن بدهید، بعد این پیام را در گروه بفرستید:</i>')
-                ->line(Fmt::code(is_string($link['command'] ?? null) ? $link['command'] : null));
-            $view->row(
-                str_starts_with($url, 'https://') ? Button::url('➕ افزودن ربات به گروه', $url) : null,
-                Button::to('🔄 لینک تازه', self::ID, 'link'),
-            );
+                ->line(Fmt::code($command));
+            $view->row(str_starts_with($url, 'https://') ? Button::url('➕ افزودن ربات به گروه', $url)->primary() : null)
+                ->row($command !== null ? Button::copy(Words::copy('پیام اتصال'), $command) : null, Button::to('🔗 لینک تازه', self::ID, 'link'));
         } else {
-            $view->row(Button::to('🔗 ساخت لینک اتصال', self::ID, 'link'));
+            $view->row(Button::to('🔗 ساخت لینک اتصال', self::ID, 'link')->primary());
         }
         $attempt = is_array($group['attempt'] ?? null) ? $group['attempt'] : null;
         if ($attempt !== null) {
             $view->line()->line('⛔️ گروه «' . Fmt::e((string) ($attempt['title'] ?? '')) . '» وصل نشد: ' . Fmt::e((string) ($attempt['message'] ?? '')));
         }
-        $view->line();
     }
 
     /**

@@ -43,7 +43,7 @@ abstract class ConfigScreen extends DraftScreen
 
     protected function path(): array
     {
-        return ['مدیریت', 'تنظیمات', 'تنظیمات پنل'];
+        return PanelSettingsScreen::under();
     }
 
     protected function parent(): string
@@ -66,7 +66,7 @@ abstract class ConfigScreen extends DraftScreen
     {
         $file = (array) ($this->config($admin)['file'] ?? []);
 
-        return ($file['writable'] ?? true) === false ? ['⚠️ <b>فایل config.php قابل نوشتن نیست.</b> در File Manager هاست به این فایل و پوشه برنامه اجازه نوشتن بدهید تا تنظیمات از این‌جا ذخیره شوند؛ تا آن موقع می‌توانید خود فایل را همان‌جا ویرایش کنید.'] : [];
+        return ($file['writable'] ?? true) === false ? ["⚠️ <b>فایل \u{2068}config.php\u{2069} قابل نوشتن نیست.</b> در \u{2068}File Manager\u{2069} هاست به این فایل و پوشه برنامه اجازه نوشتن بدهید تا تنظیمات از این‌جا ذخیره شوند؛ تا آن موقع می‌توانید خود فایل را همان‌جا ویرایش کنید."] : [];
     }
 
     /**

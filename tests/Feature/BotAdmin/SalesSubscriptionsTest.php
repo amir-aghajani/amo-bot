@@ -11,6 +11,7 @@ use App\Modules\Subscriptions\Enums\SubscriptionStatus;
 use App\Modules\Subscriptions\Models\Subscription;
 use App\Modules\Telegram\Admin\Door\BotAdminDoor;
 use App\Modules\Telegram\Admin\Ui\Nav;
+use App\Modules\Telegram\Admin\Ui\Words;
 use App\Modules\Users\Enums\UserRole;
 use App\Modules\Users\Models\User;
 use App\Support\Traffic;
@@ -141,7 +142,14 @@ final class SalesSubscriptionsTest extends BotTestCase
 
         $this->send($this->tap(Nav::to('sbm', 'go', $target->id), chat: 7001));
         self::assertSame([$target->id, $target->id], [$first->refresh()->server_id, $second->refresh()->server_id], 'each moved through the panel\'s route');
-        self::assertStringContainsString('۲ منتقل شد', implode("\n", $this->said()));
+        self::assertStringContainsString('منتقل شد: <b>۲ از ۲</b>', implode("\n", $this->said()));
+
+        // The confirmation tapped again (a second tap, an old window): the move done stands, nothing sent again.
+        $this->send($this->tap(Nav::to('sbm', 'go', $target->id), chat: 7001));
+        $screen = implode("\n", $this->said());
+        self::assertStringContainsString('منتقل شد: <b>۲ از ۲</b>', $screen);
+        self::assertStringNotContainsString('ناموفق', $screen);
+        self::assertSame([$target->id, $target->id], [$first->refresh()->server_id, $second->refresh()->server_id]);
 
         $this->send($this->tap(Nav::to('sbm', 'end'), chat: 7001));
         self::assertContains(Nav::to('sbm'), $this->callbacks(0), 'back on the services list');
@@ -208,13 +216,89 @@ final class SalesSubscriptionsTest extends BotTestCase
         self::assertNotContains(Nav::to('sbv', 'show', $here->id), $this->callbacks(0));
     }
 
+    public function testTheListIsOrderedEveryWayThePanelOrdersIt(): void
+    {
+        $this->owner();
+        $first = $this->subscription($this->ali, $this->plan, $this->server, 'ali_r_1');
+        $second = $this->subscription($this->ali, $this->plan, $this->server, 'ali_r_2');
+        $third = $this->subscription($this->ali, $this->plan, $this->server, 'ali_r_3');
+        $first->forceFill(['expires_at' => now()->addDays(20), 'download_bytes' => 5 * Traffic::GIGABYTE])->save();
+        $second->forceFill(['expires_at' => now()->addDays(5), 'download_bytes' => 1 * Traffic::GIGABYTE])->save();
+        $third->forceFill(['expires_at' => now()->addDays(40), 'download_bytes' => 9 * Traffic::GIGABYTE])->save();
+        $rows = fn(): array => array_values(array_filter($this->callbacks($this->windowCall()), static fn(string $data): bool => str_starts_with($data, 'a:sbv:')));
+        $ids = static fn(Subscription ...$services): array => array_map(static fn(Subscription $service): string => Nav::to('sbv', 'show', $service->id), $services);
+
+        $this->send($this->tap(Nav::to('sbf'), chat: 7001));
+        foreach (['created.asc', 'expires.asc', 'expires.desc', 'used.desc', 'used.asc'] as $order) {
+            self::assertContains(Nav::to('sbf', 's', 'sort', $order), $this->callbacks(0), "the order {$order} offered");
+        }
+
+        $orders = [
+            'created.asc' => $ids($first, $second, $third),
+            'expires.asc' => $ids($second, $first, $third),
+            'expires.desc' => $ids($third, $first, $second),
+            'used.desc' => $ids($third, $first, $second),
+            'used.asc' => $ids($second, $first, $third),
+        ];
+        foreach ($orders as $order => $expected) {
+            $this->send($this->tap(Nav::to('sbf', 's', 'sort', $order), chat: 7001));
+            self::assertContains(Words::CHIP . match ($order) {
+                'created.asc' => 'قدیمی‌ترین',
+                'expires.asc' => 'زودتر تمام می‌شود',
+                'expires.desc' => 'دیرتر تمام می‌شود',
+                'used.desc' => 'بیشترین مصرف',
+                default => 'کمترین مصرف',
+            }, $this->buttonLabels(0), 'the order in force marked');
+            $this->send($this->tap(Nav::to('sb'), chat: 7001));
+            self::assertSame($expected, $rows(), "listed {$order}");
+            self::assertStringContainsString('ترتیب:', $this->said()[0], 'the order said in the header');
+        }
+
+        $this->send($this->tap(Nav::to('sbf', 's', 'sort', '_'), chat: 7001));
+        $this->send($this->tap(Nav::to('sb'), chat: 7001));
+        self::assertSame($ids($third, $second, $first), $rows(), 'the newest first again');
+    }
+
+    public function testTheServiceCardOffersItsLinkToCopy(): void
+    {
+        $this->owner();
+        $service = $this->mirrored($this->subscription($this->ali, $this->plan, $this->server, 'ali_r_1'));
+
+        $this->send($this->tap(Nav::to('sbv', 'show', $service->id), chat: 7001));
+        $copied = array_values(array_filter(array_map(static fn(array $button): ?string => $button['copy_text']['text'] ?? null, array_merge(...$this->inlineKeyboard(0)))));
+        self::assertSame(['https://fake.test/sub/ali_r_1'], $copied, 'the link, copied at a tap');
+        self::assertStringContainsString('▱', $this->said()[0], 'the traffic used, as a bar');
+    }
+
+    public function testARunningServiceShowsItsTimeUsedAndAnEndedOneItsEnd(): void
+    {
+        $this->owner();
+        $service = $this->subscription($this->ali, $this->plan, $this->server, 'ali_r_1');
+        $service->forceFill(['starts_at' => now()->subDays(15), 'expires_at' => now()->addDays(15), 'duration_hours' => 720, 'download_bytes' => 3 * Traffic::GIGABYTE])->save();
+
+        $this->send($this->tap(Nav::to('sbv', 'show', $service->id), chat: 7001));
+        $card = $this->said()[0];
+        self::assertStringContainsString('▰▰▰▰▰▱▱▱▱▱ · مدت ۳۰ روز', $card, 'half the term used, as a bar');
+        self::assertStringContainsString('۱۵ روز مانده', $card);
+        self::assertStringContainsString('<b>۳ گیگابایت</b> از', $card, 'the traffic used');
+
+        $service->forceFill(['status' => SubscriptionStatus::Deleted])->save();
+        $this->send($this->tap(Nav::to('sbv', 'show', $service->id), chat: 7001));
+        $card = $this->said()[0];
+        self::assertStringContainsString('این لینک دیگر کار نمی‌کند', $card);
+        self::assertStringNotContainsString('▰▰▰▰▰▱', $card, 'no term running for a deleted service');
+        self::assertSame([], array_values(array_filter(array_map(static fn(array $button): ?string => $button['copy_text']['text'] ?? null, array_merge(...$this->inlineKeyboard(0))))), 'a dead link is not offered to copy');
+    }
+
     public function testAnAgentExtendsFromTheirBotsTrafficAndSeesNoMainShopKinds(): void
     {
         $bot = $this->agentBot(traffic: 100);
         $service = CurrentBot::run($bot, fn(): Subscription => $this->mirrored($this->subscription($this->customer(['telegram_id' => 2001, 'first_name' => 'Reza']), $this->plan(['name' => 'پلن نماینده']), $this->server, 'reza_1')));
 
         $this->sendTo($bot, $this->tap(Nav::to('sbe', 'show', $service->id), chat: self::AGENT_TELEGRAM_ID));
-        self::assertStringContainsString('از حجم ربات این فروشگاه کم می‌شود (۱۰۰ گیگابایت مانده)', $this->said()[0], 'an agent\'s GB come out of their bot');
+        self::assertStringContainsString('از حجم ربات این فروشگاه کم می‌شود', $this->said()[0], 'an agent\'s GB come out of their bot');
+        self::assertStringContainsString('حجم مانده ربات: <b>۱۰۰ گیگابایت</b>', $this->said()[0], 'what is left of it, on the card');
+
 
         $this->sendTo($bot, $this->tap(Nav::to('sbf'), chat: self::AGENT_TELEGRAM_ID));
         self::assertNotContains(Nav::to('sbf', 's', 'kind', 'claimed'), $this->callbacks(0), 'only the main shop takes services by their link');
@@ -235,12 +319,5 @@ final class SalesSubscriptionsTest extends BotTestCase
     private function staff(): void
     {
         $this->customer(['telegram_id' => 7100, 'first_name' => 'Boss', 'role' => UserRole::Admin]);
-    }
-
-    /** The account 7001 linked as the owner. */
-    private function owner(): void
-    {
-        $this->customer(['telegram_id' => 7001, 'first_name' => 'Amir']);
-        $this->linkOwner(7001);
     }
 }

@@ -6,6 +6,7 @@ namespace App\Modules\Telegram\Admin\Sections\Panel\Backups;
 
 use App\Modules\Telegram\Admin\AdminSeat;
 use App\Modules\Telegram\Admin\Door\ApiRefusal;
+use App\Modules\Telegram\Admin\Sections\Panel\PanelSettingsScreen;
 use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\Answer;
 use App\Modules\Telegram\Admin\Ui\BaseScreen;
@@ -14,6 +15,7 @@ use App\Modules\Telegram\Admin\Ui\Fmt;
 use App\Modules\Telegram\Admin\Ui\Json;
 use App\Modules\Telegram\Admin\Ui\Prompt;
 use App\Modules\Telegram\Admin\Ui\View;
+use App\Modules\Telegram\Admin\Ui\Words;
 
 /**
  * «بازگردانی»: a backup file sent here, checked by the API and described — when it was made, by which version, of what,
@@ -27,6 +29,8 @@ final class RestoreScreen extends BaseScreen
 {
     public const ID = 'ppbr';
 
+    public const TITLE = '♻️ بازگردانی';
+
     public function allows(AdminSeat $seat): bool
     {
         return $seat->configures();
@@ -38,7 +42,7 @@ final class RestoreScreen extends BaseScreen
         $state = $admin->state(self::ID);
         $whole = ($status['scope'] ?? '') === 'installation';
         $subject = $whole ? 'کل نصب' : 'فروشگاه ' . Tables::shop(is_array($status['shop'] ?? null) ? $status['shop'] : null);
-        $view = View::make('♻️ بازگردانی', 'مدیریت', 'تنظیمات پنل', 'پشتیبان‌گیری');
+        $view = View::make(self::TITLE, ...PanelSettingsScreen::under(Fmt::bare(BackupsScreen::TITLE)));
 
         $restored = is_array($state['restored'] ?? null) ? $state['restored'] : null;
         if ($restored !== null) {
@@ -47,37 +51,33 @@ final class RestoreScreen extends BaseScreen
 
         $inspection = is_array($state['inspection'] ?? null) ? $state['inspection'] : null;
         if ($inspection === null) {
-            $view->line($subject . ' را به حالت یک فایل پشتیبان برگردانید. اول فایل بررسی و محتوایش نشان داده می‌شود؛ تا تایید نکنید، چیزی تغییر نمی‌کند.')
-                ->line("<i>فایل پشتیبانی (\u{2068}.json.gz\u{2069}) که از همین‌جا یا از پنل گرفته شده است. تلگرام فایل بزرگ‌تر از ۲۰ مگابایت را به ربات نمی‌دهد؛ فایل بزرگ‌تر را از پنل بازگردانی کنید.</i>")
-                ->row(Button::to('📤 فرستادن فایل پشتیبان', self::ID, 'up'));
-
-            return $view->back(BackupsScreen::ID);
+            return $view->line($subject . ' را به حالت یک فایل پشتیبان برگردانید. اول فایل بررسی و محتوایش نشان داده می‌شود؛ تا تایید نکنید، چیزی تغییر نمی‌کند.')
+                ->note("فایل پشتیبانی (\u{2068}.json.gz\u{2069}) که از همین‌جا یا از پنل گرفته شده است. تلگرام فایل بزرگ‌تر از ۲۰ مگابایت را به ربات نمی‌دهد؛ فایل بزرگ‌تر را از پنل بازگردانی کنید.")
+                ->row(Button::to('📤 فرستادن فایل پشتیبان', self::ID, 'up')->primary())
+                ->back(BackupsScreen::ID);
         }
 
         $made = Fmt::date(is_string($inspection['made_at'] ?? null) ? $inspection['made_at'] : null, true);
         $tables = Json::part($inspection, 'tables');
-        $view->line('<b>فایل انتخاب‌شده</b>: ' . Fmt::ltr((string) ($inspection['name'] ?? '')))
-            ->facts([
-                'زمان پشتیبان' => $made,
-                "نسخه \u{2068}AmoBot\u{2069}" => Fmt::ltr((string) ($inspection['app_version'] ?? '')),
-                'محتوا' => ($inspection['scope'] ?? '') === 'installation' ? 'کل نصب: همه فروشگاه‌ها، سرورها و نماینده‌ها' : 'فروشگاه ' . Tables::shop(is_array($inspection['shop'] ?? null) ? $inspection['shop'] : null),
-                'ردیف‌ها' => Fmt::number((int) ($inspection['rows'] ?? 0)) . ' ردیف در ' . Fmt::number(count($tables)) . ' جدول',
-            ]);
+        $view->card([
+            'فایل انتخاب‌شده' => Fmt::ltr((string) ($inspection['name'] ?? '')),
+            'زمان پشتیبان' => $made,
+            "نسخه \u{2068}AmoBot\u{2069}" => Fmt::ltr((string) ($inspection['app_version'] ?? '')),
+            'محتوا' => ($inspection['scope'] ?? '') === 'installation' ? 'کل نصب: همه فروشگاه‌ها، سرورها و نماینده‌ها' : 'فروشگاه ' . Tables::shop(is_array($inspection['shop'] ?? null) ? $inspection['shop'] : null),
+            'ردیف‌ها' => Fmt::number((int) ($inspection['rows'] ?? 0)) . ' ردیف در ' . Fmt::number(count($tables)) . ' جدول',
+            'آماده بازگردانی تا' => Fmt::date(is_string($inspection['expires_at'] ?? null) ? $inspection['expires_at'] : null, true),
+        ]);
         $warnings = array_filter(Json::part($inspection, 'warnings'), is_string(...));
         if ($warnings !== []) {
-            $view->line()->line('⚠️ <b>پیش از بازگردانی بدانید:</b>');
+            $view->section('⚠️ پیش از بازگردانی بدانید');
             foreach ($warnings as $warning) {
                 $view->line('• ' . Fmt::e($warning));
             }
         }
-        $view->line()->line('🛑 ' . self::loss($whole, $status, $made))
-            ->note('این فایل تا ' . Fmt::date(is_string($inspection['expires_at'] ?? null) ? $inspection['expires_at'] : null, true) . ' آماده بازگردانی می‌ماند؛ پس از آن باید دوباره فرستاده شود.');
-        if ($tables !== []) {
-            $view->row(Button::to('📋 ردیف‌های هر جدول', self::ID, 'rows'));
-        }
+        $view->line()->line('🛑 ' . self::loss($whole, $status, $made));
 
-        return $view->row(Button::to('♻️ بازگردانی', self::ID, 'ask'), Button::to('✖️ انصراف', self::ID, 'drop'))
-            ->row(Button::to('📤 فایل دیگر', self::ID, 'up'))
+        return $view->row(Button::to(self::TITLE, self::ID, 'ask')->danger(), $tables !== [] ? Button::to('📋 ردیف‌های هر جدول', self::ID, 'rows') : null)
+            ->row(Button::to('📤 فایل دیگر', self::ID, 'up'), Button::to('🗑 کنار گذاشتن فایل', self::ID, 'drop'))
             ->back(BackupsScreen::ID);
     }
 
@@ -87,12 +87,12 @@ final class RestoreScreen extends BaseScreen
         $inspection = is_array($inspection) ? $inspection : null;
         switch ($action) {
             case 'up':
-                return $admin->ask(new Prompt('فایل پشتیبان', self::ID, 'up', [], "فایل پشتیبان (\u{2068}.json.gz\u{2069}) را به صورت فایل همین‌جا بفرستید؛ تا ۲۰ مگابایت.", file: true));
+                return $admin->ask((new Prompt('فایل پشتیبان', self::ID, 'up', [], "فایل پشتیبان (\u{2068}.json.gz\u{2069}) را به صورت فایل همین‌جا بفرستید.", file: true))->limits('تا ۲۰ مگابایت'));
             case 'rows':
                 if ($inspection === null) {
                     break;
                 }
-                $view = View::make('📋 ردیف‌های هر جدول', 'مدیریت', 'پشتیبان‌گیری', 'بازگردانی');
+                $view = View::make('📋 ردیف‌های هر جدول', ...PanelSettingsScreen::under(Fmt::bare(BackupsScreen::TITLE), Fmt::bare(self::TITLE)));
                 foreach (Json::part($inspection, 'tables') as $table) {
                     if (is_array($table)) {
                         $view->line('• ' . Tables::name((string) ($table['table'] ?? '')) . ': ' . Fmt::number((int) ($table['rows'] ?? 0)));
@@ -109,9 +109,10 @@ final class RestoreScreen extends BaseScreen
 
                 return $admin->confirm(
                     'به حالت این پشتیبان برگردد؟',
-                    Button::to('✔️ می‌دانم؛ بازگردانی شود', self::ID, 'go'),
-                    Button::to('✖️ انصراف', self::ID),
+                    Button::to(Words::yes('می‌دانم؛ بازگردانی شود'), self::ID, 'go'),
+                    Button::to(Words::CANCEL, self::ID),
                     self::loss(($status['scope'] ?? '') === 'installation', $status, $made) . "\n\n<b>می‌دانم هرچه بعد از این پشتیبان تغییر کرده، از دست می‌رود.</b>",
+                    danger: true,
                 );
             case 'go':
                 if ($inspection === null) {
@@ -127,7 +128,7 @@ final class RestoreScreen extends BaseScreen
                 $whole = ($status['scope'] ?? '') === 'installation';
 
                 return $this->restored(
-                    View::make('♻️ بازگردانی', 'مدیریت', 'تنظیمات پنل', 'پشتیبان‌گیری'),
+                    View::make(self::TITLE, ...PanelSettingsScreen::under(Fmt::bare(BackupsScreen::TITLE))),
                     $whole ? 'کل نصب' : 'فروشگاه ' . Tables::shop(is_array($status['shop'] ?? null) ? $status['shop'] : null),
                     $whole,
                     $restored,

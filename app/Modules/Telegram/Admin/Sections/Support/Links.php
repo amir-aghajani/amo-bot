@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace App\Modules\Telegram\Admin\Sections\Support;
 
+use App\Modules\Telegram\Admin\Sections\Customers\CustomerScreen;
 use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\Button;
+use App\Modules\Telegram\Admin\Ui\Icons;
 use App\Modules\Telegram\Admin\Ui\Nav;
 
 /**
@@ -15,7 +17,7 @@ use App\Modules\Telegram\Admin\Ui\Nav;
 final class Links
 {
     /** A customer's own page (Sections\Customers). */
-    public const CUSTOMER = 'usv';
+    public const CUSTOMER = CustomerScreen::ID;
 
     /** An order's, a payment's and a service's own screens (Sections\Sales). */
     public const ORDER = 'orv';
@@ -37,6 +39,6 @@ final class Links
     {
         $id = is_int($ref['id'] ?? null) ? $ref['id'] : 0;
 
-        return $id > 0 ? self::to($admin, '👤 ' . ($label !== '' ? $label : Words::name($ref)), self::CUSTOMER, Nav::SHOW, $id) : null;
+        return $id > 0 ? self::to($admin, Icons::CUSTOMER . ' ' . ($label !== '' ? $label : Words::name($ref)), self::CUSTOMER, Nav::SHOW, $id) : null;
     }
 }

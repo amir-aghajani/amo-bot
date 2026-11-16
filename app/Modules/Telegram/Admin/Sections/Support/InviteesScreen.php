@@ -12,9 +12,9 @@ use App\Modules\Telegram\Admin\Ui\Nav;
 use App\Modules\Telegram\Admin\Ui\View;
 
 /**
- * «🙋 زیرمجموعه‌ها» (GET /referrals/invitees): the customers who came through a link, newest first — or by what they
- * earned their referrer —, who brought each, each opening its own screen (InviteeScreen); one referrer's alone, as the
- * referrers list leads here (`ref`).
+ * «🙋 زیرمجموعه‌ها» (GET /referrals/invitees): the customers who came through a link, ordered by when they came or what
+ * they earned their referrer — either way —, each a row «name · referrer · earned» opening its own screen
+ * (InviteeScreen); one referrer's alone, as the referrers list leads here (`ref`).
  *
  * Actions: `ref` (referrer id: theirs alone), `all` (every referrer's again).
  */
@@ -23,7 +23,10 @@ final class InviteesScreen extends ListScreen
     public const ID = 'rfi';
 
     /** The panel's sortable headers, its own order first. */
-    private const SORTS = ['joined' => 'تازه‌ترین', 'earned' => 'بیشترین پورسانت'];
+    private const SORTS = ['joined' => 'زمان عضویت', 'earned' => 'پورسانت'];
+
+    /** The ones of them that are moments. */
+    private const MOMENTS = ['joined'];
 
     /** The referrer the list is narrowed to (its state's `referrer`) while it is shown; 0 for none. */
     private int $referrer = 0;
@@ -42,12 +45,12 @@ final class InviteesScreen extends ListScreen
 
     protected function title(): string
     {
-        return '🙋 زیرمجموعه‌ها';
+        return ReferralsScreen::INVITEES;
     }
 
     protected function path(): array
     {
-        return ['مدیریت', 'فروش', 'زیرمجموعه‌گیری'];
+        return ReferralsScreen::under();
     }
 
     protected function endpoint(): string
@@ -62,12 +65,17 @@ final class InviteesScreen extends ListScreen
 
     protected function filters(): array
     {
-        return ['sort' => self::SORTS];
+        return ['sort' => self::SORTS, Sorting::DIR => Sorting::directions($this->here, self::ID, self::SORTS, self::MOMENTS)];
     }
 
     protected function fixed(): array
     {
         return $this->referrer > 0 ? ['referrer' => $this->referrer] : [];
+    }
+
+    protected function noun(): string
+    {
+        return 'زیرمجموعه';
     }
 
     protected function searchHint(): string
@@ -77,17 +85,14 @@ final class InviteesScreen extends ListScreen
 
     protected function empty(): string
     {
-        return 'هنوز کسی با لینک دعوت نیامده است. کسی که اولین بار با لینک دعوت یک نفر وارد ربات شود، این‌جا می‌آید.';
+        return $this->referrer > 0
+            ? 'این معرف هنوز کسی را نیاورده است.'
+            : 'هنوز کسی با لینک دعوت نیامده است. کسی که اولین بار با لینک دعوت یک نفر وارد ربات شود، این‌جا می‌آید.';
     }
 
     protected function summary(array $meta): array
     {
-        $lines = ['مشتری‌هایی که با لینک دعوت آمده‌اند: چه کسی آن‌ها را آورده و پرداخت‌هایشان چقدر پورسانت داشته است.'];
-        if ($this->referrer > 0) {
-            $lines[] = '👥 فقط زیرمجموعه‌های معرف ' . Fmt::id($this->referrer);
-        }
-
-        return $lines;
+        return $this->referrer > 0 ? [ReferralsScreen::REFERRER . ' فقط زیرمجموعه‌های معرف ' . Fmt::id($this->referrer)] : [];
     }
 
     protected function extra(View $view, Admin $admin): void
@@ -95,6 +100,7 @@ final class InviteesScreen extends ListScreen
         if ($this->referrer > 0) {
             $view->row(Button::to('✖️ همه معرف‌ها', self::ID, 'all'));
         }
+        $view->help('مشتری‌هایی که با لینک دعوت آمده‌اند: چه کسی آن‌ها را آورده و پرداخت‌هایشان چقدر پورسانت برای معرف داشته است.');
     }
 
     protected function keepsRows(): bool
@@ -111,10 +117,10 @@ final class InviteesScreen extends ListScreen
     {
         $user = is_array($row['user'] ?? null) ? $row['user'] : null;
         $referrer = is_array($row['referrer'] ?? null) ? $row['referrer'] : null;
-        $earned = is_numeric($row['earned'] ?? null) ? (string) $row['earned'] : '0';
+        $earned = Words::figure($row['earned'] ?? null);
 
         return Button::to(
-            Words::name($user) . ($referrer !== null ? ' · معرف: ' . Words::name($referrer) : '') . ((float) $earned > 0 ? ' · ' . Fmt::plain(Fmt::money($earned)) : ''),
+            Fmt::cut(Words::name($user), 16) . ($referrer !== null && $this->referrer === 0 ? ' · معرف: ' . Fmt::cut(Words::name($referrer), 16) : '') . ((float) $earned > 0 ? ' · ' . Fmt::plain(Fmt::money($earned)) : ''),
             InviteeScreen::ID,
             Nav::SHOW,
             (int) ($row['id'] ?? 0),

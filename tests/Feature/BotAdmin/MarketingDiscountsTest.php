@@ -11,7 +11,6 @@ use App\Modules\Orders\Enums\OrderStatus;
 use App\Modules\Telegram\Admin\Sections\Marketing\Form\Moment;
 use App\Modules\Telegram\Admin\Ui\Nav;
 use App\Modules\Users\Enums\UserRole;
-use App\Modules\Users\Models\User;
 use App\Support\LocalTime;
 use Tests\BotTestCase;
 
@@ -23,8 +22,6 @@ use Tests\BotTestCase;
  */
 final class MarketingDiscountsTest extends BotTestCase
 {
-    private const OWNER = 7001;
-
     protected function setUp(): void
     {
         parent::setUp();
@@ -44,30 +41,48 @@ final class MarketingDiscountsTest extends BotTestCase
         self::assertContains(Nav::to('dcf', 'new'), $this->buttons());
 
         $this->send($this->tap(Nav::to('dcf', 'new'), chat: self::OWNER));
-        self::assertStringContainsString('✍️ کد', $this->said()[0]);
-        self::assertStringContainsString('قدم ۱ از', $this->said()[0]);
+        self::assertStringContainsString('✍️ مشتری چه کدی بنویسد؟', $this->said()[0], 'each step a question');
+        self::assertStringContainsString('گام ۱ از ۹', $this->said()[0], 'where the walk is');
+        self::assertStringContainsString('کدهای تخفیف › افزودن کد تخفیف', $this->said()[0], 'asked from inside the form');
         self::assertContains(Nav::to('dcf', 'q', 0, 0), $this->buttons(), 'a random code at a tap');
+        self::assertNotContains(Nav::to('dcf', 'prev', 0), $this->buttons(), 'no step before the first');
+        self::assertNotContains(Nav::to('dcf', 'skip', 0), $this->buttons(), 'the code may not be left empty');
 
         $this->send($this->message('nowruz', chat: self::OWNER));
-        self::assertStringContainsString('نوع تخفیف', $this->lastSaid());
+        self::assertStringContainsString('تخفیف از چه نوعی باشد؟', $this->lastSaid());
+        self::assertStringContainsString('گام ۲ از ۹', $this->lastSaid());
+        self::assertContains(Nav::to('dcf', 'prev', 1), $this->buttons(), 'back a step');
+        self::assertStringContainsString('✅ درصدی', json_encode($this->inlineKeyboard($this->buttonsCall()), JSON_UNESCAPED_UNICODE) ?: '', 'the choice in force marked');
+
+        // Back a step: the code asked again, its value now said; a second tap of the same button lands there too.
+        $this->send($this->tap(Nav::to('dcf', 'prev', 1), chat: self::OWNER));
+        self::assertStringContainsString('مشتری چه کدی بنویسد؟', $this->said()[0]);
+        self::assertStringContainsString('مقدار فعلی: <code>NOWRUZ</code>', $this->said()[0]);
+        self::assertContains(Nav::to('dcf', 'skip', 0), $this->buttons(), 'a value kept: «⏭ همین بماند»');
+        $this->send($this->tap(Nav::to('dcf', 'prev', 1), chat: self::OWNER));
+        self::assertStringContainsString('مشتری چه کدی بنویسد؟', $this->said()[0], 'tapped twice: one step back');
+        $this->send($this->tap(Nav::to('dcf', 'skip', 0), chat: self::OWNER));
         $this->send($this->tap(Nav::to('dcf', 'pick', 1, 0), chat: self::OWNER));
-        self::assertStringContainsString('درصد تخفیف', $this->said()[0]);
+        self::assertStringContainsString('چند درصد کم شود؟', $this->said()[0]);
+        self::assertStringContainsString('محدوده: از ۱ تا ۱۰۰ درصد', $this->said()[0]);
 
         $this->send($this->message('۲۰۰', chat: self::OWNER));
         self::assertStringContainsString('عددی بین ۱ تا ۱۰۰', $this->lastSaid(), 'out of range: asked again');
+        self::assertContains(Nav::to('dcf', 'prev', 2), $this->buttons(), 'the way back kept on the question asked again');
         $this->send($this->message('۲۰', chat: self::OWNER));
-        self::assertStringContainsString('سقف تخفیف', $this->lastSaid());
+        self::assertStringContainsString('تخفیف تا چه مبلغی باشد؟', $this->lastSaid());
+        self::assertContains(Nav::to('dcf', 'skip', 4), $this->buttons(), 'an optional step: «⏭ رد شدن»');
         $this->send($this->message('۵۰ هزار تومان', chat: self::OWNER));
-        self::assertStringContainsString('برای چه سفارش‌هایی', $this->lastSaid());
+        self::assertStringContainsString('برای چه سفارش‌هایی کار کند؟', $this->lastSaid());
 
         $this->send($this->tap(Nav::to('dcf', 'mt', 5, 0), chat: self::OWNER));
         $this->send($this->tap(Nav::to('dcf', 'mt', 5, 1), chat: self::OWNER));
         self::assertStringContainsString('✅ تمدید', json_encode($this->inlineKeyboard($this->buttonsCall()), JSON_UNESCAPED_UNICODE) ?: '');
         $this->send($this->tap(Nav::to('dcf', 'done', 5), chat: self::OWNER));
-        self::assertStringContainsString('شروع', $this->said()[0]);
+        self::assertStringContainsString('از کی کار کند؟', $this->said()[0]);
         $this->send($this->tap(Nav::to('dcf', 'skip', 6), chat: self::OWNER));
         $this->send($this->message('1406/01/15 18', chat: self::OWNER));
-        self::assertStringContainsString('سقف کل استفاده', $this->lastSaid());
+        self::assertStringContainsString('روی هم چند بار استفاده شود؟', $this->lastSaid());
         $this->send($this->tap(Nav::to('dcf', 'skip', 8), chat: self::OWNER));
         $this->send($this->tap(Nav::to('dcf', 'q', 9, 0), chat: self::OWNER));
 
@@ -76,7 +91,10 @@ final class MarketingDiscountsTest extends BotTestCase
         self::assertStringContainsString('۲۰٪', $summary);
         self::assertStringContainsString('خرید، تمدید', $summary);
         self::assertStringContainsString('یک‌بار مصرف', $summary);
-        self::assertContains(Nav::to('dcf', 'ask', 10), $this->buttons(), 'the plans, from the summary alone');
+        self::assertStringContainsString('<blockquote>', $summary, 'the review card');
+        self::assertStringContainsString('محدودیت‌های بیشتر', $summary, 'the fields not walked, a section of their own');
+        self::assertContains(Nav::to('dcf', 'ask', 10), $this->buttons(), 'the plans, from the review alone');
+        self::assertStringContainsString('"text":"✔️ ساختن","callback_data":"a:dcf:save","style":"success"', json_encode($this->inlineKeyboard($this->buttonsCall()), JSON_UNESCAPED_UNICODE) ?: '');
         self::assertSame(0, DiscountCode::query()->count(), 'nothing saved before «ساختن»');
 
         $this->send($this->tap(Nav::to('dcf', 'save'), chat: self::OWNER));
@@ -98,6 +116,31 @@ final class MarketingDiscountsTest extends BotTestCase
         self::assertStringContainsString('کد را بنویسید', (string) $this->popup());
         self::assertStringContainsString('⚠️', $this->said()[0], 'the summary, the refusal under the field');
         self::assertContains(Nav::to('dcf', 'save'), $this->buttons());
+        self::assertSame(0, DiscountCode::query()->count());
+    }
+
+    public function testATickTappedTwiceIsOneTickAndARefusalNamesTheFieldShown(): void
+    {
+        $this->owner();
+        $this->send($this->message('/admin', chat: self::OWNER));
+        $this->send($this->tap(Nav::to('dcf', 'new'), chat: self::OWNER));
+        $this->send($this->message('nowruz', chat: self::OWNER));
+        $this->send($this->tap(Nav::to('dcf', 'pick', 1, 0), chat: self::OWNER));
+        $this->send($this->message('۲۰', chat: self::OWNER));
+        $this->send($this->tap(Nav::to('dcf', 'skip', 4), chat: self::OWNER));
+        self::assertContains(Nav::to('dcf', 'mt', 5, 0, 1), $this->buttons(), 'a tick\'s button carries the tick it sets');
+
+        $this->send($this->tap(Nav::to('dcf', 'mt', 5, 0, 1), chat: self::OWNER));
+        $this->send($this->tap(Nav::to('dcf', 'mt', 5, 0, 1), chat: self::OWNER));
+        self::assertContains(Nav::to('dcf', 'mt', 5, 0, 0), $this->buttons(), 'tapped twice: still ticked');
+        self::assertStringContainsString('✅ خرید', json_encode($this->inlineKeyboard($this->buttonsCall()), JSON_UNESCAPED_UNICODE) ?: '');
+
+        // A fixed code saved without its amount: the API's `value` is the amount's here, not the percent's.
+        $this->send($this->tap(Nav::to('dcf', 'ask', 1), chat: self::OWNER));
+        $this->send($this->tap(Nav::to('dcf', 'pick', 1, 1), chat: self::OWNER));
+        $this->send($this->tap(Nav::to('dcf', 'save'), chat: self::OWNER));
+        self::assertSame('مبلغ تخفیف: مبلغ تخفیف را به تومان بنویسید.', $this->popup());
+        self::assertStringContainsString('⚠️ مبلغ تخفیف: <b>—</b>', $this->said()[0], 'marked on its field');
         self::assertSame(0, DiscountCode::query()->count());
     }
 
@@ -140,17 +183,67 @@ final class MarketingDiscountsTest extends BotTestCase
         $this->send($this->tap(Nav::to('dcf', 'edit', $code->id), chat: self::OWNER));
         self::assertStringContainsString('SUMMER', $this->said()[0], 'the code read afresh, not the list\'s kept row');
         self::assertStringContainsString('از پنل', $this->said()[0]);
-        self::assertStringContainsString('💾 ذخیره تغییرات', json_encode($this->inlineKeyboard($this->buttonsCall()), JSON_UNESCAPED_UNICODE) ?: '');
+        self::assertStringContainsString('هنوز چیزی را عوض نکرده‌اید', $this->said()[0]);
+        self::assertNotContains(Nav::to('dcf', 'save'), $this->buttons(), 'nothing changed: nothing to save');
+        self::assertContains(Nav::to('dcv', 'show', $code->id), $this->buttons(), 'the way back instead');
         self::assertContains(Nav::to('dcf', 'pick', 15, 1), $this->buttons(), 'the switch sets "off", the value its tap gives');
         $this->send($this->tap(Nav::to('dcf', 'pick', 15, 1), chat: self::OWNER));
         $this->send($this->tap(Nav::to('dcf', 'pick', 15, 1), chat: self::OWNER));
         self::assertContains(Nav::to('dcf', 'pick', 15, 0), $this->buttons(), 'tapped twice: still off');
+        self::assertStringContainsString('💾 ذخیره', json_encode($this->inlineKeyboard($this->buttonsCall()), JSON_UNESCAPED_UNICODE) ?: '', 'changed: the save offered');
         $this->send($this->tap(Nav::to('dcf', 'ask', 2), chat: self::OWNER));
         $this->send($this->message('15', chat: self::OWNER));
         $this->send($this->tap(Nav::to('dcf', 'save'), chat: self::OWNER));
 
         $code->refresh();
         self::assertSame(['SUMMER', '15.00', 50, 'از پنل', false], [$code->code, $code->value, $code->max_uses, $code->note, $code->enabled], 'the panel\'s changes kept');
+    }
+
+    public function testTheCodesAreNarrowedByTheirStateAndACodeIsCopiedAtATap(): void
+    {
+        $this->owner();
+        $on = $this->code('SPRING');
+        $off = $this->code('WINTER');
+        $off->forceFill(['enabled' => false])->save();
+        $this->send($this->message('/admin', chat: self::OWNER));
+        $this->send($this->tap(Nav::to('dc'), chat: self::OWNER));
+        self::assertStringContainsString('۲ کد', $this->said()[0]);
+        self::assertContains(Nav::to('dc', 'f', 'state', 'off'), $this->buttons(), 'the state chips');
+
+        $this->send($this->tap(Nav::to('dc', 'f', 'state', 'off'), chat: self::OWNER));
+        self::assertStringContainsString('۱ کد · ⏸ غیرفعال', $this->said()[0]);
+        self::assertContains(Nav::to('dcv', 'show', $off->id), $this->buttons());
+        self::assertNotContains(Nav::to('dcv', 'show', $on->id), $this->buttons(), 'narrowed here: the panel\'s list has no state filter');
+        self::assertStringContainsString('● ⏸ غیرفعال', json_encode($this->inlineKeyboard($this->buttonsCall()), JSON_UNESCAPED_UNICODE) ?: '', 'the chip in force marked');
+
+        $this->send($this->tap(Nav::to('dc', 'f', 'state', 'active'), chat: self::OWNER));
+        self::assertContains(Nav::to('dcv', 'show', $on->id), $this->buttons());
+        self::assertNotContains(Nav::to('dcv', 'show', $off->id), $this->buttons());
+
+        $this->send($this->tap(Nav::to('dcv', 'show', $on->id), chat: self::OWNER));
+        self::assertStringContainsString('"copy_text":{"text":"SPRING"}', json_encode($this->inlineKeyboard($this->buttonsCall()), JSON_UNESCAPED_UNICODE) ?: '', 'the code copied at a tap');
+    }
+
+    public function testANarrowedListPastItsPagesSaysTheOldestCodesWereNotRead(): void
+    {
+        $this->owner();
+        $now = date('Y-m-d H:i:s');
+        $rows = [];
+        for ($i = 1; $i <= 1001; $i++) {
+            // The oldest one off: on the 41st of the panel's pages, past the 40 a narrowed list reads.
+            $rows[] = ['code' => 'BULK' . $i, 'type' => 'percent', 'value' => 10, 'enabled' => $i !== 1, 'created_at' => $now, 'updated_at' => $now];
+        }
+        DiscountCode::query()->insert($rows);
+        $this->send($this->message('/admin', chat: self::OWNER));
+        $this->send($this->tap(Nav::to('dc'), chat: self::OWNER));
+        self::assertStringContainsString('۱٬۰۰۱ کد', $this->said()[0]);
+
+        $this->send($this->tap(Nav::to('dc', 'f', 'state', 'off'), chat: self::OWNER));
+        self::assertStringContainsString('۰ کد · ⏸ غیرفعال', $this->said()[0]);
+        self::assertStringContainsString('فقط ۱٬۰۰۰ کد تازه‌تر بررسی شد', $this->said()[0], 'the count is of the newest codes, said so');
+
+        $this->send($this->tap(Nav::to('dc', 'f', 'state', '_'), chat: self::OWNER));
+        self::assertStringNotContainsString('تازه‌تر بررسی شد', $this->said()[0], 'every code: the panel\'s own pages');
     }
 
     public function testACodeAnOrderKeepsIsNotDeleted(): void
@@ -221,14 +314,6 @@ final class MarketingDiscountsTest extends BotTestCase
         self::assertNull(Moment::parse('فردا', 0));
     }
 
-    /** The last thing said: a question asked again over the window that was. */
-    private function lastSaid(): string
-    {
-        $said = $this->said();
-
-        return (string) end($said);
-    }
-
     /** @return list<string> The window's buttons' data. */
     private function buttons(): array
     {
@@ -238,14 +323,5 @@ final class MarketingDiscountsTest extends BotTestCase
     private function code(string $text): DiscountCode
     {
         return $this->service(DiscountCodes::class)->create(['code' => $text, 'type' => 'percent', 'value' => 10, 'first_purchase_only' => false, 'enabled' => true]);
-    }
-
-    /** The account 7001 linked as the owner. */
-    private function owner(): User
-    {
-        $owner = User::query()->where('telegram_id', self::OWNER)->first() ?? $this->customer(['telegram_id' => self::OWNER, 'first_name' => 'Amir']);
-        $this->linkOwner(self::OWNER);
-
-        return $owner;
     }
 }

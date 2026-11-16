@@ -4,20 +4,21 @@ declare(strict_types=1);
 
 namespace App\Modules\Telegram\Admin\Sections\Marketing\GiftCodes;
 
-use App\Modules\Telegram\Admin\Door\ApiFile;
 use App\Modules\Telegram\Admin\Sections\Marketing\Form\FormScreen;
 use App\Modules\Telegram\Admin\Sections\Marketing\Form\Step;
-use App\Modules\Telegram\Admin\Sections\Marketing\Words;
+use App\Modules\Telegram\Admin\Sections\Marketing\Words as Marketing;
 use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\Fmt;
+use App\Modules\Telegram\Admin\Ui\Icons;
 use App\Modules\Telegram\Admin\Ui\View;
+use App\Modules\Telegram\Admin\Ui\Words;
 use App\Support\LocalTime;
 use App\Support\Persian;
 
 /**
- * «➕ ساخت کدها» (the panel's MakeCodesModal): what each code is worth — Toman for the wallet, or a plan's free service —,
- * how many, the batch's name, a prefix and how many days they work. One save: POST /gift-codes; the codes made are sent
- * as a text file to hand out (the panel shows them to copy), and the new batch opens.
+ * «➕ افزودن کدهای هدیه» (the panel's MakeCodesModal): what each code is worth — Toman for the wallet, or a plan's free
+ * service —, how many, the batch's name, a prefix and how many days they work. One save: POST /gift-codes; the codes
+ * made are sent as a text file to hand out (the panel shows them to copy), and the new batch opens.
  */
 final class GiftCodesForm extends FormScreen
 {
@@ -30,12 +31,12 @@ final class GiftCodesForm extends FormScreen
 
     protected function title(int $id, array $draft): string
     {
-        return '🎟 ساخت کدهای هدیه';
+        return Words::add(Marketing::GIFT_CODES);
     }
 
     protected function path(): array
     {
-        return [...Words::PATH, 'کدهای هدیه'];
+        return Marketing::in(Marketing::GIFT_CODES);
     }
 
     protected function steps(Admin $admin): array
@@ -43,13 +44,13 @@ final class GiftCodesForm extends FormScreen
         $most = self::daysMost();
 
         return [
-            Step::choice('kind', 'ارزش هر کد', ['wallet' => 'شارژ کیف پول', 'plan' => 'سرویس رایگان']),
-            Step::money('amount', 'مبلغ هر کد', 'مبلغی که هر کد به کیف پول مشتری اضافه می‌کند.')->when('kind', ['wallet']),
-            Step::choice('plan_id', 'پلن', static fn(): array => Words::plans($admin, 'غیرفعال؛ فقط برای هدیه'), 'هر کد یک سرویس رایگان از این پلن می‌دهد؛ روی اولین سروری که همان لحظه تحویل بدهد. پلن غیرفعال هم می‌شود — مخصوص هدیه.')->when('kind', ['plan']),
-            Step::count('count', 'تعداد کدها', 'کد', 'بین ۱ تا ۵۰۰')->range(1, 500)->quick('۱۰', 10)->quick('۵۰', 50)->quick('۱۰۰', 100),
-            Step::text('batch', 'نام سری', 'کدهای یک سری با هم دیده، فرستاده و حذف می‌شوند؛ مثلا «نوروز ۱۴۰۵».'),
-            Step::code('prefix', 'پیشوند', 'حروف انگلیسی و عدد، حداکثر ۱۲ کاراکتر؛ اول همه کدها می‌آید، مثل ' . Words::iso('NOWRUZ') . '.')->optional('ندارد'),
-            Step::count('expires_days', 'مهلت استفاده', 'روز', 'از امروز، بین ۰ تا ' . Fmt::number($most) . ' روز؛ خالی بماند، کدها همیشه معتبرند.')->range(0, $most)->optional('همیشه معتبر')
+            Step::choice('kind', 'ارزش هر کد', ['wallet' => 'شارژ کیف پول', 'plan' => 'سرویس رایگان'])->asks('هر کد چه بدهد؟'),
+            Step::money('amount', 'مبلغ هر کد', 'به کیف پول مشتری اضافه می‌شود.')->asks('هر کد چه مبلغی بدهد؟')->example('۲۰۰۰۰')->when('kind', ['wallet']),
+            Step::choice('plan_id', 'پلن', static fn(): array => Marketing::giftPlans($admin), 'هر کد یک سرویس رایگان از این پلن می‌دهد، روی اولین سروری که همان لحظه تحویل بدهد. پلن غیرفعال هم می‌شود — مخصوص هدیه.')->asks('سرویس رایگان از کدام پلن؟')->when('kind', ['plan']),
+            Step::count('count', 'تعداد کدها', 'کد')->asks('چند کد ساخته شود؟')->range(1, 500)->quick('۱۰', 10)->quick('۵۰', 50)->quick('۱۰۰', 100),
+            Step::text('batch', 'نام سری', 'کدهای یک سری با هم دیده، فرستاده و حذف می‌شوند.')->asks('اسم این سری چه باشد؟')->example('نوروز ۱۴۰۵'),
+            Step::code('prefix', 'پیشوند', 'حروف انگلیسی و رقم، حداکثر ۱۲ کاراکتر؛ اول همه کدها می‌آید.')->asks('کدها با چه پیشوندی شروع شوند؟')->example('NOWRUZ')->optional('ندارد'),
+            Step::count('expires_days', 'مهلت استفاده', 'روز', 'از امروز؛ بدون مهلت، کدها همیشه معتبرند.')->asks('کدها تا چند روز کار کنند؟')->as('expires_on')->range(0, $most)->optional('همیشه معتبر')
                 ->quick('۷ روز', 7)->quick('۳۰ روز', 30)->quick('۹۰ روز', 90)
                 ->says(static fn(mixed $days): ?string => is_int($days) ? Fmt::number($days) . ' روز — تا پایان ' . Persian::date(self::day($days)) : null),
         ];
@@ -93,7 +94,7 @@ final class GiftCodesForm extends FormScreen
         $codes = array_values(array_filter((array) ($row['codes'] ?? []), is_string(...)));
         $batch = (string) ($row['batch'] ?? '');
         if ($codes !== []) {
-            $admin->send(new ApiFile(implode("\n", $codes) . "\n", 'text/plain', 'gift-codes.txt'), '🎟 کدهای «' . Fmt::e($batch) . '»: ' . Fmt::number(count($codes)) . ' کد؛ آن‌ها را به مشتری‌ها بدهید.');
+            $admin->send(GiftBatchScreen::file($codes), Icons::GIFT_CODES . ' کدهای «' . Fmt::e($batch) . '»: ' . Fmt::number(count($codes)) . ' کد؛ آن‌ها را به مشتری‌ها بدهید.');
         }
         $admin->notice('✅ ' . Fmt::number(count($codes)) . ' کد هدیه ساخته شد');
         $admin->remember(GiftBatchScreen::ID, ['batch' => $batch]);

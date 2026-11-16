@@ -75,6 +75,25 @@ final class BotSettingsScreen
         throw new UnknownGroupException();
     }
 
+    /**
+     * The field of `$name` among every group's — its default and bounds, as the bot's management asks it —; null for
+     * none.
+     *
+     * @return Field<mixed>|null
+     */
+    public function field(string $name): ?Field
+    {
+        foreach ($this->groups() as $group) {
+            foreach ($group->fields as $field) {
+                if ($field->name === $name) {
+                    return $field;
+                }
+            }
+        }
+
+        return null;
+    }
+
     /** @return list<Form> As the current bot's screen has them */
     private function groups(): array
     {

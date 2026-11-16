@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Telegram\Admin\Sections\Catalog;
 
+use App\Modules\Telegram\Admin\Ui\Icons;
 use App\Modules\Telegram\Admin\Ui\Json;
 
 /**
@@ -14,7 +15,7 @@ use App\Modules\Telegram\Admin\Ui\Json;
 final class PlanDraft
 {
     /** The panel's form tabs, each its fields' home: a refused field points at its tab. */
-    public const TABS = ['details' => '🏷 مشخصات', 'quota' => '💰 قیمت و سهمیه', 'servers' => '🖥 سرورها', 'extras' => '➕ خرید اضافه'];
+    public const TABS = ['details' => '🏷 مشخصات', 'quota' => '💰 قیمت و سهمیه', 'servers' => Icons::SERVERS . ' سرورها', 'extras' => Icons::EXTRAS . ' خرید اضافه'];
 
     /** Each field in the panel's words. */
     public const LABELS = [

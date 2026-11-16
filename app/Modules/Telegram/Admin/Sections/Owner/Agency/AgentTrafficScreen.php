@@ -15,6 +15,7 @@ use App\Modules\Telegram\Admin\Ui\Fmt;
 use App\Modules\Telegram\Admin\Ui\Json;
 use App\Modules\Telegram\Admin\Ui\Prompt;
 use App\Modules\Telegram\Admin\Ui\View;
+use App\Modules\Telegram\Admin\Ui\Words as UiWords;
 use App\Support\Unit;
 
 /**
@@ -65,7 +66,7 @@ final class AgentTrafficScreen extends BaseScreen
                     'gb',
                     [$sign],
                     'حجم باقی‌مانده ربات: ' . $this->balance($admin),
-                    Button::to('✖️ لغو', self::ID),
+                    Button::to(UiWords::CANCEL, self::ID),
                 ))->choices(...array_map(static fn(int $n, int $gb): Button => Button::to(Fmt::number($gb) . ' گیگ', self::ID, 'gp', $sign, $n), array_keys(self::PRESETS), self::PRESETS)));
             case 'gp':
                 return $this->note($admin, self::id($args) === 1, (string) (self::PRESETS[self::id($args, 1)] ?? self::PRESETS[0]));
@@ -74,7 +75,7 @@ final class AgentTrafficScreen extends BaseScreen
                     break;
                 }
 
-                return $admin->ask(new Prompt('توضیح', self::ID, 'note', [], 'نماینده این متن را در گردش حجمش می‌بیند؛ مثلا: ' . (str_starts_with((string) $admin->state(self::ID)['gb'], '-') ? 'اصلاح اشتباه' : 'هدیه شروع کار'), Button::to('✖️ انصراف', self::ID, 'quit')));
+                return $admin->ask(new Prompt('توضیح', self::ID, 'note', [], 'نماینده این متن را در گردش حجمش می‌بیند؛ مثلا: ' . (str_starts_with((string) $admin->state(self::ID)['gb'], '-') ? 'اصلاح اشتباه' : 'هدیه شروع کار'), Button::to(UiWords::CANCEL, self::ID, 'quit')));
             case 'nn':
                 return $this->send($admin, '');
             case 'quit':
@@ -106,11 +107,12 @@ final class AgentTrafficScreen extends BaseScreen
         $name = Words::user((AgentScreen::row($admin, (int) ($admin->state(self::ID)['agent'] ?? 0)) ?? [])['user'] ?? null);
 
         return Words::withNote(
+            $admin,
             Fmt::number($gb) . ' گیگابایت ' . ($add ? 'به حجم ربات ' . $name . ' اضافه شود؟' : 'از حجم ربات ' . $name . ' کم شود؟'),
             'حجم باقی‌مانده ربات: ' . $this->balance($admin) . "\n" . 'نماینده تغییر و توضیحش را در گردش حجمش می‌بیند.',
-            Button::to('✍️ با توضیح', self::ID, 'nw'),
-            Button::to('⏭ بدون توضیح', self::ID, 'nn'),
-            Button::to('✖️ انصراف', self::ID, 'quit'),
+            Button::to('✍️ با توضیح', self::ID, 'nw')->styled($add ? 'success' : 'danger'),
+            Button::to('⏭ بدون توضیح', self::ID, 'nn')->styled($add ? 'success' : 'danger'),
+            Button::to(UiWords::CANCEL, self::ID, 'quit'),
         );
     }
 
@@ -150,10 +152,9 @@ final class AgentTrafficScreen extends BaseScreen
         $lines = Json::rows($answer, 'lines');
         $meta = (array) ($answer['meta'] ?? []);
 
-        $view = View::make('📦 حجم ' . Words::user($row['user'] ?? null), 'مدیریت', 'نمایندگان', 'نماینده‌ها')
-            ->line('حجم باقی‌مانده ربات: <b>' . $this->balance($admin) . '</b>')
-            ->line()
-            ->line('<b>گردش حجم</b>');
+        $view = View::make('📦 حجم ربات ' . Words::user($row['user'] ?? null), ...[...AgencyScreen::path(), Fmt::bare(AgentsScreen::TITLE)])
+            ->card(['حجم باقی‌مانده ربات' => $this->balance($admin)])
+            ->section('📒 گردش حجم');
         if ($lines === []) {
             $view->line('هنوز گردشی ندارد. خرید حجم، فروش، تمدید و افزایش حجم سرویس‌های ربات این‌جا ثبت می‌شوند.');
         }
@@ -166,8 +167,9 @@ final class AgentTrafficScreen extends BaseScreen
                 . (Words::reviewer($line) !== null ? ' · ' . Words::reviewer($line) : ''));
         }
 
-        return $view->pager((int) ($meta['page'] ?? 1), (int) ($meta['last_page'] ?? 1), self::ID, 'page')
-            ->row(Button::to('➕ افزایش حجم', self::ID, 'add'), Button::to('➖ کاهش حجم', self::ID, 'sub'))
-            ->back(AgentScreen::ID, 'show', $id);
+        return $view->row(Button::to('➕ افزایش حجم', self::ID, 'add')->success(), Button::to('➖ کاهش حجم', self::ID, 'sub'))
+            ->pager((int) ($meta['page'] ?? 1), (int) ($meta['last_page'] ?? 1), self::ID, 'page')
+            ->back(AgentScreen::ID, 'show', $id)
+            ->refresh(self::ID);
     }
 }

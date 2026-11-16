@@ -9,11 +9,21 @@ use App\Modules\Telegram\Admin\Ui\Admin;
 /**
  * The services list's «🎛 فیلتر و ترتیب»: the panel's «سرور» (read as the seat's panel reads them) and «نوع» — the
  * services added by their link only in the main shop, the only one that takes them —, and the order of the rows (its
- * sortable headers: the newest, the soonest to end, the most used).
+ * sortable headers, each both ways: when bought, when it ends, how much it used).
  */
 final class SubscriptionFilters extends NarrowScreen
 {
     public const ID = 'sbf';
+
+    /** The panel's sortable headers, both ways (GET /subscriptions?sort&dir); '' the newest first. */
+    private const SORTS = [
+        '' => 'تازه‌ترین',
+        'created.asc' => 'قدیمی‌ترین',
+        'expires.asc' => 'زودتر تمام می‌شود',
+        'expires.desc' => 'دیرتر تمام می‌شود',
+        'used.desc' => 'بیشترین مصرف',
+        'used.asc' => 'کمترین مصرف',
+    ];
 
     protected function screen(): string
     {
@@ -27,7 +37,7 @@ final class SubscriptionFilters extends NarrowScreen
 
     protected function listTitle(): string
     {
-        return 'اشتراک‌ها';
+        return Sales::SERVICES;
     }
 
     protected function groups(Admin $admin): array
@@ -44,7 +54,7 @@ final class SubscriptionFilters extends NarrowScreen
         return [
             ['key' => 'server', 'label' => 'سرور', 'options' => $servers],
             ['key' => 'kind', 'label' => 'نوع', 'options' => $kinds],
-            ['key' => 'sort', 'label' => 'ترتیب', 'options' => ['' => 'تازه‌ترین', 'expires.asc' => 'زودتر تمام می‌شود', 'used.desc' => 'بیشترین مصرف']],
+            ['key' => 'sort', 'label' => 'ترتیب', 'options' => self::SORTS],
         ];
     }
 }

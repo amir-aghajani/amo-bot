@@ -5,19 +5,22 @@ declare(strict_types=1);
 namespace App\Modules\Telegram\Admin\Sections\Marketing\GiftCodes;
 
 use App\Modules\Telegram\Admin\AdminSeat;
-use App\Modules\Telegram\Admin\Sections\Marketing\Words;
+use App\Modules\Telegram\Admin\Sections\Marketing\Words as Marketing;
 use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\Button;
 use App\Modules\Telegram\Admin\Ui\Fmt;
+use App\Modules\Telegram\Admin\Ui\Icons;
 use App\Modules\Telegram\Admin\Ui\ListScreen;
 use App\Modules\Telegram\Admin\Ui\View;
+use App\Modules\Telegram\Admin\Ui\Words;
 
 /**
- * «📋 کدهای هدیه» (the panel's list on «کدهای هدیه»): every code, newest first, by the panel's status tabs, searched by
- * code or by the customer who took it, narrowed to one batch when GiftBatchScreen opened it — each opening its own
- * screen (GiftCodeScreen). The panel has no route for one code: the page's rows are kept for it.
+ * «🎟 همه کدها» (the panel's list on «کدهای هدیه»): every code, newest first, by the panel's status tabs (chips), searched
+ * by code or by the customer who took it, narrowed to one batch when GiftBatchScreen opened it — each a button with its
+ * status, text and worth, opening its own screen (GiftCodeScreen). The panel has no route for one code: the page's rows
+ * are kept for it.
  *
- * Actions: `all` (every batch), `nob` (the batch off).
+ * Actions: ListScreen's; `all` (every batch), `nob` (the batch off).
  */
 final class GiftCodeListScreen extends ListScreen
 {
@@ -49,12 +52,12 @@ final class GiftCodeListScreen extends ListScreen
 
     protected function title(): string
     {
-        return '📋 کدهای هدیه';
+        return $this->batch === '' ? Icons::GIFT_CODES . ' همه کدها' : Icons::GIFT_CODES . ' کدهای سری «' . $this->batch . '»';
     }
 
     protected function path(): array
     {
-        return [...Words::PATH, 'کدهای هدیه'];
+        return Marketing::in(Marketing::GIFT_CODES);
     }
 
     protected function endpoint(): string
@@ -79,17 +82,17 @@ final class GiftCodeListScreen extends ListScreen
 
     protected function searchHint(): string
     {
-        return 'کد یا مشتری‌ای که استفاده کرد';
+        return 'کد، یا مشتری‌ای که استفاده کرد';
+    }
+
+    protected function noun(): string
+    {
+        return 'کد';
     }
 
     protected function empty(): string
     {
-        return 'کدی پیدا نشد.';
-    }
-
-    protected function summary(array $meta): array
-    {
-        return $this->batch === '' ? [] : ['🗂 سری «' . Fmt::e($this->batch) . '»'];
+        return Words::NOTHING_FOUND;
     }
 
     protected function keepsRows(): bool
@@ -104,14 +107,12 @@ final class GiftCodeListScreen extends ListScreen
 
     protected function item(array $row): Button
     {
-        return Button::to(explode(' ', self::STATUSES[(string) ($row['status'] ?? '')] ?? '')[0] . ' ' . Words::iso((string) ($row['code'] ?? '')) . ' · ' . self::worth($row), GiftCodeScreen::ID, 'show', (int) ($row['id'] ?? 0));
+        return Button::to(explode(' ', self::STATUSES[(string) ($row['status'] ?? '')] ?? '')[0] . ' ' . Marketing::iso((string) ($row['code'] ?? '')) . ' · ' . self::worth($row), GiftCodeScreen::ID, 'show', (int) ($row['id'] ?? 0));
     }
 
-    protected function extra(View $view, Admin $admin): void
+    protected function tools(Admin $admin): array
     {
-        if ($this->batch !== '') {
-            $view->row(Button::to('✖️ همه سری‌ها', self::ID, 'nob'));
-        }
+        return [$this->batch === '' ? null : Button::to('✖️ همه سری‌ها', self::ID, 'nob')];
     }
 
     protected function action(Admin $admin, string $action, array $args): View

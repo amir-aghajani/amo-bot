@@ -474,32 +474,150 @@ principal آن اجرا می‌شود، و هر تغییر (نه GET) با جا�
 
 **صفحه‌ها**: `Ui\Screen` (<code dir="ltr">allows()</code>، <code dir="ltr">show()</code>، <code dir="ltr">act()</code>،
 <code dir="ltr">input()</code>، که هر کدام یک `Ui\View` برمی‌گرداند)، با یک شناسه کوتاه در `Ui\Screens` ثبت می‌شود: صفحه‌های
-هسته (`h` صفحه اصلی، `ba`، `ol`، `shop`) و `Sections\<Area>\<Area>Screens::SCREENS` هر بخش. ورودی‌های صفحه اصلی و
-منوها (`hl`، `hs`، `hm`، `hb`، `hc`) فهرستی از شناسه‌ها در همان‌جا هستند؛ ورودی‌ای که صفحه‌اش نیست یا جایگاه نمی‌تواند
-بازش کند کنار گذاشته می‌شود. پایه‌ها: `BaseScreen`؛ `ListScreen` (یک مسیر فهرست پنل، `PER_PAGE` یعنی ۸ ردیف که از
-صفحه‌های ۲۵تایی پنل بریده می‌شود، فیلترهایش به شکل دکمه، جستجو، صفحه‌ها، <code dir="ltr">extra()</code> برای «➕ افزودن»،
-<code dir="ltr">keepsRows()</code> جایی که مسیری برای خواندن یک ردیف نیست)؛ `Settings\SettingsScreen` (یک کارت تنظیمات به
-شکل `FieldDef`هایی روی یک `SettingsSource`، یعنی `BotGroupSource` برای یک گروه «تنظیمات ربات»، `PatchSource` یا
-`PutSource`، که فیلد به فیلد ذخیره می‌شود)؛ `HubScreen`. یک `View` عنوان، مسیر بالای آن (زنجیره منوها)، خط‌ها، مشخصات،
-ردیف‌های `Button` و راه بازگشت است، یعنی «⬅️ بازگشت» از <code dir="ltr">back()</code> با «🏠 مدیریت» کنارش؛ متن بلندتر از
-`TEXT_MOST` (۴۰۰۰) را سر یک خط و کپشن بلندتر از `CAPTION_MOST` را کوتاه می‌کند، و فهرستی از گزینه‌ها (پلن‌ها، سرورها،
-اینباندها، فروشگاه‌ها) `CHOICES_MOST` یعنی ۴۰تا در هر صفحه می‌آید. یک دکمه
-<code dir="ltr">Button::to(label, screen, action, ...args)</code> است: برچسبش در ۴۸ کاراکتر بریده می‌شود، و callback آن
-<code dir="ltr">a:&lt;screen&gt;:&lt;action&gt;:&lt;args&gt;</code> از <code dir="ltr">Nav::to()</code> است، حداکثر ۶۴ بایت،
-هر بخشش <code dir="ltr">[A-Za-z0-9_.-]</code> (وگرنه Nav استثنا پرتاب می‌کند): هرگز متن در آن نیست.
+هسته (`h` صفحه اصلی، `sr` جستجو، `ba`، `ol`، `shop`، `pgi` دکمه وسط صفحه‌ها) و `Sections\<Area>\<Area>Screens::SCREENS` هر
+بخش. ورودی‌های صفحه اصلی (<code dir="ltr">Screens::homeEntries()</code>) و منوها (`hl`، `hs`، `hm`، `hb`، `hc`) فهرستی از
+شناسه‌ها در همان‌جا هستند، ورودی هر منو با صفی که می‌شمارد (شمارش کنار دکمه؛ کارهای منتظر صفحه اصلی به جای آن دکمه‌های
+«🔔 در انتظار» آن هستند، <code dir="ltr">HomeScreen::QUEUES</code>)؛ ورودی‌ای که صفحه‌اش نیست یا جایگاه نمی‌تواند بازش
+کند کنار گذاشته می‌شود. **هر بخش فقط یک ورودی دارد**: کارت تنظیمات یک قابلیت از صفحه خود همان قابلیت باز می‌شود، و دیگر از
+«🤖 تنظیمات ربات» نه؛ پنجره‌ای از 0.10.0 که یکی را از آنجا باز کرده بود هنوز <code dir="ltr">from.&lt;menu&gt;</code> را با
+خودش دارد (`Settings\Origin`)، و «⬅️ بازگشت» آن به همان‌جا برمی‌گردد. پایه‌ها: `BaseScreen`؛ `ListScreen`؛
+`Settings\SettingsScreen`؛ `HubScreen`. یک دکمه <code dir="ltr">Button::to(label, screen, action, ...args)</code> است: برچسبش
+در ۴۸ کاراکتر بریده می‌شود، و callback آن <code dir="ltr">a:&lt;screen&gt;:&lt;action&gt;:&lt;args&gt;</code> از
+<code dir="ltr">Nav::to()</code> است، حداکثر ۶۴ بایت، هر بخشش <code dir="ltr">[A-Za-z0-9_.-]</code> (وگرنه Nav استثنا پرتاب
+می‌کند): هرگز متن در آن نیست.
+
+**کلمه‌ها و آیکون‌ها**: `Ui\Words` هر کلمه‌ای را که مدیریت تکرار می‌کند نگه می‌دارد، و هیچ صفحه‌ای آن را دوباره تایپ نمی‌کند:
+جابه‌جا شدن (`BACK` یعنی «⬅️ بازگشت»، `HOME` یعنی «🏠 خانه»، `REFRESH`، `HELP`، `SEARCH`، `CLEAR_SEARCH`، `PREVIOUS`،
+`NEXT`)، کارها (`EDIT`، `CREATE` یعنی «✔️ ساختن»، `SAVE` یعنی «💾 ذخیره»، `DELETE`، `CANCEL` یعنی «✖️ انصراف»، تنها راه
+بیرون رفتن از یک سوال، یک تایید یا یک فرم؛ `TURN_ON` و `TURN_OFF` برای یک تنظیم، `ACTIVATE` و `DEACTIVATE` برای یک ردیف،
+`UP`، `DOWN`، `CLEAR` یعنی «🗑 خالی کردن»، `RESET` یعنی «↩️ پیش‌فرض»، `PREVIOUS_STEP`، `SKIP`)، برچسب‌های وضعیت (`ON`، `OFF`،
+`ACTIVE`، `INACTIVE`، `PENDING`، `FAILED`، `REJECTED`، `NONE` یعنی «—»، `PICKED` یعنی «✅ »، `CHIP` یعنی «● »)،
+علامت‌های یک انتخاب چندتایی (<code dir="ltr">tick($on)</code>: `PICKED` یا `UNTICKED` یعنی «◻️ »؛ `TICK_PAGE`،
+`TICK_NONE`)، خط‌های یک سوال (`CURRENT`، `EXAMPLE`، `LIMITS`، و جواب‌های ردشده `NOT_NUMBER` و `NOT_TOMAN`)، کلمه‌های صفحه اصلی (`WAITING`، `NOTHING_WAITING`، `OLD_BUTTON`)، و
+سازنده‌ها: <code dir="ltr">edit($label)</code> یعنی «✏️ …»، <code dir="ltr">add($noun)</code> یعنی «➕ افزودن …»،
+<code dir="ltr">yes($what, $icon)</code> یعنی «✔️ بله، …»، <code dir="ltr">copy($what)</code> یعنی «📋 کپی …»،
+<code dir="ltr">turn($on, $label)</code> یعنی «▶️ روشن کردن «…»» / «⏸ خاموش کردن «…»» (حالتی که یک لمس می‌گذارد)،
+<code dir="ltr">page()</code>، <code dir="ltr">step()</code> یعنی «گام ۲ از ۶». `Ui\Icons` به هر چیز یک ایموجی می‌دهد (یک بخش،
+یک ورودی منو، عنوان یک صفحه، یک کارت تنظیمات) تا از هر جا که باز شود یک‌جور دیده شود: عنوان یعنی
+<code dir="ltr">Icons::X . ' ' . its name</code>.
+کلمه‌های خاص هر بخش کنار همان بخش‌اند (`Sections\Sales\Sales`، `Sections\Marketing\Words`، `Sections\Owner\Words`…).
+
+**نما**: یک `View` عنوان است، جای صفحه زیر آن (<code dir="ltr">View::make(title, ...path)</code>، با خط کوچک: «مدیریت › فروش ›
+پرداخت‌ها»)، آنچه همین حالا انجام شده بالای عنوان (<code dir="ltr">notices()</code>)، خط‌ها و ردیف‌های `Button`:
+- <code dir="ltr">card(facts)</code>: کارت خلاصه، هر چیز یک خط در یک <code dir="ltr">&lt;blockquote&gt;</code> (یعنی
+  <code dir="ltr">label: &lt;b&gt;value&lt;/b&gt;</code>؛ مقدار null کنار گذاشته می‌شود، مقدار خالی «—» است، و مقداری که در
+  <code dir="ltr">&lt;code&gt;</code> است پررنگ نمی‌شود)؛ <code dir="ltr">section(heading)</code>: یک خط خالی و یک عنوان پررنگ؛
+  <code dir="ltr">help(html)</code>: راهنمای جمع‌شده،
+  <code dir="ltr">&lt;blockquote expandable&gt;❔ …&lt;/blockquote&gt;</code>؛ <code dir="ltr">note(html)</code>: یک نکته کج یک‌خطی؛
+  <code dir="ltr">total(count, noun, ...filters)</code>: خط «۲۳ پرداخت · در انتظار بررسی» یک فهرست.
+- <code dir="ltr">row(...)</code>: دکمه‌ها **به ترتیب خواندن**؛ <code dir="ltr">keyboard()</code> هر ردیف را برعکس می‌کند، چون
+  تلگرام ردیف را از چپ به راست می‌کشد (کیبوردهای کاربران هم همین کار را می‌کنند)، پس اولین دکمه‌ای که نوشته می‌شود راست‌ترین
+  است؛ دکمه null کنار گذاشته می‌شود. <code dir="ltr">grid(n, ...)</code>: ردیف‌های n‌تایی؛ <code dir="ltr">tiles(...)</code>:
+  دوتا در یک ردیف جایی که هر دو برچسب کوتاه‌اند (`TILE_MOST`)، وگرنه یکی؛
+  <code dir="ltr">pager(page, pages, screen, action, ...args)</code>: «‹ قبلی» · «۲ / ۵» · «بعدی ›»، که دکمه وسط
+  به `Screens::PAGE` (`PageScreen`) می‌رود و «صفحه ۲ از ۵» را در یک اعلان می‌گوید و پنجره را همان‌طور می‌گذارد
+  (<code dir="ltr">View::stay()</code>)؛ <code dir="ltr">paged()</code>: گزینه‌ها `CHOICES_MOST` یعنی ۴۰تا در هر صفحه؛
+  <code dir="ltr">slice()</code>: یک صفحه از فهرستی که کامل خوانده شده.
+- <code dir="ltr">back(screen, action, ...args)</code>: **ردیف جابه‌جا شدن**، که زیر همه ردیف‌های دیگر کشیده می‌شود هر چه بعد
+  از آن افزوده شده باشد: «⬅️ بازگشت» و «🏠 خانه» (وقتی راه بازگشت خود صفحه اصلی است فقط خانه)؛
+  <code dir="ltr">refresh(screen, ...)</code> «🔄 تازه‌سازی» را کنارشان می‌گذارد، برای صفحه‌ای که رقم‌هایش عوض می‌شوند (صفحه
+  اصلی، داشبورد، یک فهرست، یک صف).
+- متن بلندتر از `TEXT_MOST` (۴۰۰۰) را میان خط‌ها کوتاه می‌کند (هیچ نقل‌قولی نیمه‌کاره بریده نمی‌شود) و کپشن بلندتر از
+  `CAPTION_MOST` را؛ <code dir="ltr">picture()</code> صفحه را یک تصویر می‌کند (یک رسید)؛ <code dir="ltr">transient()</code> یک
+  سوال یا تایید را مشخص می‌کند، که در جایی که سوال بعدی نشان می‌دهد جای خودش را نمی‌گیرد.
+
+**دکمه‌ها**: <code dir="ltr">Button::to()</code> برای یک کار، <code dir="ltr">Button::url()</code> برای یک لینک،
+<code dir="ltr">Button::copy(label, text)</code> برای مقداری که با یک لمس کامل کپی می‌شود (`copy_text` تلگرام: یک آدرس، یک
+کلید، یک لینک، یک کد، یک شماره کارت). دکمه کپی بی‌مقدار، یا با مقداری بلندتر از `COPY_MOST` (۲۵۶ کاراکتر)، در کیبورد
+نمی‌آید (<code dir="ltr">fits()</code>): کلید یا لینک بریده‌شده نادرست است؛ مقدار برای کپی در خود صفحه می‌ماند. دکمه یک کار رنگ می‌گیرد (<code dir="ltr">success()</code> سبز برای تایید، ذخیره، ساختن، روشن
+کردن یا پذیرفتن؛ <code dir="ltr">danger()</code> قرمز برای حذف، خاموش کردن، رد کردن یا قطع اتصال؛
+<code dir="ltr">primary()</code> آبی برای تنها کار اصلی صفحه)؛ هر کدام دکمه تازه‌ای است. <code dir="ltr">labelled()</code> نام یک دکمه را عوض می‌کند، <code dir="ltr">markup()</code> شکل تلگرامی آن است و
+<code dir="ltr">kept()</code> آن را دوباره می‌خواند (سوالی که منتظر است دکمه‌هایش را این‌طور نگه می‌دارد).
+
+**سوال و تایید**: `Ui\Prompt` یک سوال است: فیلدش، صفحه و کار و آرگومان‌هایی که پاسخ به آن‌ها می‌رود، یک راهنما،
+<code dir="ltr">current(value, copyable)</code> («مقدار فعلی»، برای کپی نشان داده می‌شود؛ «ذخیره شده» یک رمز نه)،
+<code dir="ltr">example()</code>، <code dir="ltr">limits()</code>، گزینه‌های آماده (<code dir="ltr">choices()</code>)،
+<code dir="ltr">clearable(screen, action, ...)</code> یعنی «🗑 خالی کردن»، <code dir="ltr">resettable(...)</code> یعنی «↩️
+پیش‌فرض»، و <code dir="ltr">ways()</code> گام یک ویزارد («⬅️ گام قبل»، «⏭ رد شدن») در ردیفی جدا؛ `file` برای تصویر یا فایل، و
+`anyText` برای پاسخی که می‌تواند برچسب یک دکمه منو باشد (<code dir="ltr">Admin::INPUT_ANY</code>).
+<code dir="ltr">Admin::ask()</code> آن را می‌کشد و در `adm.input` منتظر می‌ماند؛ پاسخ به شکل یک `Answer` به
+<code dir="ltr">input()</code> صفحه‌ای که پرسیده می‌رسد (<code dir="ltr">text()</code>، <code dir="ltr">latin()</code>،
+<code dir="ltr">integer()</code>، <code dir="ltr">amount(Unit)</code>، <code dir="ltr">decimal()</code>،
+<code dir="ltr">numbers()</code>، <code dir="ltr">picture()</code>، <code dir="ltr">document()</code>)؛ اگر رد شود، همان‌طور که نگه
+داشته شده دوباره پرسیده می‌شود (<code dir="ltr">Prompt::kept()</code>)، با «⚠️» و دلیل بالای آن.
+<code dir="ltr">Admin::confirm(question, yes, no, detail, danger)</code> پیش از تغییری که برنمی‌گردد می‌پرسد: «بله» سبز است، یا
+قرمز جایی که چیزی را از بین می‌برد (<code dir="ltr">danger: true</code>، یا وقتی null بماند، «بله»ای که برچسبش با 🗑 🚫 ⛔ 🛑 ✂️
+شروع شود؛ آن را با <code dir="ltr">Words::yes('حذف شود', '🗑')</code> بسازید تا آیکونش همین را بگوید)، و «بله»ای که رنگ خودش را
+دارد همان را نگه می‌دارد. هر دو هر کلمه انصرافی را که راه بیرون رفتنشان دارد به شکل `Words::CANCEL` می‌کشند.
+
+**کارت‌های تنظیمات**: `Settings\SettingsScreen` یک کارت پنل است به شکل `FieldDef`هایی روی یک `SettingsSource`
+(`BotGroupSource` برای یک گروه «تنظیمات ربات»، `PatchSource`، `PutSource`)، که فیلد به فیلد ذخیره می‌شود، همان‌طور که پنل کارت
+را ذخیره می‌کند. خلاصه‌اش مقدار هر فیلد را یک بار می‌گوید (کلید با برچسب وضعیتش، و آن‌هایی که شرطشان پنهانشان کرده بیرون)؛
+دکمه‌هایش کاری را که می‌کنند می‌گویند: یک کلید <code dir="ltr">Words::turn()</code> است و مقداری را که می‌گذارد با خودش دارد
+(پس لمس دوم چیزی را عوض نمی‌کند)، و جایی که <code dir="ltr">FieldDef::asks()</code> باشد اول می‌پرسد؛ هر فیلد دیگر
+<code dir="ltr">Words::edit($label)</code> است، و سوالش با مقدار فعلی، یک مثال و محدوده (کارت «تنظیمات ربات» محدوده و پیش‌فرض
+یک عدد را از فرم خود سرور می‌گیرد: <code dir="ltr">BotCard::described()</code>)، «🗑 خالی کردن» جایی که
+<code dir="ltr">FieldDef::nullable()</code>، و «↩️ پیش‌فرض» جایی که <code dir="ltr">FieldDef::byDefault()</code>. قلاب‌ها:
+<code dir="ltr">parts()</code>، یعنی FormPartهای پنل (<code dir="ltr">[label, [api names]]</code>)، هر کدام صفحه‌ای جدا که راه
+بازگشتش کارت است و با `SettingsScreen::PART` (`p`، n) باز می‌شود؛ <code dir="ltr">chips()</code>، یعنی کارتی با کلیدهای زیاد و
+یک‌جور هر کدام را به شکل یک برچسب نشان می‌دهد («🟢 خریدها») که با یک لمس حالت دیگر را می‌گذارد، و در خلاصه نمی‌آید (تاپیک‌های
+گزارش)؛ <code dir="ltr">warnings()</code>، <code dir="ltr">explain()</code> (راهنمای پنل که دنبال یک مقدار می‌آید)،
+<code dir="ltr">notes()</code>، <code dir="ltr">shows()</code>، <code dir="ltr">extra()</code>، <code dir="ltr">intro()</code>.
+**یک فیلد با نام API آن** از هر جا باز می‌شود (نتیجه یک جستجو، راه درست کردن یک هشدار):
+<code dir="ltr">Button::to(Words::edit($label), Card::ID, SettingsScreen::FIELD, 'topup_min')</code> فیلد نوشتنی را می‌پرسد،
+گزینه‌های یک انتخاب را نشان می‌دهد، و یک کلید را روی کارت یا بخش خودش نشان می‌دهد، بدون اینکه هرگز آن را عوض کند؛
+فیلدی که الان فیلد دیگری پنهانش کرده، کارتش را باز می‌کند و می‌گوید کدام فیلد نشانش می‌دهد («این گزینه با روشن کردن «…»
+دیده می‌شود.»).
+
+**فهرست‌ها**: `ListScreen` یک مسیر فهرست پنل را می‌خواند (<code dir="ltr">endpoint()</code>، با ردیف‌هایش زیر
+<code dir="ltr">key()</code>)، `PER_PAGE` یعنی ۸ ردیف که از صفحه‌های ۲۵تایی پنل بریده می‌شود (یا از همه ردیف‌ها، برای مسیری که
+همه را با هم می‌دهد). **اول** می‌گوید چند مورد است و چه چیزی محدودش کرده (<code dir="ltr">total()</code> با
+<code dir="ltr">noun()</code>، برچسب فعال، جستجو و <code dir="ltr">narrowedBy()</code>، یعنی یک انتخاب یا یک بازه روز:
+«تاریخ: ۷ روز اخیر»)، بعد <code dir="ltr">summary()</code> (جمع فهرست)، ردیف‌ها (<code dir="ltr">item()</code>، هر کدام دکمه‌ای که
+خود ردیف است: برچسب وضعیت، نام، رقم اصلی)، <code dir="ltr">extra()</code> (کارهای خود فهرست: «➕ افزودن …»، یک کار یکجا)،
+<code dir="ltr">filters()</code> به شکل برچسب با `Words::CHIP` روی برچسب فعال، «🔎 جستجو» کنار <code dir="ltr">tools()</code>
+(یکی یا دوتا: «🎛 فیلتر و ترتیب»، «↕️ ترتیب»، «✖️ حذف فیلترها»)، صفحه‌ها، و «🔄 تازه‌سازی».
+<code dir="ltr">keepsRows()</code> ردیف‌های یک صفحه را برای صفحه یک ردیف نگه می‌دارد، جایی که مسیری برای خواندن یک ردیف نیست،
+و آن صفحه ردیفش را با <code dir="ltr">ListScreen::keptRow()</code> می‌خواند. فیلتر، جستجو و شماره صفحه وضعیت خود صفحه‌اند؛
+یک هوک فیلتر فعال را با <code dir="ltr">filterValue()</code> می‌خواند.
+
+**دکمه قدیمی**: لمسی که صفحه‌اش دیگر نیست، داده‌اش را Nav نمی‌تواند بخواند، یا جایگاه دیگر نمی‌تواند بازش کند، به صفحه اصلی
+می‌رسد با `Words::OLD_BUTTON` بالای آن («⚠️ این دکمه قدیمی است؛ از همین‌جا ادامه دهید.»)، هرگز خطا نمی‌دهد؛ پاسخ سوالی که
+صفحه‌اش رفته هم همین‌طور. شناسه صفحه‌ها و شکل callbackها بعد از انتشار همان‌طور می‌مانند، تا دکمه‌های یک پنجره قدیمی‌تر کار
+کنند.
+
+**جستجو**: `Core\SearchScreen` (`sr`، «🔎 جستجو» در صفحه اصلی) یک مقدار می‌پرسد و آن را با جستجوی خود فهرست‌ها
+(<code dir="ltr">/users</code>، <code dir="ltr">/orders</code>، <code dir="ltr">/payments</code>،
+<code dir="ltr">/subscriptions</code>) می‌گردد، آن‌هایی که جایگاه می‌تواند باز کند: از هر کدام `SHOWN` یعنی ۵ ردیف، شماره
+موبایلی که به شکل ایرانی نوشته شده به شکل ده رقم آخرش خوانده می‌شود، و بیشتر از آن دکمه‌ای که همان فهرست را با جستجو باز
+می‌کند.
+
+**جستجوی تنظیمات**: «🔎 جستجوی تنظیمات» (`Panel\Search\SettingsSearchScreen`، `ss`،
+<code dir="ltr">$seat->configures()</code>) در فهرست تنظیمات خود پنل می‌گردد: `Panel\Search\PanelSettings` کپی
+<code dir="ltr">lib/settings-search/settings.generated.ts</code> پنل است که `pnpm settings:index` کنار آن می‌نویسد (نسخه
+منتشرشده سورس پنل را ندارد)، و هرگز دستی ویرایش نمی‌شود. `Panel\Search\SettingsIndex` آن را به ربات وصل می‌کند: `SECTIONS`،
+یعنی هر آدرس پنل ← صفحه ربات، نامش، منوهایی که زیرشان است و کلمه‌های دیگر؛ `SETTINGS`، یعنی تنظیم‌هایی که جور دیگری جز بخششان
+باز می‌شوند: `f` یک فیلد با نام API آن (`SettingsScreen::FIELD`)، `p` یک بخش، `s` و `a` صفحه‌ای دیگر و آرگومان‌هایش، `only`
+دلیل اینکه فقط پنل آن را تنظیم می‌کند، `w` کلمه‌های بیشتر. <code dir="ltr">find()</code> آنچه نوشته شده را همان‌طور می‌خواند
+که جستجوی پنل می‌خواند (<code dir="ltr">normalize()</code>: فارسی هر طور که نوشته شود، و حرف‌ها و رقم‌های عربی و نیم‌فاصله‌ها یکی
+می‌شوند)، هر کلمه نوشته‌شده را (همه با هم) در عنوان، کلمه‌ها، جا یا راهنمای یک تنظیم پیدا می‌کند (کامل، به شکل آغاز یک کلمه،
+داخل یک کلمه، یا با یک حرف اختلاف در عنوان)، عنوان را بیشتر از همه وزن می‌دهد و `MOST` یعنی ۲۰ مورد را نگه می‌دارد، آن‌هایی که
+جایگاه می‌تواند باز کند. **`SettingsParityTest`** این دو را با هم نگه می‌دارد: `PanelSettings` کلمه به کلمه همان
+`settings.generated.ts` است؛ هر بخش پنل در `SettingsIndex::SECTIONS` جایی دارد؛ هر جا صفحه‌ای را نام می‌برد که مدیریت دارد، و
+فیلد یا بخشی را که همان کارت دارد؛ و آنچه فقط پنل تنظیم می‌کند دلیلش را می‌گوید. تنظیمی که پنل اضافه کند این تست را شکست
+می‌دهد تا وقتی ربات جایی برایش داشته باشد ([گسترش](Extending.md#تنظیم)).
 
 **وضعیت**: `Admin` یک آپدیت است همان‌طور که صفحه آن را می‌بیند: `seat`، `api` (پل برای همان جایگاه)،
 <code dir="ltr">state()</code>، <code dir="ltr">remember()</code> و <code dir="ltr">forget()</code> برای هر صفحه (fact چت
 <code dir="ltr">_adm</code>، پس روند یک کاربر در این میان چیزی از آن کم نمی‌کند؛ انتخاب فروشگاه مالک هم همین‌جاست:
 <code dir="ltr">pickShop()</code> وضعیت همه صفحه‌ها را خالی می‌کند)، <code dir="ltr">open()</code> برای صفحه‌ای دیگر،
-<code dir="ltr">ask(Prompt)</code> (چت در `adm.input` منتظر می‌ماند؛ پاسخ به شکل یک `Answer` به
-<code dir="ltr">input()</code> صفحه‌ای که پرسیده می‌رسد: <code dir="ltr">text()</code>، <code dir="ltr">latin()</code>،
-<code dir="ltr">integer()</code>، <code dir="ltr">amount(Unit)</code>، <code dir="ltr">decimal()</code>،
-<code dir="ltr">numbers()</code>، <code dir="ltr">picture()</code>، <code dir="ltr">document()</code>)،
-<code dir="ltr">confirm()</code>، <code dir="ltr">notice()</code> (اعلانی برای ضربه، یا خطی بالای صفحه بعد از یک پاسخ
-نوشتنی)، <code dir="ltr">alert()</code> و <code dir="ltr">send(ApiFile)</code>. کلاس `Ui\Fmt` آنچه صفحه نشان می‌دهد را
-قالب می‌دهد (<code dir="ltr">e()</code> برای هر چه از یک آدم یا از پنل آمده، <code dir="ltr">ltr()</code> و
-<code dir="ltr">code()</code> برای متن لاتین در یک خط فارسی، مبلغ، حجم، تاریخ شمسی).
+<code dir="ltr">ask()</code>، <code dir="ltr">confirm()</code>، <code dir="ltr">notice()</code> (اعلانی برای ضربه، یا خطی بالای
+صفحه بعد از یک پاسخ نوشتنی)، <code dir="ltr">alert()</code> و <code dir="ltr">send(ApiFile)</code>.
+<code dir="ltr">here()</code> جایی را که پنجره هست نگه می‌دارد، برای مسیری که یک سوال یا تایید نشان می‌دهد. کلاس `Ui\Fmt` آنچه
+صفحه نشان می‌دهد را قالب می‌دهد (<code dir="ltr">e()</code> برای هر چه از یک آدم یا از پنل آمده، <code dir="ltr">ltr()</code>
+و <code dir="ltr">code()</code> برای متن لاتین در یک خط فارسی، مبلغ، حجم، تاریخ شمسی، <code dir="ltr">onOff()</code> و
+<code dir="ltr">active()</code> برای برچسب‌های وضعیت، <code dir="ltr">badge()</code> برای یک
+شمارش).
 
 **دسترسی‌ها آینه ورودی‌اند**: صفحه‌ای روی مسیرهای کارهای روزانه به همه جایگاه‌ها اجازه می‌دهد؛ روی پیکربندی،
 <code dir="ltr">$seat->configures()</code> (مالک و نماینده)؛ روی سیستم، سرورها، نمایندگی، هدیه همگانی و تنظیمات پنل،
@@ -541,7 +659,10 @@ pollی که هنوز با توکن قدیمی باز است رها می‌شود
 unit testهای API، متن‌ها و کیبوردها در `tests/Unit/Telegram` هستند. تست‌های مدیریت در `tests/Feature/BotAdmin` هستند:
 `BotAdminDoorTest` (نگهبان‌های ورودی)، `BotAdminFlowTest` (مالکی که با <code dir="ltr">OwnerLinks::link()</code> و
 <code dir="ltr">redeem()</code> وصل شده، <code dir="ltr">/admin</code>، ضربه‌ها با <code dir="ltr">Nav::to()</code>، پاسخ‌های
-نوشتنی) و یک یا چند فایل برای هر بخش، که با نام پوشه‌اش شروع می‌شود (<code dir="ltr">Support*</code>،
+نوشتنی)، `BotAdminFoundationTest` (لایه `Ui` همان‌طور که هر صفحه از آن استفاده می‌کند: رنگ‌ها، دکمه‌های کپی، ردیف‌هایی که از
+راست به چپ کشیده می‌شوند، ردیف جابه‌جا شدن، کارت و راهنمای جمع‌شده، دکمه وسط صفحه‌ها، مقدار فعلی یک سوال و «🗑 خالی کردن» /
+«↩️ پیش‌فرض» آن، رنگ یک تایید، دکمه یک پنجره قدیمی که به صفحه اصلی می‌رسد، صفحه اصلی و جستجو)، `SettingsParityTest` (هر
+تنظیم پنل در ربات جایی دارد؛ [بالاتر](#مدیریت-فروشگاه)) و یک یا چند فایل برای هر بخش، که با نام پوشه‌اش شروع می‌شود (<code dir="ltr">Support*</code>،
 <code dir="ltr">Customers*</code>، <code dir="ltr">Sales*</code>، <code dir="ltr">Catalog*</code>،
 <code dir="ltr">Marketing*</code>، <code dir="ltr">BotArea*</code>، <code dir="ltr">Owner*</code> و
 <code dir="ltr">Panel*</code>، یعنی `PanelConfigTest`، `PanelWebsiteTest`، `PanelMiniAppTest`،

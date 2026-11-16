@@ -7,8 +7,9 @@ namespace Tests\Feature\BotAdmin;
 use App\Modules\Catalog\Models\Plan;
 use App\Modules\Telegram\Admin\Door\BotAdminDoor;
 use App\Modules\Telegram\Admin\Ui\Nav;
+use App\Modules\Telegram\Update\ReceivedUpdates;
 use App\Modules\Users\Enums\UserRole;
-use App\Modules\Users\Models\User;
+use Illuminate\Support\Carbon;
 use Tests\BotTestCase;
 
 /**
@@ -19,7 +20,6 @@ use Tests\BotTestCase;
  */
 final class CatalogPlansTest extends BotTestCase
 {
-    private const OWNER = 7001;
     private const STAFF = 7100;
 
     protected function setUp(): void
@@ -42,8 +42,10 @@ final class CatalogPlansTest extends BotTestCase
         self::assertContains(Nav::to('ct'), $this->callbacks(0));
 
         $this->tapAs(Nav::to('pl'));
-        self::assertStringContainsString('یک‌ماهه', $this->said()[0]);
-        self::assertStringContainsString('سه‌ماهه', $this->said()[0]);
+        self::assertContains('🟢 یک‌ماهه · ۱۲۰٬۰۰۰ تومان', $this->buttonLabels(0), 'a plan\'s button is its row: chip, name, price');
+        self::assertContains('🟢 سه‌ماهه · ۳۰۰٬۰۰۰ تومان', $this->buttonLabels(0));
+        self::assertStringContainsString('۲ پلن', $this->said()[0]);
+        self::assertStringNotContainsString('یک‌ماهه', $this->said()[0], 'the text never repeats the rows');
         self::assertContains(Nav::to('pl', 'cat', $monthly->id), $this->callbacks(0), 'a chip per category');
         self::assertContains(Nav::to('ple', 'new'), $this->callbacks(0));
         self::assertContains(Nav::to('plp', 'new'), $this->callbacks(0));
@@ -62,6 +64,31 @@ final class CatalogPlansTest extends BotTestCase
             self::assertContains(Nav::to('plv', $action, $plan->id), $this->callbacks(0));
         }
         self::assertContains(Nav::to('ple', 'edit', $plan->id), $this->callbacks(0));
+    }
+
+    public function testThePlansAreSearchedByNameAndAnUnseenPlanIsFlagged(): void
+    {
+        $this->owner();
+        $server = $this->sellingServer();
+        $this->plan(['name' => 'یک‌ماهه'], $server);
+        $quarterly = $this->plan(['name' => 'سه‌ماهه', 'price' => '300000.00'], $server);
+        $bare = $this->plan(['name' => 'بی‌سرور', 'price' => '50000.00']);
+
+        $this->tapAs(Nav::to('pl'));
+        self::assertContains('⚠️ بی‌سرور · ۵۰٬۰۰۰ تومان', $this->buttonLabels(0), 'an active plan the bot does not show: its chip says so');
+        self::assertStringContainsString('۱ پلن فعال در ربات دیده نمی‌شود', $this->said()[0]);
+
+        $this->tapAs(Nav::to('pl', 'search'));
+        self::assertStringContainsString('چه پلنی؟', $this->said()[0]);
+        $this->sayAs('سه');
+        $offered = $this->offered();
+        self::assertContains(Nav::to('plv', 'show', $quarterly->id), $offered);
+        self::assertNotContains(Nav::to('plv', 'show', $bare->id), $offered, 'narrowed to the name searched');
+        self::assertStringContainsString('۱ پلن · 🔎 «سه»', implode("\n", $this->said()));
+        self::assertContains(Nav::to('pl', 'clear'), $offered);
+
+        $this->tapAs(Nav::to('pl', 'clear'));
+        self::assertContains(Nav::to('plv', 'show', $bare->id), $this->callbacks(0), 'every plan again');
     }
 
     public function testANewPlanIsAskedFieldByFieldAndMadeInOneSave(): void
@@ -156,6 +183,19 @@ final class CatalogPlansTest extends BotTestCase
         self::assertSame([$inbound->id], $plan->servers()->sole()->inbounds()->pluck('server_inbounds.id')->all(), 'its chosen inbound kept');
     }
 
+    public function testAQuestionSaysTheValueNowWholeToCopyBack(): void
+    {
+        $this->owner();
+        $long = str_repeat('برای استفاده روزانه و تماشای ویدیو مناسب است. ', 4);
+        $plan = $this->plan(['description' => trim($long)], $this->sellingServer());
+
+        $this->tapAs(Nav::to('ple', 'edit', $plan->id));
+        $this->tapAs(Nav::to('ple', 'f', 'description'));
+        self::assertStringContainsString('مقدار فعلی: <code>' . trim($long) . '</code>', $this->said()[0], 'the whole text, not the summary\'s cut');
+        self::assertStringContainsString('مثال: ', $this->said()[0]);
+        self::assertContains(Nav::to('ple', 'x', 'description'), $this->callbacks(0), '«🗑 خالی کردن» for a field that may be empty');
+    }
+
     public function testARefusedSaveKeepsTheDraftOnTheTabToFix(): void
     {
         $this->owner();
@@ -219,24 +259,99 @@ final class CatalogPlansTest extends BotTestCase
         $dear = $this->plan(['name' => 'گران', 'price' => '200000.00'], $server);
 
         $this->tapAs(Nav::to('plp', 'new'));
-        self::assertNotContains(Nav::to('plp', 'ok'), $this->callbacks(0), 'nothing applied before a preview');
+        self::assertNull($this->applyOffered(), 'nothing applied before a preview');
         $this->tapAs(Nav::to('plp', 'val'));
         $this->sayAs('۱۰');
         $this->tapAs(Nav::to('plp', 'pv'));
         self::assertStringContainsString('قیمت ۲ پلن تغییر می‌کند', $this->said()[0]);
         self::assertStringContainsString('۵۵٬۰۰۰ تومان', $this->said()[0]);
-        self::assertContains(Nav::to('plp', 'ok'), $this->callbacks(0));
+        $first = $this->applyOffered();
+        self::assertNotNull($first);
 
         $this->tapAs(Nav::to('plp', 'rnd', 1));
-        self::assertNotContains(Nav::to('plp', 'ok'), $this->callbacks(0), 'a change drops the preview');
+        self::assertNull($this->applyOffered(), 'a change drops the preview');
         $this->tapAs(Nav::to('plp', 'pv'));
-        $this->tapAs(Nav::to('plp', 'ok'));
+        $apply = $this->applyOffered();
+        self::assertNotNull($apply);
+        self::assertNotSame($first, $apply, 'the apply names the preview it is drawn under');
+        $this->tapAs($apply);
 
         self::assertSame(['55000.00', '45000.00', '220000.00'], [$cheap->refresh()->price, $cheap->agent_price, $dear->refresh()->price]);
         self::assertStringContainsString('قیمت ۲ پلن تغییر کرد', (string) $this->popup());
 
-        $this->tapAs(Nav::to('plp', 'ok'));
+        $this->tapAs($apply);
         self::assertSame(['55000.00', '220000.00'], [$cheap->refresh()->price, $dear->refresh()->price], 'a second tap applies nothing again');
+    }
+
+    public function testAnApplyLeftFromAnotherPreviewMakesNothing(): void
+    {
+        $this->owner();
+        $server = $this->sellingServer();
+        $cheap = $this->plan(['name' => 'ارزان', 'price' => '50000.00'], $server);
+        $dear = $this->plan(['name' => 'گران', 'price' => '200000.00'], $server);
+
+        $this->tapAs(Nav::to('plp', 'new'));
+        $this->tapAs(Nav::to('plp', 'val'));
+        $this->sayAs('۱۰');
+        $this->tapAs(Nav::to('plp', 'pv'));
+        $old = $this->applyOffered();
+        // A window kept from then (one Telegram did not let the bot take away), while the change is previewed anew.
+        $this->tapAs(Nav::to('plp', 'val'));
+        $this->sayAs('۲۰');
+        $this->tapAs(Nav::to('plp', 'pv'));
+        $new = $this->applyOffered();
+        self::assertNotNull($old);
+        self::assertNotNull($new);
+        self::assertNotSame($old, $new);
+
+        $this->tapAs($old);
+        self::assertSame(['50000.00', '200000.00'], [$cheap->refresh()->price, $dear->refresh()->price], 'the +10% the old window showed is not the +20% previewed now: nothing made');
+        self::assertStringContainsString('پیش‌نمایش عوض شده است', (string) $this->popup());
+        self::assertStringContainsString('۲۴۰٬۰۰۰ تومان', implode("\n", $this->said()), 'the preview in force shown');
+        self::assertSame($new, $this->applyOffered(), 'to apply from it');
+
+        $this->tapAs(Nav::to('plp', 'ok'));
+        self::assertSame(['50000.00', '200000.00'], [$cheap->refresh()->price, $dear->refresh()->price], 'an older version\'s apply, naming no preview, makes nothing');
+
+        $this->tapAs($new);
+        self::assertSame(['60000.00', '240000.00'], [$cheap->refresh()->price, $dear->refresh()->price]);
+    }
+
+    public function testEveryChoiceDropsThePreview(): void
+    {
+        $this->owner();
+        $server = $this->sellingServer();
+        $plan = $this->plan(['name' => 'ارزان', 'price' => '50000.00'], $server);
+        $this->plan(['name' => 'گران', 'price' => '200000.00'], $server);
+
+        $choices = [
+            'a plan ticked off' => Nav::to('plp', 'tg', $plan->id, 1),
+            'every plan ticked off' => Nav::to('plp', 'all', 1),
+            'the direction' => Nav::to('plp', 'dir', 'decrease'),
+            'the kind' => Nav::to('plp', 'mode', 'amount'),
+            'the rounding' => Nav::to('plp', 'rnd', 100),
+            'the prices moved' => Nav::to('plp', 'pr', 'agent_price'),
+            'the value typed' => null,
+        ];
+        foreach ($choices as $what => $choice) {
+            // Each round past the chat's pace of taps (ReceivedUpdates::FLOOD_UPDATES), as an owner trying them would be.
+            Carbon::setTestNow(now()->addSeconds(ReceivedUpdates::FLOOD_SECONDS + 1));
+            $this->tapAs(Nav::to('plp', 'new'));
+            $this->tapAs(Nav::to('plp', 'val'));
+            $this->sayAs('۱۰');
+            $this->tapAs(Nav::to('plp', 'pv'));
+            self::assertNotNull($this->applyOffered(), "previewed before {$what}");
+            if ($choice === null) {
+                $this->tapAs(Nav::to('plp', 'val'));
+                $this->sayAs('۱۵');
+            } else {
+                $this->tapAs($choice);
+                $this->tapAs(Nav::to('plp'));
+            }
+            self::assertNull($this->applyOffered(), "{$what} drops the preview");
+            self::assertStringNotContainsString('<b>👁 پیش‌نمایش</b>', implode("\n", $this->said()), "{$what}: no preview shown");
+        }
+        self::assertSame('50000.00', $plan->refresh()->price, 'nothing applied');
     }
 
     public function testAChangeWhosePricesMovedSinceItsPreviewIsRefusedAndThePreviewStays(): void
@@ -253,17 +368,17 @@ final class CatalogPlansTest extends BotTestCase
         // Meanwhile the change is made once already (another tap at once, the panel): the prices are not the previewed.
         $dear->forceFill(['price' => '220000.00'])->save();
 
-        $this->tapAs(Nav::to('plp', 'ok'));
+        $this->tapAs((string) $this->applyOffered());
         self::assertSame(['50000.00', '220000.00'], [$cheap->refresh()->price, $dear->refresh()->price], 'nothing moved twice, nothing moved at all');
         $window = $this->said()[0];
         self::assertStringContainsString('اعمال نشد', $window);
         self::assertStringContainsString('پلن «گران»: قیمتش بعد از پیش‌نمایش تغییر کرده است', $window, 'why, in the window');
         self::assertStringContainsString('۲۰۰٬۰۰۰ تومان ← ', $window, 'the preview kept');
-        self::assertNotContains(Nav::to('plp', 'ok'), $this->offered());
+        self::assertNull($this->applyOffered());
 
         $this->tapAs(Nav::to('plp', 'pv'));
         self::assertStringNotContainsString('اعمال نشد', $this->said()[0]);
-        $this->tapAs(Nav::to('plp', 'ok'));
+        $this->tapAs((string) $this->applyOffered());
         self::assertSame(['55000.00', '242000.00'], [$cheap->refresh()->price, $dear->refresh()->price], 'previewed again, made on the prices as they are');
     }
 
@@ -282,16 +397,16 @@ final class CatalogPlansTest extends BotTestCase
         $this->sayAs('۵۰');
         $this->tapAs(Nav::to('plp', 'pv'));
         $window = $this->said()[0];
-        self::assertStringContainsString('۱۰ پلن · صفحه ۱ از ۲', $window);
+        self::assertContains('۱ / ۲', $this->buttonLabels(0), 'the page in the pager, not the text');
         self::assertStringContainsString('ویژه', $window, 'the plan that cannot take it first');
         self::assertStringContainsString('قیمت نماینده دیگر کمتر از قیمت پلن نمی‌ماند', $window);
         self::assertStringNotContainsString('پلن 8', $window, 'a page at a time');
         self::assertContains(Nav::to('plp', 'pg', 2), $this->callbacks(0));
-        self::assertNotContains(Nav::to('plp', 'ok'), $this->callbacks(0), 'held while a plan cannot take it');
+        self::assertNull($this->applyOffered(), 'held while a plan cannot take it');
 
         $this->tapAs(Nav::to('plp', 'pg', 2));
         self::assertStringContainsString('پلن 8', $this->said()[0]);
-        self::assertStringContainsString('صفحه ۲ از ۲', $this->said()[0]);
+        self::assertContains('۲ / ۲', $this->buttonLabels(0));
     }
 
     public function testThePlansOwnExtrasPricesAndAPremiumName(): void
@@ -306,6 +421,12 @@ final class CatalogPlansTest extends BotTestCase
         self::assertStringContainsString('✨ دارد', $this->said()[0], 'the premium emoji typed is the name\'s');
 
         $this->tapAs(Nav::to('plx'));
+        $shop = Nav::to('bsx', 'show', 'from.plx');
+        self::assertContains($shop, $this->callbacks(0), 'the shop\'s extras prices a tap away, saying where from');
+        $this->tapAs($shop);
+        self::assertContains(Nav::to('plx'), $this->callbacks(0), 'their «⬅️ بازگشت» is the plan\'s form');
+        $this->tapAs(Nav::to('plx'));
+        self::assertStringStartsWith('<b>🧩 خرید اضافه</b>', $this->said()[0], 'the draft kept: the edit is not stranded in the bot settings');
         $this->tapAs(Nav::to('plx', 'mode', 'own'));
         $this->tapAs(Nav::to('plx', 'f', 'traffic', 'price'));
         $this->sayAs('۳۰۰۰');
@@ -366,40 +487,35 @@ final class CatalogPlansTest extends BotTestCase
         self::assertNotContains(Nav::to('ple', 'v', 'traffic_gb', '0'), $this->offered(), 'no unlimited traffic to sell');
 
         $this->sendTo($bot, $this->tap(Nav::to('tsr'), chat: self::AGENT_TELEGRAM_ID));
-        self::assertSame([Nav::to('ts'), Nav::to('h')], $this->callbacks(0), 'a server\'s terms are the owner\'s: the list only reads');
+        self::assertSame([Nav::to('tsr'), Nav::to('h'), Nav::to('ts')], $this->callbacks(0), 'a server\'s terms are the owner\'s: the list only reads — «⬅️ بازگشت» on the right, «🏠 خانه» and «🔄» beside it');
     }
 
-    /**
-     * The buttons the window shows now, whichever call put them there (after a popup, the edit is the second).
-     *
-     * @return list<string>
-     */
-    private function offered(): array
+    public function testAnAgentsButtonNamingTheMainShopsPlanChangesNothing(): void
     {
-        $offered = [];
-        foreach (array_keys($this->calls()) as $call) {
-            $offered = [...$offered, ...$this->callbacks($call)];
+        $plan = $this->plan([], $this->sellingServer());
+        $bot = $this->agentBot();
+        $plans = Plan::query()->withoutGlobalScopes()->count();
+
+        foreach ([Nav::to('plv', 'tog', $plan->id, 0), Nav::to('plv', 'dup', $plan->id), Nav::to('plv', 'gone', $plan->id)] as $forged) {
+            $this->sendTo($bot, $this->tap($forged, chat: self::AGENT_TELEGRAM_ID));
+            self::assertNotNull($this->popup(), "{$forged}: reached the plan's screen and refused by the panel's route (the plan is not in the agent's shop)");
+            self::assertNotContains('editMessageText', $this->calls(), "{$forged}: no screen drawn as if done");
         }
 
-        return $offered;
+        $plan->refresh();
+        self::assertTrue($plan->is_active, 'the main shop\'s plan is not the agent\'s to switch');
+        self::assertSame($plans, Plan::query()->withoutGlobalScopes()->count(), 'nor to copy, nor to delete');
     }
 
-    private function tapAs(string $data): void
+    /** The «✔️ اعمال تغییر» the window offers now (it names its preview: `plp:ok:<digest>`); null for none. */
+    private function applyOffered(): ?string
     {
-        $this->send($this->tap($data, chat: self::OWNER));
-    }
+        foreach ($this->offered() as $data) {
+            if ($data === Nav::to('plp', 'ok') || str_starts_with($data, Nav::to('plp', 'ok') . ':')) {
+                return $data;
+            }
+        }
 
-    private function sayAs(string $text): void
-    {
-        $this->send($this->message($text, chat: self::OWNER));
-    }
-
-    /** The account 7001 linked as the owner. */
-    private function owner(): User
-    {
-        $owner = $this->customer(['telegram_id' => self::OWNER, 'first_name' => 'Amir']);
-        $this->linkOwner(self::OWNER);
-
-        return $owner;
+        return null;
     }
 }

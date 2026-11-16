@@ -11,6 +11,7 @@ use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\Fmt;
 use App\Modules\Telegram\Admin\Ui\Json;
 use App\Modules\Telegram\Admin\Ui\View;
+use App\Modules\Telegram\Admin\Ui\Words;
 
 /**
  * A new «افزودن زمان و حجم» to a server's services (the panel's grant dialog): the days, the traffic and the reason
@@ -49,12 +50,12 @@ final class ServerGrantFormScreen extends FormScreen
 
     protected function title(array $state): string
     {
-        return '🎁 افزودن زمان و حجم';
+        return ServerGrantsScreen::TITLE;
     }
 
     protected function path(array $state): array
     {
-        return ['مدیریت', 'سرورها', (string) ($state['name'] ?? '')];
+        return [Words::ROOT, Fmt::bare(ServersScreen::TITLE), (string) ($state['name'] ?? '')];
     }
 
     protected function saveLabel(array $state): string

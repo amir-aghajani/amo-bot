@@ -10,7 +10,6 @@ use App\Modules\Payments\Models\PaymentCard;
 use App\Modules\Payments\Models\PaymentMethod;
 use App\Modules\Telegram\Admin\Ui\Nav;
 use App\Modules\Users\Enums\UserRole;
-use App\Modules\Users\Models\User;
 use Tests\BotTestCase;
 use Tests\Support\FakeZarinpal;
 
@@ -22,8 +21,6 @@ use Tests\Support\FakeZarinpal;
  */
 final class OwnerPaymentsTest extends BotTestCase
 {
-    private const OWNER = 7001;
-
     protected function setUp(): void
     {
         parent::setUp();
@@ -42,13 +39,13 @@ final class OwnerPaymentsTest extends BotTestCase
         $this->send($this->tap(Nav::to('hs'), chat: self::OWNER));
         self::assertContains(Nav::to('pm'), $this->callbacks(0), 'in the shop menu');
         $this->send($this->tap(Nav::to('pm'), chat: self::OWNER));
-        self::assertStringContainsString('کارت به کارت (ملت)', $this->said()[0]);
+        self::assertContains('🟢 کارت به کارت (ملت) · ۱ کارت', $this->buttonLabels(0), 'the list\'s buttons are its rows: chip, name, how it settles');
         self::assertContains(Nav::to('pmv', 'show', $card->id), $this->callbacks(0));
 
         $this->send($this->tap(Nav::to('pmv', 'on', $card->id, 0), chat: self::OWNER));
         self::assertFalse($card->refresh()->enabled, 'switched off through PATCH');
         self::assertSame('⏸ غیرفعال شد', $this->popup());
-        self::assertStringContainsString('وضعیت: ⏸ غیرفعال', $this->said()[0]);
+        self::assertStringContainsString('وضعیت: <b>⏸ غیرفعال</b>', $this->said()[0]);
         self::assertStringContainsString('مدیریت › فروشگاه › روش‌های پرداخت', $this->said()[0]);
 
         $this->send($this->tap(Nav::to('pmv', 'up', $spare->id), chat: self::OWNER));
@@ -64,6 +61,45 @@ final class OwnerPaymentsTest extends BotTestCase
         self::assertContains(Nav::to('pmv', 'gone', $spare->id), $this->callbacks(0), 'asked first');
         $this->send($this->tap(Nav::to('pmv', 'gone', $spare->id), chat: self::OWNER));
         self::assertNull(PaymentMethod::query()->find($spare->id));
+    }
+
+    public function testTheListSaysWhyAMethodIsOfferedToNobodyAndTheDriversSayWhatTheyAreInALine(): void
+    {
+        $card = $this->cardMethod();
+        PaymentCard::query()->where('payment_method_id', $card->id)->update(['enabled' => false]);
+
+        $this->send($this->tap(Nav::to('pm'), chat: self::OWNER));
+        self::assertContains('⚠️ کارت به کارت (ملت) · ۱ کارت', $this->buttonLabels(0), 'on, yet offered to nobody: its chip says so');
+        self::assertStringContainsString('⚠️ کارت به کارت (ملت): همه کارت‌ها غیرفعال‌اند', $this->said()[0], 'and why, over the list');
+        self::assertContains('⚡️ تایید خودکار واریز · ⏸ خاموش', $this->buttonLabels(0), 'the approval\'s state on its button');
+        self::assertContains(Nav::to('pm'), $this->callbacks(0), '«🔄 تازه‌سازی»');
+
+        $this->send($this->tap(Nav::to('pma'), chat: self::OWNER));
+        self::assertStringContainsString('<b>زرین‌پال</b>: پرداخت آنلاین با هر کارت بانکی در درگاه زرین‌پال', $this->said()[0], 'each driver in one line: what it is, not how to set it up');
+        self::assertStringNotContainsString('مرچنت کد', $this->said()[0]);
+
+        $first = PaymentCard::query()->where('payment_method_id', $card->id)->value('id');
+        $this->send($this->tap(Nav::to('pmc', 'show', $card->id), chat: self::OWNER));
+        $this->send($this->tap(Nav::to('pmcv', 'show', $first), chat: self::OWNER));
+        $copies = array_column(array_merge(...$this->inlineKeyboard(0)), 'copy_text');
+        self::assertContains(['text' => '6037997700001119'], $copies, 'the card\'s number copied at a tap');
+    }
+
+    public function testACardShownToAPaymentIsKeptAndTheCardsRefreshTheirOwnMethod(): void
+    {
+        $card = $this->cardMethod();
+        $this->cardPayment($this->topUpOrder($this->customer(), '50000'), $card);
+        $paid = PaymentCard::query()->where('payment_method_id', $card->id)->sole();
+
+        $this->send($this->tap(Nav::to('pmc', 'show', $card->id), chat: self::OWNER));
+        self::assertContains(Nav::to('pmc', 'show', $card->id), $this->callbacks(0), '«🔄 تازه‌سازی» names its method: a window kept from before refreshes its own cards');
+
+        $this->send($this->tap(Nav::to('pmcv', 'show', $paid->id), chat: self::OWNER));
+        self::assertNotContains(Nav::to('pmcv', 'del', $paid->id), $this->callbacks(0), 'no delete offered');
+        $this->send($this->tap(Nav::to('pmcv', 'del', $paid->id), chat: self::OWNER));
+        self::assertStringContainsString('با این کارت پرداخت شده', (string) $this->popup(), 'an old or forged delete: said, not asked');
+        self::assertStringNotContainsString('❓', implode("\n", $this->said()), 'no question claiming no payment was shown it');
+        self::assertTrue(PaymentCard::query()->whereKey($paid->id)->exists());
     }
 
     public function testACardMethodIsAddedByItsDriversFormWithItsFirstCard(): void
@@ -137,8 +173,14 @@ final class OwnerPaymentsTest extends BotTestCase
         $key = $this->service(DepositSettings::class)->key();
         self::assertStringContainsString('<tg-spoiler><code>' . $key . '</code></tg-spoiler>', $this->said()[0], 'the key behind a spoiler, copied whole');
 
+        self::assertStringContainsString('تایید خودکار واریزها: <b>🟢 روشن</b>', $this->said()[0], 'how it stands first, in its card');
+        $copies = array_column(array_merge(...$this->inlineKeyboard($this->windowCall())), 'copy_text');
+        self::assertContains(['text' => $key], $copies, 'the key copied by its button too');
+        self::assertContains(Nav::to('pmd'), $this->callbacks($this->windowCall()), '«🔄 تازه‌سازی»: whether the test message came');
+
         $this->send($this->tap(Nav::to('pmd', 'key'), chat: self::OWNER));
         self::assertContains(Nav::to('pmd', 'rotate'), $this->callbacks(0), 'asked first');
+        self::assertSame('danger', $this->inlineKeyboard(0)[0][1]['style'] ?? null, 'red: the key in ForApp stops working');
         $this->send($this->tap(Nav::to('pmd', 'rotate'), chat: self::OWNER));
         self::assertNotSame($key, $this->service(DepositSettings::class)->key());
     }
@@ -161,13 +203,5 @@ final class OwnerPaymentsTest extends BotTestCase
         self::assertNotContains(Nav::to('pm'), $this->callbacks(0));
         $this->send($this->tap(Nav::to('pmv', 'on', $card->id, 0), chat: 7100));
         self::assertTrue($card->refresh()->enabled, 'an admin\'s tap changes nothing');
-    }
-
-    private function owner(): User
-    {
-        $owner = User::query()->where('telegram_id', self::OWNER)->first() ?? $this->customer(['telegram_id' => self::OWNER, 'first_name' => 'Amir']);
-        $this->linkOwner(self::OWNER);
-
-        return $owner;
     }
 }

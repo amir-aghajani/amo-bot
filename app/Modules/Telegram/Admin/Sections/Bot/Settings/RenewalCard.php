@@ -20,6 +20,8 @@ final class RenewalCard extends BotCard
 {
     public const ID = 'bsr';
 
+    public const TITLE = '🔁 تمدید سرویس';
+
     /** Each method's switch and name (the panel's RENEWAL_METHOD), in the bot's order. */
     private const METHODS = [
         'extend' => ['renew_extend', 'تمدید پلن فعلی'],
@@ -41,7 +43,7 @@ final class RenewalCard extends BotCard
 
     protected function title(): string
     {
-        return '🔁 تمدید سرویس';
+        return self::TITLE;
     }
 
     protected function intro(): string
@@ -51,14 +53,23 @@ final class RenewalCard extends BotCard
 
     protected function fields(): array
     {
-        return [
+        return $this->described([
             FieldDef::toggle('carry_traffic', 'حجم باقی‌مانده به دوره جدید منتقل شود', 'برای روش «تمدید پلن فعلی». روشن: حجم مصرف‌نشده دوره فعلی به حجم دوره جدید اضافه می‌شود. خاموش: حجم مصرف‌نشده تا پایان دوره فعلی قابل استفاده است و بعد از آن صفر می‌شود؛ دوره جدید با حجم پلن شروع می‌شود. تمدید زودتر از پایان دوره، چیزی از حجم فعلی مشتری کم نمی‌کند.'),
-            FieldDef::number('renew_window_days', 'آستانه تمدید: روز مانده به پایان', 'روز', 'بین ۰ تا ۳۶۵ روز؛ ۰ یعنی بدون این شرط.'),
-            FieldDef::number('renew_window_percent', 'آستانه تمدید: درصد حجم مانده', 'درصد', 'بین ۰ تا ۱۰۰ درصد؛ ۰ یعنی بدون این شرط.'),
-            FieldDef::toggle('renew_extend', 'روش «تمدید پلن فعلی»', 'روزهای پلن به روزهای مانده و حجم پلن به حجم سرویس اضافه می‌شود؛ حجم مانده طبق «حجم باقی‌مانده به دوره جدید منتقل شود» به دوره جدید می‌رود یا با پایان دوره فعلی از بین می‌رود.'),
-            FieldDef::toggle('renew_reset_traffic', 'روش «ریست حجم + افزایش روز»', 'روزهای پلن به روزهای مانده اضافه می‌شود و حجم از نو با حجم پلن شمرده می‌شود؛ حجم مانده از بین می‌رود.'),
-            FieldDef::toggle('renew_reset_time', 'روش «ریست زمان + انتقال حجم»', 'مدت سرویس از همان لحظه با مدت پلن از نو شروع می‌شود و روزهای مانده از بین می‌رود؛ حجم پلن به حجم مانده اضافه می‌شود.'),
+            FieldDef::number('renew_window_days', 'روز مانده به پایان', 'روز', 'بین ۰ تا ۳۶۵ روز؛ ۰ یعنی بدون این شرط.'),
+            FieldDef::number('renew_window_percent', 'درصد حجم مانده', 'درصد', 'بین ۰ تا ۱۰۰ درصد؛ ۰ یعنی بدون این شرط.'),
+            FieldDef::toggle('renew_extend', 'تمدید پلن فعلی', 'روزهای پلن به روزهای مانده و حجم پلن به حجم سرویس اضافه می‌شود؛ حجم مانده طبق «حجم باقی‌مانده به دوره جدید منتقل شود» به دوره جدید می‌رود یا با پایان دوره فعلی از بین می‌رود.'),
+            FieldDef::toggle('renew_reset_traffic', 'ریست حجم + افزایش روز', 'روزهای پلن به روزهای مانده اضافه می‌شود و حجم از نو با حجم پلن شمرده می‌شود؛ حجم مانده از بین می‌رود.'),
+            FieldDef::toggle('renew_reset_time', 'ریست زمان + انتقال حجم', 'مدت سرویس از همان لحظه با مدت پلن از نو شروع می‌شود و روزهای مانده از بین می‌رود؛ حجم پلن به حجم مانده اضافه می‌شود.'),
             FieldDef::choice('renew_default_method', 'روش تمدید خودکار', array_map(static fn(array $method): string => $method[1], self::METHODS), 'تمدید خودکار از کیف پول با این روش انجام می‌شود؛ یکی از روش‌های روشن. با «ریست زمان + انتقال حجم» تمدید تا آخرین نیم‌ساعت پیش از پایان سرویس صبر می‌کند تا از مدت پرداخت‌شده بیش از همین نیم‌ساعت از بین نرود؛ اگر موجودی کیف پول کافی نباشد، مشتری همچنان از «چند روز پیش از پایان سرویس» خبردار می‌شود.'),
+        ]);
+    }
+
+    /** The panel's parts: from when a service may be renewed, and the ways a renewal adds its plan. */
+    protected function parts(): array
+    {
+        return [
+            ['⏳ آستانه مجاز تمدید', ['renew_window_days', 'renew_window_percent']],
+            ['🔀 روش‌های تمدید', ['renew_extend', 'renew_reset_traffic', 'renew_reset_time', 'renew_default_method']],
         ];
     }
 
@@ -122,6 +133,6 @@ final class RenewalCard extends BotCard
 
     protected function extra(View $view, Admin $admin, array $values): void
     {
-        $view->row(Button::to('⏱ تمدید خودکار', AutoRenewCard::ID));
+        $view->row(Button::to(AutoRenewCard::TITLE, AutoRenewCard::ID));
     }
 }

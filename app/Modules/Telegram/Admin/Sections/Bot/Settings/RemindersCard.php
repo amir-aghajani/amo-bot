@@ -11,6 +11,8 @@ final class RemindersCard extends BotCard
 {
     public const ID = 'bsm';
 
+    public const TITLE = '⏰ یادآوری به مشتری';
+
     protected function group(): string
     {
         return 'reminders';
@@ -23,7 +25,7 @@ final class RemindersCard extends BotCard
 
     protected function title(): string
     {
-        return '⏰ یادآوری به مشتری';
+        return self::TITLE;
     }
 
     protected function intro(): string
@@ -33,11 +35,11 @@ final class RemindersCard extends BotCard
 
     protected function fields(): array
     {
-        return [
+        return $this->described([
             FieldDef::toggle('expiry_reminder', 'یادآوری نزدیک شدن تاریخ پایان', 'سرویسی که تمدید خودکارش روشن است این یادآوری را نمی‌گیرد؛ تمدید خودکار خودش خبر می‌دهد.'),
             FieldDef::number('expiry_reminder_days', 'چند روز پیش از پایان سرویس', 'روز', 'بین ۱ تا ۳۰ روز.')->when('expiry_reminder', [true]),
             FieldDef::toggle('traffic_reminder', 'یادآوری تمام شدن حجم', 'سرویس‌های با حجم نامحدود این یادآوری را نمی‌گیرند.'),
             FieldDef::number('traffic_reminder_percent', 'بعد از مصرف چند درصد حجم', 'درصد', 'بین ۵۰ تا ۹۹ درصد.')->when('traffic_reminder', [true]),
-        ];
+        ]);
     }
 }

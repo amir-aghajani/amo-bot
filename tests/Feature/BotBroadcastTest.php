@@ -78,7 +78,7 @@ final class BotBroadcastTest extends BotTestCase
         // The message to send: any message, here a photo with a caption (message id 70).
         $this->send($this->message(null, ['message_id' => 70, 'photo' => [['file_id' => 'p1']], 'caption' => 'تخفیف پاییزی']));
         self::assertSame([self::card(self::content('photo', 'تخفیف پاییزی'))], $this->said(), 'everyone active, the known blocker counted, the banned one not');
-        self::assertSame([self::step('aud'), self::step('mode'), self::step('btn'), self::step('pin'), self::step('drop'), self::step('send')], $this->callbacks(0));
+        self::assertSame([self::step('aud'), self::step('mode'), self::step('btn'), self::step('pin'), self::step('drop'), self::step('ask')], $this->callbacks(0));
 
         // Sent: the card becomes the progress message; Sara has blocked the bot since.
         $this->telegram()->on('copyMessage', static fn(array $params): mixed => $params['chat_id'] === '1002' ? FakeTelegram::error(403, 'Forbidden: bot was blocked by the user') : ['message_id' => 500]);
@@ -105,6 +105,33 @@ final class BotBroadcastTest extends BotTestCase
         $this->send($this->tap(self::step('send')));
         self::assertSame(1, Broadcast::query()->count());
         self::assertSame([], $this->paramsOf('copyMessage'));
+    }
+
+    public function testTheCardsSendIsAskedOnceMoreAndOnlyTheYesStartsIt(): void
+    {
+        $this->send($this->message('/broadcast'));
+        $this->send($this->message('سلام به همه', ['message_id' => 72]));
+        $this->send($this->tap(self::step('pin')));
+
+        $this->send($this->tap(self::step('ask')));
+        self::assertSame([Messages::fill(Messages::BROADCAST_CONFIRM, [
+            'count' => Persian::number(4),
+            'content' => self::content('text', 'سلام به همه'),
+            'audience' => Audience::LABELS[Audience::ALL],
+            'blocked' => Messages::fill(Messages::BROADCAST_DRAFT_BLOCKED, ['count' => Persian::number(1)]),
+            'pin' => Messages::BROADCAST_CONFIRM_PIN,
+        ])], $this->said(), 'what goes, to whom and how many — the one who blocked the bot said, as the card says it —, in the card\'s place');
+        self::assertSame([self::step('card'), self::step('send')], $this->callbacks(0), '«✖️ انصراف» back to the card, «✔️ بله» sends');
+        self::assertSame('success', $this->inlineKeyboard(0)[0][1]['style'] ?? null, 'the yes is green: nothing is destroyed');
+        self::assertSame(0, Broadcast::query()->count(), 'asking starts nothing');
+
+        $this->send($this->tap(self::step('card')));
+        self::assertSame(0, Broadcast::query()->count(), '«✖️ انصراف»: still a draft');
+        self::assertContains(self::step('ask'), $this->callbacks(0), 'the card again');
+
+        $this->send($this->tap(self::step('send')));
+        self::assertSame(1, Broadcast::query()->count(), 'the yes starts it, once');
+        self::assertSame(4, Broadcast::query()->value('total'), 'to as many as it said');
     }
 
     public function testDroppingTheDraftLeavesNothingToSend(): void
@@ -272,7 +299,7 @@ final class BotBroadcastTest extends BotTestCase
 
         $this->send($this->tap(self::step('aud', Audience::AGENTS)));
         self::assertSame([self::card(self::content('text', 'ویژه گروه'), ['audience' => Audience::LABELS[Audience::AGENTS], 'count' => Persian::number(0), 'blocked' => ''])], $this->said());
-        self::assertNotContains(self::step('send'), $this->callbacks(0), 'nobody to send to: no «ارسال»');
+        self::assertNotContains(self::step('ask'), $this->callbacks(0), 'nobody to send to: no «ارسال»');
 
         // A «ارسال» pressed on an older card all the same.
         $this->send($this->tap(self::step('send')));
@@ -320,7 +347,7 @@ final class BotBroadcastTest extends BotTestCase
 
         $this->send($this->tap(self::step('card')));
         self::assertSame([self::card(self::content('text', 'ویژه گروه'), ['audience' => 'گروهی که حذف شده', 'count' => Persian::number(0), 'blocked' => ''])], $this->said(), 'the draft waits for another audience');
-        self::assertNotContains(self::step('send'), $this->callbacks(0));
+        self::assertNotContains(self::step('ask'), $this->callbacks(0));
 
         // A run under way whose group goes: whoever it has not reached yet is not reached at all.
         $service = $this->service(BroadcastService::class);

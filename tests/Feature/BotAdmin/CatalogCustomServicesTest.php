@@ -15,8 +15,6 @@ use Tests\BotTestCase;
  */
 final class CatalogCustomServicesTest extends BotTestCase
 {
-    private const OWNER = 7001;
-
     protected function setUp(): void
     {
         parent::setUp();
@@ -93,37 +91,5 @@ final class CatalogCustomServicesTest extends BotTestCase
     private function setting(string $name): mixed
     {
         return $this->service(BotSettingsScreen::class)->present()[$name] ?? null;
-    }
-
-    /**
-     * The buttons the window shows now, whichever call put them there (after a typed answer, its deletion comes first).
-     *
-     * @return list<string>
-     */
-    private function offered(): array
-    {
-        $offered = [];
-        foreach (array_keys($this->calls()) as $call) {
-            $offered = [...$offered, ...$this->callbacks($call)];
-        }
-
-        return $offered;
-    }
-
-    private function tapAs(string $data): void
-    {
-        $this->send($this->tap($data, chat: self::OWNER));
-    }
-
-    private function sayAs(string $text): void
-    {
-        $this->send($this->message($text, chat: self::OWNER));
-    }
-
-    /** The account 7001 linked as the owner. */
-    private function owner(): void
-    {
-        $this->customer(['telegram_id' => self::OWNER, 'first_name' => 'Amir']);
-        $this->linkOwner(self::OWNER);
     }
 }

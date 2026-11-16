@@ -18,8 +18,6 @@ use Tests\BotTestCase;
  */
 final class CatalogTestsTest extends BotTestCase
 {
-    private const OWNER = 7001;
-
     protected function setUp(): void
     {
         parent::setUp();
@@ -68,6 +66,25 @@ final class CatalogTestsTest extends BotTestCase
         self::assertContains(Nav::to('tsv', 'show', $theirs->id), $this->callbacks(0));
     }
 
+    public function testTheTestsSwitchedOffAreTurnedOnFromTheListAndATestLeadsToItsCustomer(): void
+    {
+        $this->owner();
+        $server = $this->sellingServer();
+        $ali = $this->customer(['first_name' => 'Ali']);
+        $test = TestAccount::query()->create(['user_id' => $ali->id, 'server_id' => $server->id, 'traffic_bytes' => 1, 'duration_hours' => 1, 'on_hold' => true, 'issued_at' => now()]);
+
+        $this->tapAs(Nav::to('ts'));
+        self::assertContains(Nav::to('tss', 'e', 0, 1), $this->callbacks(0), 'the switch a tap from the warning');
+        $this->tapAs(Nav::to('tss', 'e', 0, 1));
+        self::assertTrue($this->setting('test_enabled'));
+
+        $this->tapAs(Nav::to('ts'));
+        self::assertNotContains(Nav::to('tss', 'e', 0, 1), $this->callbacks(0), 'nothing to fix: no switch offered');
+        $this->tapAs(Nav::to('tsv', 'show', $test->id));
+        self::assertContains(Nav::to('ts', 'user', $ali->id), $this->callbacks(0), 'the customer\'s other tests');
+        self::assertContains(Nav::to('usv', 'show', $ali->id), $this->callbacks(0), 'the customer\'s own page');
+    }
+
     public function testTheMenuWithoutTheTestsButtonIsWarnedOf(): void
     {
         $this->owner();
@@ -108,7 +125,8 @@ final class CatalogTestsTest extends BotTestCase
         $server = $this->sellingServer();
 
         $this->tapAs(Nav::to('tsr'));
-        self::assertStringContainsString('آلمان', $this->said()[0]);
+        self::assertStringContainsString('۱ سرور', $this->said()[0]);
+        self::assertStringStartsWith('⏸ آلمان · ', $this->buttonLabels(0)[0], 'a server\'s button is its row: its chip, name and terms');
         self::assertContains(Nav::to('tsrv', 'srv', $server->id), $this->callbacks(0));
 
         $this->tapAs(Nav::to('tsrv', 'srv', $server->id));
@@ -138,17 +156,5 @@ final class CatalogTestsTest extends BotTestCase
     private function setting(string $name): mixed
     {
         return $this->service(BotSettingsScreen::class)->present()[$name] ?? null;
-    }
-
-    private function tapAs(string $data): void
-    {
-        $this->send($this->tap($data, chat: self::OWNER));
-    }
-
-    /** The account 7001 linked as the owner. */
-    private function owner(): void
-    {
-        $this->customer(['telegram_id' => self::OWNER, 'first_name' => 'Amir']);
-        $this->linkOwner(self::OWNER);
     }
 }

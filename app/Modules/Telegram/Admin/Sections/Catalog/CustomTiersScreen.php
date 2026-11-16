@@ -12,16 +12,18 @@ use App\Modules\Telegram\Admin\Ui\Answer;
 use App\Modules\Telegram\Admin\Ui\BaseScreen;
 use App\Modules\Telegram\Admin\Ui\Button;
 use App\Modules\Telegram\Admin\Ui\Fmt;
+use App\Modules\Telegram\Admin\Ui\Nav;
 use App\Modules\Telegram\Admin\Ui\Prompt;
 use App\Modules\Telegram\Admin\Ui\Settings\BotGroupSource;
 use App\Modules\Telegram\Admin\Ui\View;
+use App\Modules\Telegram\Admin\Ui\Words;
 use App\Support\Persian;
 
 /**
  * One quantity's price tiers of «سرویس دلخواه» (the settings card's «قیمت هر گیگابایت» / «قیمت هر روز» rows): each
  * tier from how many units up and its price a unit — every unit at the rate of the tier the quantity falls into. A tier
- * added (one with the same start replaced), every tier typed anew a line each, or one taken off; each change saved
- * through the bot settings' route at once, the panel's checks answering it.
+ * added (one with the same start replaced), every tier typed anew a line each, or one taken off, asked first; each change
+ * saved through the bot settings' route at once, the panel's checks answering it.
  *
  * Actions: `add` (quantity: asks), `all` (quantity: asks), `del` (quantity, from: asks), `gone` (quantity, from).
  */
@@ -44,19 +46,17 @@ final class CustomTiersScreen extends BaseScreen
         $quantity = self::quantity($args);
         $words = CustomPricing::QUANTITIES[$quantity];
         $tiers = CustomPricing::tiers(BotGroupSource::settings($admin), $quantity);
-        $view = View::make($words['title'] . ': ' . $words['unitPrice'], 'مدیریت', 'فروشگاه', 'سرویس دلخواه')
-            ->line(Fmt::e($words['about']))
-            ->line(Fmt::e("هر پله: از چند {$words['unit']} به بالا، هر {$words['unit']} چند تومان. همه {$words['unit']}‌ها با قیمت پله‌ای حساب می‌شوند که عدد مشتری در آن است."))
-            ->line()
+        $view = View::make($words['title'] . ': ' . $words['unitPrice'], ...CatalogFmt::under(Fmt::bare(CustomServicesScreen::TITLE)))
+            ->total(count($tiers), 'پله')
             ->lines(...CustomPricing::tierLines($tiers, $quantity));
-        foreach ($tiers as $tier) {
-            $view->row(Button::to('🗑 حذف پله از ' . Persian::number($tier['from']) . ' ' . $words['unit'], self::ID, 'del', $quantity, $tier['from']));
-        }
         if (count($tiers) < self::MOST) {
-            $view->row(Button::to('➕ افزودن پله', self::ID, 'add', $quantity));
+            $view->row(Button::to(Words::add('پله'), self::ID, 'add', $quantity)->success());
         }
-
-        $view->row(Button::to('✏️ نوشتن همه پله‌ها', self::ID, 'all', $quantity));
+        $view->row(Button::to(Words::edit('همه پله‌ها با هم'), self::ID, 'all', $quantity));
+        foreach ($tiers as $tier) {
+            $view->row(Button::to(Words::DELETE . ' پله از ' . Persian::number($tier['from']) . ' ' . $words['unit'], self::ID, 'del', $quantity, $tier['from'])->danger());
+        }
+        $view->help(Fmt::e($words['about'] . " هر پله: از چند {$words['unit']} به بالا، هر {$words['unit']} چند تومان. همه {$words['unit']}‌ها با قیمت پله‌ای حساب می‌شوند که عدد مشتری در آن است؛ حداکثر " . Persian::number(self::MOST) . ' پله.'));
 
         return CustomServicesScreen::backTo($view, CustomServicesScreen::opener($admin, self::ID, $args[1] ?? null));
     }
@@ -67,25 +67,29 @@ final class CustomTiersScreen extends BaseScreen
         $unit = CustomPricing::QUANTITIES[$quantity]['unit'];
         switch ($action) {
             case 'add':
-                return $admin->ask(new Prompt('پله تازه', self::ID, 'add', [$quantity], Fmt::e("دو عدد بنویسید: از چند {$unit} به بالا، و قیمت هر {$unit} به تومان؛ مثل «۵۰ ۲۵۰۰». پله‌ای با همان شروع، جایگزین می‌شود.")));
+                return $admin->ask((new Prompt('پله تازه', self::ID, 'add', [$quantity], Fmt::e("دو عدد بنویسید: از چند {$unit} به بالا، و قیمت هر {$unit} به تومان. پله‌ای با همان شروع، جایگزین می‌شود."), Button::to(Words::CANCEL, self::ID, Nav::SHOW, $quantity)))
+                    ->example('۵۰ ۲۵۰۰'));
             case 'all':
                 $settings = BotGroupSource::settings($admin);
+                $current = implode("\n", array_map(static fn(array $tier): string => $tier['from'] . ' ' . $tier['price'], CustomPricing::tiers($settings, $quantity)));
 
-                return $admin->ask(new Prompt(
+                return $admin->ask((new Prompt(
                     'همه پله‌ها',
                     self::ID,
                     'all',
                     [$quantity],
-                    Fmt::e("هر پله در یک خط: از چند {$unit}، و قیمت هر {$unit} به تومان؛ مثل:\n۱ ۳۰۰۰\n۵۰ ۲۵۰۰\nهمه پله‌های فعلی جای خود را به این‌ها می‌دهند؛ حداکثر ۱۰ پله.") . "\n\nالان:\n" . implode("\n", CustomPricing::tierLines(CustomPricing::tiers($settings, $quantity), $quantity)),
-                ));
+                    Fmt::e("هر پله در یک خط: از چند {$unit}، و قیمت هر {$unit} به تومان. همه پله‌های فعلی جای خود را به این‌ها می‌دهند."),
+                    Button::to(Words::CANCEL, self::ID, Nav::SHOW, $quantity),
+                ))->current($current === '' ? null : $current)->example("۱ ۳۰۰۰\n۵۰ ۲۵۰۰")->limits('حداکثر ' . Persian::number(self::MOST) . ' پله'));
             case 'del':
                 $from = self::id($args, 1);
 
                 return $admin->confirm(
                     'این پله حذف شود؟',
-                    Button::to('🗑 بله، حذف شود', self::ID, 'gone', $quantity, $from),
-                    Button::to('✖️ انصراف', self::ID, 'show', $quantity),
+                    Button::to(Words::yes('حذف شود', CatalogFmt::emoji(Words::DELETE)), self::ID, 'gone', $quantity, $from),
+                    Button::to(Words::CANCEL, self::ID, Nav::SHOW, $quantity),
                     Fmt::e('پله «از ' . Persian::number($from) . " {$unit}» از پله‌های قیمت برداشته می‌شود و قیمت سرویس‌های تازه بی آن حساب می‌شود."),
+                    danger: true,
                 );
             case 'gone':
                 $from = self::id($args, 1);
@@ -120,6 +124,17 @@ final class CustomTiersScreen extends BaseScreen
         }
 
         return $this->show($admin, [$quantity]);
+    }
+
+    /**
+     * «✏️ پله‌های حجم» · «✏️ پله‌های مدت»: a button to each quantity's tiers, whose way back is `$opener` (the page or the
+     * settings card the row is on: CustomServicesScreen::opener()).
+     *
+     * @return list<Button>
+     */
+    public static function buttons(string $opener): array
+    {
+        return array_map(static fn(string $quantity): Button => Button::to(Words::edit('پله‌های ' . Fmt::bare(CustomPricing::QUANTITIES[$quantity]['title'])), self::ID, Nav::SHOW, $quantity, $opener), array_keys(CustomPricing::QUANTITIES));
     }
 
     /**

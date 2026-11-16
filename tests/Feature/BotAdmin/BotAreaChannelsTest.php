@@ -22,8 +22,6 @@ use Tests\Support\FakeTelegram;
  */
 final class BotAreaChannelsTest extends BotTestCase
 {
-    private const OWNER = 7001;
-
     protected function setUp(): void
     {
         parent::setUp();
@@ -99,7 +97,7 @@ final class BotAreaChannelsTest extends BotTestCase
 
         $this->reportGroup();
         $this->send($this->tap(Nav::to('rg'), chat: self::OWNER));
-        self::assertStringContainsString('✅ وصل است', $this->said()[0]);
+        self::assertStringContainsString('🟢 وصل است', $this->said()[0]);
         self::assertContains(Nav::to('rg', 'test'), $this->callbacks(0));
 
         $this->send($this->tap(Nav::to('rg', 'test'), chat: self::OWNER));

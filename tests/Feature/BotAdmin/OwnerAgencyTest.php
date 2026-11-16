@@ -8,9 +8,9 @@ use App\Modules\Agency\Models\AgencyLevel;
 use App\Modules\Agency\Models\AgencyRequest;
 use App\Modules\Agency\Services\AgencySettings;
 use App\Modules\Telegram\Admin\Ui\Nav;
+use App\Modules\Telegram\Admin\Ui\Words;
 use App\Modules\Telegram\Keyboard\KeyboardLayouts;
 use App\Modules\Users\Enums\UserRole;
-use App\Modules\Users\Models\User;
 use App\Support\Traffic;
 use Tests\BotTestCase;
 
@@ -22,8 +22,6 @@ use Tests\BotTestCase;
  */
 final class OwnerAgencyTest extends BotTestCase
 {
-    private const OWNER = 7001;
-
     protected function setUp(): void
     {
         parent::setUp();
@@ -41,7 +39,7 @@ final class OwnerAgencyTest extends BotTestCase
         $request = $this->agencyRequest($customer);
 
         $this->send($this->tap(Nav::to('ag'), chat: self::OWNER));
-        self::assertStringContainsString('درخواست‌های در انتظار: ۱', $this->said()[0]);
+        self::assertStringContainsString('درخواست‌های در انتظار: <b>۱</b>', $this->said()[0]);
 
         $this->send($this->tap(Nav::to('agr'), chat: self::OWNER));
         self::assertContains(Nav::to('agrv', 'show', $request->id), $this->callbacks(0), 'the waiting one first');
@@ -72,7 +70,7 @@ final class OwnerAgencyTest extends BotTestCase
 
         $this->send($this->tap(Nav::to('agr'), chat: self::OWNER));
         $this->send($this->tap(Nav::to('agrv', 'no', $request->id), chat: self::OWNER));
-        self::assertSame([Nav::to('agrv', 'nw', $request->id), Nav::to('agrv', 'nn', $request->id), Nav::to('agrv', 'show', $request->id)], $this->callbacks(0), 'asked first: with a note, without, or not');
+        self::assertSame([Nav::to('agrv', 'nn', $request->id), Nav::to('agrv', 'nw', $request->id), Nav::to('agrv', 'show', $request->id)], $this->callbacks(0), 'asked first: with a note (on the right), without, or not');
         $this->send($this->message('فعلا ظرفیت نداریم', chat: self::OWNER));
         self::assertSame('pending', $request->refresh()->status->value, 'a typed note alone is no yes');
 
@@ -118,7 +116,7 @@ final class OwnerAgencyTest extends BotTestCase
         $this->send($this->tap(Nav::to('agt', 'show', $agent->id), chat: self::OWNER));
         $this->send($this->tap(Nav::to('agt', 'gp', 1, 0), chat: self::OWNER));
         self::assertStringContainsString('۱۰ گیگابایت به حجم ربات', $this->said()[0], 'the change asked first');
-        self::assertSame([Nav::to('agt', 'nw'), Nav::to('agt', 'nn'), Nav::to('agt', 'quit')], $this->callbacks(0));
+        self::assertSame([Nav::to('agt', 'nn'), Nav::to('agt', 'nw'), Nav::to('agt', 'quit')], $this->callbacks(0), 'with a note on the right, without, or not');
         $this->send($this->tap(Nav::to('agt', 'nw'), chat: self::OWNER));
         $this->send($this->message('هدیه شروع کار', chat: self::OWNER));
         self::assertSame(Traffic::bytesOfGb(30), $bot->refresh()->trafficBalance(), 'added through the panel\'s route, once');
@@ -130,7 +128,7 @@ final class OwnerAgencyTest extends BotTestCase
         self::assertContains(Nav::to('agh', 'srv', $server->id, 0), $this->callbacks($this->buttonsCall()), 'shown again by its own button');
 
         $this->send($this->tap(Nav::to('agv', 'sus', $agent->id), chat: self::OWNER));
-        self::assertSame([Nav::to('agv', 'susw', $agent->id), Nav::to('agv', 'susn', $agent->id), Nav::to('agv', 'show', $agent->id)], $this->callbacks(0), 'asked first: with a note, without, or not');
+        self::assertSame([Nav::to('agv', 'susn', $agent->id), Nav::to('agv', 'susw', $agent->id), Nav::to('agv', 'show', $agent->id)], $this->callbacks(0), 'asked first: with a note (on the right), without, or not');
         $this->send($this->message('👛 کیف پول', chat: self::OWNER));
         self::assertNull($bot->refresh()->sellingSuspension(), 'a typed text alone stops nothing');
         $this->send($this->tap(Nav::to('agv', 'susn', $agent->id), chat: self::OWNER));
@@ -147,8 +145,11 @@ final class OwnerAgencyTest extends BotTestCase
         self::assertSame('200000', (string) (int) $bot->refresh()->monthly_minimum, 'its minimum changed, the rest kept');
 
         $this->send($this->tap(Nav::to('agv', 'rev', $agent->id), chat: self::OWNER));
-        self::assertSame([Nav::to('agv', 'revw', $agent->id), Nav::to('agv', 'revn', $agent->id), Nav::to('agv', 'show', $agent->id)], $this->callbacks(0), 'asked first, a note offered');
+        self::assertSame([Nav::to('agv', 'revn', $agent->id), Nav::to('agv', 'revw', $agent->id), Nav::to('agv', 'show', $agent->id)], $this->callbacks(0), 'asked first, a note offered (on the right)');
+        $where = '<i>مدیریت › نمایندگان › نماینده‌ها › نماینده ';
+        self::assertStringContainsString($where, $this->said()[0], 'asked from the agent\'s page, as every confirmation says');
         $this->send($this->tap(Nav::to('agv', 'revw', $agent->id), chat: self::OWNER));
+        self::assertStringContainsString($where, $this->said()[0], 'the note\'s question too: the confirmation was no place of its own');
         $this->send($this->message('پایان همکاری', chat: self::OWNER));
         self::assertNull($agent->refresh()->agency_level_id, 'the agency ended, with the note');
     }
@@ -162,12 +163,12 @@ final class OwnerAgencyTest extends BotTestCase
         $layouts->save('start', ['type' => 'reply', 'rows' => [[['action' => 'buy', 'label' => 'خرید', 'style' => null], ['action' => 'agency', 'label' => 'نمایندگی', 'style' => null]]]]);
         $this->send($this->tap(Nav::to('ag'), chat: self::OWNER));
         self::assertStringNotContainsString('در منوی ربات نیست', $this->said()[0]);
-        self::assertNotContains(Nav::to('kb'), $this->callbacks(0));
+        self::assertNotContains(Nav::to('kbl', 'show', 'start'), $this->callbacks(0));
 
         $layouts->save('start', ['type' => 'reply', 'rows' => [[['action' => 'buy', 'label' => 'خرید', 'style' => null]]]]);
         $this->send($this->tap(Nav::to('ag'), chat: self::OWNER));
         self::assertStringContainsString('⚠️ دکمه «نمایندگی» در منوی ربات نیست', $this->said()[0]);
-        self::assertContains(Nav::to('kb'), $this->callbacks(0), '«⌨️ افزودن دکمه در کیبوردها»');
+        self::assertContains(Nav::to('kbl', 'show', 'start'), $this->callbacks(0), '«⌨️ افزودن دکمه در منوی شروع»: straight to the start menu');
     }
 
     public function testHiddenServersComeAPageAtATimeAndEachButtonSetsWhatItSays(): void
@@ -256,8 +257,38 @@ final class OwnerAgencyTest extends BotTestCase
         self::assertNull(AgencyLevel::query()->find($level->id));
 
         $this->send($this->tap(Nav::to('ags'), chat: self::OWNER));
+        $rules = $this->said()[0];
+        self::assertStringContainsString('مدت نمایندگی: <b>بدون پایان</b>', $rules, '0 days: none, as an agent\'s terms say it');
+        self::assertStringContainsString('کف خرید ماهانه: <b>بدون کف خرید</b>', $rules);
+        self::assertStringNotContainsString('<i>اعتبار اولیه، مدت نمایندگی', $rules, 'the long note folded into the help, not an italic wall');
+        self::assertStringContainsString('اعتبار اولیه، مدت نمایندگی', (string) strstr($rules, '<blockquote expandable>'));
         $this->send($this->tap(Nav::to('ags', 'e', 0), chat: self::OWNER));
         self::assertFalse($this->service(AgencySettings::class)->enabled(), 'switched off through PUT /agency/settings');
+    }
+
+    public function testAnAgentsTermsHaveOneWayOutAskedFirstOnceChanged(): void
+    {
+        $bot = $this->agentBot();
+        $agent = $bot->agent ?? self::fail('no agent');
+        $this->send($this->tap(Nav::to('agv', 'show', $agent->id), chat: self::OWNER));
+
+        $this->send($this->tap(Nav::to('age', 'edit', $agent->id), chat: self::OWNER));
+        $labels = array_column(array_merge(...$this->inlineKeyboard(0)), 'text', 'callback_data');
+        self::assertSame(Words::BACK, $labels[Nav::to('age', 'quit')] ?? null, 'as they started: «⬅️ بازگشت» the one way out');
+        self::assertNotContains(Words::CANCEL, $labels);
+
+        $this->send($this->tap(Nav::to('age', 'exd', 30), chat: self::OWNER));
+        $buttons = array_column(array_merge(...$this->inlineKeyboard(0)), null, 'callback_data');
+        self::assertSame(['🗑 کنار گذاشتن', 'danger'], [$buttons[Nav::to('age', 'quit')]['text'] ?? null, $buttons[Nav::to('age', 'quit')]['style'] ?? null], 'changed: «🗑 کنار گذاشتن», red');
+        self::assertNotContains(Words::BACK, array_column($buttons, 'text'), 'no second way out');
+
+        // The way out, an older window's «⬅️ بازگشت» the same, asks first.
+        $this->send($this->tap(Nav::to('age', 'quit'), chat: self::OWNER));
+        self::assertStringContainsString('تغییرها کنار گذاشته شوند؟', $this->said()[0], 'the words a form asks with');
+        self::assertSame([Nav::to('age', 'show'), Nav::to('age', 'gone')], $this->callbacks(0));
+        $this->send($this->tap(Nav::to('age', 'gone'), chat: self::OWNER));
+        self::assertNull($bot->refresh()->agency_expires_at, 'dropped: nothing saved');
+        self::assertContains(Nav::to('age', 'edit', $agent->id), $this->callbacks(0), 'back on the agent\'s page');
     }
 
     public function testAShopsAdminHasNoAgency(): void
@@ -271,11 +302,38 @@ final class OwnerAgencyTest extends BotTestCase
         self::assertSame('pending', AgencyRequest::query()->findOrFail($request->id)->status->value);
     }
 
-    private function owner(): User
+    public function testTheAgentsAreSortedAsThePanelsColumnsSortThem(): void
     {
-        $owner = User::query()->where('telegram_id', self::OWNER)->first() ?? $this->customer(['telegram_id' => self::OWNER, 'first_name' => 'Amir']);
-        $this->linkOwner(self::OWNER);
+        $level = $this->agencyLevel();
+        $rich = $this->wallet($this->agent($level, overrides: ['telegram_id' => 8301, 'first_name' => 'Rich']), '100000');
+        $poor = $this->agent($level, overrides: ['telegram_id' => 8302, 'first_name' => 'Poor']);
+        $order = fn(): array => array_values(array_filter($this->callbacks($this->buttonsCall()), static fn(string $data): bool => str_starts_with($data, Nav::to('agv', 'show') . ':')));
 
-        return $owner;
+        $this->send($this->tap(Nav::to('agl'), chat: self::OWNER));
+        self::assertSame([Nav::to('agv', 'show', $poor->id), Nav::to('agv', 'show', $rich->id)], $order(), 'the newest first, as the panel');
+        self::assertContains(Nav::to('agl', 'sort'), $this->callbacks(0), '«↕️» beside the search');
+
+        $this->send($this->tap(Nav::to('agl', 'sort'), chat: self::OWNER));
+        self::assertContains(Nav::to('agl', 'so', 'balance', 'asc'), $this->callbacks(0), 'each order both ways');
+        $this->send($this->tap(Nav::to('agl', 'so', 'balance', 'desc'), chat: self::OWNER));
+        self::assertSame([Nav::to('agv', 'show', $rich->id), Nav::to('agv', 'show', $poor->id)], $order(), 'GET /agency/agents?sort=balance&dir=desc');
+        self::assertStringContainsString('۱۰۰٬۰۰۰ تومان', implode(' ', $this->buttonLabels($this->buttonsCall())), 'the row says the figure it is sorted by');
+        $this->send($this->tap(Nav::to('agl', 'so', 'balance', 'asc'), chat: self::OWNER));
+        self::assertSame([Nav::to('agv', 'show', $poor->id), Nav::to('agv', 'show', $rich->id)], $order());
+    }
+
+    public function testTheRequestsComeNewestFirstOrOldest(): void
+    {
+        $this->agencyLevel();
+        $first = $this->agencyRequest($this->customer(['telegram_id' => 8401]));
+        $second = $this->agencyRequest($this->customer(['telegram_id' => 8402]));
+        $order = fn(): array => array_values(array_filter($this->callbacks($this->buttonsCall()), static fn(string $data): bool => str_starts_with($data, Nav::to('agrv', 'show') . ':')));
+
+        $this->send($this->tap(Nav::to('agr'), chat: self::OWNER));
+        self::assertSame([Nav::to('agrv', 'show', $second->id), Nav::to('agrv', 'show', $first->id)], $order(), 'the newest first');
+        self::assertContains(Nav::to('agr', 'dir', 'asc'), $this->callbacks(0));
+        $this->send($this->tap(Nav::to('agr', 'dir', 'asc'), chat: self::OWNER));
+        self::assertSame([Nav::to('agrv', 'show', $first->id), Nav::to('agrv', 'show', $second->id)], $order(), 'GET /agency/requests?sort=created&dir=asc');
+        self::assertContains(Nav::to('agr', 'dir', 'desc'), $this->callbacks($this->buttonsCall()), 'and back');
     }
 }

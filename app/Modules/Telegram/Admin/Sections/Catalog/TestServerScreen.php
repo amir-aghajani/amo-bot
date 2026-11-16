@@ -5,13 +5,16 @@ declare(strict_types=1);
 namespace App\Modules\Telegram\Admin\Sections\Catalog;
 
 use App\Modules\Telegram\Admin\AdminSeat;
+use App\Modules\Telegram\Admin\Sections\Owner\Servers\ServersScreen;
 use App\Modules\Telegram\Admin\Ui\Admin;
-use App\Modules\Telegram\Admin\Ui\Answer;
 use App\Modules\Telegram\Admin\Ui\Button;
+use App\Modules\Telegram\Admin\Ui\Fmt;
+use App\Modules\Telegram\Admin\Ui\Icons;
 use App\Modules\Telegram\Admin\Ui\Settings\FieldDef;
 use App\Modules\Telegram\Admin\Ui\Settings\SettingsScreen;
 use App\Modules\Telegram\Admin\Ui\Settings\SettingsSource;
 use App\Modules\Telegram\Admin\Ui\View;
+use App\Modules\Telegram\Admin\Ui\Words;
 
 /**
  * A server's free test accounts (the owner's: the server page's «اکانت تست» card, GET/PUT /servers/{id}/test-account),
@@ -31,19 +34,9 @@ final class TestServerScreen extends SettingsScreen
     /** The `srv` argument of a card opened from the server's page. */
     public const FROM_SERVER = 'v';
 
-    /** The server's name, for the card's title: read with its id. */
-    private string $name = '';
-
     public function allows(AdminSeat $seat): bool
     {
         return $seat->isOwner();
-    }
-
-    public function show(Admin $admin, array $args): View
-    {
-        $this->name = (string) ($admin->state(self::ID)['name'] ?? '');
-
-        return parent::show($admin, $args);
     }
 
     public function act(Admin $admin, string $action, array $args): View
@@ -55,16 +48,8 @@ final class TestServerScreen extends SettingsScreen
 
             return $this->show($admin, []);
         }
-        $this->name = (string) ($admin->state(self::ID)['name'] ?? '');
 
         return parent::act($admin, $action, $args);
-    }
-
-    public function input(Admin $admin, string $action, array $args, Answer $answer): View
-    {
-        $this->name = (string) ($admin->state(self::ID)['name'] ?? '');
-
-        return parent::input($admin, $action, $args, $answer);
     }
 
     protected function screen(): string
@@ -74,12 +59,14 @@ final class TestServerScreen extends SettingsScreen
 
     protected function title(): string
     {
-        return '🧪 اکانت تست' . ($this->name !== '' ? ' «' . $this->name . '»' : ' سرور');
+        $name = $this->name();
+
+        return Icons::TESTS . ' اکانت تست' . ($name !== '' ? ' «' . $name . '»' : ' سرور');
     }
 
     protected function path(): array
     {
-        return $this->fromServer() ? ['مدیریت', 'سرورها', $this->name] : ['مدیریت', 'فروشگاه', 'اکانت تست', 'سرورها'];
+        return $this->fromServer() ? [Words::ROOT, Fmt::bare(ServersScreen::TITLE), $this->name()] : CatalogFmt::under(Fmt::bare(TestsScreen::TITLE), Fmt::bare(TestServersScreen::TITLE));
     }
 
     protected function parent(): string
@@ -95,9 +82,9 @@ final class TestServerScreen extends SettingsScreen
     protected function fields(): array
     {
         return [
-            FieldDef::toggle('test_enabled', 'اکانت تست روی این سرور', 'روشن که باشد، مشتری‌های هر فروشگاهی که اکانت تست را در «اکانت تست › تنظیمات» خودش روشن کرده، روی این سرور اکانت تست می‌گیرند.'),
-            FieldDef::number('test_traffic_mb', 'حجم هر اکانت تست', 'مگابایت', 'بین ۱ تا ۱۰۲۴۰۰ مگابایت.'),
-            FieldDef::number('test_duration_hours', 'مدت هر اکانت تست', 'ساعت', 'بین ۱ تا ۷۲۰ ساعت.'),
+            FieldDef::toggle('test_enabled', 'اکانت تست روی این سرور', 'روشن که باشد، مشتری‌های هر فروشگاهی که اکانت تست را در «' . Fmt::bare(TestsScreen::TITLE) . ' › ' . Fmt::bare(TestSettingsScreen::TITLE) . '» خودش روشن کرده، روی این سرور اکانت تست می‌گیرند.'),
+            FieldDef::number('test_traffic_mb', 'حجم هر اکانت تست', 'مگابایت', 'هر اکانت تست روی این سرور همین حجم را می‌گیرد.')->limits('از ۱ تا ۱۰۲۴۰۰ مگابایت')->example('۵۰۰'),
+            FieldDef::number('test_duration_hours', 'مدت هر اکانت تست', 'ساعت', 'هر اکانت تست روی این سرور همین مدت کار می‌کند.')->limits('از ۱ تا ۷۲۰ ساعت')->example('۲۴'),
             FieldDef::toggle('test_on_hold', 'شروع از اولین اتصال', 'روشن: ساعت‌ها از اولین اتصال مشتری شمرده می‌شوند. خاموش: از همان لحظه که اکانت تست ساخته می‌شود.'),
         ];
     }
@@ -110,7 +97,7 @@ final class TestServerScreen extends SettingsScreen
     protected function extra(View $view, Admin $admin, array $values): void
     {
         if ($admin->opens(TestSettingsScreen::ID)) {
-            $view->row(Button::to('⚙️ اکانت تست › تنظیمات', TestSettingsScreen::ID));
+            $view->row(Button::to(TestSettingsScreen::TITLE, TestSettingsScreen::ID));
         }
     }
 
@@ -118,5 +105,11 @@ final class TestServerScreen extends SettingsScreen
     private function fromServer(): bool
     {
         return ($this->here?->state(self::ID)['from'] ?? '') === self::SERVER;
+    }
+
+    /** The server's name, for the card's title: kept with its id when the card is opened (`srv`). */
+    private function name(): string
+    {
+        return (string) ($this->here?->state(self::ID)['name'] ?? '');
     }
 }

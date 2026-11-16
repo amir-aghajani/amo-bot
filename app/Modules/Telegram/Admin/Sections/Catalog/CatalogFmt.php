@@ -5,8 +5,9 @@ declare(strict_types=1);
 namespace App\Modules\Telegram\Admin\Sections\Catalog;
 
 use App\Modules\Telegram\Admin\Ui\Answer;
-use App\Modules\Telegram\Admin\Ui\Button;
 use App\Modules\Telegram\Admin\Ui\Fmt;
+use App\Modules\Telegram\Admin\Ui\Icons;
+use App\Modules\Telegram\Admin\Ui\Words;
 use App\Modules\Telegram\Messages;
 use App\Modules\Telegram\Texts\PremiumText;
 use App\Support\Persian;
@@ -14,11 +15,18 @@ use App\Support\Traffic;
 
 /**
  * How the catalogue's screens say a plan's things — its price («رایگان» for none to pay), traffic, term and devices, its
- * button and badge in the panel's words — and the little they share: a name's premium emoji read off what was typed, a
- * row moved among its neighbours.
+ * category, its button and badge, whose extras prices it sells at, in the panel's words — and the little they share: the
+ * shop menu they are under, a row's chip, a name's premium emoji (whether it has one, the one typed), a row moved among
+ * its neighbours.
  */
 final class CatalogFmt
 {
+    /** The shop menu the catalogue is in («📦 فروشگاه», the home's): its screen, its lists' way back. */
+    public const HUB = 'hs';
+
+    /** The shop menu's title. */
+    public const SHOP = Icons::SHOP . ' فروشگاه';
+
     /** The labels a plan's card may wear in the mini app and on the website (PlanBadge::label()). */
     public const BADGES = ['bestseller' => 'پرفروش‌ترین', 'recommended' => 'پیشنهاد ما', 'vip' => "\u{2068}VIP\u{2069}"];
 
@@ -27,6 +35,35 @@ final class CatalogFmt
 
     /** How many buttons share a plan's button's row in the bot's plan list. */
     public const ROWS = [1 => 'یک ردیف کامل', 2 => 'دو در ردیف', 3 => 'سه در ردیف'];
+
+    /**
+     * The path of a screen under the shop menu — «مدیریت › فروشگاه» and the sections `$more` between.
+     *
+     * @return list<string>
+     */
+    public static function under(string ...$more): array
+    {
+        return [Words::ROOT, Fmt::bare(self::SHOP), ...array_values($more)];
+    }
+
+    /**
+     * A row's state as a button's leading chip (its emoji alone, the label being short): active 🟢, inactive ⏸ — and ⚠️
+     * for one active that the customer does not see now.
+     */
+    public static function dot(bool $active, bool $unseen = false): string
+    {
+        return self::emoji(match (true) {
+            !$active => Words::INACTIVE,
+            $unseen => '⚠️',
+            default => Words::ACTIVE,
+        });
+    }
+
+    /** A chip's emoji, its word left out: «🟢 فعال» → «🟢». */
+    public static function emoji(string $chip): string
+    {
+        return explode(' ', $chip)[0];
+    }
 
     /** What a plan costs: its amount, «رایگان» for 0, «—» for none. */
     public static function price(string|int|null $amount): string
@@ -48,6 +85,28 @@ final class CatalogFmt
     public static function devices(int|string|null $count): string
     {
         return Messages::devices((int) $count);
+    }
+
+    /**
+     * A plan's category as its card says it (plain text): its name, «(غیرفعال)» after it while customers do not see it.
+     *
+     * @param array<string, mixed> $category
+     */
+    public static function category(array $category): string
+    {
+        return (string) ($category['name'] ?? '') . ((bool) ($category['is_active'] ?? true) ? '' : ' (' . Fmt::bare(Words::INACTIVE) . ')');
+    }
+
+    /** Whose prices a plan's extras are sold at: «قیمت‌های این پلن» for its own list, else «قیمت‌های فروشگاه». */
+    public static function extras(bool $own): string
+    {
+        return $own ? 'قیمت‌های این پلن' : 'قیمت‌های فروشگاه';
+    }
+
+    /** Whether a name has its premium emoji: «✨ دارد» / «ندارد». */
+    public static function hasPremium(bool $has): string
+    {
+        return $has ? '✨ دارد' : 'ندارد';
     }
 
     /** An amount the API wrote ("120000.00") as a form starts from it ("120000"); null for none. */

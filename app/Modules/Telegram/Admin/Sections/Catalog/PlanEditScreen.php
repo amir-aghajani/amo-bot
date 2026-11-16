@@ -12,19 +12,24 @@ use App\Modules\Telegram\Admin\Ui\Answer;
 use App\Modules\Telegram\Admin\Ui\BaseScreen;
 use App\Modules\Telegram\Admin\Ui\Button;
 use App\Modules\Telegram\Admin\Ui\Fmt;
+use App\Modules\Telegram\Admin\Ui\Icons;
 use App\Modules\Telegram\Admin\Ui\Json;
+use App\Modules\Telegram\Admin\Ui\Nav;
 use App\Modules\Telegram\Admin\Ui\Prompt;
 use App\Modules\Telegram\Admin\Ui\View;
+use App\Modules\Telegram\Admin\Ui\Words;
 use App\Support\Persian;
 use App\Support\Unit;
 
 /**
  * The plan form (the panel's «افزودن پلن» / «ویرایش» dialog) as a wizard: a new plan asks what it must have field by
  * field — name, category, price, traffic, term, devices, servers — then the optional description and the first-purchase
- * and agent prices («⏭ رد شدن»); then, and for an edit at once, a summary in the form's four tabs with «✏️» on every field
- * — the checkout note, the bot button's colour and width, the badge, the premium emoji, the switch, the servers
- * (PlanServersScreen), the extras prices (PlanExtrasScreen) — and one save of the whole draft. A save the panel refuses
- * keeps the draft and opens the first tab with something to fix, each refusal over its field.
+ * and agent prices («⏭ رد شدن»), each question saying the value now, an example and the limits; then, and for an edit at
+ * once, a summary: every field once, in the form's four tabs as cards, and «✏️ {field}» for the tab open — the checkout
+ * note, the bot button's colour and width, the badge, the premium emoji, the switch (saying the state a tap sets), the
+ * servers (PlanServersScreen), the extras prices (PlanExtrasScreen) —, the tabs as chips, and one save of the whole
+ * draft. A save the panel refuses keeps the draft and opens the first tab with something to fix, each refusal over its
+ * field.
  *
  * The draft (PlanDraft) is the chat's: `id` (0: new), `d`, `seq` (the step of a new plan's questions, null after),
  * `tab`, `err` (the last refusal's messages by field), `title` (the name the plan had).
@@ -54,15 +59,37 @@ final class PlanEditScreen extends BaseScreen
         'extras' => ['extras'],
     ];
 
-    /** Each field's emoji on its button. */
-    private const ICONS = [
-        'name' => '✏️', 'emoji_id' => '✨', 'category_id' => '🗂', 'description' => '📝', 'checkout_note' => '🧾', 'button_style' => '🎨',
-        'button_row' => '↔️', 'badge' => '🏷', 'is_active' => '🛒', 'price' => '💰', 'first_purchase_price' => '🥇', 'agent_price' => '🤝',
-        'traffic_gb' => '📶', 'duration_hours' => '⏳', 'ip_limit' => '👥', 'servers' => '🖥', 'extras' => '➕',
-    ];
+    /** The emoji of each field picked among buttons (choose()), over its picker. */
+    private const ICONS = ['category_id' => Icons::CATEGORIES, 'button_style' => '🎨', 'button_row' => '↔️', 'badge' => '🏷'];
 
     /** The badge choice's «بدون برچسب», the colour's «پیش‌فرض»: a button's data holds no blank value. */
     private const NONE = 'none';
+
+    /** A new plan's way from its questions on to the summary, the rest left as it comes. */
+    private const TO_SUMMARY = '📋 خلاصه و ساختن';
+
+    /** What an answer to a typed field looks like (Prompt::example()). */
+    private const EXAMPLES = [
+        'name' => 'یک‌ماهه ۳۰ گیگ',
+        'description' => 'مناسب استفاده روزانه',
+        'checkout_note' => 'پس از پرداخت، لینک اشتراک همین‌جا فرستاده می‌شود.',
+        'price' => '۱۲۰۰۰۰',
+        'first_purchase_price' => '۹۰۰۰۰',
+        'agent_price' => '۱۰۰۰۰۰',
+        'traffic_gb' => '۳۰',
+        'duration_hours' => '۳۰',
+        'ip_limit' => '۲',
+    ];
+
+    /** What an answer to a typed field may be (Prompt::limits()). */
+    private const LIMITS = [
+        'checkout_note' => 'حداکثر ۵۰۰ نویسه',
+        'first_purchase_price' => 'کمتر از قیمت پلن',
+        'agent_price' => 'کمتر از قیمت پلن',
+        'traffic_gb' => '۰ یعنی نامحدود',
+        'duration_hours' => '۰ یعنی نامحدود',
+        'ip_limit' => '۰ یعنی نامحدود',
+    ];
 
     public function allows(AdminSeat $seat): bool
     {
@@ -143,15 +170,16 @@ final class PlanEditScreen extends BaseScreen
             case 'drop':
                 return $admin->confirm(
                     'این پیش‌نویس کنار گذاشته شود؟',
-                    Button::to('🗑 بله، کنار گذاشته شود', self::ID, 'gone'),
-                    Button::to('✖️ انصراف', self::ID, 'sum'),
+                    Button::to(Words::yes('کنار گذاشته شود', CatalogFmt::emoji(Words::DELETE)), self::ID, 'gone'),
+                    Button::to(Words::CANCEL, self::ID, 'sum'),
                     'آنچه این‌جا نوشته شده ذخیره نمی‌شود.',
+                    danger: true,
                 );
             case 'gone':
                 $id = (int) ($admin->state(self::ID)['id'] ?? 0);
                 $admin->forget(self::ID);
 
-                return $id > 0 ? $admin->open(PlanScreen::ID, 'show', [$id]) : $admin->open(PlansScreen::ID);
+                return $id > 0 ? $admin->open(PlanScreen::ID, Nav::SHOW, [$id]) : $admin->open(PlansScreen::ID);
         }
 
         return $this->summary($admin);
@@ -232,6 +260,16 @@ final class PlanEditScreen extends BaseScreen
         ];
     }
 
+    /**
+     * The path of a screen of the plan form: «مدیریت › فروشگاه › پلن‌ها» and the sections `$more` between.
+     *
+     * @return list<string>
+     */
+    public static function under(string ...$more): array
+    {
+        return CatalogFmt::under(Fmt::bare(PlansScreen::TITLE), ...$more);
+    }
+
     /** After a field is set: the next question of a new plan's, else the summary on the field's tab. */
     private function after(Admin $admin, string $field): View
     {
@@ -289,53 +327,70 @@ final class PlanEditScreen extends BaseScreen
         }
 
         $agentShop = !$admin->seat->shop()->isMain();
-        [$question, $hint, $choices] = match ($field) {
-            'name' => ['نام پلن', 'همان‌طور که مشتری در ربات می‌بیند؛ مثلا «یک‌ماهه ۳۰ گیگ». نامی که با ایموجی پرمیوم شروع شود، در ربات پرمیوم دیده می‌شود.', []],
-            'emoji_id' => ['ایموجی پرمیوم نام', 'یک ایموجی پرمیوم بفرستید: جای ایموجی اول نام می‌نشیند و ربات آن را پرمیوم نشان می‌دهد؛ روی دکمه به شکل آیکون. فقط وقتی دیده می‌شود که حسابی که ربات را در ' . Fmt::ltr('@BotFather') . ' ساخته تلگرام پرمیوم داشته باشد؛ مینی‌اپ و وب‌سایت همان ایموجی معمولی را نشان می‌دهند.', []],
-            'description' => ['توضیحات', 'زیر نام پلن نمایش داده می‌شود؛ مثلا برای چه کسی مناسب است.', []],
-            'checkout_note' => ['یادداشت پیش‌فاکتور', 'زیر پیش‌فاکتور خرید و تمدید این پلن در ربات نشان داده می‌شود؛ حداکثر ۵۰۰ نویسه.', []],
-            'price' => ['قیمت (تومان)', 'قیمت عادی پلن، برای هر خرید و تمدید؛ ۰ یعنی رایگان.', [Button::to('🆓 رایگان', self::ID, 'v', 'price', '0')]],
-            'first_purchase_price' => ['قیمت خرید اول (تومان)', 'مشتری‌ای که هنوز سرویسی از فروشگاه نخریده، اولین بار این پلن را با این قیمت می‌خرد. باید کمتر از قیمت پلن باشد؛ ۰ یعنی خرید اول رایگان. تمدید همیشه با قیمت عادی است.', []],
-            'agent_price' => ['قیمت نماینده (تومان)', 'نماینده‌ها و مشتری‌های گروه‌های همکار این قیمت را می‌پردازند، در خرید و تمدید؛ باید کمتر از قیمت باشد. خالی یعنی ندارد.', []],
-            'traffic_gb' => ['حجم (گیگابایت)', $agentShop ? 'الزامی؛ هر فروش و تمدید این پلن همین حجم را از حجم نمایندگی کم می‌کند.' : '۰ یعنی نامحدود. حجم و مدت روی پنل اعمال می‌شوند و با پایان هر کدام اشتراک منقضی می‌شود.', [
-                ...array_map(static fn(int $gb): Button => Button::to(Persian::number($gb) . ' گیگ', self::ID, 'v', 'traffic_gb', (string) $gb), [10, 30, 50, 100]),
-                ...($agentShop ? [] : [Button::to('♾ نامحدود', self::ID, 'v', 'traffic_gb', '0')]),
-            ]],
-            'duration_hours' => ['مدت اعتبار', 'به روز بنویسید، یا برای پلن ساعتی با «ساعت» (مثل «۱۲ ساعت»)؛ ۰ یعنی نامحدود. روزها از اولین اتصال مشتری شمرده می‌شوند.', [
-                ...array_map(static fn(int $days): Button => Button::to(Persian::number($days) . ' روز', self::ID, 'v', 'duration_hours', (string) ($days * 24)), [7, 30, 60, 90]),
-                Button::to('♾ نامحدود', self::ID, 'v', 'duration_hours', '0'),
-            ]],
-            'ip_limit' => ['تعداد کاربر', 'چند اتصال هم‌زمان مجاز است؛ ۰ یعنی نامحدود.', [
-                ...array_map(static fn(int $count): Button => Button::to(Persian::number($count) . ' کاربر', self::ID, 'v', 'ip_limit', (string) $count), [1, 2, 3, 5]),
-                Button::to('♾ نامحدود', self::ID, 'v', 'ip_limit', '0'),
-            ]],
-            default => [PlanDraft::LABELS[$field], '', []],
-        };
+        [$question, $hint, $choices] = self::question($field, $agentShop);
 
         // The premium emoji's hint carries its own markup (an isolated @BotFather).
         $lines = [$field === 'emoji_id' ? $hint : Fmt::e($hint)];
         $current = $draft[$field] ?? null;
         $set = $current !== null && $current !== '';
-        if ($set || !$asking) {
-            $lines[] = 'الان: ' . self::display($field, $draft, null);
-        }
         $index = array_search($field, self::SEQUENCE, true);
         if ($asking && $index !== false) {
-            $lines[] = '<i>گام ' . Persian::number($index + 1) . ' از ' . Persian::number(count(self::SEQUENCE)) . '</i>';
+            $lines[] = '<i>' . Words::step($index + 1, count(self::SEQUENCE)) . '</i>';
         }
-        $cancel = $asking && $new && $field === self::SEQUENCE[0] ? Button::to('✖️ لغو', self::ID, 'gone') : Button::to('✖️ لغو', self::ID, 'sum');
+        $cancel = Button::to(Words::CANCEL, self::ID, $asking && $new && $field === self::SEQUENCE[0] ? 'gone' : 'sum');
         $prompt = new Prompt($question, self::ID, 'f', [$field], implode("\n", $lines), $cancel);
+        if ($set) {
+            // The value to copy in the form an answer takes: a text whole, as typed; an amount as the summary says it (the
+            // answer's reader takes that too); the premium emoji only whether it has one.
+            $prompt->current(in_array($field, ['name', 'description', 'checkout_note'], true) ? (string) ($current ?? '') : Fmt::plain(self::display($field, $draft, null)), $field !== 'emoji_id');
+        } elseif (!$asking) {
+            // An edit's field with nothing in it: «—», not a word to copy back.
+            $prompt->current(null);
+        }
+        $prompt->example(self::EXAMPLES[$field] ?? '')->limits($field === 'traffic_gb' && $agentShop ? 'بیش از صفر' : (self::LIMITS[$field] ?? ''));
         if (in_array($field, self::OPTIONAL, true)) {
             if ($asking) {
-                $choices[] = Button::to('⏭ رد شدن', self::ID, 'skip', $field);
-                $choices[] = Button::to('📋 خلاصه و ساختن', self::ID, 'sum');
+                $prompt->ways(Button::to(Words::SKIP, self::ID, 'skip', $field));
+                $choices[] = Button::to(self::TO_SUMMARY, self::ID, 'sum');
             }
             if ($set) {
-                $choices[] = Button::to($field === 'emoji_id' ? '🚫 برداشتن ایموجی پرمیوم' : '🗑 خالی کردن', self::ID, 'x', $field);
+                $prompt->clearable(self::ID, 'x', $field);
             }
         }
 
         return $admin->ask($prompt->choices(...$choices));
+    }
+
+    /**
+     * A typed field's question, its hint (plain text, but the premium emoji's: HTML) and its quick picks — an agent's shop
+     * (`$agentShop`) sells no unlimited traffic.
+     *
+     * @return array{0: string, 1: string, 2: list<Button>}
+     */
+    private static function question(string $field, bool $agentShop): array
+    {
+        return match ($field) {
+            'name' => ['نام پلن', 'همان‌طور که مشتری در ربات می‌بیند؛ مثلا «یک‌ماهه ۳۰ گیگ». نامی که با ایموجی پرمیوم شروع شود، در ربات پرمیوم دیده می‌شود.', []],
+            'emoji_id' => ['ایموجی پرمیوم نام', 'یک ایموجی پرمیوم بفرستید: جای ایموجی اول نام می‌نشیند و ربات آن را پرمیوم نشان می‌دهد؛ روی دکمه به شکل آیکون. فقط وقتی دیده می‌شود که حسابی که ربات را در ' . Fmt::ltr('@BotFather') . ' ساخته تلگرام پرمیوم داشته باشد؛ مینی‌اپ و وب‌سایت همان ایموجی معمولی را نشان می‌دهند.', []],
+            'description' => ['توضیحات', 'زیر نام پلن نمایش داده می‌شود؛ مثلا برای چه کسی مناسب است.', []],
+            'checkout_note' => ['یادداشت پیش‌فاکتور', 'زیر پیش‌فاکتور خرید و تمدید این پلن در ربات نشان داده می‌شود.', []],
+            'price' => ['قیمت (تومان)', 'قیمت عادی پلن، برای هر خرید و تمدید؛ ۰ یعنی رایگان.', [Button::to('🆓 رایگان', self::ID, 'v', 'price', '0')]],
+            'first_purchase_price' => ['قیمت خرید اول (تومان)', 'مشتری‌ای که هنوز سرویسی از فروشگاه نخریده، اولین بار این پلن را با این قیمت می‌خرد؛ ۰ یعنی خرید اول رایگان. تمدید همیشه با قیمت عادی است.', []],
+            'agent_price' => ['قیمت نماینده (تومان)', 'نماینده‌ها و مشتری‌های گروه‌های همکار این قیمت را می‌پردازند، در خرید و تمدید. خالی یعنی ندارد.', []],
+            'traffic_gb' => ['حجم (گیگابایت)', $agentShop ? 'الزامی؛ هر فروش و تمدید این پلن همین حجم را از حجم نمایندگی کم می‌کند.' : 'حجم و مدت روی پنل اعمال می‌شوند و با پایان هر کدام اشتراک منقضی می‌شود.', [
+                ...array_map(static fn(int $gb): Button => Button::to(Persian::number($gb) . ' گیگ', self::ID, 'v', 'traffic_gb', (string) $gb), [10, 30, 50, 100]),
+                ...($agentShop ? [] : [Button::to('♾ نامحدود', self::ID, 'v', 'traffic_gb', '0')]),
+            ]],
+            'duration_hours' => ['مدت اعتبار', 'به روز بنویسید، یا برای پلن ساعتی با «ساعت» (مثل «۱۲ ساعت»). روزها از اولین اتصال مشتری شمرده می‌شوند.', [
+                ...array_map(static fn(int $days): Button => Button::to(Persian::number($days) . ' روز', self::ID, 'v', 'duration_hours', (string) ($days * 24)), [7, 30, 60, 90]),
+                Button::to('♾ نامحدود', self::ID, 'v', 'duration_hours', '0'),
+            ]],
+            'ip_limit' => ['تعداد کاربر', 'چند اتصال هم‌زمان مجاز است.', [
+                ...array_map(static fn(int $count): Button => Button::to(Persian::number($count) . ' کاربر', self::ID, 'v', 'ip_limit', (string) $count), [1, 2, 3, 5]),
+                Button::to('♾ نامحدود', self::ID, 'v', 'ip_limit', '0'),
+            ]],
+            default => [PlanDraft::LABELS[$field], '', []],
+        };
     }
 
     /**
@@ -346,7 +401,7 @@ final class PlanEditScreen extends BaseScreen
     private function choose(Admin $admin, string $field, array $draft, int $page): View
     {
         $current = $draft[$field] ?? null;
-        $view = View::make(self::ICONS[$field] . ' ' . PlanDraft::LABELS[$field], 'مدیریت', 'فروشگاه', 'پلن‌ها');
+        $view = View::make(self::ICONS[$field] . ' ' . PlanDraft::LABELS[$field], ...self::under());
         $options = [];
         switch ($field) {
             case 'category_id':
@@ -356,7 +411,7 @@ final class PlanEditScreen extends BaseScreen
                     : 'تا وقتی دسته فعالی هست، مشتری در ربات اول دسته را انتخاب می‌کند؛ پلن بی‌دسته زیر «سایر پلن‌ها» می‌آید.');
                 $options[0] = 'بدون دسته';
                 foreach ($categories as $category) {
-                    $options[(int) $category['id']] = (string) $category['name'] . ((bool) ($category['is_active'] ?? true) ? '' : ' (غیرفعال)');
+                    $options[(int) $category['id']] = ((bool) ($category['is_active'] ?? true) ? '' : CatalogFmt::emoji(Words::INACTIVE) . ' ') . (string) $category['name'];
                 }
                 $current = (int) ($current ?? 0);
                 break;
@@ -380,14 +435,14 @@ final class PlanEditScreen extends BaseScreen
         }
         $buttons = [];
         foreach ($options as $value => $label) {
-            $buttons[] = Button::to(((string) $value === (string) $current ? '● ' : '') . $label, self::ID, 'v', $field, (string) $value);
+            $buttons[] = Button::to(((string) $value === (string) $current ? Words::PICKED : '') . $label, self::ID, 'v', $field, (string) $value);
         }
         $view->paged(count($buttons) > 4 ? 2 : 1, $buttons, $page, static fn(int $at): array => [self::ID, 'f', [$field, $at]]);
         if (self::asking($admin)) {
-            $view->row(Button::to('📋 خلاصه و ساختن', self::ID, 'sum'));
+            $view->row(Button::to(self::TO_SUMMARY, self::ID, 'sum'));
         }
 
-        return $view->back(self::ID, 'sum');
+        return $view->transient()->back(self::ID, 'sum');
     }
 
     /** The summary: every field in the form's tabs, the shown tab's fields to edit, and the one save. */
@@ -400,55 +455,47 @@ final class PlanEditScreen extends BaseScreen
         $errors = Json::part($state, 'err');
         $options = self::options($admin);
 
-        $view = View::make($id > 0 ? '✏️ ویرایش «' . (string) ($state['title'] ?? '') . '»' : '📦 پلن تازه', 'مدیریت', 'فروشگاه', 'پلن‌ها');
+        $view = View::make($id > 0 ? Words::EDIT . ' «' . (string) ($state['title'] ?? '') . '»' : Icons::PLANS . ' پلن تازه', ...self::under());
         foreach ($errors as $field => $messages) {
             foreach (is_array($messages) ? $messages : [] as $message) {
                 $view->line('⚠️ ' . Fmt::e((PlanDraft::LABELS[explode('.', (string) $field)[0]] ?? (string) $field) . ': ' . (is_string($message) ? $message : '')));
             }
         }
-        if ($errors !== []) {
-            $view->line();
-        }
+        // Every field, a tab a section — the tab open marked —, said once: the buttons only say what they edit.
         foreach (self::FIELDS as $section => $fields) {
-            $view->line('<b>' . Fmt::e(PlanDraft::TABS[$section]) . '</b>');
+            $view->section(PlanDraft::TABS[$section] . ($section === $tab ? ' ✏️' : ''));
             if ($section === 'servers') {
                 $view->lines(...PlanServersScreen::lines($admin, $draft, $options['servers']));
-            } elseif ($section === 'extras') {
-                $view->line(is_array($draft['extras'] ?? null) ? 'قیمت‌های این پلن' : 'قیمت‌های فروشگاه');
-            } else {
-                foreach ($fields as $field) {
-                    $view->line(Fmt::e(PlanDraft::LABELS[$field]) . ': ' . self::display($field, $draft, $options));
-                }
+                continue;
             }
-            $view->line();
+            $facts = [];
+            foreach ($fields as $field) {
+                $facts[PlanDraft::LABELS[$field]] = self::display($field, $draft, $options);
+            }
+            $view->card($facts);
         }
-        $view->note($id > 0
-            ? 'تغییرات روی خریدهای بعدی و تمدیدها اثر می‌گذارد؛ اشتراک‌های فعلی تا تمدید بعدی با شرایط قبلی ادامه می‌دهند.'
-            : 'بسته‌ای که مشتری می‌خرد: حجم، مدت، تعداد کاربر و قیمت.');
 
         $chips = [];
         foreach (PlanDraft::TABS as $section => $label) {
             $refused = array_filter(array_keys($errors), static fn(int|string $field): bool => PlanDraft::tab((string) $field) === $section) !== [];
-            $chips[] = Button::to(($section === $tab ? '● ' : '') . $label . ($refused ? ' ⚠️' : ''), self::ID, 'sum', $section);
+            $chips[] = Button::to(($section === $tab ? Words::CHIP : '') . $label . ($refused ? ' ⚠️' : ''), self::ID, 'sum', $section);
         }
-        $view->grid(2, ...$chips);
         $buttons = [];
+        $on = (bool) ($draft['is_active'] ?? true);
         foreach (self::FIELDS[$tab] as $field) {
-            $value = match ($field) {
-                'servers' => Persian::number(count(Json::part($draft, 'servers'))) . ' سرور',
-                'extras' => is_array($draft['extras'] ?? null) ? 'قیمت‌های این پلن' : 'قیمت‌های فروشگاه',
-                default => Fmt::plain(self::display($field, $draft, $options)),
-            };
             // The switch carries what it sets: a tap twice, or on a stale window, sets it the same.
             $buttons[] = $field === 'is_active'
-                ? Button::to(self::ICONS[$field] . ' ' . PlanDraft::LABELS[$field] . ': ' . $value, self::ID, 'tog', (bool) ($draft['is_active'] ?? true) ? 0 : 1)
-                : Button::to(self::ICONS[$field] . ' ' . PlanDraft::LABELS[$field] . ': ' . $value, self::ID, 'f', $field);
+                ? Button::to(Words::turn(!$on, PlanDraft::LABELS[$field]), self::ID, 'tog', $on ? 0 : 1)
+                : Button::to(Words::edit(PlanDraft::LABELS[$field]), self::ID, 'f', $field);
         }
-        $view->grid(1, ...$buttons)
-            ->row(Button::to($id > 0 ? '💾 ذخیره تغییرات' : '✔️ ساختن', self::ID, 'save'))
-            ->row(Button::to('🗑 کنار گذاشتن', self::ID, 'drop'));
+        $view->tiles(...$buttons)
+            ->grid(2, ...$chips)
+            ->row(Button::to($id > 0 ? Words::SAVE : Words::CREATE, self::ID, 'save')->success(), Button::to('🗑 کنار گذاشتن', self::ID, 'drop')->danger())
+            ->help($id > 0
+                ? 'تا «' . Words::SAVE . '» را نزنید چیزی ذخیره نمی‌شود. تغییرات روی خریدهای بعدی و تمدیدها اثر می‌گذارد؛ اشتراک‌های فعلی تا تمدید بعدی با شرایط قبلی ادامه می‌دهند.'
+                : 'بسته‌ای که مشتری می‌خرد: حجم، مدت، تعداد کاربر و قیمت. تا «' . Words::CREATE . '» را نزنید چیزی ذخیره نمی‌شود.');
 
-        return $id > 0 ? $view->back(PlanScreen::ID, 'show', $id) : $view->back(PlansScreen::ID);
+        return $id > 0 ? $view->back(PlanScreen::ID, Nav::SHOW, $id) : $view->back(PlansScreen::ID);
     }
 
     /**
@@ -476,7 +523,7 @@ final class PlanEditScreen extends BaseScreen
         $admin->forget(self::ID);
         $admin->notice($id > 0 ? '✅ پلن ذخیره شد' : '✅ پلن اضافه شد');
 
-        return $admin->open(PlanScreen::ID, 'show', [(int) ($saved['id'] ?? $id)]);
+        return $admin->open(PlanScreen::ID, Nav::SHOW, [(int) ($saved['id'] ?? $id)]);
     }
 
     /**
@@ -492,7 +539,8 @@ final class PlanEditScreen extends BaseScreen
 
         return match ($field) {
             'name', 'description', 'checkout_note' => $text === '' ? Fmt::NONE : Fmt::e(Fmt::cut($text, 80)),
-            'emoji_id' => $text === '' ? 'ندارد' : '✨ دارد',
+            'emoji_id' => CatalogFmt::hasPremium($text !== ''),
+            'extras' => CatalogFmt::extras(is_array($value)),
             'category_id' => (int) $value === 0 ? 'بدون دسته' : Fmt::e(self::categoryName((int) $value, $options)),
             'button_style' => Fmt::e(CatalogFmt::STYLES[$text] ?? CatalogFmt::STYLES['']),
             'button_row' => Fmt::e(CatalogFmt::ROWS[(int) $value] ?? CatalogFmt::ROWS[1]),
@@ -510,13 +558,9 @@ final class PlanEditScreen extends BaseScreen
     /** @param array{categories: list<array<string, mixed>>, servers: list<array<string, mixed>>}|null $options */
     private static function categoryName(int $id, ?array $options): string
     {
-        foreach ($options['categories'] ?? [] as $category) {
-            if ((int) $category['id'] === $id) {
-                return (string) $category['name'] . ((bool) ($category['is_active'] ?? true) ? '' : ' (غیرفعال)');
-            }
-        }
+        $category = CatalogFmt::find($options['categories'] ?? [], $id);
 
-        return 'دسته ' . Persian::digits((string) $id);
+        return $category === null ? 'دسته ' . Persian::digits((string) $id) : CatalogFmt::category($category);
     }
 
     /** A value picked at a tap, as the draft keeps it; false for one that is none of the field's. */

@@ -19,7 +19,7 @@ abstract class WebsiteCard extends Card
 
     protected function path(): array
     {
-        return ['مدیریت', 'تنظیمات', 'تنظیمات وب‌سایت'];
+        return WebsiteScreen::under();
     }
 
     protected function parent(): string

@@ -22,6 +22,8 @@ final class DatabaseScreen extends ConfigScreen
 {
     public const ID = 'ppd';
 
+    public const TITLE = '🗄 دیتابیس';
+
     protected function screen(): string
     {
         return self::ID;
@@ -29,7 +31,7 @@ final class DatabaseScreen extends ConfigScreen
 
     protected function title(): string
     {
-        return '🗄 دیتابیس';
+        return self::TITLE;
     }
 
     protected function group(): string

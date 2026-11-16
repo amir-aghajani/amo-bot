@@ -11,6 +11,8 @@ use App\Modules\Telegram\Admin\Sections\Catalog\CatalogScreens;
 use App\Modules\Telegram\Admin\Sections\Core\BotAdminsScreen;
 use App\Modules\Telegram\Admin\Sections\Core\HomeScreen;
 use App\Modules\Telegram\Admin\Sections\Core\OwnerAccountsScreen;
+use App\Modules\Telegram\Admin\Sections\Core\PageScreen;
+use App\Modules\Telegram\Admin\Sections\Core\SearchScreen;
 use App\Modules\Telegram\Admin\Sections\Core\ShopScreen;
 use App\Modules\Telegram\Admin\Sections\Customers\CustomerScreens;
 use App\Modules\Telegram\Admin\Sections\Marketing\MarketingScreens;
@@ -29,12 +31,23 @@ final class Screens
 {
     public const HOME = 'h';
 
-    /** The core's own screens: the home, «مدیران ربات», the owner's linked accounts, the owner's shop. */
+    /** The pages' middle button: says where it is, the window left as it is (Core\PageScreen). */
+    public const PAGE = 'pgi';
+
+    /** «🔎 جستجو» on the home: a customer, an order, a payment or a service found by one value (Core\SearchScreen). */
+    public const SEARCH = 'sr';
+
+    /**
+     * The core's own screens: the home, the search, «مدیران ربات», the owner's linked accounts, the owner's shop, the
+     * pages' middle button.
+     */
     private const CORE = [
         self::HOME => HomeScreen::class,
-        'ba' => BotAdminsScreen::class,
-        'ol' => OwnerAccountsScreen::class,
+        self::SEARCH => SearchScreen::class,
+        BotAdminsScreen::ID => BotAdminsScreen::class,
+        OwnerAccountsScreen::ID => OwnerAccountsScreen::class,
         'shop' => ShopScreen::class,
+        self::PAGE => PageScreen::class,
     ];
 
     /** Each section's list. */
@@ -109,11 +122,7 @@ final class Screens
             return [];
         }
 
-        $queues = is_array($queues) ? array_map(intval(...), array_filter($queues, is_numeric(...))) : [];
-        // The sales menu's badge: the receipts to review and the orders stuck, as its line on the home says.
-        $queues['sales'] = ($queues['payments_to_review'] ?? 0) + ($queues['stuck_orders'] ?? 0);
-
-        return $queues;
+        return is_array($queues) ? array_map(intval(...), array_filter($queues, is_numeric(...))) : [];
     }
 
     /**
@@ -137,72 +146,79 @@ final class Screens
     }
 
     /**
-     * The home's entries: what waits first, then the panel's sidebar.
+     * The home's menu: the panel's sidebar, each entry with the queue it holds (the home says what waits apart, as
+     * buttons straight to it).
      *
      * @return list<array{0: string, 1: string, 2?: string}>
      */
     public static function homeEntries(): array
     {
         return [
-            ['db', '📊 داشبورد'],
-            ['acc', '💼 حساب نمایندگی'],
-            ['tk', '🎧 پشتیبانی', 'open_tickets'],
-            ['rv', '⭐️ نظرات', 'pending_reviews'],
-            ['hl', '🛍 فروش', 'sales'],
-            ['hs', '📦 فروشگاه'],
-            ['hm', '🎉 تخفیف و جوایز'],
-            ['hb', '🤖 ربات'],
-            ['sv', '🖥 سرورها'],
-            ['ag', '🤝 نمایندگان'],
-            ['hc', '⚙️ تنظیمات'],
+            ['db', Icons::DASHBOARD . ' داشبورد'],
+            ['acc', Icons::AGENT_ACCOUNT . ' حساب نمایندگی'],
+            ['tk', Icons::SUPPORT . ' پشتیبانی', 'open_tickets'],
+            ['rv', Icons::REVIEWS . ' نظرات', 'pending_reviews'],
+            ['hl', Icons::SALES . ' فروش'],
+            ['hs', Icons::SHOP . ' فروشگاه'],
+            ['hm', Icons::REWARDS . ' تخفیف و جوایز'],
+            ['hb', Icons::BOT . ' ربات'],
+            ['sv', Icons::SERVERS . ' سرورها'],
+            ['ag', Icons::AGENTS . ' نمایندگان'],
+            ['hc', Icons::SETTINGS . ' تنظیمات'],
         ];
     }
 
-    /** The menu of `$id`; null when it is no menu. */
+    /**
+     * The menu of `$id`; null when it is no menu. Each section is reached from one menu alone: a settings card of a
+     * feature's (the discount codes', the test accounts', the custom services', the referrals') from that feature's own
+     * screen, never from «🤖 تنظیمات ربات» too; the channels and the report group from «🤖 ربات»; «🛡 مدیران ربات» from
+     * «⚙️ تنظیمات».
+     */
     private function hub(string $id): ?HubScreen
     {
         return match ($id) {
-            'hl' => new HubScreen($this, '🛍 فروش', ['مدیریت'], [
-                ['py', '💳 پرداخت‌ها', 'payments_to_review'],
-                ['or', '🛒 سفارش‌ها', 'stuck_orders'],
-                ['us', '👥 کاربران'],
-                ['sb', '📡 اشتراک‌ها'],
-                ['rf', '🔗 زیرمجموعه‌گیری'],
-                ['dp', '📩 واریزهای پیامکی'],
-            ]),
-            'hs' => new HubScreen($this, '📦 فروشگاه', ['مدیریت'], [
-                ['pl', '📦 پلن‌ها'],
-                ['ct', '🗂 دسته‌بندی‌ها'],
-                ['ug', '👫 گروه‌های کاربران'],
-                ['ts', '🧪 اکانت تست'],
-                ['cs', '🛠 سرویس دلخواه'],
-                ['pm', '🏦 روش‌های پرداخت'],
-            ]),
-            'hm' => new HubScreen($this, '🎉 تخفیف و جوایز', ['مدیریت'], [
-                ['dc', '🏷 کدهای تخفیف'],
-                ['sl', '🔥 فروش ویژه'],
-                ['ly', '🏅 سطوح وفاداری'],
-                ['cb', '💸 کش‌بک'],
-                ['gc', '🎟 کدهای هدیه'],
-                ['wh', '🎡 گردونه شانس'],
-                ['lt', '🎲 قرعه‌کشی'],
-            ]),
-            'hb' => new HubScreen($this, '🤖 ربات', ['مدیریت'], [
-                ['br', '📣 ارسال همگانی'],
-                ['mg', '🎁 هدیه همگانی'],
-                ['tx', '📝 متن‌های ربات'],
-                ['kb', '⌨️ کیبوردها'],
-                ['ch', '📢 کانال‌های اجباری'],
-                ['rg', '📋 گروه گزارش‌ها'],
-            ]),
-            'hc' => new HubScreen($this, '⚙️ تنظیمات', ['مدیریت'], [
-                ['bs', '🤖 تنظیمات ربات'],
-                ['ba', '🛡 مدیران ربات'],
-                ['ws', '🌐 تنظیمات وب‌سایت'],
-                ['ma', '📱 مینی‌اپ تلگرام'],
-                ['pp', '🧰 تنظیمات پنل'],
-                ['ol', '👑 حساب تلگرام مالک'],
-            ]),
+            'hl' => new HubScreen($this, Icons::SALES . ' فروش', [Words::ROOT], [
+                ['py', Icons::PAYMENTS . ' پرداخت‌ها', 'payments_to_review'],
+                ['or', Icons::ORDERS . ' سفارش‌ها', 'stuck_orders'],
+                ['us', Icons::CUSTOMERS . ' کاربران'],
+                ['sb', Icons::SERVICES . ' اشتراک‌ها'],
+                ['rf', Icons::REFERRALS . ' زیرمجموعه‌گیری'],
+                ['dp', Icons::DEPOSITS . ' واریزهای پیامکی'],
+            ], 'کارهای روزانه فروش: آنچه مشتری‌ها خریده و پرداخته‌اند.'),
+            'hs' => new HubScreen($this, Icons::SHOP . ' فروشگاه', [Words::ROOT], [
+                ['pl', Icons::PLANS . ' پلن‌ها'],
+                ['ct', Icons::CATEGORIES . ' دسته‌بندی‌ها'],
+                ['ug', Icons::GROUPS . ' گروه‌های کاربران'],
+                ['ts', Icons::TESTS . ' اکانت تست'],
+                ['cs', Icons::CUSTOM . ' سرویس دلخواه'],
+                ['pm', Icons::METHODS . ' روش‌های پرداخت'],
+            ], 'آنچه فروشگاه می‌فروشد، به چه کسانی و با چه راه پرداختی.'),
+            'hm' => new HubScreen($this, Icons::REWARDS . ' تخفیف و جوایز', [Words::ROOT], [
+                ['dc', Icons::DISCOUNTS . ' کدهای تخفیف'],
+                ['sl', Icons::SPECIAL_SALES . ' فروش ویژه'],
+                ['ly', Icons::LOYALTY . ' سطوح وفاداری'],
+                ['cb', Icons::CASHBACK . ' کش‌بک'],
+                ['gc', Icons::GIFT_CODES . ' کدهای هدیه'],
+                ['wh', Icons::WHEEL . ' گردونه شانس'],
+                ['lt', Icons::LOTTERY . ' قرعه‌کشی'],
+            ], 'راه‌های جذب و نگه داشتن مشتری با تخفیف، هدیه و جایزه.'),
+            'hb' => new HubScreen($this, Icons::BOT . ' ربات', [Words::ROOT], [
+                ['br', Icons::BROADCAST . ' ارسال همگانی'],
+                ['mg', Icons::MASS_GIFT . ' هدیه همگانی'],
+                ['tx', Icons::TEXTS . ' متن‌های ربات'],
+                ['kb', Icons::KEYBOARDS . ' کیبوردها'],
+                ['ch', Icons::CHANNELS . ' کانال‌های اجباری'],
+                ['rg', Icons::REPORT_GROUP . ' گروه گزارش‌ها'],
+            ], 'آنچه مشتری در ربات می‌بیند و می‌گیرد، و گزارش‌هایی که به شما می‌رسد.'),
+            'hc' => new HubScreen($this, Icons::SETTINGS . ' تنظیمات', [Words::ROOT], [
+                ['ss', Icons::SEARCH . ' جستجوی تنظیمات'],
+                ['bs', Icons::BOT . ' تنظیمات ربات'],
+                ['ba', Icons::BOT_ADMINS . ' مدیران ربات'],
+                ['ws', Icons::WEBSITE . ' تنظیمات وب‌سایت'],
+                ['ma', Icons::MINI_APP . ' مینی‌اپ تلگرام'],
+                ['pp', Icons::PANEL . ' تنظیمات پنل'],
+                ['ol', Icons::OWNER . ' حساب تلگرام مالک'],
+            ], 'رفتار ربات، دسترسی مدیران و اتصال وب‌سایت، مینی‌اپ و پنل.'),
             default => null,
         };
     }

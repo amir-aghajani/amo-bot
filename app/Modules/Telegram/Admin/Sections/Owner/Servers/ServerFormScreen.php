@@ -11,8 +11,10 @@ use App\Modules\Telegram\Admin\Sections\Owner\Forms\FormScreen;
 use App\Modules\Telegram\Admin\Sections\Owner\Words;
 use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\Button;
+use App\Modules\Telegram\Admin\Ui\Fmt;
 use App\Modules\Telegram\Admin\Ui\Json;
 use App\Modules\Telegram\Admin\Ui\View;
+use App\Modules\Telegram\Admin\Ui\Words as UiWords;
 
 /**
  * A server's form on its connector (the panel's ServerForm), drawn from the connector's description (GET
@@ -46,17 +48,19 @@ final class ServerFormScreen extends FormScreen
 
     protected function title(array $state): string
     {
-        return self::isNew($state) ? '➕ افزودن سرور ' . (string) ($state['label'] ?? '') : '✏️ تنظیمات اتصال';
+        return self::isNew($state) ? UiWords::add('سرور') . ' ' . (string) ($state['label'] ?? '') : UiWords::edit('تنظیمات اتصال');
     }
 
     protected function path(array $state): array
     {
-        return self::isNew($state) ? ['مدیریت', 'سرورها'] : ['مدیریت', 'سرورها', (string) ($state['name'] ?? '')];
+        $path = [UiWords::ROOT, Fmt::bare(ServersScreen::TITLE)];
+
+        return self::isNew($state) ? $path : [...$path, (string) ($state['name'] ?? '')];
     }
 
     protected function saveLabel(array $state): string
     {
-        return self::isNew($state) ? '✔️ افزودن سرور' : '💾 ذخیره تغییرات';
+        return self::isNew($state) ? '✔️ افزودن سرور' : UiWords::SAVE;
     }
 
     protected function leave(Admin $admin, array $state): View
@@ -69,17 +73,18 @@ final class ServerFormScreen extends FormScreen
         if (!self::isNew($state)) {
             return;
         }
-        $view->line('اطلاعات اتصال به پنل را وارد کنید. قبل از ذخیره می‌توانید اتصال را تست کنید.');
-        foreach ((array) ($state['notes'] ?? []) as $note) {
-            $view->line('ℹ️ ' . Words::note(is_scalar($note) ? (string) $note : ''));
-        }
-        $view->line();
+        $view->line('<i>اطلاعات اتصال به پنل را وارد کنید؛ قبل از ذخیره می‌توانید اتصال را تست کنید.</i>');
+    }
+
+    protected function folded(array $state): string
+    {
+        return implode("\n", array_map(static fn(mixed $note): string => 'ℹ️ ' . Words::note(is_scalar($note) ? (string) $note : ''), (array) ($state['notes'] ?? [])));
     }
 
     protected function extra(View $view, Admin $admin, array $state): void
     {
         if (is_array($state['probe'] ?? null)) {
-            $view->line()->lines(...ServerWords::probe($state['probe']));
+            $view->section('🧪 نتیجه تست اتصال')->lines(...ServerWords::probe($state['probe']));
         }
         $view->row(Button::to('🧪 تست اتصال', self::ID, 'test'));
     }
@@ -106,7 +111,7 @@ final class ServerFormScreen extends FormScreen
                 $state = ['key' => $id, 'driver' => (string) ($server['driver'] ?? ''), 'name' => (string) ($server['name'] ?? ''), 'stored' => Json::part($server, 'form')];
                 $edited = $this->form($admin, $state);
                 if ($edited === null) {
-                    $admin->alert('فرم تنظیمات این کانکتور در این نسخه در دسترس نیست.');
+                    $admin->alert(ServerWords::NO_FORM);
 
                     return $admin->open(ServerScreen::ID, 'show', [$id]);
                 }

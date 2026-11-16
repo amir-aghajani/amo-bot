@@ -7,14 +7,17 @@ namespace App\Modules\Telegram\Admin\Sections\Customers;
 use App\Modules\Telegram\Admin\Sections\Sales\Sales;
 use App\Modules\Telegram\Admin\Ui\Button;
 use App\Modules\Telegram\Admin\Ui\Fmt;
+use App\Modules\Telegram\Admin\Ui\Icons;
 
-/** «🛒 سفارش‌ها» of a customer's page: their orders, newest first, each opening the order's screen (`orv`). */
+/**
+ * «🛒 سفارش‌ها» of a customer's page: their orders, newest first, each a button — its state, number, what it was for, the
+ * plan and the amount — opening the order's screen (`orv`).
+ */
 final class CustomerOrdersScreen extends CustomerRowsScreen
 {
     public const ID = 'uslo';
 
-    /** Its state, by its status. */
-    private const STATUS = ['pending' => '⏳', 'paid' => '💰', 'processing' => '⚙️', 'fulfilled' => '✅', 'failed' => '⚠️', 'cancelled' => '✖️', 'refunded' => '↩️'];
+    public const TITLE = Icons::ORDERS . ' سفارش‌ها';
 
     protected function screen(): string
     {
@@ -23,7 +26,7 @@ final class CustomerOrdersScreen extends CustomerRowsScreen
 
     protected function title(): string
     {
-        return '🛒 سفارش‌ها';
+        return self::TITLE;
     }
 
     protected function endpoint(): string
@@ -36,22 +39,31 @@ final class CustomerOrdersScreen extends CustomerRowsScreen
         return 'orders';
     }
 
+    protected function noun(): string
+    {
+        return 'سفارش';
+    }
+
     protected function empty(): string
     {
         return 'هنوز سفارشی ثبت نکرده است. خریدها، تمدیدها و شارژهای این مشتری این‌جا می‌آیند.';
     }
 
-    protected function summary(array $meta): array
+    protected function legend(): string
     {
-        return ['✅ تکمیل‌شده · ⏳ در انتظار پرداخت · ⚙️ در حال ساخت · ⚠️ ناموفق · ✖️ لغوشده · ↩️ بازپرداخت‌شده'];
+        return implode(' · ', Sales::ORDER_STATUS);
     }
 
     protected function item(array $row): Button
     {
-        $package = Customer::text($row, 'package_name');
-
         return $this->open(
-            (self::STATUS[(string) ($row['status'] ?? '')] ?? '•') . ' ' . Fmt::id(Customer::int($row, 'id')) . ' · ' . (Sales::ORDER_TYPE[(string) ($row['type'] ?? '')] ?? '') . ($package !== null ? ' · ' . $package : '') . ' · ' . Fmt::money(Customer::money($row['amount'] ?? null)),
+            Sales::mark(Sales::ORDER_STATUS, $row['status'] ?? '') . ' ' . implode(' · ', array_filter([
+                Fmt::id(Customer::int($row, 'id')),
+                Sales::word(Sales::ORDER_TYPE, $row['type'] ?? ''),
+                // The plan cut, so the amount stays whole on the button.
+                Customer::text($row, 'package_name') === null ? null : Fmt::cut(Customer::text($row, 'package_name'), 16),
+                Fmt::money(Customer::money($row['amount'] ?? null)),
+            ])),
             'orv',
             Customer::int($row, 'id'),
         );

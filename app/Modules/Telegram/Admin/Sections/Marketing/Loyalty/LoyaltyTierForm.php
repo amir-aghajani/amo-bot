@@ -6,10 +6,11 @@ namespace App\Modules\Telegram\Admin\Sections\Marketing\Loyalty;
 
 use App\Modules\Telegram\Admin\Sections\Marketing\Form\FormScreen;
 use App\Modules\Telegram\Admin\Sections\Marketing\Form\Step;
-use App\Modules\Telegram\Admin\Sections\Marketing\Words;
+use App\Modules\Telegram\Admin\Sections\Marketing\Words as Marketing;
 use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\Json;
 use App\Modules\Telegram\Admin\Ui\View;
+use App\Modules\Telegram\Admin\Ui\Words;
 
 /**
  * «➕ افزودن سطح» / «✏️ ویرایش» (the panel's TierForm): the tier's name, its spending threshold, its discount and its
@@ -26,27 +27,22 @@ final class LoyaltyTierForm extends FormScreen
 
     protected function title(int $id, array $draft): string
     {
-        return $id === 0 ? '➕ افزودن سطح' : '✏️ ویرایش «' . (string) ($draft['name'] ?? '') . '»';
+        return $id === 0 ? Words::add('سطح') : Words::EDIT . ' «' . (string) ($draft['name'] ?? '') . '»';
     }
 
     protected function path(): array
     {
-        return [...Words::PATH, 'سطوح وفاداری'];
-    }
-
-    protected function createLabel(): string
-    {
-        return '✔️ افزودن';
+        return Marketing::in(Marketing::LOYALTY);
     }
 
     protected function steps(Admin $admin): array
     {
         return [
-            Step::text('name', 'نام سطح', 'همان‌طور که مشتری در کیف پول ربات و در وب‌سایت می‌بیند؛ مثلا «برنزی»، «نقره‌ای» یا «طلایی».'),
-            Step::money('min_spent', 'حد خرید', 'مشتری‌ای که جمع خریدهایش (خرید، تمدید، حجم، زمان و کاربر اضافه — پرداخت‌شده و برگشت‌نخورده) به این مبلغ برسد روی این سطح است؛ صفر یعنی همه مشتری‌ها از ابتدا.')
+            Step::text('name', 'نام سطح', 'همان‌طور که مشتری در کیف پول ربات و در وب‌سایت می‌بیند.')->asks('اسم این سطح چه باشد؟')->example('طلایی'),
+            Step::money('min_spent', 'حد خرید', 'جمع خرید، تمدید، حجم، زمان و کاربر اضافه — پرداخت‌شده و برگشت‌نخورده. صفر یعنی همه مشتری‌ها از ابتدا.')->asks('مشتری با چه مبلغ خریدی به این سطح برسد؟')->example('۵۰۰۰۰۰')
                 ->quick('۰ (همه از ابتدا)', 0)->says(static fn(mixed $value): ?string => $value === 0 ? 'از ابتدا (همه مشتری‌ها)' : null),
-            Step::percent('discount_percent', 'درصد تخفیف', 'روی هر خرید، تمدید و حجم، زمان و کاربر اضافه؛ از تخفیف‌های خودکار فقط بزرگ‌ترین اعمال می‌شود.')->range(0, 100)->quick('۰٪', 0)->quick('۵٪', 5)->quick('۱۰٪', 10),
-            Step::percent('cashback_percent', 'درصد کش‌بک اضافه', 'روی درصد قانون‌های کش‌بک اضافه می‌شود، تا وقتی کش‌بک روشن است.')->range(0, 100)->quick('۰٪', 0)->quick('۲٪', 2)->quick('۵٪', 5),
+            Step::percent('discount_percent', 'درصد تخفیف', 'روی هر خرید، تمدید و حجم، زمان و کاربر اضافه؛ از تخفیف‌های خودکار فقط بزرگ‌ترین اعمال می‌شود.')->asks('چند درصد تخفیف بگیرد؟')->range(0, 100)->quick('۰٪', 0)->quick('۵٪', 5)->quick('۱۰٪', 10),
+            Step::percent('cashback_percent', 'درصد کش‌بک اضافه', 'روی درصد قانون‌های کش‌بک اضافه می‌شود، تا وقتی کش‌بک روشن است.')->asks('چند درصد کش‌بک اضافه بگیرد؟')->range(0, 100)->quick('۰٪', 0)->quick('۲٪', 2)->quick('۵٪', 5),
         ];
     }
 
@@ -57,7 +53,7 @@ final class LoyaltyTierForm extends FormScreen
 
     protected function row(Admin $admin, int $id): ?array
     {
-        return Words::one($admin, '/loyalty/tiers', 'tiers', $id);
+        return Marketing::one($admin, '/loyalty/tiers', 'tiers', $id);
     }
 
     protected function draftOf(array $row): array
@@ -94,7 +90,7 @@ final class LoyaltyTierForm extends FormScreen
 
     protected function done(Admin $admin, array $row, bool $created): View
     {
-        $admin->notice($created ? '✅ سطح اضافه شد' : '✅ سطح ذخیره شد');
+        $admin->notice($created ? '✅ سطح اضافه شد' : '✅ تغییرهای سطح ذخیره شد');
 
         return $admin->open(LoyaltyTierScreen::ID, 'show', [(int) ($row['id'] ?? 0)]);
     }

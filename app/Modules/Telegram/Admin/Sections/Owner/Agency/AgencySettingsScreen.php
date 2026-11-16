@@ -5,12 +5,11 @@ declare(strict_types=1);
 namespace App\Modules\Telegram\Admin\Sections\Owner\Agency;
 
 use App\Modules\Telegram\Admin\AdminSeat;
-use App\Modules\Telegram\Admin\Ui\Admin;
+use App\Modules\Telegram\Admin\Ui\Icons;
 use App\Modules\Telegram\Admin\Ui\Settings\FieldDef;
 use App\Modules\Telegram\Admin\Ui\Settings\PutSource;
 use App\Modules\Telegram\Admin\Ui\Settings\SettingsScreen;
 use App\Modules\Telegram\Admin\Ui\Settings\SettingsSource;
-use App\Modules\Telegram\Admin\Ui\View;
 
 /**
  * «⚙️ تنظیمات نمایندگی» (the panel's «برنامه نمایندگی» card): whether the program takes requests, what an approval
@@ -21,6 +20,8 @@ use App\Modules\Telegram\Admin\Ui\View;
 final class AgencySettingsScreen extends SettingsScreen
 {
     public const ID = 'ags';
+
+    public const TITLE = Icons::SETTINGS . ' تنظیمات نمایندگی';
 
     public function allows(AdminSeat $seat): bool
     {
@@ -34,12 +35,12 @@ final class AgencySettingsScreen extends SettingsScreen
 
     protected function title(): string
     {
-        return '⚙️ تنظیمات نمایندگی';
+        return self::TITLE;
     }
 
     protected function path(): array
     {
-        return ['مدیریت', 'نمایندگان'];
+        return AgencyScreen::path();
     }
 
     protected function parent(): string
@@ -49,7 +50,8 @@ final class AgencySettingsScreen extends SettingsScreen
 
     protected function intro(): string
     {
-        return 'مشتری از صفحه «نمایندگی» ربات درخواست می‌دهد و پشتیبانی آن را با انتخاب یک سطح تایید یا رد می‌کند. نماینده ربات فروش خودش را دارد و حجمی را که رباتش می‌فروشد با قیمت هر گیگابایت سطحش از ربات اصلی می‌خرد.';
+        return 'مشتری از صفحه «نمایندگی» ربات درخواست می‌دهد و پشتیبانی آن را با انتخاب یک سطح تایید یا رد می‌کند. نماینده ربات فروش خودش را دارد و حجمی را که رباتش می‌فروشد با قیمت هر گیگابایت سطحش از ربات اصلی می‌خرد.'
+            . "\n\n" . 'اعتبار اولیه، مدت نمایندگی و کف خرید ماهانه برای تاییدی است که از دکمه‌های گروه گزارش‌ها انجام می‌شود؛ هنگام تایید هر درخواست می‌شود مقدار دیگری داد، و بعدا از «سطح، اعتبار و شرایط فروش» هر نماینده.';
     }
 
     protected function fields(): array
@@ -70,8 +72,11 @@ final class AgencySettingsScreen extends SettingsScreen
         return new PutSource('/agency/settings', 'settings');
     }
 
-    protected function extra(View $view, Admin $admin, array $values): void
+    /** A starting credit, a length or a monthly minimum of 0 is none, said as an agent's terms say it. */
+    protected function shows(FieldDef $field, mixed $value): ?string
     {
-        $view->note('اعتبار اولیه، مدت نمایندگی و کف خرید ماهانه برای تاییدی است که از دکمه‌های گروه گزارش‌ها انجام می‌شود؛ هنگام تایید هر درخواست می‌شود مقدار دیگری داد، و بعدا از «سطح، اعتبار و شرایط فروش» هر نماینده.');
+        $none = ['default_credit' => TermsScreen::NO_CREDIT, 'term_days' => AgencyEnd::NONE, 'monthly_minimum' => TermsScreen::NO_MINIMUM][$field->name] ?? null;
+
+        return $none !== null && is_numeric($value) && (float) $value === 0.0 ? $none : null;
     }
 }

@@ -12,6 +12,7 @@ use App\Modules\Telegram\Admin\Ui\Button;
 use App\Modules\Telegram\Admin\Ui\Fmt;
 use App\Modules\Telegram\Admin\Ui\Json;
 use App\Modules\Telegram\Admin\Ui\View;
+use App\Modules\Telegram\Admin\Ui\Words as Vocabulary;
 
 /**
  * «پنل‌ها» of an import's review: each of the other bot's panels — its name, kind, address and services — and where its
@@ -19,7 +20,8 @@ use App\Modules\Telegram\Admin\Ui\View;
  * new server, or nowhere; a panel no connector speaks to says why. A choice is saved at once (PUT …/choices, every
  * choice as it stands).
  *
- * Actions: `p` (n: panel n's choices), `s` (n, server id), `a` (n: added as a new server), `k` (n: left behind).
+ * Actions: `p` (n, page: panel n's choices, its servers a page at a time — no page, the picked one's), `s` (n, server
+ * id), `a` (n: added as a new server), `k` (n: left behind).
  */
 final class ImportPanelsScreen extends BaseScreen
 {
@@ -37,7 +39,7 @@ final class ImportPanelsScreen extends BaseScreen
             return $admin->open(ImportsScreen::ID);
         }
         $servers = self::servers($admin);
-        $view = View::make('🖥 پنل‌ها', 'مدیریت', 'انتقال از ربات دیگر', 'بررسی')
+        $view = View::make('🖥 پنل‌ها', ...ImportsScreen::under())
             ->line('سرویس‌های هر پنل روی سروری از فروشگاه که به همان پنل وصل است، با نام کاربری‌شان پیدا می‌شوند. پلن‌ها هم روی همان سرورها فروخته می‌شوند. روی پنل‌ها چیزی تغییر نمی‌کند.');
         $buttons = [];
         foreach (self::panels($import) as $n => $panel) {
@@ -63,7 +65,7 @@ final class ImportPanelsScreen extends BaseScreen
         $n = self::id($args);
         switch ($action) {
             case 'p':
-                return $this->panel($admin, $import, $panel, $n);
+                return $this->panel($admin, $import, $panel, $n, isset($args[1]) ? self::page($args, 1) : null);
             case 's':
                 return $this->choose($admin, $import, $panel, ['action' => 'server', 'server_id' => self::id($args, 1)]);
             case 'a':
@@ -76,17 +78,18 @@ final class ImportPanelsScreen extends BaseScreen
     }
 
     /**
-     * One panel: what it is, and where its services may go — or why they cannot go anywhere.
+     * One panel: what it is, and where its services may go — the shop's servers on its connector at page `$page` (none:
+     * the page of the server picked, else of the one suggested) — or why they cannot go anywhere.
      *
      * @param array<string, mixed> $import
      * @param array<string, mixed> $panel
      */
-    private function panel(Admin $admin, array $import, array $panel, int $n): View
+    private function panel(Admin $admin, array $import, array $panel, int $n, ?int $page): View
     {
         $choice = self::choiceOf($import, $panel);
         $servers = self::servers($admin);
-        $view = View::make("\u{200F}🖥 " . (string) ($panel['name'] ?? ''), 'مدیریت', 'انتقال از ربات دیگر', 'پنل‌ها')
-            ->facts([
+        $view = View::make("\u{200F}🖥 " . (string) ($panel['name'] ?? ''), ...ImportsScreen::under('پنل‌ها'))
+            ->card([
                 'نوع' => Fmt::ltr((string) ($panel['type'] ?? '')),
                 'آدرس' => is_string($panel['url'] ?? null) ? Fmt::ltr($panel['url']) : null,
                 'سرویس‌ها' => Fmt::number((int) ($panel['services'] ?? 0)),
@@ -97,24 +100,30 @@ final class ImportPanelsScreen extends BaseScreen
         }
         $view->line()->line('<b>سرویس‌های «' . Fmt::e((string) ($panel['name'] ?? '')) . '» کجا بروند؟</b>')
             ->line('<i>' . Fmt::e(self::where($panel, $choice, $servers)) . '</i>');
-        $buttons = [];
+        $choices = [];
+        [$pickedAt, $suggestedAt] = [null, null];
         foreach ($servers as $server) {
             if (($server['driver'] ?? null) !== $panel['driver']) {
                 continue;
             }
             $picked = ($choice['action'] ?? null) === 'server' && ($choice['server_id'] ?? null) === $server['id'];
             $suggested = ($server['id'] ?? null) === ($panel['suggested_server_id'] ?? false);
-            $buttons[] = Button::to(($picked ? '● ' : '') . 'سرور «' . (string) ($server['name'] ?? '') . '»' . ($suggested ? ' ⭐️ پیشنهادی' : ''), self::ID, 's', $n, (int) ($server['id'] ?? 0));
+            $pickedAt ??= $picked ? count($choices) : null;
+            $suggestedAt ??= $suggested ? count($choices) : null;
+            $choices[] = Button::to(($picked ? Vocabulary::PICKED : '') . 'سرور «' . (string) ($server['name'] ?? '') . '»' . ($suggested ? ' ⭐️ پیشنهادی' : ''), self::ID, 's', $n, (int) ($server['id'] ?? 0));
         }
-        if (Json::on($panel, 'addable')) {
-            $buttons[] = Button::to((($choice['action'] ?? null) === 'add' ? '● ' : '') . '➕ افزودن به‌عنوان سرور تازه', self::ID, 'a', $n);
-        }
-        $buttons[] = Button::to((($choice['action'] ?? 'skip') === 'skip' ? '● ' : '') . '🚫 منتقل نشود', self::ID, 'k', $n);
-        if (count($buttons) === 1 && ($panel['addable'] ?? false) !== true) {
+        // Opened afresh: at the server picked, else the one suggested.
+        $page ??= intdiv($pickedAt ?? $suggestedAt ?? 0, View::CHOICES_MOST) + 1;
+        $addable = Json::on($panel, 'addable');
+        if ($choices === [] && !$addable) {
             $view->line('سروری با همین نوع پنل در فروشگاه نیست؛ برای انتقال سرویس‌هایش، اول آن را در «🖥 سرورها» اضافه کنید.');
         }
 
-        return $view->grid(1, ...$buttons)->back(self::ID);
+        // The shop's servers a page at a time (a keyboard takes 100 buttons); the panel added or left behind on every page.
+        return $view->paged(1, $choices, $page, static fn(int $at): array => [self::ID, 'p', [$n, $at]])
+            ->row($addable ? Button::to((($choice['action'] ?? null) === 'add' ? Vocabulary::PICKED : '') . '➕ افزودن به‌عنوان سرور تازه', self::ID, 'a', $n) : null)
+            ->row(Button::to((($choice['action'] ?? 'skip') === 'skip' ? Vocabulary::PICKED : '') . '🚫 منتقل نشود', self::ID, 'k', $n))
+            ->back(self::ID);
     }
 
     /**

@@ -7,23 +7,34 @@ namespace App\Modules\Telegram\Admin\Sections\Support;
 use App\Modules\Bots\CurrentBot;
 use App\Modules\Bots\Services\Bots;
 use App\Modules\Telegram\Admin\Door\ApiRefusal;
+use App\Modules\Telegram\Admin\Sections\Bot\Settings\GeneralCard;
+use App\Modules\Telegram\Admin\Sections\Core\HomeScreen;
+use App\Modules\Telegram\Admin\Sections\Panel\Config\AdvancedScreen;
+use App\Modules\Telegram\Admin\Sections\Panel\Config\TelegramScreen;
+use App\Modules\Telegram\Admin\Sections\Panel\SystemScreen;
+use App\Modules\Telegram\Admin\Sections\Panel\UpdateScreen;
+use App\Modules\Telegram\Admin\Sections\Sales\AgentAccountScreen;
 use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\BaseScreen;
 use App\Modules\Telegram\Admin\Ui\Button;
 use App\Modules\Telegram\Admin\Ui\Fmt;
+use App\Modules\Telegram\Admin\Ui\Icons;
 use App\Modules\Telegram\Admin\Ui\Json;
 use App\Modules\Telegram\Admin\Ui\Nav;
 use App\Modules\Telegram\Admin\Ui\Screens;
+use App\Modules\Telegram\Admin\Ui\Settings\SettingsScreen;
 use App\Modules\Telegram\Admin\Ui\View;
+use App\Modules\Telegram\Admin\Ui\Words as UiWords;
 use App\Support\LocalTime;
 use Illuminate\Support\Carbon;
 
 /**
- * «📊 داشبورد» (the panel's overview, GET /dashboard): a greeting, the range's headline figures against the range
- * before, what needs a hand — an agent's terms of selling and traffic shortage first (for the agent, their account and
- * the main bot where traffic is bought a tap away), each queue a button to its list as the count's tab shows it —, apart
- * from it what waits on customers, and for the owner the system's state. The daily curve (DashboardChartScreen) and the
- * latest orders and customers (DashboardRecentScreen) are a tap away.
+ * «📊 داشبورد» (the panel's overview, GET /dashboard), at a glance: a greeting; an agent's terms of selling and a
+ * traffic shortage when they need an eye (with the way to see to them); the range's figures in one card, each against
+ * the range before — and, where the range before had none, said once under it —; the range as chips (7/30/90 days);
+ * what waits on a human as buttons straight to its list on the count's tab (HomeScreen::QUEUES), and apart what waits on
+ * customers; for the owner, the system only when something there needs fixing, each fix a button to its screen; and
+ * the daily curve (DashboardChartScreen) and the latest orders and customers (DashboardRecentScreen) a tap away.
  *
  * Actions: `r` (days: the range), `q` (a queue's key: its list, that tab alone — no search or other narrowing).
  */
@@ -31,34 +42,23 @@ final class DashboardScreen extends BaseScreen
 {
     public const ID = 'db';
 
+    public const TITLE = Icons::DASHBOARD . ' داشبورد';
+
     /** The panel's ranges, in days, and the one in force at first. */
     public const RANGES = [7 => '۷ روز', 30 => '۳۰ روز', 90 => '۹۰ روز'];
     public const RANGE = 30;
 
     /**
-     * What waits on support, as the panel's attention card counts it: each count's words, and the list (and its filter)
-     * it leads to.
+     * What waits on customers, shown apart and never counted as waiting on a human (what does: the home's queues,
+     * HomeScreen::QUEUES) — each count's button, and the list (and its filter) it leads to.
      */
-    private const QUEUES = [
-        'payments_to_review' => ['💳 پرداخت‌های در انتظار بررسی', 'py', 'status', 'awaiting_review'],
-        'held_payments' => ['⏸ پرداخت‌های نگه داشته شده', 'py', 'status', 'held'],
-        'stuck_orders' => ['🧯 سفارش‌های نیازمند رسیدگی', 'or', 'status', 'stuck'],
-        'open_tickets' => ['🎧 تیکت‌های در انتظار پاسخ', TicketsScreen::ID, 'status', 'open'],
-        'pending_reviews' => ['⭐️ نظرات در انتظار بررسی', ReviewsScreen::ID, 'status', 'pending'],
-        'servers_with_errors' => ['🖥 سرورهای دارای خطا', 'sv', null, null],
-    ];
-
-    /** What waits on customers, shown apart and never counted as waiting on support. */
     private const CUSTOMERS = [
-        'expiring_soon' => ['⌛️ اشتراک‌های رو به انقضا', 'sb', 'status', 'expiring'],
-        'pending_orders' => ['🕒 سفارش‌های در انتظار پرداخت', 'or', 'status', 'pending'],
+        'pending_orders' => ['🕒 در انتظار پرداخت', 'or', 'status', 'pending'],
+        'expiring_soon' => ['⌛️ رو به پایان', 'sb', 'status', 'expiring'],
     ];
 
-    /** How a bot gets its updates (the panel's BOT_MODE). */
-    private const BOT_MODE = ['webhook' => 'Webhook', 'polling' => 'پولینگ', 'offline' => 'مشکل دارد'];
-
-    /** The agent's own account (Sections\Sales\AgentAccountScreen). */
-    private const ACCOUNT = 'acc';
+    /** The range's figures against the range before (the server's kpis): each one's name. */
+    private const FIGURES = ['revenue' => 'درآمد', 'orders' => 'سفارش‌ها', 'new_users' => 'کاربران جدید'];
 
     public function __construct(
         private readonly Bots $bots,
@@ -69,39 +69,35 @@ final class DashboardScreen extends BaseScreen
         $days = self::range($admin);
         $data = self::read($admin, $days);
         $shown = self::shown($data, $days);
-        $kpis = Json::part($data, 'kpis');
         $attention = Json::part($data, 'attention');
         $expiringDays = (int) ($data['expiring_days'] ?? 0);
 
-        $view = View::make('📊 داشبورد', 'مدیریت')
-            ->line('👋 ' . self::greeting() . '، ' . Fmt::e($admin->seat->user->name()))
-            ->line('خلاصه وضعیت فروشگاه در ' . Fmt::number($shown) . ' روز گذشته')
-            ->line();
+        $view = View::make(self::TITLE, UiWords::ROOT)
+            ->line('👋 ' . self::greeting() . '، ' . Fmt::e($admin->seat->user->name()));
+        $standing = $this->standing($admin, $view, $data);
+        $this->figures($view, Json::part($data, 'kpis'), $shown);
+        [$tasks, $customers] = $this->waiting($admin, $view, $attention, $expiringDays);
+        [$fixes, $system] = $admin->seat->isOwner() ? $this->system($admin) : [[], []];
+        if ($system !== []) {
+            $view->section(Icons::SYSTEM . ' وضعیت سیستم')->lines(...$system);
+        }
 
-        $revenue = Json::part($kpis, 'revenue');
-        $orders = Json::part($kpis, 'orders');
-        $users = Json::part($kpis, 'new_users');
-        $expiring = (int) ($attention['expiring_soon'] ?? 0);
-        $view->lines(
-            '💰 درآمد: <b>' . Fmt::money(self::figure($revenue['value'] ?? '0')) . '</b> · ' . Words::change(self::figure($revenue['value'] ?? 0), self::figure($revenue['previous'] ?? 0)),
-            '🛒 سفارش‌ها: <b>' . Fmt::number(self::figure($orders['value'] ?? 0)) . '</b> · ' . Words::change(self::figure($orders['value'] ?? 0), self::figure($orders['previous'] ?? 0)),
-            '👤 کاربران جدید: <b>' . Fmt::number(self::figure($users['value'] ?? 0)) . '</b> · ' . Words::change(self::figure($users['value'] ?? 0), self::figure($users['previous'] ?? 0)) . ' (' . Fmt::number(self::figure($kpis['users_total'] ?? 0)) . ' کاربر در کل)',
-            '📡 اشتراک‌های فعال: <b>' . Fmt::number(self::figure($kpis['active_subscriptions'] ?? 0)) . '</b> · ' . ($expiring > 0
-                ? Fmt::number($expiring) . ' اشتراک تا ' . Fmt::number($expiringDays) . ' روز آینده تمام می‌شود'
-                : 'هیچ اشتراکی تا ' . Fmt::number($expiringDays) . ' روز آینده تمام نمی‌شود'),
-            '<i>درصدها نسبت به ' . Fmt::number($shown) . ' روز قبل از آن؛ درآمد پولی است که واقعا وارد شد و خرید از کیف پول دوباره شمرده نمی‌شود.</i>',
-        );
-
-        $buttons = $this->attention($admin, $view, $data, $attention, $expiringDays);
-        $fixes = $admin->seat->isOwner() ? $this->system($admin, $view) : [];
-
-        $view->row(...self::ranges(self::ID, $shown));
-        $view->grid(1, ...$buttons);
-        $view->row(Button::to('📈 نمودار روزانه', DashboardChartScreen::ID));
-        $view->row(Button::to('🛒 آخرین سفارش‌ها', DashboardRecentScreen::ID, Nav::SHOW, DashboardRecentScreen::ORDERS), Button::to('👥 مشتریان جدید', DashboardRecentScreen::ID, Nav::SHOW, DashboardRecentScreen::USERS));
-        $view->row(...$fixes);
-
-        return $view->row(Button::to('🔄 به‌روزرسانی', self::ID))->back(Screens::HOME);
+        return $view->grid(1, ...$standing)
+            ->row(...self::ranges(self::ID, $shown))
+            ->tiles(...$tasks)
+            ->tiles(...$customers)
+            ->tiles(...$fixes)
+            ->row(Button::to('📈 نمودار روزانه', DashboardChartScreen::ID))
+            ->row(
+                Button::to(DashboardRecentScreen::ORDERS_TITLE, DashboardRecentScreen::ID, Nav::SHOW, DashboardRecentScreen::ORDERS),
+                Button::to(DashboardRecentScreen::USERS_TITLE, DashboardRecentScreen::ID, Nav::SHOW, DashboardRecentScreen::USERS),
+            )
+            ->help(implode("\n\n", [
+                '<b>درآمد</b> پولی است که در این بازه واقعا وارد شد؛ خرید از کیف پول دوباره شمرده نمی‌شود، چون پولش موقع شارژ کیف پول شمرده شده است.',
+                '<b>' . UiWords::WAITING . '</b>: کارهایی که دست شما را لازم دارند، هر کدام دکمه‌ای به فهرستش. 🕒 و ⌛️ در انتظار مشتری‌اند: سفارش‌هایی که هنوز پرداخت نشده و اشتراک‌هایی که تا ' . Fmt::number($expiringDays) . ' روز دیگر تمام می‌شوند.',
+            ]))
+            ->back(Screens::HOME)
+            ->refresh(self::ID);
     }
 
     public function act(Admin $admin, string $action, array $args): View
@@ -109,7 +105,7 @@ final class DashboardScreen extends BaseScreen
         if ($action === 'r' && isset(self::RANGES[self::id($args)])) {
             $admin->remember(self::ID, ['range' => self::id($args)]);
         }
-        $queue = self::QUEUES[$args[0] ?? ''] ?? self::CUSTOMERS[$args[0] ?? ''] ?? null;
+        $queue = HomeScreen::QUEUES[$args[0] ?? ''] ?? self::CUSTOMERS[$args[0] ?? ''] ?? null;
         if ($action === 'q' && $queue !== null) {
             [, $screen, $filter, $value] = $queue;
             // The list as the count counted it: a search or another narrowing left on it would hide some of them.
@@ -164,21 +160,100 @@ final class DashboardScreen extends BaseScreen
     {
         $chips = [];
         foreach (self::RANGES as $range => $label) {
-            $chips[] = Button::to(($range === $days ? '● ' : '') . $label, $screen, 'r', $range);
+            $chips[] = Button::to(($range === $days ? UiWords::CHIP : '') . $label, $screen, 'r', $range);
         }
 
         return $chips;
     }
 
     /**
-     * «نیازمند توجه»: the agent's terms and the traffic shortage, then the queues that wait on support — the total said
-     * first —, and apart, what waits on customers; each count a button to its list where that is built.
+     * Where the range before had no figure to compare with, said once (Words::NO_BASELINE) — for every figure, or as
+     * «—» beside those it is so for —, else what the changes are against.
+     *
+     * @param list<bool> $baselines Whether each figure had one
+     */
+    public static function against(array $baselines, int $days): string
+    {
+        return match (true) {
+            !in_array(false, $baselines, true) => 'درصدها نسبت به ' . Fmt::number($days) . ' روز قبل از آن.',
+            !in_array(true, $baselines, true) => Words::NO_BASELINE . '.',
+            default => 'درصدها نسبت به ' . Fmt::number($days) . ' روز قبل از آن؛ «' . Fmt::NONE . '»: ' . Words::NO_BASELINE . '.',
+        };
+    }
+
+    /**
+     * The range's figures in one card — each with its change against the range before where that one had a figure —,
+     * the active subscriptions and all customers beside them; what the changes are against said once under it.
+     *
+     * @param array<string, mixed> $kpis
+     */
+    private function figures(View $view, array $kpis, int $days): void
+    {
+        $card = [];
+        $trends = [];
+        foreach (self::FIGURES as $key => $label) {
+            $figure = Json::part($kpis, $key);
+            $value = Words::figure($figure['value'] ?? null);
+            $card[$label] = '<b>' . ($key === 'revenue' ? Fmt::money($value) : Fmt::number($value)) . '</b>';
+            $trends[$label] = Words::trend($value, Words::figure($figure['previous'] ?? null));
+        }
+        $baselines = array_map(static fn(?string $trend): bool => $trend !== null, array_values($trends));
+        if (in_array(true, $baselines, true)) {
+            foreach ($trends as $label => $trend) {
+                $card[$label] .= ' · ' . ($trend ?? Fmt::NONE);
+            }
+        }
+        $card['اشتراک‌های فعال'] = Fmt::number(Words::figure($kpis['active_subscriptions'] ?? null));
+        $card['کل کاربران'] = Fmt::number(Words::figure($kpis['users_total'] ?? null));
+
+        $view->section('📅 ' . Fmt::number($days) . ' روز گذشته')
+            ->card($card)
+            ->line('<i>' . self::against($baselines, $days) . '</i>');
+    }
+
+    /**
+     * «🔔 در انتظار»: how many wait on a human — or that nothing does —, each queue a button to its list where the seat
+     * may open it (else its count said); apart, what waits on customers, the same way.
+     *
+     * @param array<string, mixed> $attention
+     * @return array{0: list<Button>, 1: list<Button>}
+     */
+    private function waiting(Admin $admin, View $view, array $attention, int $expiringDays): array
+    {
+        $total = 0;
+        foreach (array_keys(HomeScreen::QUEUES) as $key) {
+            $total += max(0, (int) ($attention[$key] ?? 0));
+        }
+        $view->line()->line($total > 0 ? '<b>' . UiWords::WAITING . '</b> · ' . Fmt::number($total) . ' کار' : UiWords::NOTHING_WAITING);
+
+        $buttons = [[], []];
+        foreach ([HomeScreen::QUEUES, self::CUSTOMERS] as $group => $queues) {
+            foreach ($queues as $key => [$label, $screen]) {
+                $count = max(0, (int) ($attention[$key] ?? 0));
+                $label = $key === 'expiring_soon' ? $label . ' تا ' . Fmt::number($expiringDays) . ' روز' : $label;
+                if ($count === 0) {
+                    continue;
+                }
+                if ($admin->opens($screen)) {
+                    $buttons[$group][] = Button::to($label . Fmt::badge($count), self::ID, 'q', $key);
+                } else {
+                    $view->line('• ' . Fmt::e($label) . ': <b>' . Fmt::number($count) . '</b>');
+                }
+            }
+        }
+
+        return $buttons;
+    }
+
+    /**
+     * An agent's terms of selling and a traffic shortage, said under the greeting when they need an eye — to the agent
+     * of their own bot, to the owner of the agent's —, and the ways to see to them: the agent's account and the main bot
+     * where traffic is bought, or the owner's agents.
      *
      * @param array<string, mixed> $data
-     * @param array<string, mixed> $attention
      * @return list<Button>
      */
-    private function attention(Admin $admin, View $view, array $data, array $attention, int $expiringDays): array
+    private function standing(Admin $admin, View $view, array $data): array
     {
         $seat = $admin->seat;
         $standing = is_array($data['agency_standing'] ?? null) ? $data['agency_standing'] : null;
@@ -189,79 +264,44 @@ final class DashboardScreen extends BaseScreen
         };
         $shortage = is_array($data['traffic_shortage'] ?? null)
             ? Standing::shortage($data['traffic_shortage'], match (true) {
-                $seat->isAgent() => Standing::BUY_TRAFFIC,
+                $seat->isAgent() => Fmt::e(Standing::BUY_TRAFFIC),
                 $seat->isOwner() => 'حجم ربات را از «نمایندگان» تنظیم کنید.',
                 default => '',
             })
             : null;
-
-        $total = ($selling === null ? 0 : 1) + ($shortage === null ? 0 : 1);
-        foreach (array_keys(self::QUEUES) as $key) {
-            $total += max(0, (int) ($attention[$key] ?? 0));
-        }
-
-        $view->line()->line('🔔 <b>نیازمند توجه</b>' . ($total > 0 ? ' · ' . Fmt::number($total) . ' مورد منتظر اقدام شماست' : ''));
-        $buttons = [];
-        if ($total === 0) {
-            $view->line('✅ همه‌چیز مرتب است: ' . ($seat->shop()->isMain()
-                ? 'پرداخت‌ها، سفارش‌ها، تیکت‌ها، نظرات و سرورها در وضعیت عادی هستند.'
-                : 'پرداخت‌ها، سفارش‌ها، تیکت‌ها و نظرات در وضعیت عادی هستند.'));
+        if ($selling === null && $shortage === null) {
+            return [];
         }
         foreach (array_filter([$selling, $shortage]) as $notice) {
             $view->line($notice);
         }
-        if (($selling !== null || $shortage !== null) && $seat->isOwner()) {
-            $buttons[] = Links::to($admin, '🤝 نمایندگان', 'ag');
+        if ($seat->isOwner()) {
+            return array_values(array_filter([Links::to($admin, Icons::AGENTS . ' نمایندگان', 'ag')]));
         }
-        if (($selling !== null || $shortage !== null) && $seat->isAgent()) {
-            $buttons[] = Links::to($admin, '💼 حساب نمایندگی', self::ACCOUNT);
-            $main = $this->bots->username(CurrentBot::main());
-            if ($main !== '') {
-                $buttons[] = Button::url('🛒 خرید حجم در ربات اصلی', 'https://t.me/' . rawurlencode($main));
-            }
+        if (!$seat->isAgent()) {
+            return [];
         }
-        foreach (self::QUEUES as $key => [$label, $screen]) {
-            $buttons[] = $this->count($admin, $view, (int) ($attention[$key] ?? 0), $label, $screen, $key);
-        }
+        $main = $this->bots->username(CurrentBot::main());
 
-        $waiting = array_filter(self::CUSTOMERS, static fn(string $key): bool => (int) ($attention[$key] ?? 0) > 0, ARRAY_FILTER_USE_KEY);
-        if ($waiting !== []) {
-            $view->line()->line('⏳ <b>در انتظار مشتری</b>');
-            foreach ($waiting as $key => [$label, $screen]) {
-                $label = $key === 'expiring_soon' ? $label . ' (' . Fmt::number($expiringDays) . ' روز)' : $label;
-                $buttons[] = $this->count($admin, $view, (int) ($attention[$key] ?? 0), $label, $screen, $key);
-            }
-        }
-
-        return array_values(array_filter($buttons));
+        return array_values(array_filter([
+            Links::to($admin, Icons::AGENT_ACCOUNT . ' حساب نمایندگی', AgentAccountScreen::ID)?->primary(),
+            $main !== '' ? Button::url('🛒 خرید حجم در ربات اصلی', 'https://t.me/' . rawurlencode($main)) : null,
+        ]));
     }
 
     /**
-     * One count's line — none at zero — and its button (`q`) to the list `$screen` as the count's tab shows it, where the
-     * seat may open it.
-     */
-    private function count(Admin $admin, View $view, int $count, string $label, string $screen, string $queue): ?Button
-    {
-        if ($count <= 0) {
-            return null;
-        }
-        $view->line('• ' . Fmt::e($label) . ': <b>' . Fmt::number($count) . '</b>');
-
-        return $admin->opens($screen) ? Button::to($label . ' (' . Fmt::number($count) . ')', self::ID, 'q', $queue) : null;
-    }
-
-    /**
-     * «وضعیت سیستم» (the owner's): the shop's bot and how it gets updates, the scheduled tasks, a newer release — each
-     * as the panel's system card says it; what needs the panel's settings, a button there.
+     * «وضعیت سیستم» (the owner's), only what needs fixing — the host's PHP, the shop's bot (no token, no messages, off
+     * in the settings), scheduled tasks that never ran, a newer release —, each as the panel's system card says it, and
+     * a button to the screen that fixes it; nothing while all is well.
      *
-     * @return list<Button>
+     * @return array{0: list<Button>, 1: list<string>} The buttons, and the lines
      */
-    private function system(Admin $admin, View $view): array
+    private function system(Admin $admin): array
     {
         try {
             $system = (array) ($admin->api->get('/system')['system'] ?? []);
         } catch (ApiRefusal) {
-            return [];
+            return [[], []];
         }
         try {
             $update = (array) ($admin->api->get('/system/update')['update'] ?? []);
@@ -269,51 +309,43 @@ final class DashboardScreen extends BaseScreen
             $update = [];
         }
 
+        $lines = [];
+        $fixes = [];
+        $php = is_string($system['php'] ?? null) ? $system['php'] : '';
+        if (($system['php_safe'] ?? true) === false) {
+            // The panel's banner over every page (apps/admin/php-banner.tsx), word for word — its mark the chips' 🔴.
+            $lines[] = '🔴 <b>' . Fmt::ltr('PHP') . ' این هاست (' . Fmt::ltr($php) . ') حفره امنیتی جدی دارد.</b> آن را از تنظیمات هاست (مثلا «' . Fmt::ltr('Select PHP Version') . '» در ' . Fmt::ltr('cPanel') . ') به ' . Fmt::ltr('PHP ' . (is_string($system['php_required'] ?? null) ? $system['php_required'] : '')) . ' یا بالاتر ببرید؛ تا آن وقت به‌روزرسانی فروشگاه نصب نمی‌شود.';
+        }
+
         $bot = Json::part($system, 'bot');
         $main = (int) ($bot['id'] ?? 1) === 1;
         $username = is_string($bot['username'] ?? null) && $bot['username'] !== '' ? $bot['username'] : null;
+        $name = ($main ? 'ربات اصلی' : 'ربات این فروشگاه') . ($username === null ? '' : ' ' . Fmt::ltr('@' . $username));
         $mode = is_string($bot['mode'] ?? null) ? $bot['mode'] : 'offline';
-        $configured = Json::on($bot, 'configured');
-        $enabled = Json::on($bot, 'enabled');
-        $needsFix = !$configured || $mode === 'offline';
-
-        $php = is_string($system['php'] ?? null) ? $system['php'] : '';
-        $view->line()->line('🖥 <b>وضعیت سیستم</b> · نسخه ' . Fmt::ltr(is_string($system['version'] ?? null) ? $system['version'] : null) . ' · ' . Fmt::ltr('PHP ' . $php));
-        if (($system['php_safe'] ?? true) === false) {
-            // The panel's banner over every page (apps/admin/php-banner.tsx), word for word.
-            $view->line('🛡 <b>' . Fmt::ltr('PHP') . ' این هاست (' . Fmt::ltr($php) . ') حفره امنیتی جدی دارد.</b> آن را از تنظیمات هاست (مثلا «' . Fmt::ltr('Select PHP Version') . '» در ' . Fmt::ltr('cPanel') . ') به ' . Fmt::ltr('PHP ' . (is_string($system['php_required'] ?? null) ? $system['php_required'] : '')) . ' یا بالاتر ببرید؛ تا آن وقت به‌روزرسانی فروشگاه نصب نمی‌شود.');
+        if (!Json::on($bot, 'configured')) {
+            $lines[] = '🔴 ' . $name . ': وصل نشده — ' . ($main ? 'توکن ربات تنظیم نشده است' : 'نماینده هنوز توکن رباتش را از ربات اصلی نفرستاده است');
+            $fixes[] = $main ? Links::to($admin, Icons::BOT . ' تنظیم توکن ربات', TelegramScreen::ID) : null;
+        } elseif ($mode === 'offline') {
+            $lines[] = '🟡 ' . $name . ': پیامی نمی‌رسد — ' . Fmt::ltr('Webhook') . ' ثبت نشده است';
+            $fixes[] = Links::to($admin, Icons::SYSTEM . ' ثبت Webhook', SystemScreen::ID);
+        } elseif (!Json::on($bot, 'enabled')) {
+            $lines[] = '🟡 ' . $name . ': غیرفعال از تنظیمات — مشتری‌ها فقط پیام غیرفعال بودن را می‌گیرند';
+            $fixes[] = Links::to($admin, GeneralCard::TITLE . ' · ربات فعال باشد', GeneralCard::ID, SettingsScreen::FIELD, 'enabled');
         }
-        $health = match (true) {
-            !$configured => '🔴',
-            $mode === 'offline' || !$enabled => '🟡',
-            default => '🟢',
-        };
-        $state = match (true) {
-            !$configured => 'وصل نشده',
-            $mode !== 'offline' && !$enabled => 'غیرفعال از تنظیمات',
-            default => self::BOT_MODE[$mode] ?? $mode,
-        };
-        $detail = match (true) {
-            !$configured => $main ? 'توکن ربات تنظیم نشده است' : 'نماینده هنوز توکن رباتش را از ربات اصلی نفرستاده است',
-            $mode === 'offline' => 'پیامی نمی‌رسد: ' . Fmt::ltr('Webhook') . ' ثبت نشده است',
-            default => ($username === null ? 'توکن تنظیم شده · ' : '') . 'آخرین پیام: ' . Words::ago(is_string($bot['last_update_at'] ?? null) ? $bot['last_update_at'] : null),
-        };
-        $view->line("{$health} " . ($main ? 'ربات اصلی' : 'ربات این فروشگاه') . ($username === null ? '' : ' ' . Fmt::ltr('@' . $username)) . ': ' . Fmt::e($state) . ' — ' . $detail);
 
         $cron = Json::part($system, 'cron');
-        $ran = is_string($cron['last_run_at'] ?? null) ? $cron['last_run_at'] : null;
-        $view->line($ran !== null
-            ? '🟢 کارهای زمان‌بندی‌شده: فعال — آخرین اجرا: ' . Words::ago($ran) . ' · ' . Fmt::number((int) ($cron['tasks'] ?? 0)) . ' وظیفه'
-            : '🟡 کارهای زمان‌بندی‌شده: تنظیم نشده — هنوز اجرا نشده‌اند');
-        $needsFix = $needsFix || $ran === null;
+        if (!is_string($cron['last_run_at'] ?? null)) {
+            $lines[] = '🟡 کارهای زمان‌بندی‌شده هنوز اجرا نشده‌اند';
+            $fixes[] = Links::to($admin, Icons::ADVANCED . ' راه‌اندازی Cron', AdvancedScreen::ID);
+        }
 
         $latest = is_array($update['latest'] ?? null) ? $update['latest'] : null;
         if (Json::on($update, 'available') && $latest !== null) {
-            $view->line('🔵 نسخه تازه: آماده نصب — به‌روزرسانی به نسخه ' . Fmt::ltr(is_string($latest['version'] ?? null) ? $latest['version'] : null));
-            $needsFix = true;
+            $lines[] = '🔵 نسخه تازه آماده نصب است: ' . Fmt::ltr(is_string($latest['version'] ?? null) ? $latest['version'] : null);
+            $fixes[] = Links::to($admin, UpdateScreen::TITLE, UpdateScreen::ID)?->primary();
         }
 
-        return $needsFix ? array_values(array_filter([Links::to($admin, '🧰 تنظیمات پنل', 'pp')])) : [];
+        return [array_values(array_filter($fixes)), $lines];
     }
 
     /** «صبح بخیر» … by the hour on the shop's clock. */
@@ -327,11 +359,5 @@ final class DashboardScreen extends BaseScreen
             $hour >= 15 && $hour < 19 => 'عصر بخیر',
             default => 'شب بخیر',
         };
-    }
-
-    /** A figure of the panel's JSON (a count, or money as a decimal string). */
-    private static function figure(mixed $value): string
-    {
-        return is_numeric($value) ? (string) $value : '0';
     }
 }

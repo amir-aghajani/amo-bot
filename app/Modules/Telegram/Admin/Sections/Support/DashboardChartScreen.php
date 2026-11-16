@@ -10,14 +10,16 @@ use App\Modules\Telegram\Admin\Ui\Button;
 use App\Modules\Telegram\Admin\Ui\Fmt;
 use App\Modules\Telegram\Admin\Ui\Json;
 use App\Modules\Telegram\Admin\Ui\View;
+use App\Modules\Telegram\Admin\Ui\Words as UiWords;
 use App\Support\LocalTime;
 use App\Support\Persian;
 use Illuminate\Support\Carbon;
 
 /**
  * «📈 نمودار روزانه» (the dashboard's chart): one metric at a time over the dashboard's range — its total and change
- * against the range before (the server's, as the dashboard's figures say them), the daily curve in bars, the daily
- * average and the best day —, then the days one by one, newest first (a 90-day range by its weeks).
+ * against the range before (the server's, as the dashboard's figures say them), the daily average and the best day in
+ * one card —, the daily curve in bars, and the days one by one, newest first (a 90-day range by its weeks), folded away
+ * until tapped. The metric and the range are chips.
  *
  * Actions: `m` (metric), `r` (days: the dashboard's range).
  */
@@ -27,9 +29,9 @@ final class DashboardChartScreen extends BaseScreen
 
     /** Each metric: its name, what it counts, and its headline figure among the server's (the dashboard's). */
     private const METRICS = [
-        'revenue' => ['درآمد', 'پولی که هر روز واقعا وارد شد — بدون خرید از کیف پول', 'revenue'],
-        'orders' => ['سفارش‌ها', 'تعداد سفارش‌های ثبت‌شده در هر روز', 'orders'],
-        'users' => ['کاربران جدید', 'تعداد ثبت‌نام‌ها در هر روز', 'new_users'],
+        'revenue' => ['درآمد', 'پولی که هر روز واقعا وارد شد؛ خرید از کیف پول دوباره شمرده نمی‌شود.', 'revenue'],
+        'orders' => ['سفارش‌ها', 'تعداد سفارش‌های ثبت‌شده در هر روز.', 'orders'],
+        'users' => ['کاربران جدید', 'تعداد ثبت‌نام‌ها در هر روز.', 'new_users'],
     ];
 
     /** The longest range listed day by day; a longer one is listed by its weeks. */
@@ -40,8 +42,9 @@ final class DashboardChartScreen extends BaseScreen
         $metric = (string) ($admin->state(self::ID)['metric'] ?? 'revenue');
         $metric = isset(self::METRICS[$metric]) ? $metric : 'revenue';
         [$label, $about, $kpi] = self::METRICS[$metric];
-        $data = DashboardScreen::read($admin, DashboardScreen::range($admin));
-        $days = DashboardScreen::shown($data, DashboardScreen::range($admin));
+        $range = DashboardScreen::range($admin);
+        $data = DashboardScreen::read($admin, $range);
+        $days = DashboardScreen::shown($data, $range);
 
         $points = [];
         foreach (Json::part($data, 'series') as $point) {
@@ -54,40 +57,44 @@ final class DashboardChartScreen extends BaseScreen
         $total = is_numeric($figure['value'] ?? null) ? (float) $figure['value'] : array_sum($points);
         $previous = is_numeric($figure['previous'] ?? null) ? (float) $figure['previous'] : 0.0;
         $money = $metric === 'revenue';
-
-        $view = View::make('📈 ' . $label . ' · ' . Fmt::number($days) . ' روز گذشته', 'مدیریت', 'داشبورد')
-            ->line(Fmt::e($about))
-            ->line()
-            ->line('<b>' . self::value($total, $money) . '</b> · ' . Words::change($total, $previous) . ($previous == 0.0 ? '' : ' نسبت به دوره قبل'));
-
         $empty = array_filter($points, static fn(float $value): bool => $value > 0) === [];
+        $trend = Words::trend($total, $previous);
+
+        $view = View::make('📈 ' . $label . ' · ' . Fmt::number($days) . ' روز گذشته', UiWords::ROOT, Fmt::bare(DashboardScreen::TITLE));
         if ($empty) {
-            $view->line()->line('هنوز داده‌ای برای این بازه ثبت نشده است.');
+            $view->line('هنوز داده‌ای برای این بازه ثبت نشده است.');
         } else {
+            $peak = (string) array_search(max($points), $points, true);
+            $view->card([
+                'جمع' => '<b>' . self::value($total, $money) . '</b>' . ($trend === null ? '' : ' · ' . $trend),
+                'میانگین روزانه' => $money ? Fmt::money((string) round($total / count($points))) : Words::decimal($total / count($points)),
+                'بیشترین' => self::day($peak) . ' · ' . self::value($points[$peak], $money),
+            ]);
             foreach (Words::curve(array_values($points)) as $line) {
                 $view->line('<code>' . $line . '</code>');
             }
-            $peak = (string) array_search(max($points), $points, true);
-            $average = $points === [] ? 0.0 : $total / count($points);
-            $view->line()
-                ->line('میانگین روزانه: ' . ($money ? Fmt::money((string) round($average)) : Words::decimal($average)))
-                ->line('بیشترین: ' . self::day($peak) . ' با ' . self::value($points[$peak], $money))
-                ->line(Fmt::number(count($points)) . ' روز');
+            $view->line('<i>' . DashboardScreen::against([$trend !== null], $days) . '</i>');
 
-            $view->line()->line((count($points) > self::DAILY_MOST ? '<b>هفته به هفته</b>' : '<b>روز به روز</b>') . ' (تازه‌ترین اول؛ آنچه رقمی نداشت نیامده است)');
+            $rows = [];
             foreach (self::rows($points) as [$day, $value]) {
                 if ($value > 0) {
-                    $view->line('• ' . $day . ': ' . self::value($value, $money));
+                    $rows[] = '• ' . $day . ': ' . self::value($value, $money);
                 }
             }
+            $view->section(count($points) > self::DAILY_MOST ? '📅 هفته به هفته' : '📅 روز به روز')
+                ->line('<blockquote expandable>' . implode("\n", $rows) . '</blockquote>');
         }
 
         $chips = [];
         foreach (self::METRICS as $key => [$name]) {
-            $chips[] = Button::to(($key === $metric ? '● ' : '') . $name, self::ID, 'm', $key);
+            $chips[] = Button::to(($key === $metric ? UiWords::CHIP : '') . $name, self::ID, 'm', $key);
         }
 
-        return $view->row(...$chips)->row(...DashboardScreen::ranges(self::ID, $days))->back(DashboardScreen::ID);
+        return $view->help(Fmt::e($about) . ' روزها و هفته‌هایی که رقمی نداشتند در فهرست نیامده‌اند؛ تازه‌ترین اول.')
+            ->row(...$chips)
+            ->row(...DashboardScreen::ranges(self::ID, $days))
+            ->back(DashboardScreen::ID)
+            ->refresh(self::ID);
     }
 
     public function act(Admin $admin, string $action, array $args): View

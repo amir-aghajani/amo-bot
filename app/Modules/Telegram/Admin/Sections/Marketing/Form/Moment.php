@@ -16,7 +16,7 @@ use Illuminate\Support\Carbon;
 final class Moment
 {
     /** What a window's end takes, for its question. */
-    public const HINT = 'روز را به شکل ۱۴۰۵/۰۷/۲۰ بنویسید و اگر بخواهید ساعتش را بعدش، مثل ۱۴۰۵/۰۷/۲۰ ۱۸؛ به وقت فروشگاه.';
+    public const HINT = 'روز را به تقویم شمسی بنویسید و اگر بخواهید ساعتش را بعدش؛ به وقت فروشگاه.';
 
     /** A typed day (and hour) as the API takes it; null for text that is no real day. `$hour` stands in for none typed. */
     public static function parse(string $typed, int $hour): ?string
@@ -61,6 +61,27 @@ final class Moment
         $parsed = \DateTimeImmutable::createFromFormat(LocalTime::MOMENT, $moment, LocalTime::zone());
 
         return $parsed === false ? Persian::digits($moment) : Persian::date($parsed, true);
+    }
+
+    /** A draft's moment as it is typed back (its question's value now): «۱۴۰۵/۰۷/۲۰ ۱۸:۰۰». */
+    public static function typed(string $moment): string
+    {
+        $parsed = \DateTimeImmutable::createFromFormat(LocalTime::MOMENT, $moment, LocalTime::zone());
+        if ($parsed === false) {
+            return Persian::digits($moment);
+        }
+        [$year, $month, $day] = Persian::jalali($parsed);
+
+        return Persian::digits(sprintf('%04d/%02d/%02d %s', $year, $month, $day, $parsed->format('H:i')));
+    }
+
+    /** What a moment looks like typed, a week from now at 18: its question's example. */
+    public static function example(): string
+    {
+        $then = (new \DateTimeImmutable('now', LocalTime::zone()))->modify('+7 days');
+        [$year, $month, $day] = Persian::jalali($then);
+
+        return Persian::digits(sprintf('%04d/%02d/%02d 18', $year, $month, $day));
     }
 
     /** `$days` from now on the shop's clock, at the next whole hour: a quick end of a window. */

@@ -10,19 +10,24 @@ use App\Modules\Telegram\Admin\Ui\BaseScreen;
 use App\Modules\Telegram\Admin\Ui\Button;
 use App\Modules\Telegram\Admin\Ui\Fmt;
 use App\Modules\Telegram\Admin\Ui\Json;
+use App\Modules\Telegram\Admin\Ui\Nav;
 use App\Modules\Telegram\Admin\Ui\View;
+use App\Modules\Telegram\Admin\Ui\Words;
 
 /**
  * «🔐 ورود به وب‌سایت» (the panel's card of that name): how the customer signs in on the shop's website — Telegram,
- * Google, email and password, two-factor —, the devices signed in and the accounts merged into theirs. For a seat the
- * `account_security` grant opens: two-factor sign-in turned off (a lost phone) and a sign-out on every device, each asked
- * first in the panel's words. One of the shop's admins only looks at a bot admin's or an agent's.
+ * Google, email and password, two-factor — and the devices signed in, as a summary card, then the accounts merged into
+ * theirs. For a seat the `account_security` grant opens: two-factor sign-in turned off (a lost phone) and a sign-out on
+ * every device, each asked first in the panel's words, red. One of the shop's admins only looks at a bot admin's or an
+ * agent's.
  *
  * Opened with the customer's id. Actions: `tf` (id: asks), `tfy` (id: turned off), `so` (id: asks), `soy` (id: signed out).
  */
 final class CustomerAccountScreen extends BaseScreen
 {
     public const ID = 'usa';
+
+    public const TITLE = '🔐 ورود به وب‌سایت';
 
     public function show(Admin $admin, array $args): View
     {
@@ -46,10 +51,11 @@ final class CustomerAccountScreen extends BaseScreen
 
                 return $admin->confirm(
                     'ورود دو مرحله‌ای این کاربر خاموش شود؟',
-                    Button::to('🔓 بله، خاموش شود', self::ID, 'tfy', $id),
-                    Button::to('✖️ انصراف', self::ID, 'show', $id),
+                    Button::to(Words::yes('خاموش شود'), self::ID, 'tfy', $id),
+                    Button::to(Words::CANCEL, self::ID, Nav::SHOW, $id),
                     Fmt::e('از این پس کد برنامه احراز هویت از ' . $name . ' خواسته نمی‌شود: ایمیل و رمز عبورش برای ورود به وب‌سایت کافی است.')
-                    . "\n" . 'برای مشتری‌ای که گوشی برنامه احراز هویتش را از دست داده است. به او خبر داده می‌شود — در ربات تلگرام و با ایمیل، هر کدام که دارد — و در اعلان‌های وب‌سایتش هم می‌ماند. هر وقت بخواهد می‌تواند دوباره آن را روشن کند.',
+                    . "\n" . 'برای مشتری‌ای که گوشی برنامه احراز هویتش را از دست داده است. به او خبر داده می‌شود (در ربات و با ایمیل، هر کدام که دارد) و هر وقت بخواهد دوباره روشنش می‌کند.',
+                    danger: true,
                 );
             case 'tfy':
                 $admin->api->post("/users/{$id}/two-factor/disable");
@@ -62,10 +68,11 @@ final class CustomerAccountScreen extends BaseScreen
 
                 return $admin->confirm(
                     'این کاربر از همه دستگاه‌ها خارج شود؟',
-                    Button::to('🚪 بله، خارج شود', self::ID, 'soy', $id),
-                    Button::to('✖️ انصراف', self::ID, 'show', $id),
+                    Button::to(Words::yes('خارج شود'), self::ID, 'soy', $id),
+                    Button::to(Words::CANCEL, self::ID, Nav::SHOW, $id),
                     Fmt::e($name . ' از همه دستگاه‌هایی که با آن وارد وب‌سایت شده است خارج می‌شود.')
                     . "\n" . 'برای ادامه باید دوباره وارد وب‌سایت شود؛ ربات تلگرام و سرویس‌هایش دست نمی‌خورد.',
+                    danger: true,
                 );
             case 'soy':
                 $admin->api->post("/users/{$id}/sessions/end");
@@ -79,7 +86,7 @@ final class CustomerAccountScreen extends BaseScreen
     }
 
     /**
-     * The account's ways in, its devices and merged accounts as the panel answered them, and what the seat may do to it.
+     * The account's ways in and its devices as a card, the merged accounts under it, and what the seat may do to it.
      *
      * @param array<string, mixed> $detail
      */
@@ -93,40 +100,39 @@ final class CustomerAccountScreen extends BaseScreen
         $sessions = Customer::int($account, 'sessions');
         $lock = Customer::lock($admin, $detail);
 
-        $view = View::make('🔐 ورود به وب‌سایت', 'مدیریت', 'فروش', 'کاربران', Customer::name($user))
-            ->line('راه‌های ورود مشتری به وب‌سایت فروشگاه و دستگاه‌هایی که با آن وارد شده است.')
-            ->line()
-            ->facts([
+        $view = View::make(self::TITLE, ...Customer::under(Customer::name($user)))
+            ->card([
                 'تلگرام' => is_int($user['telegram_id'] ?? null) ? 'وصل است' : 'وصل نیست',
                 'گوگل' => Json::on($account, 'google') ? 'وصل است' : 'وصل نیست',
-                'ایمیل' => $email === null ? 'ایمیلی ندارد' : Fmt::ltr($email) . ' · ' . (Json::on($account, 'has_password') ? 'با رمز عبور' : 'بدون رمز عبور'),
-                'ورود دو مرحله‌ای' => $twoFactor ? '✅ روشن' : 'خاموش',
+                'ایمیل' => $email === null ? '' : Fmt::ltr($email) . ' · ' . (Json::on($account, 'has_password') ? 'با رمز عبور' : 'بدون رمز عبور'),
+                'ورود دو مرحله‌ای' => Fmt::onOff($twoFactor),
                 'دستگاه‌ها' => $sessions > 0 ? Fmt::number($sessions) . ' دستگاه' : 'در هیچ دستگاهی وارد نیست',
             ]);
 
         $merges = Json::rows($account, 'merges');
         if ($merges !== []) {
-            $view->line()->line('<b>حساب‌های ادغام‌شده</b>');
+            $view->section('🖇 حساب‌های ادغام‌شده');
             foreach ($merges as $merge) {
                 $merged = Json::part($merge, 'merged');
                 $telegram = is_int($merged['telegram_id'] ?? null) ? $merged['telegram_id'] : null;
-                $view->line('• ' . Fmt::e(Customer::name(['id' => Customer::int($merge, 'merged_user_id')] + $merged)) . ' · حساب ' . Fmt::code('#' . Customer::int($merge, 'merged_user_id'))
-                    . ($telegram !== null ? ' · شناسه تلگرام ' . Fmt::code((string) $telegram) : '')
-                    . (Json::on($merged, 'google') ? ' · با گوگل' : '')
-                    . ' · به درخواست خود مشتری · ' . Fmt::date(Customer::text($merge, 'created_at')));
+                $view->line('• ' . implode(' · ', array_filter([
+                    Fmt::e(Customer::name(['id' => Customer::int($merge, 'merged_user_id')] + $merged)),
+                    Fmt::code('#' . Customer::int($merge, 'merged_user_id')),
+                    $telegram !== null ? 'تلگرام ' . Fmt::code((string) $telegram) : null,
+                    Json::on($merged, 'google') ? 'گوگل' : null,
+                    Fmt::date(Customer::text($merge, 'created_at')),
+                ])));
             }
         }
         if ($lock !== null) {
-            $view->line()->line($lock);
+            $view->note(Fmt::e($lock));
         } elseif ($admin->seat->holds(StaffGrant::AccountSecurity)) {
-            if ($twoFactor) {
-                $view->row(Button::to('🔓 خاموش کردن ورود دو مرحله‌ای', self::ID, 'tf', $id));
-            }
-            if ($sessions > 0) {
-                $view->row(Button::to('🚪 خروج از همه دستگاه‌ها', self::ID, 'so', $id));
-            }
+            $view->row($twoFactor ? Button::to('🔓 خاموش کردن ورود دو مرحله‌ای', self::ID, 'tf', $id)->danger() : null)
+                ->row($sessions > 0 ? Button::to('🚪 خروج از همه دستگاه‌ها', self::ID, 'so', $id)->danger() : null);
         }
 
-        return $view->back(CustomerScreen::ID, 'show', $id);
+        return $view->help('راه‌های ورود مشتری به وب‌سایت فروشگاه و دستگاه‌هایی که با آن وارد شده است.' . ($merges === [] ? '' : ' حساب‌های ادغام‌شده را خود مشتری با حسابش یکی کرده است.'))
+            ->back(CustomerScreen::ID, Nav::SHOW, $id)
+            ->refresh(self::ID, Nav::SHOW, $id);
     }
 }

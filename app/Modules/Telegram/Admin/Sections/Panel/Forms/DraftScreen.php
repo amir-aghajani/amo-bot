@@ -13,17 +13,20 @@ use App\Modules\Telegram\Admin\Ui\Button;
 use App\Modules\Telegram\Admin\Ui\Fmt;
 use App\Modules\Telegram\Admin\Ui\Prompt;
 use App\Modules\Telegram\Admin\Ui\View;
+use App\Modules\Telegram\Admin\Ui\Words;
 use App\Support\Persian;
 
 /**
- * A form the panel saves whole (DraftForm) as a management screen: the driver picked and each field shown with its
- * value, edited into a draft the chat keeps — a switch flips, a choice is picked, the rest is typed (a secret is taken
- * away once read and kept encrypted) — then «💾 ذخیره» sends it in one request, as the panel's card does. What the API
- * refuses is said under each field, the draft kept to fix; «↩️ دور انداختن تغییرها» goes back to what is saved.
+ * A form the panel saves whole (DraftForm) as a management screen, drawn as a settings card is: a summary of the driver
+ * picked and each field with its value (said once there; the buttons say only what they do), edited into a draft the
+ * chat keeps — a switch set as its button says, a choice picked, the rest typed through a question that says the value
+ * now (a secret is taken away once read, kept encrypted and never shown back) — then «💾 ذخیره» sends it in one
+ * request, as the panel's card does. What the API refuses is said under the summary, field by field, the draft kept to
+ * fix; «↩️ دور انداختن تغییرها» goes back to what is saved; the driver's and the fields' hints are folded away.
  *
- * Actions: `e` (i: edit field i), `c` (i, n: choice n), `pk` (i, n: a found choice n), `x` (i: emptied / cleared), `k`
- * (i: a secret kept as it is), `g` (i: a secret made up), `df` (i: back to its default), `d` (the drivers), `dv` (n:
- * driver n), `save`, `drop`.
+ * Actions: `e` (i: edit field i; a switch's i and 1|0, the state it is set to), `c` (i, n: choice n), `pk` (i, n: a
+ * found choice n), `x` (i: emptied / cleared), `k` (i: a secret kept as it is), `g` (i: a secret made up), `df` (i:
+ * back to its default), `d` (the drivers), `dv` (n: driver n), `save`, `drop`.
  */
 abstract class DraftScreen extends BaseScreen
 {
@@ -73,7 +76,7 @@ abstract class DraftScreen extends BaseScreen
     /** The button that sends the draft. */
     protected function submitLabel(): string
     {
-        return '💾 ذخیره';
+        return Words::SAVE;
     }
 
     /** Whether the draft is sent even with nothing changed (a connection to try, not a setting to keep). */
@@ -104,6 +107,17 @@ abstract class DraftScreen extends BaseScreen
      * @param array<string, string|bool> $values
      */
     protected function extra(View $view, Admin $admin, DraftForm $form, string $driver, array $values): void {}
+
+    /**
+     * Paragraphs folded away with the fields' hints (HTML): what the card has besides, for a site's developer; none by
+     * default.
+     *
+     * @return list<string>
+     */
+    protected function notes(Admin $admin, DraftForm $form, string $driver): array
+    {
+        return [];
+    }
 
     /**
      * Whether a field shows beside its own `when`, on a condition of the screen's (the owner's password while the Bot API
@@ -182,7 +196,7 @@ abstract class DraftScreen extends BaseScreen
         $name = DraftForm::name($field);
         switch ($action) {
             case 'e':
-                return $this->edit($admin, $form, $driver, $values, $index, $field);
+                return $this->edit($admin, $form, $driver, $values, $index, $field, $args[1] ?? null);
             case 'c':
             case 'pk':
                 $options = array_keys(DraftForm::options($field));
@@ -243,7 +257,7 @@ abstract class DraftScreen extends BaseScreen
             $values[$name] = DraftForm::seal($answer->text(), $this->crypt);
             $values['clear_' . $name] = false;
         } elseif ($type === 'number') {
-            $values[$name] = (string) ($answer->integer() ?? throw ApiRefusal::typed($name, 'یک عدد بنویسید.'));
+            $values[$name] = (string) ($answer->integer() ?? throw ApiRefusal::typed($name, Words::NOT_NUMBER));
         } else {
             $values[$name] = DraftForm::isLatin($field) ? $answer->latin() : $answer->text();
         }
@@ -252,7 +266,12 @@ abstract class DraftScreen extends BaseScreen
         return $this->card($admin, $form);
     }
 
-    /** The card: the driver picked, each field shown with its value, a refusal under it, and the way to save. */
+    /**
+     * The card: its intro and warnings, a summary of the driver picked and each field shown with its value — what the API
+     * refused said under it, field by field —, whether the draft is unsaved, the buttons (the driver to pick, each switch
+     * the state a tap sets, each other field «✏️ …»), «💾 ذخیره» while there is something to save, and the driver's and the
+     * fields' hints folded away under the rest, the card's notes() with them.
+     */
     protected function card(Admin $admin, DraftForm $form): View
     {
         [$driver, $values] = $this->draft($admin, $form);
@@ -266,52 +285,53 @@ abstract class DraftScreen extends BaseScreen
             $view->line('⚠️ ' . Fmt::e((string) $line));
         }
 
+        $facts = [];
+        $refused = [];
+        $hints = [];
         $buttons = [];
         if ($form->choose !== null) {
-            $view->line()->line('• <b>' . Fmt::e($this->chooseLabel()) . '</b>: ' . Fmt::e($form->choices()[$driver] ?? $driver));
+            $facts[$this->chooseLabel()] = Fmt::e($form->choices()[$driver] ?? $driver);
             $about = $driver === DraftForm::NONE ? ($form->none['hint'] ?? '') : implode(' · ', array_filter([$form->drivers[$driver]['description'] ?? '', ...($form->drivers[$driver]['notes'] ?? [])]));
             if ($about !== '') {
-                $view->line('<i>' . Fmt::e($about) . '</i>');
+                $hints[] = '<b>' . Fmt::e($form->choices()[$driver] ?? $driver) . '</b>: ' . Fmt::e($about);
             }
             if (isset($errors[$form->choose])) {
-                $view->line('⚠️ ' . Fmt::e((string) $errors[$form->choose]));
+                $refused[] = '⚠️ ' . Fmt::e($this->chooseLabel()) . ': ' . Fmt::e((string) $errors[$form->choose]);
             }
-            $buttons[] = Button::to('🔀 ' . $this->chooseLabel() . ': ' . ($form->choices()[$driver] ?? $driver), $this->screen(), 'd');
+            $buttons[] = Button::to('🔀 ' . $this->chooseLabel(), $this->screen(), 'd');
         }
-        $first = true;
         foreach ($form->shown($driver, $values) as $index => $field) {
             if (!$this->visible($field, $form, $driver, $values)) {
                 continue;
             }
-            if ($first && $form->choose === null) {
-                $view->line();
-            }
-            $first = false;
             $name = DraftForm::name($field);
-            // A right-to-left mark first: a Latin label («Site Key») would turn the line left to right.
-            $view->line("\u{200F}• <b>" . Fmt::e(DraftForm::label($field)) . '</b>: ' . $form->display($field, $driver, $values));
+            $label = DraftForm::label($field);
+            $facts[$label] = $form->display($field, $driver, $values);
             if (is_string($field['hint'] ?? null) && $field['hint'] !== '') {
-                $view->line('<i>' . Fmt::e($field['hint']) . '</i>');
+                $hints[] = '<b>' . Fmt::e($label) . '</b>: ' . Fmt::e($field['hint']);
             }
             if ($form->leftBehind($field, $driver, $values)) {
-                $view->line('⚠️ ' . Fmt::e(is_string($field['moved'] ?? null) ? $field['moved'] : 'دوباره بنویسید.'));
+                $refused[] = '⚠️ ' . Fmt::e($label) . ': ' . Fmt::e(is_string($field['moved'] ?? null) ? $field['moved'] : 'دوباره بنویسید.');
             }
             if (isset($errors[$name])) {
-                $view->line('⚠️ ' . Fmt::e((string) $errors[$name]));
+                $refused[] = '⚠️ ' . Fmt::e($label) . ': ' . Fmt::e((string) $errors[$name]);
             }
-            $buttons[] = Button::to(DraftForm::label($field) . ': ' . $form->brief($field, $driver, $values), $this->screen(), 'e', $index);
+            $buttons[] = ($field['type'] ?? '') === 'toggle'
+                ? Button::to(Words::turn(($values[$name] ?? false) !== true, $label), $this->screen(), 'e', $index, ($values[$name] ?? false) === true ? 0 : 1)
+                : Button::to(Words::edit($label), $this->screen(), 'e', $index);
         }
+        $view->card($facts)->lines(...$refused);
         $dirty = $form->dirty($driver, $values, $this->crypt);
         if ($dirty && !$this->alwaysSubmits()) {
             $view->line()->line('✏️ <b>تغییرها هنوز ذخیره نشده‌اند.</b>');
         }
-        $view->grid(1, ...$buttons);
+        $view->tiles(...$buttons);
         $this->extra($view, $admin, $form, $driver, $values);
         if ($dirty || $this->alwaysSubmits()) {
-            $view->row(Button::to($this->submitLabel(), $this->screen(), 'save'), ...($dirty && !$this->alwaysSubmits() ? [Button::to('↩️ دور انداختن تغییرها', $this->screen(), 'drop')] : []));
+            $view->row(Button::to($this->submitLabel(), $this->screen(), 'save')->success(), $dirty && !$this->alwaysSubmits() ? Button::to('↩️ دور انداختن تغییرها', $this->screen(), 'drop') : null);
         }
 
-        return $view->back($this->parent());
+        return $view->help(implode("\n\n", [...$hints, ...$this->notes($admin, $form, $driver)]))->back($this->parent());
     }
 
     /**
@@ -403,55 +423,57 @@ abstract class DraftScreen extends BaseScreen
     }
 
     /**
-     * A field asked: a choice among buttons (or searched by typing, a long one), anything else typed — with what it holds
-     * now, and the quick ways a field has (emptied, cleared, made up, back to its default).
+     * A field asked: a switch set as its button said (`$set` 1 or 0; an older window's carries none and turns it over), a
+     * choice among buttons — the one in force marked ✅ — (or searched by typing, a long one), anything else typed: its
+     * question says the value now (a secret only whether one is kept), an example and its bounds, and offers the quick
+     * ways a field has (emptied, put back as it comes, a secret made up, kept or cleared).
      *
      * @param array<string, string|bool> $values
      * @param array<string, mixed> $field
      */
-    private function edit(Admin $admin, DraftForm $form, string $driver, array $values, int $index, array $field): View
+    private function edit(Admin $admin, DraftForm $form, string $driver, array $values, int $index, array $field, ?string $set): View
     {
         $name = DraftForm::name($field);
         $type = (string) ($field['type'] ?? 'text');
+        $label = DraftForm::label($field);
         if ($type === 'toggle') {
-            $values[$name] = ($values[$name] ?? false) !== true;
+            $values[$name] = $set !== null ? $set === '1' : ($values[$name] ?? false) !== true;
             $this->keep($admin, $driver, $values, $this->without($admin, $name));
 
             return $this->card($admin, $form);
         }
         $options = DraftForm::options($field);
+        $hint = is_string($field['hint'] ?? null) ? $field['hint'] : '';
         if ($type === 'choice' && count($options) <= self::BUTTONS_MOST) {
-            $view = View::make(DraftForm::label($field), ...[...$this->path(), $this->title()]);
-            if (is_string($field['hint'] ?? null) && $field['hint'] !== '') {
-                $view->line(Fmt::e($field['hint']));
-            }
             $choices = [];
             foreach (array_keys($options) as $n => $value) {
-                $choices[] = Button::to(((string) ($values[$name] ?? '') === (string) $value ? '● ' : '') . $options[$value], $this->screen(), 'c', $index, $n);
+                $choices[] = Button::to(((string) ($values[$name] ?? '') === (string) $value ? Words::PICKED : '') . $options[$value], $this->screen(), 'c', $index, $n);
             }
 
-            return $view->grid(count($choices) > 4 ? 2 : 1, ...$choices)->back($this->screen());
+            return View::make($label, ...$this->within())
+                ->help(Fmt::e($hint))
+                ->tiles(...$choices)
+                ->back($this->screen());
         }
 
-        $hint = [];
-        if (is_string($field['hint'] ?? null) && $field['hint'] !== '') {
-            $hint[] = Fmt::e($field['hint']);
-        }
-        $hint[] = 'الان: ' . $form->display($field, $driver, $values);
-        if ($type === 'number' && is_int($field['min'] ?? null) && is_int($field['max'] ?? null)) {
-            $hint[] = 'عددی از ' . Fmt::number($field['min']) . ' تا ' . Fmt::number($field['max']) . (is_string($field['unit'] ?? null) ? ' ' . Fmt::e($field['unit']) : '') . '.';
-        }
+        $secret = DraftForm::isSecret($field);
+        $lines = $hint === '' ? [] : [Fmt::e($hint)];
         if ($type === 'choice') {
-            $hint[] = 'چند حرف از نامش را بنویسید تا پیدایش کنم.';
+            $lines[] = 'چند حرف از نامش را بنویسید تا پیدایش کنم.';
         }
-        if (DraftForm::isSecret($field)) {
-            $hint[] = 'پیامتان بعد از خواندن پاک می‌شود و دیگر نشان داده نمی‌شود.';
+        if ($secret) {
+            $lines[] = 'پیامتان بعد از خواندن پاک می‌شود و دیگر نشان داده نمی‌شود.';
         }
-        $prompt = new Prompt(DraftForm::label($field), $this->screen(), 'e', [$index], implode("\n", $hint), Button::to('✖️ لغو', $this->screen()));
-        $quick = [];
         $current = $values[$name] ?? '';
-        $kept = $form->stored[$driver][$name] ?? null;
-        if (DraftForm::isSecret($field)) {
+        $prompt = (new Prompt($label, $this->screen(), 'e', [$index], implode("\n", $lines), Button::to(Words::CANCEL, $this->screen())))
+            ->current($secret || $type === 'choice' ? Fmt::plain($form->display($field, $driver, $values)) : (string) $current, !$secret)
+            ->example(is_string($field['placeholder'] ?? null) ? $field['placeholder'] : '');
+        if ($type === 'number' && is_int($field['min'] ?? null) && is_int($field['max'] ?? null)) {
+            $prompt->limits('از ' . Fmt::number($field['min']) . ' تا ' . Fmt::number($field['max']) . (is_string($field['unit'] ?? null) ? ' ' . $field['unit'] : ''));
+        }
+        $quick = [];
+        if ($secret) {
+            $kept = $form->stored[$driver][$name] ?? null;
             if ((int) ($field['generate'] ?? 0) > 0) {
                 $quick[] = Button::to('🎲 ساختن رمز تازه', $this->screen(), 'g', $index);
             }
@@ -459,15 +481,15 @@ abstract class DraftScreen extends BaseScreen
                 $quick[] = Button::to('↩️ همان قبلی بماند', $this->screen(), 'k', $index);
             }
             if (($field['required'] ?? false) !== true && ($field['transient'] ?? false) !== true && is_array($kept) && ($kept['set'] ?? false) === true && ($values['clear_' . $name] ?? false) !== true) {
-                $quick[] = Button::to('🗑 پاک کردن', $this->screen(), 'x', $index);
+                $prompt->clearable($this->screen(), 'x', $index);
             }
         } else {
             if (($field['required'] ?? false) !== true && $current !== '') {
-                $quick[] = Button::to('🗑 خالی کردن', $this->screen(), 'x', $index);
+                $prompt->clearable($this->screen(), 'x', $index);
             }
             $default = $field['default'] ?? null;
             if (is_scalar($default) && !is_bool($default) && (string) $default !== '' && (string) $default !== (string) $current) {
-                $quick[] = Button::to('↩️ پیش‌فرض: ' . ($options[(string) $default] ?? (string) $default), $this->screen(), 'df', $index);
+                $prompt->resettable($this->screen(), 'df', $index);
             }
         }
 
@@ -475,7 +497,8 @@ abstract class DraftScreen extends BaseScreen
     }
 
     /**
-     * A long choice found by what was typed: one match is picked, a few are offered, none or too many asked again.
+     * A long choice found by what was typed: one match is picked, a few are offered — the one in force marked ✅ —, none
+     * or too many asked again.
      *
      * @param array<string, string|bool> $values
      * @param array<string, mixed> $field
@@ -497,7 +520,7 @@ abstract class DraftScreen extends BaseScreen
             }
         }
         if ($found === []) {
-            throw new ApiRefusal(422, 'چیزی با این نام پیدا نشد؛ جور دیگری بنویسید، مثل Tehran.');
+            throw new ApiRefusal(422, "چیزی با این نام پیدا نشد؛ جور دیگری بنویسید، مثل \u{2068}Tehran\u{2069}.");
         }
         if (count($found) === 1) {
             $values[$name] = (string) reset($found);
@@ -508,27 +531,39 @@ abstract class DraftScreen extends BaseScreen
         if (count($found) > self::FOUND_MOST) {
             throw new ApiRefusal(422, 'موارد زیادی پیدا شد (' . Fmt::number(count($found)) . ')؛ دقیق‌تر بنویسید.');
         }
-        $view = View::make(DraftForm::label($field), ...[...$this->path(), $this->title()])->line('کدام یک؟');
         $buttons = [];
         foreach ($found as $n => $value) {
-            $buttons[] = Button::to($options[$value], $this->screen(), 'pk', $index, $n);
+            $buttons[] = Button::to(((string) ($values[$name] ?? '') === $value ? Words::PICKED : '') . $options[$value], $this->screen(), 'pk', $index, $n);
         }
 
-        return $view->grid(1, ...$buttons)->back($this->screen());
+        return View::make(DraftForm::label($field), ...$this->within())
+            ->line('کدام یک؟')
+            ->grid(1, ...$buttons)
+            ->back($this->screen());
     }
 
-    /** The drivers to pick among, each with what it is. */
+    /** The drivers to pick among, each with what it is — the one in force marked ✅. */
     private function drivers(DraftForm $form, string $driver): View
     {
-        $view = View::make($this->chooseLabel(), ...[...$this->path(), $this->title()]);
+        $view = View::make($this->chooseLabel(), ...$this->within());
         $buttons = [];
         foreach (array_keys($form->choices()) as $n => $key) {
             $about = $key === DraftForm::NONE ? ($form->none['hint'] ?? '') : ($form->drivers[$key]['description'] ?? '');
             $view->line("\u{200F}• <b>" . Fmt::e($form->choices()[$key]) . '</b>' . ($about !== '' ? ': ' . Fmt::e($about) : ''));
-            $buttons[] = Button::to(($key === $driver ? '● ' : '') . $form->choices()[$key], $this->screen(), 'dv', $n);
+            $buttons[] = Button::to(($key === $driver ? Words::PICKED : '') . $form->choices()[$key], $this->screen(), 'dv', $n);
         }
 
-        return $view->grid(1, ...$buttons)->back($this->screen());
+        return $view->tiles(...$buttons)->back($this->screen());
+    }
+
+    /**
+     * Where what the card opens itself is (a choice's buttons, the drivers): the card's path and its own name.
+     *
+     * @return list<string>
+     */
+    private function within(): array
+    {
+        return [...$this->path(), Fmt::bare($this->title())];
     }
 
     /**

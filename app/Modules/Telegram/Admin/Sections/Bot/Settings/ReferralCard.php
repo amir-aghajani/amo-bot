@@ -5,9 +5,13 @@ declare(strict_types=1);
 namespace App\Modules\Telegram\Admin\Sections\Bot\Settings;
 
 use App\Modules\Telegram\Admin\Sections\Bot\Keyboards\KeyboardScreen;
+use App\Modules\Telegram\Admin\Sections\Sales\Sales;
+use App\Modules\Telegram\Admin\Sections\Support\ReferralsScreen;
 use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\Fmt;
+use App\Modules\Telegram\Admin\Ui\Icons;
 use App\Modules\Telegram\Admin\Ui\Settings\FieldDef;
+use App\Modules\Telegram\Admin\Ui\Words;
 use App\Support\Money;
 
 /**
@@ -19,6 +23,8 @@ use App\Support\Money;
 final class ReferralCard extends BotCard
 {
     public const ID = 'bsf';
+
+    public const TITLE = Icons::REFERRALS . ' قوانین زیرمجموعه‌گیری';
 
     protected function group(): string
     {
@@ -32,7 +38,7 @@ final class ReferralCard extends BotCard
 
     protected function title(): string
     {
-        return '🤝 زیرمجموعه‌گیری';
+        return self::TITLE;
     }
 
     protected function intro(): string
@@ -44,7 +50,7 @@ final class ReferralCard extends BotCard
     {
         $on = static fn(FieldDef $field): FieldDef => $field->when('referral_enabled', [true]);
 
-        return [
+        return $this->described([
             FieldDef::toggle('referral_enabled', 'زیرمجموعه‌گیری فعال باشد', 'خاموش که باشد، دکمه «زیرمجموعه‌گیری» از منوی ربات برداشته می‌شود، لینک‌ها کسی را زیرمجموعه نمی‌کنند و پرداختی پورسانت یا هدیه‌ای ندارد. با روشن شدن دوباره، دکمه سر جایش برمی‌گردد و زیرمجموعه‌ها و پورسانت‌های قبلی سر جایشان می‌مانند.'),
             $on(FieldDef::number('referral_rate', 'درصد پورسانت', 'درصد', 'پورسانت: از پولی که زیرمجموعه واقعا واریز می‌کند، سهمی به کیف پول معرف اضافه می‌شود؛ بین ۱ تا ۱۰۰ درصد.')),
             $on(FieldDef::number('referral_renewal_rate', 'درصد پورسانت تمدید', 'درصد', 'پرداخت تمدید سرویس به جای درصد بالا این درصد را دارد؛ ۰ یعنی بدون پورسانت.')),
@@ -53,12 +59,34 @@ final class ReferralCard extends BotCard
             $on(FieldDef::money('referral_start_invitee', 'هدیه شروع زیرمجموعه', 'مبلغ به تومان؛ ۰ یعنی بدون هدیه.')),
             $on(FieldDef::choice('referral_start_when', 'زمان هدیه شروع', ['purchase' => 'با اولین خرید', 'join' => 'با عضویت'], '«با اولین خرید»: وقتی اولین خرید زیرمجموعه پرداخت شد — با هر روش، کیف پول هم؛ سرویس هدیه خرید حساب نمی‌شود. حساب‌هایی که فقط برای هدیه ساخته شوند چیزی نمی‌گیرند.' . "\n" . '«با عضویت»: همان لحظه که زیرمجموعه با لینک وارد ربات یا وب‌سایت می‌شود.')),
             // The plan before its count, as each is saved on its own: a count above 0 needs a plan.
-            $on(FieldDef::choice('referral_reward_plan_id', 'جایزه دعوت: پلن جایزه', [], 'سرویس جایزه روی اولین سروری ساخته می‌شود که این پلن را می‌فروشد. جایزه دعوت پلن را لازم دارد؛ اول پلن را انتخاب کنید، بعد تعداد را.'))->nullable(),
-            $on(FieldDef::number('referral_reward_every', 'جایزه دعوت: به ازای هر چند زیرمجموعه خریدار', 'زیرمجموعه', 'هر بار که تعداد زیرمجموعه‌های خریدار یک معرف به مضرب تازه‌ای از این عدد برسد، یک سرویس از پلن جایزه رایگان به او داده می‌شود. ۰ یعنی بدون جایزه.')),
-            $on(FieldDef::number('referral_alert_burst', 'هشدار: عضویت پشت سر هم', 'زیرمجموعه', 'هشدار زیرمجموعه‌گیری فیک: این تعداد زیرمجموعه با یک لینک در بازه هشدار. معرفی که زیرمجموعه‌هایش ساختگی به نظر برسند، در گروه گزارش‌ها (بخش کاربران جدید) و صفحه «زیرمجموعه‌گیری» هشدار می‌گیرد. تا پشتیبانی هشدار را رفع نکند، هدیه شروع و جایزه دعوت به او داده نمی‌شود — و بعد از رفع هم داده نمی‌شود؛ پورسانت‌ها مثل قبل است. ۰ یعنی بدون آن هشدار.')),
-            $on(FieldDef::number('referral_alert_minutes', 'هشدار: بازه هشدار', 'دقیقه', 'در هر بازه، هر نوع هشدار یک بار.')),
-            $on(FieldDef::number('referral_alert_idle', 'هشدار: زیرمجموعه بدون خرید', 'زیرمجموعه', 'این تعداد زیرمجموعه که هیچ‌کدام خرید نکرده‌اند؛ ۰ یعنی بدون آن هشدار.')),
+            $on(FieldDef::choice('referral_reward_plan_id', 'پلن جایزه', [], 'سرویس جایزه روی اولین سروری ساخته می‌شود که این پلن را می‌فروشد. جایزه دعوت پلن را لازم دارد؛ اول پلن را انتخاب کنید، بعد تعداد را.'))->nullable(),
+            $on(FieldDef::number('referral_reward_every', 'به ازای هر چند زیرمجموعه خریدار', 'زیرمجموعه', 'هر بار که تعداد زیرمجموعه‌های خریدار یک معرف به مضرب تازه‌ای از این عدد برسد، یک سرویس از پلن جایزه رایگان به او داده می‌شود. ۰ یعنی بدون جایزه.')),
+            $on(FieldDef::number('referral_alert_burst', 'عضویت پشت سر هم', 'زیرمجموعه', 'هشدار زیرمجموعه‌گیری فیک: این تعداد زیرمجموعه با یک لینک در بازه هشدار. معرفی که زیرمجموعه‌هایش ساختگی به نظر برسند، در گروه گزارش‌ها (بخش کاربران جدید) و صفحه «زیرمجموعه‌گیری» هشدار می‌گیرد. تا پشتیبانی هشدار را رفع نکند، هدیه شروع و جایزه دعوت به او داده نمی‌شود — و بعد از رفع هم داده نمی‌شود؛ پورسانت‌ها مثل قبل است. ۰ یعنی بدون آن هشدار.')),
+            $on(FieldDef::number('referral_alert_minutes', 'بازه هشدار', 'دقیقه', 'در هر بازه، هر نوع هشدار یک بار.')),
+            $on(FieldDef::number('referral_alert_idle', 'زیرمجموعه بدون خرید', 'زیرمجموعه', 'این تعداد زیرمجموعه که هیچ‌کدام خرید نکرده‌اند؛ ۰ یعنی بدون آن هشدار.')),
+        ]);
+    }
+
+    /** The panel's parts of the program, each a screen of its own: the commission, the start gift, the invite reward, the alerts. */
+    protected function parts(): array
+    {
+        return [
+            ['💰 پورسانت', ['referral_rate', 'referral_renewal_rate', 'referral_first_only']],
+            ['🎁 هدیه شروع', ['referral_start_referrer', 'referral_start_invitee', 'referral_start_when']],
+            ['🏆 جایزه دعوت', ['referral_reward_plan_id', 'referral_reward_every']],
+            ['⚠️ هشدار زیرمجموعه‌گیری فیک', ['referral_alert_burst', 'referral_alert_minutes', 'referral_alert_idle']],
         ];
+    }
+
+    protected function path(): array
+    {
+        return [Words::ROOT, Sales::TITLE, Fmt::bare(ReferralsScreen::TITLE)];
+    }
+
+    /** Its program's page, «🔗 زیرمجموعه‌گیری», where its numbers and lists are. */
+    protected function parent(): string
+    {
+        return ReferralsScreen::ID;
     }
 
     protected function notes(): array

@@ -11,6 +11,8 @@ final class ServiceTransfersCard extends BotCard
 {
     public const ID = 'bsv';
 
+    public const TITLE = '🔀 انتقال سرویس';
+
     protected function group(): string
     {
         return 'service_transfers';
@@ -23,7 +25,7 @@ final class ServiceTransfersCard extends BotCard
 
     protected function title(): string
     {
-        return '🔀 انتقال سرویس';
+        return self::TITLE;
     }
 
     protected function intro(): string

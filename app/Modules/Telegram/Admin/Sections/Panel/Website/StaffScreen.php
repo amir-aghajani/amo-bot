@@ -8,8 +8,8 @@ use App\Modules\Telegram\Admin\Ui\Settings\FieldDef;
 
 /**
  * «مدیران سایت» of the website: whether the bot's admins work the shop from the website (the Store API's /admin), whether
- * they must sign in strongly, and the grants beyond the daily work, each a switch — with the panel's warning that the
- * guards stop an admin only on their own account.
+ * they must sign in strongly, and the grants beyond the daily work — a part of their own («کارهای بیشتر») —, with the
+ * panel's word that the guards stop an admin only on their own account folded under it.
  */
 final class StaffScreen extends WebsiteCard
 {
@@ -39,18 +39,12 @@ final class StaffScreen extends WebsiteCard
 
     protected function intro(): string
     {
-        return 'مدیران ربات با حساب وب‌سایت خودشان کارهای روزانه فروشگاه را در وب‌سایت انجام می‌دهند: رسیدها و پرداخت‌ها، سفارش‌ها، سرویس‌ها، تیکت‌ها، مشتری‌ها و ارسال‌های همگانی. روش‌های پرداخت، ربات، گروه گزارش‌ها، وب‌سایت و اینکه چه کسی مدیر است فقط از پنل تغییر می‌کند. ورود هر مدیر تا ۱۲ ساعت برای کار مدیریتی معتبر است و بعد از آن باید ورودش را دوباره تایید کند؛ تایید پرداخت هم، چون سرویس تحویل می‌دهد، ورود ۱۵ دقیقه گذشته را می‌خواهد.';
-    }
-
-    protected function lead(array $values): array
-    {
-        return [
-            '',
+        return implode("\n\n", [
+            'مدیران ربات با حساب وب‌سایت خودشان کارهای روزانه فروشگاه را در وب‌سایت انجام می‌دهند: رسیدها و پرداخت‌ها، سفارش‌ها، سرویس‌ها، تیکت‌ها، مشتری‌ها و ارسال‌های همگانی. روش‌های پرداخت، ربات، گروه گزارش‌ها، وب‌سایت و اینکه چه کسی مدیر است فقط از پنل تغییر می‌کند. ورود هر مدیر تا ۱۲ ساعت برای کار مدیریتی معتبر است و بعد از آن باید ورودش را دوباره تایید کند؛ تایید پرداخت هم، چون سرویس تحویل می‌دهد، ورود ۱۵ دقیقه گذشته را می‌خواهد.',
             'ℹ️ مدیران ربات همان کاربرانی هستند که نقش مدیر دارند؛ آن‌ها را در «👥 کاربران» ببینید و از صفحه هر کاربر، مدیر ربات کنید یا مدیریت را بردارید.',
             '⚠️ هر مدیر فقط درباره حساب خودش محدود است: پرداخت، کیف پول، سرویس و نظر خودش با مدیر دیگری است و حساب مدیران و نماینده‌ها فقط از پنل تغییر می‌کند. ولی دو مدیر این کارها را برای هم انجام می‌دهند؛ پس نقش مدیر را فقط به کسانی بدهید که به آن‌ها اعتماد دارید.',
-            '',
-            '<b>کارهای بیشتر</b> (از «پلن‌ها و دسته‌بندی‌ها» به پایین): این کارها فقط وقتی از وب‌سایت انجام می‌شود که روشنشان کنید، و مدیر برای هر کدام باید در ۱۵ دقیقه گذشته وارد شده یا ورودش را دوباره تایید کرده باشد.',
-        ];
+            '<b>کارهای بیشتر</b>: این کارها فقط وقتی از وب‌سایت انجام می‌شود که روشنشان کنید، و مدیر برای هر کدام باید در ۱۵ دقیقه گذشته وارد شده یا ورودش را دوباره تایید کرده باشد.',
+        ]);
     }
 
     protected function fields(): array
@@ -64,5 +58,11 @@ final class StaffScreen extends WebsiteCard
         }
 
         return $fields;
+    }
+
+    /** The grants, a part of their own (the panel's «کارهای بیشتر»). */
+    protected function parts(): array
+    {
+        return [['➕ کارهای بیشتر', array_map(static fn(string $grant): string => WebsiteSource::GRANT . $grant, array_keys(self::GRANTS))]];
     }
 }

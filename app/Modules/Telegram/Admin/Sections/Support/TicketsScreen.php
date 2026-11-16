@@ -7,14 +7,17 @@ namespace App\Modules\Telegram\Admin\Sections\Support;
 use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\Button;
 use App\Modules\Telegram\Admin\Ui\Fmt;
+use App\Modules\Telegram\Admin\Ui\Icons;
 use App\Modules\Telegram\Admin\Ui\ListScreen;
 use App\Modules\Telegram\Admin\Ui\Nav;
 use App\Modules\Telegram\Admin\Ui\View;
+use App\Modules\Telegram\Admin\Ui\Words as UiWords;
 
 /**
- * «🎧 پشتیبانی» (the panel's tickets screen): the support tickets, the latest activity first — those waiting on an answer
- * first —, searched by number, customer or subject, each opening its own screen (TicketScreen) to read and answer it.
- * One customer's alone, as their page links here (`user`).
+ * «🎧 پشتیبانی» (the panel's tickets screen): the support tickets by the panel's tabs — those waiting on an answer
+ * first —, the latest activity first, searched by number, customer or subject, each a row «chip #number · subject ·
+ * customer» opening its own screen (TicketScreen) to read and answer it. One customer's alone, as their page links here
+ * (`user`).
  *
  * Actions: `user` (customer id: theirs alone), `all` (every customer's again).
  */
@@ -22,11 +25,13 @@ final class TicketsScreen extends ListScreen
 {
     public const ID = 'tk';
 
-    /** The panel's status tabs, the queue first («در انتظار پاسخ»), «همه» last. */
-    public const STATUSES = ['open' => '⏳ در انتظار پاسخ', 'answered' => '💬 پاسخ‌داده‌شده', 'closed' => '🔒 بسته‌شده', self::ANY => 'همه'];
+    public const TITLE = Icons::SUPPORT . ' پشتیبانی';
 
-    /** A ticket's state in its row's mark (the panel's TICKET_STATUS). */
-    public const MARK = ['open' => '⏳', 'answered' => '💬', 'closed' => '🔒'];
+    /** The panel's status tabs, the queue first («در انتظار پاسخ»), «همه» last. */
+    public const STATUSES = ['open' => '🟡 در انتظار پاسخ', 'answered' => '💬 پاسخ‌داده‌شده', 'closed' => '✅ بسته‌شده', self::ANY => 'همه'];
+
+    /** A ticket's state in its row's chip (the panel's TICKET_STATUS). */
+    public const MARK = ['open' => '🟡', 'answered' => '💬', 'closed' => '✅'];
 
     /** The customer the list is narrowed to (its state's `user`) while it is shown; 0 for none. */
     private int $user = 0;
@@ -45,12 +50,12 @@ final class TicketsScreen extends ListScreen
 
     protected function title(): string
     {
-        return '🎧 پشتیبانی';
+        return self::TITLE;
     }
 
     protected function path(): array
     {
-        return ['مدیریت'];
+        return [UiWords::ROOT];
     }
 
     protected function endpoint(): string
@@ -73,25 +78,30 @@ final class TicketsScreen extends ListScreen
         return $this->user > 0 ? ['user' => $this->user] : [];
     }
 
+    protected function noun(): string
+    {
+        return 'تیکت';
+    }
+
     protected function searchHint(): string
     {
-        return 'شماره تیکت، مشتری یا موضوع';
+        return 'شماره تیکت (مثل #۱۲)، مشتری یا موضوع';
     }
 
     protected function empty(): string
     {
-        return 'تیکتی پیدا نشد.';
+        return $this->tab() === 'open' && $this->user === 0 ? UiWords::NOTHING_WAITING : 'تیکتی پیدا نشد.';
     }
 
     protected function summary(array $meta): array
     {
         $open = (int) ($meta['open'] ?? 0);
-        $lines = ['تیکت‌هایی که مشتری‌ها برای پشتیبانی باز کرده‌اند؛ تیکتی که تازه‌ترین پیام را دارد بالاتر است. مشتری از پاسخی که این‌جا می‌دهید خبردار می‌شود.'];
-        if ($open > 0) {
-            $lines[] = '⏳ ' . Fmt::number($open) . ' تیکت در انتظار پاسخ شماست.';
-        }
+        $lines = [];
         if ($this->user > 0) {
-            $lines[] = '👤 فقط تیکت‌های مشتری ' . Fmt::id($this->user);
+            $lines[] = Icons::CUSTOMER . ' فقط تیکت‌های مشتری ' . Fmt::id($this->user);
+        } elseif ($this->tab() !== 'open' && $open > 0) {
+            // Beside another tab, how many wait: the queue's own tab says it in its count.
+            $lines[] = '🟡 ' . Fmt::number($open) . ' تیکت در انتظار پاسخ شماست.';
         }
 
         return $lines;
@@ -102,6 +112,7 @@ final class TicketsScreen extends ListScreen
         if ($this->user > 0) {
             $view->row(Button::to('✖️ همه مشتری‌ها', self::ID, 'all'));
         }
+        $view->help('تیکت‌هایی که مشتری‌ها از ربات، وب‌سایت یا مینی‌اپ باز کرده‌اند؛ تیکتی که تازه‌ترین پیام را دارد بالاتر است. مشتری از پاسخی که این‌جا می‌دهید خبردار می‌شود.');
     }
 
     protected function item(array $row): Button
@@ -110,7 +121,7 @@ final class TicketsScreen extends ListScreen
         $status = (string) ($row['status'] ?? '');
 
         return Button::to(
-            (self::MARK[$status] ?? '') . ' ' . Fmt::id(is_int($row['id'] ?? null) ? $row['id'] : null) . ' · ' . Fmt::cut((string) ($row['subject'] ?? ''), 24) . ' · ' . Words::name($customer),
+            (self::MARK[$status] ?? '•') . ' ' . Fmt::id(is_int($row['id'] ?? null) ? $row['id'] : null) . ' · ' . Fmt::cut((string) ($row['subject'] ?? ''), 24) . ($this->user > 0 ? '' : ' · ' . Words::name($customer)),
             TicketScreen::ID,
             Nav::SHOW,
             (int) ($row['id'] ?? 0),
@@ -127,5 +138,11 @@ final class TicketsScreen extends ListScreen
         }
 
         return $this->show($admin, []);
+    }
+
+    /** The tab in force. */
+    private function tab(): string
+    {
+        return $this->filterValue($this->here?->state(self::ID) ?? [], 'status');
     }
 }

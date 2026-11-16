@@ -18,6 +18,8 @@ use App\Modules\Telegram\Admin\OwnerLinks;
 use App\Modules\Telegram\Admin\SeatKind;
 use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\Nav;
+use App\Modules\Telegram\Admin\Ui\Screens;
+use App\Modules\Telegram\Admin\Ui\Words;
 use App\Modules\Telegram\Session\SessionStore;
 use App\Modules\Users\Enums\UserRole;
 use App\Modules\Users\Models\User;
@@ -95,6 +97,27 @@ final class BotAdminSeatsTest extends BotTestCase
         $this->sendTo($bot, $this->tap(Nav::to('pyv', 'ok', $ours->id), chat: self::AGENT_TELEGRAM_ID));
         self::assertSame(ErrorHandler::NOT_FOUND, $this->popup());
         self::assertSame(PaymentStatus::AwaitingReview, $ours->refresh()->status);
+    }
+
+    public function testTheSearchFindsNothingOfAnotherShop(): void
+    {
+        $bot = $this->agentBot();
+        $sara = CurrentBot::run($bot, fn(): User => $this->customer(['telegram_id' => 8800, 'username' => 'sara_a']));
+        $this->customer(['telegram_id' => 8801, 'username' => 'ali_r']);
+
+        // The agent: their own customer found, the main shop's not.
+        $this->sendTo($bot, $this->tap(Nav::to(Screens::SEARCH), chat: self::AGENT_TELEGRAM_ID));
+        $this->sendTo($bot, $this->message('@sara_a', chat: self::AGENT_TELEGRAM_ID));
+        self::assertContains(Nav::to('usv', 'show', $sara->id), $this->callbacks($this->windowCall()));
+        $this->sendTo($bot, $this->tap(Nav::to(Screens::SEARCH), chat: self::AGENT_TELEGRAM_ID));
+        $this->sendTo($bot, $this->message('@ali_r', chat: self::AGENT_TELEGRAM_ID));
+        self::assertStringContainsString(Words::NOTHING_FOUND, implode("\n", $this->said()));
+
+        // The main shop's admin: the other way round.
+        $this->customer(['telegram_id' => 7100, 'role' => UserRole::Admin]);
+        $this->send($this->tap(Nav::to(Screens::SEARCH), chat: 7100));
+        $this->send($this->message('@sara_a', chat: 7100));
+        self::assertStringContainsString(Words::NOTHING_FOUND, implode("\n", $this->said()));
     }
 
     public function testOnlyTheOwnerSwitchesShops(): void

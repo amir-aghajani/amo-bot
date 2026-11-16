@@ -35,7 +35,7 @@
 | `Tests\TestCase` | تست واحدی که به برنامه نیاز دارد | <code dir="ltr">app()</code>، <code dir="ltr">service()</code>، <code dir="ltr">config()</code>، <code dir="ltr">swap()</code>، <code dir="ltr">logs()</code>، <code dir="ltr">configFile()</code>، <code dir="ltr">scratchDir()</code>، و فیک‌های پایین‌تر |
 | `Tests\DatabaseTestCase` | هر چیزی که به دیتابیس دست می‌زند | جدول‌هایی که در هر پروسه یک بار ساخته می‌شوند، هر تست در یک تراکنش که بعد از آن rollback می‌شود، و `Fixtures` |
 | `Tests\HttpTestCase` | API | <code dir="ltr">get()</code>، <code dir="ltr">postJson()</code>… (با هدر CSRF)، <code dir="ltr">send()</code> (بدون آن)، <code dir="ltr">upload()</code>، <code dir="ltr">loginAsAdmin()</code>، <code dir="ltr">loginAsAgent()</code>، <code dir="ltr">openShop()</code>، <code dir="ltr">bearer()</code>، <code dir="ltr">loginAsStaff()</code>، <code dir="ltr">storeApi()</code>، <code dir="ltr">unchecked()</code>، <code dir="ltr">decode()</code> |
-| `Tests\BotTestCase` | ربات تلگرام | <code dir="ltr">send($this->message(…))</code>، <code dir="ltr">tap()</code>، <code dir="ltr">contact()</code>، برای گروه گزارش‌ها <code dir="ltr">groupTap()</code>، <code dir="ltr">groupText()</code>، <code dir="ltr">groupReply()</code>، <code dir="ltr">botMembership()</code>؛ بعد <code dir="ltr">calls()</code>، <code dir="ltr">params()</code>، <code dir="ltr">said()</code>، <code dir="ltr">popup()</code>، <code dir="ltr">inlineKeyboard()</code>، <code dir="ltr">callbacks()</code>، <code dir="ltr">buttonsUnder()</code> |
+| `Tests\BotTestCase` | ربات تلگرام | <code dir="ltr">send($this->message(…))</code>، <code dir="ltr">tap()</code>، <code dir="ltr">contact()</code>، برای گروه گزارش‌ها <code dir="ltr">groupTap()</code>، <code dir="ltr">groupText()</code>، <code dir="ltr">groupReply()</code>، <code dir="ltr">botMembership()</code>؛ بعد <code dir="ltr">calls()</code>، <code dir="ltr">params()</code>، <code dir="ltr">said()</code>، <code dir="ltr">popup()</code>، <code dir="ltr">inlineKeyboard()</code>، <code dir="ltr">callbacks()</code>، <code dir="ltr">buttonsUnder()</code>؛ برای مدیریت، <code dir="ltr">owner()</code> (حساب `OWNER` که مالک فروشگاه می‌شود)، <code dir="ltr">tapAs()</code> و <code dir="ltr">sayAs()</code> (از طرف او)، <code dir="ltr">lastSaid()</code>، <code dir="ltr">offered()</code> |
 
 چند نکته که باید بدانید:
 
@@ -113,6 +113,9 @@ exception پرتاب می‌کند، یک task که اجراهایش را می�
   `tests/Feature/BotAdmin/BotAdminDoorTest` مدیریت ربات را به ورودی‌اش پایبند نگه می‌دارد: هیچ چیزی از بیرون وارد
   نمی‌شود، هیچ جایگاهی از ورودی جایگاه دیگری نمی‌گذرد، و مدیر فقط کارهای روزانه و مجوزهایش را دارد
   ([ساختار داخلی: ربات تلگرام](Internals-Telegram-Bot.md#مدیریت-فروشگاه)).
+- **ربات همه تنظیمات را دارد**: `tests/Feature/BotAdmin/SettingsParityTest` نسخه ربات از فهرست تنظیمات پنل را با خود فهرست
+  پنل یکی نگه می‌دارد، و هر بخش آن را با جایی در مدیریت ربات (صفحه‌ای که دارد، فیلد یا بخشی از همان کارت)، یا با دلیل اینکه
+  فقط پنل آن را تنظیم می‌کند ([گسترش](Extending.md#تنظیم)).
 - **توصیف API**: `tests/Unit/Http/ApiDescriptionTest` فایل `resources/api/openapi.yaml` را با مسیرها هماهنگ نگه
   می‌دارد، شیءهای آن را بسته (بدون فیلد اضافه)، و قابل خواندن با ابزارهای خود یک وب‌سایت
   ([قرارداد API](API-Contract.md#چطور-طرف-php-به-آن-پایبند-می‌ماند)).

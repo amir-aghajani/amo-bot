@@ -14,9 +14,12 @@ use App\Modules\Telegram\Admin\Ui\Answer;
 use App\Modules\Telegram\Admin\Ui\BaseScreen;
 use App\Modules\Telegram\Admin\Ui\Button;
 use App\Modules\Telegram\Admin\Ui\Fmt;
+use App\Modules\Telegram\Admin\Ui\Icons;
 use App\Modules\Telegram\Admin\Ui\Json;
+use App\Modules\Telegram\Admin\Ui\ListScreen;
 use App\Modules\Telegram\Admin\Ui\Prompt;
 use App\Modules\Telegram\Admin\Ui\View;
+use App\Modules\Telegram\Admin\Ui\Words as UiWords;
 use Illuminate\Support\Carbon;
 
 /**
@@ -24,9 +27,9 @@ use Illuminate\Support\Carbon;
  * `agency` in the main shop (the panel's row, its menu and AgentModal; there is no agents' route for one): their
  * bot and its state, its traffic and what is hidden from their shop, their level, wallet and credit, what their bot sold,
  * their terms of selling and the owner's word on them (selling stopped, an end near, a month short), and the row's menu:
- * «✏️ سطح، اعتبار و شرایط فروش», «📦 حجم», «🙈 سرورها و پلن‌های پنهان», «⛔️ توقف فروش» / «▶️ ادامه فروش», «🏪 باز کردن
- * فروشگاه» and «🚫 لغو نمایندگی» — the stop and the end each asked first: «✍️ با توضیح» (a note the agent reads, then
- * done), «⏭ بدون توضیح» (done) or «✖️ انصراف».
+ * «✏️ سطح، اعتبار و شرایط فروش» (the main one), «📦 حجم ربات», «🙈 پنهان از فروشگاهش», «🏪 باز کردن فروشگاه» and their
+ * bot's link, «▶️ ادامه فروش» / «⏸ توقف فروش» and «🚫 لغو نمایندگی» (red) — the stop and the end each asked first:
+ * «✍️ … با توضیح» (a note the agent reads, then done), «⏭ … بدون توضیح» (done) or «✖️ انصراف».
  *
  * Actions: `sus` (id: asks), `susw` (id: asks the note), `susn` (id: stops without a note), `res` (id), `rev` (id:
  * asks), `revw` (id: asks the note), `revn` (id: ends without a note).
@@ -89,25 +92,28 @@ final class AgentScreen extends BaseScreen
                 if ($row === null) {
                     return $admin->open(AgentsScreen::ID);
                 }
-                $name = Fmt::e(Words::user($row['user'] ?? null));
+                $user = Words::user($row['user'] ?? null);
+                $name = Fmt::e($user);
 
                 return $action === 'sus'
                     ? Words::withNote(
-                        'فروش ' . Words::user($row['user'] ?? null) . ' متوقف شود؟',
+                        $admin,
+                        'فروش ' . $user . ' متوقف شود؟',
                         'در ربات ' . $name . ' تا وقتی خودتان «ادامه فروش» را بزنید ' . self::SUSPENDED_SALES . ' تازه انجام نمی‌شود؛ ربات، پنل و سرویس‌های فعلی مشتری‌هایش کار می‌کنند و خودش هم حجم می‌خرد. به او خبر داده می‌شود.',
-                        Button::to('✍️ با توضیح', self::ID, 'susw', $id),
-                        Button::to('⏭ بدون توضیح', self::ID, 'susn', $id),
-                        Button::to('✖️ انصراف', self::ID, 'show', $id),
+                        Button::to('✍️ توقف با توضیح', self::ID, 'susw', $id)->danger(),
+                        Button::to('⏭ توقف بدون توضیح', self::ID, 'susn', $id)->danger(),
+                        Button::to(UiWords::CANCEL, self::ID, 'show', $id),
                     )
                     : Words::withNote(
-                        'نمایندگی ' . Words::user($row['user'] ?? null) . ' لغو شود؟',
+                        $admin,
+                        'نمایندگی ' . $user . ' لغو شود؟',
                         'ربات ' . $name . ' خاموش می‌شود و ورودش به پنل تمام می‌شود؛ اگر بدهکار باشد، بدهی‌اش می‌ماند. فروشگاه و حجمش نگه داشته می‌شود و با نماینده شدن دوباره برمی‌گردد. به او خبر داده می‌شود.',
-                        Button::to('✍️ با توضیح', self::ID, 'revw', $id),
-                        Button::to('⏭ بدون توضیح', self::ID, 'revn', $id),
-                        Button::to('✖️ انصراف', self::ID, 'show', $id),
+                        Button::to('✍️ لغو با توضیح', self::ID, 'revw', $id)->danger(),
+                        Button::to('⏭ لغو بدون توضیح', self::ID, 'revn', $id)->danger(),
+                        Button::to(UiWords::CANCEL, self::ID, 'show', $id),
                     );
             case 'susw':
-                return $admin->ask(new Prompt('توضیح توقف فروش', self::ID, 'sus', [$id], Words::NOTE_HINT, Button::to('✖️ انصراف', self::ID, 'show', $id)));
+                return $admin->ask(new Prompt('توضیح توقف فروش', self::ID, 'sus', [$id], Words::NOTE_HINT, Button::to(UiWords::CANCEL, self::ID, 'show', $id)));
             case 'susn':
                 return $this->suspend($admin, $id, '');
             case 'res':
@@ -116,7 +122,7 @@ final class AgentScreen extends BaseScreen
 
                 return $this->view(self::keep($admin, $agent));
             case 'revw':
-                return $admin->ask(new Prompt('توضیح لغو نمایندگی', self::ID, 'rev', [$id], Words::NOTE_HINT, Button::to('✖️ انصراف', self::ID, 'show', $id)));
+                return $admin->ask(new Prompt('توضیح لغو نمایندگی', self::ID, 'rev', [$id], Words::NOTE_HINT, Button::to(UiWords::CANCEL, self::ID, 'show', $id)));
             case 'revn':
                 return $this->revoke($admin, $id, '');
         }
@@ -149,10 +155,7 @@ final class AgentScreen extends BaseScreen
      */
     public static function row(Admin $admin, int $id): ?array
     {
-        $rows = (array) ($admin->state(AgentsScreen::ID)['rows'] ?? []);
-        $row = $rows[$id] ?? $rows[(string) $id] ?? null;
-
-        return is_array($row) ? $row : null;
+        return ListScreen::keptRow($admin, AgentsScreen::ID, $id);
     }
 
     /**
@@ -228,13 +231,13 @@ final class AgentScreen extends BaseScreen
         $hidden = Json::part($agent, 'hidden');
         $balance = (string) ($agent['balance'] ?? '0');
 
-        $view = View::make('🤝 نماینده ' . Words::user($agent['user'] ?? null), 'مدیریت', 'نمایندگان', 'نماینده‌ها')
-            ->line('👤 ' . Words::who($agent['user'] ?? null) . (($agent['status'] ?? null) === 'banned' ? ' · ⛔️ مسدود' : ''));
+        $view = View::make(Icons::AGENTS . ' نماینده ' . Words::user($agent['user'] ?? null), ...[...AgencyScreen::path(), Fmt::bare(AgentsScreen::TITLE)]);
         $concern = self::concern($agent);
         if ($concern !== null) {
             $view->line($concern);
         }
-        $view->line()->facts([
+        $view->card([
+            'مشتری' => Words::who($agent['user'] ?? null) . (($agent['status'] ?? null) === 'banned' ? ' · ⛔️ مسدود' : ''),
             'ربات' => $bot === null ? 'هنوز ندارد' : self::bot($bot),
             'حجم باقی‌مانده' => $bot === null ? null : Fmt::bytes((int) ($bot['traffic_balance'] ?? 0)),
             'پنهان' => (int) ($hidden['servers'] ?? 0) > 0 || (int) ($hidden['plans'] ?? 0) > 0 ? Fmt::number((int) ($hidden['servers'] ?? 0)) . ' سرور، ' . Fmt::number((int) ($hidden['plans'] ?? 0)) . ' پلن' : null,
@@ -246,8 +249,8 @@ final class AgentScreen extends BaseScreen
         ]);
         if ($standing !== null) {
             $month = Json::part($standing, 'month');
-            $view->facts([
-                'پایان نمایندگی' => is_string($standing['expires_at'] ?? null) ? Fmt::date($standing['expires_at']) . ' (' . self::left($standing['expires_at']) . ')' : 'بدون پایان',
+            $view->section('📋 شرایط فروش')->card([
+                'پایان نمایندگی' => is_string($standing['expires_at'] ?? null) ? Fmt::date($standing['expires_at']) . ' (' . self::left($standing['expires_at']) . ')' : AgencyEnd::NONE,
                 'خرید حجم ' . (string) ($month['name'] ?? '') => ($standing['monthly_minimum'] ?? null) === null
                     ? Fmt::money((string) ($month['purchased'] ?? '0')) . ' · بدون کف ماهانه'
                     : self::month($standing) . (Json::on($month, 'judged') ? '' : ' (این ماه سنجیده نمی‌شود)'),
@@ -256,19 +259,23 @@ final class AgentScreen extends BaseScreen
         }
 
         $suspension = is_array($standing['suspension'] ?? null) ? (string) ($standing['suspension']['reason'] ?? '') : null;
-        $view->row(Button::to('✏️ سطح، اعتبار و شرایط فروش', AgentTermsScreen::ID, 'edit', $id));
+        $username = is_string($bot['username'] ?? null) && $bot['username'] !== '' ? $bot['username'] : null;
+        $view->row(Button::to(UiWords::edit('سطح، اعتبار و شرایط فروش'), AgentTermsScreen::ID, 'edit', $id)->primary());
         if ($bot !== null) {
-            $view->row(Button::to('📦 حجم', AgentTrafficScreen::ID, 'show', $id), Button::to('🙈 سرورها و پلن‌های پنهان', AgentHiddenScreen::ID, 'show', $id));
+            $view->row(Button::to('📦 حجم ربات', AgentTrafficScreen::ID, 'show', $id), Button::to('🙈 پنهان از فروشگاهش', AgentHiddenScreen::ID, 'show', $id))
+                ->row(
+                    Button::to(Icons::SHOP_SWITCH . ' باز کردن فروشگاه', 'shop', 'pick', (int) ($bot['id'] ?? 0)),
+                    $username !== null ? Button::url('🤖 ربات او', 'https://t.me/' . $username) : null,
+                );
         }
         $view->row(
-            $standing !== null && $suspension !== 'manual' ? Button::to('⛔️ توقف فروش', self::ID, 'sus', $id) : null,
-            $suspension !== null && $suspension !== 'expired' ? Button::to('▶️ ادامه فروش', self::ID, 'res', $id) : null,
+            $suspension !== null && $suspension !== 'expired' ? Button::to('▶️ ادامه فروش', self::ID, 'res', $id)->success() : null,
+            $standing !== null && $suspension !== 'manual' ? Button::to('⏸ توقف فروش', self::ID, 'sus', $id)->danger() : null,
         );
-        if ($bot !== null) {
-            $view->row(Button::to('🏪 باز کردن فروشگاه', 'shop', 'pick', (int) ($bot['id'] ?? 0)));
-        }
 
-        return $view->row(Button::to('🚫 لغو نمایندگی', self::ID, 'rev', $id))->back(AgentsScreen::ID);
+        return $view->row(Button::to('🚫 لغو نمایندگی', self::ID, 'rev', $id)->danger())
+            ->back(AgentsScreen::ID)
+            ->refresh(self::ID, 'show', $id);
     }
 
     /**
@@ -280,10 +287,10 @@ final class AgentScreen extends BaseScreen
     {
         $name = is_string($bot['username'] ?? null) ? Fmt::ltr('@' . $bot['username']) : 'بدون توکن';
         $state = match (true) {
-            ($bot['status'] ?? null) === 'disabled' => '⚪️ غیرفعال',
+            ($bot['status'] ?? null) === 'disabled' => UiWords::INACTIVE,
             ($bot['connected'] ?? false) !== true => '🟡 منتظر توکن',
             is_string($bot['problem'] ?? null) => '⚠️ مشکل دارد: ' . Fmt::e($bot['problem']),
-            default => '🟢 فعال',
+            default => UiWords::ACTIVE,
         };
 
         return $name . ' · ' . $state;

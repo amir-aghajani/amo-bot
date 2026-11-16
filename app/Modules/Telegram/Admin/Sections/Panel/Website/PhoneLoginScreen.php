@@ -14,8 +14,8 @@ use App\Modules\Telegram\Admin\Ui\View;
 
 /**
  * «ورود با موبایل» of the website: sign-in by a code texted to the customer — held off while no SMS goes out for the
- * site (none set up, or an agent's site the owner does not text for), said as the owner's doing to the owner, as the
- * owner's to an agent.
+ * site (none set up, or an agent's site the owner does not text for), warned of as the owner's doing to the owner, as
+ * the owner's to an agent, with the way to the panel's SMS for the owner in the main shop.
  */
 final class PhoneLoginScreen extends WebsiteCard
 {
@@ -42,16 +42,16 @@ final class PhoneLoginScreen extends WebsiteCard
         return 'مشتری شماره موبایلش را وارد می‌کند و کدی شش رقمی با پیامک می‌گیرد؛ با همان کد وارد حسابش می‌شود، و اگر با این شماره حسابی نداشته باشد حساب تازه‌ای برایش ساخته می‌شود.';
     }
 
-    protected function lead(array $values): array
+    protected function warnings(Admin $admin, array $values): array
     {
         $sms = self::part($values, 'phone')['sms'] ?? self::READY;
         if ($sms === self::READY) {
             return [];
         }
         $meanwhile = Json::on($values, 'phone_login') ? 'کسی نمی‌تواند با شماره موبایل وارد شود.' : 'این گزینه روشن نمی‌شود.';
-        $owner = $this->here !== null && $this->here->seat->isOwner();
+        $owner = $admin->seat->isOwner();
 
-        return ['', '⚠️ ' . match (true) {
+        return [match (true) {
             $sms === self::NOT_FOR_AGENTS && $owner => 'پیامک را برای سایت نماینده‌ها باز نکرده‌اید؛ تا آن را در «تنظیمات پنل › پیامک» باز نکنید، ' . $meanwhile,
             $sms === self::NOT_FOR_AGENTS => 'مالک فروشگاه پیامک را برای سایت نماینده‌ها باز نکرده است؛ تا باز نکند، ' . $meanwhile,
             !$owner => 'پیامک را مالک فروشگاه راه می‌اندازد و هنوز راه‌اندازی نشده است؛ تا راه نیفتد، ' . $meanwhile,
@@ -69,7 +69,7 @@ final class PhoneLoginScreen extends WebsiteCard
     protected function extra(View $view, Admin $admin, array $values): void
     {
         if ((self::part($values, 'phone')['sms'] ?? self::READY) !== self::READY && Access::main($admin->seat)) {
-            $view->row(Button::to('📨 تنظیمات پیامک پنل', SmsScreen::ID));
+            $view->row(Button::to('📨 تنظیمات پیامک پنل', SmsScreen::ID)->primary());
         }
     }
 }

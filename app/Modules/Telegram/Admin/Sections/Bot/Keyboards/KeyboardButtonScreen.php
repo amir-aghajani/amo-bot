@@ -6,6 +6,7 @@ namespace App\Modules\Telegram\Admin\Sections\Bot\Keyboards;
 
 use App\Modules\Telegram\Admin\AdminSeat;
 use App\Modules\Telegram\Admin\Door\ApiRefusal;
+use App\Modules\Telegram\Admin\Sections\Bot\BotScreens;
 use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\Answer;
 use App\Modules\Telegram\Admin\Ui\BaseScreen;
@@ -13,6 +14,7 @@ use App\Modules\Telegram\Admin\Ui\Button;
 use App\Modules\Telegram\Admin\Ui\Fmt;
 use App\Modules\Telegram\Admin\Ui\Prompt;
 use App\Modules\Telegram\Admin\Ui\View;
+use App\Modules\Telegram\Admin\Ui\Words;
 
 /**
  * One button of a keyboard (the panel's button dialog), found by the bot's button it stands for — each is on a keyboard
@@ -29,8 +31,8 @@ final class KeyboardButtonScreen extends BaseScreen
 {
     public const ID = 'kbb';
 
-    /** Telegram's colours (the panel's styles): their name, and the colour in words. */
-    private const STYLES = ['primary' => ['اصلی', 'آبی'], 'success' => ['موفقیت', 'سبز'], 'danger' => ['خطر', 'قرمز']];
+    /** Telegram's colours (the panel's styles): their name, the colour in words and its mark. */
+    public const STYLES = ['primary' => ['اصلی', 'آبی', '🔵'], 'success' => ['موفقیت', 'سبز', '🟢'], 'danger' => ['خطر', 'قرمز', '🔴']];
 
     private const NONE = '_';
 
@@ -68,10 +70,16 @@ final class KeyboardButtonScreen extends BaseScreen
 
                 return $this->saved($admin, $data, $moved, $key, '✅ جای دکمه عوض شد');
             case 'lb':
-                $prompt = new Prompt('متن دکمه', self::ID, 'lb', [$name, $key], 'همان چیزی که مشتری روی دکمه می‌بیند؛ ایموجی هم می‌شود. حداکثر ' . Fmt::number($data['limits']['label']) . " کاراکتر.\nایموجی پرمیوم در متن، آیکون دکمه می‌شود.\nالان: " . Fmt::e((string) ($button['label'] ?? '')), anyText: true);
+                $prompt = (new Prompt('متن دکمه', self::ID, 'lb', [$name, $key], "همان چیزی که مشتری روی دکمه می‌بیند؛ ایموجی هم می‌شود.\nایموجی پرمیوم در متن، آیکون دکمه می‌شود.", anyText: true))
+                    ->current((string) ($button['label'] ?? ''))
+                    ->limits('حداکثر ' . Fmt::plain(Fmt::number($data['limits']['label'])) . ' کاراکتر');
                 $own = (string) (KeyboardScreen::action($data, $key)['label'] ?? '');
+                if ($own !== '' && $own !== ($button['label'] ?? null)) {
+                    // «↩️ پیش‌فرض» puts back the button's own words, shown as the example.
+                    $prompt->example($own)->resettable(self::ID, 'lbd', $name, $key);
+                }
 
-                return $admin->ask($own !== '' && $own !== ($button['label'] ?? null) ? $prompt->choices(Button::to('↩️ متن پیش‌فرض: ' . $own, self::ID, 'lbd', $name, $key)) : $prompt);
+                return $admin->ask($prompt);
             case 'lbd':
                 $rows[$r][$i]['label'] = (string) (KeyboardScreen::action($data, $key)['label'] ?? $button['label'] ?? '');
 
@@ -85,14 +93,17 @@ final class KeyboardButtonScreen extends BaseScreen
                 return $this->saved($admin, $data, $rows, $key, '✅ رنگ دکمه ذخیره شد');
             case 'ic':
                 $prompt = new Prompt('آیکون دکمه', self::ID, 'ic', [$name, $key], "یک ایموجی پرمیوم بفرستید؛ پیش از متن دکمه نشان داده می‌شود.\nفقط وقتی دیده می‌شود که حسابی که ربات را در \u{2068}@BotFather\u{2069} ساخته تلگرام پرمیوم داشته باشد؛ وگرنه دکمه بدون آیکون نشان داده می‌شود و همان کار را می‌کند.");
+                if (($button['icon'] ?? null) !== null) {
+                    $prompt->current('✨ ایموجی پرمیوم', false)->clearable(self::ID, 'icx', $name, $key);
+                }
 
-                return $admin->ask(($button['icon'] ?? null) !== null ? $prompt->choices(Button::to('🗑 برداشتن آیکون', self::ID, 'icx', $name, $key)) : $prompt);
+                return $admin->ask($prompt);
             case 'icx':
                 $rows[$r][$i]['icon'] = null;
 
                 return $this->saved($admin, $data, $rows, $key, '✅ آیکون دکمه برداشته شد');
             case 'ac':
-                return $this->actions($data, $key);
+                return $this->actions($data, $button, $key);
             case 'acs':
                 $new = $args[2] ?? '';
                 $action = KeyboardScreen::action($data, $new);
@@ -110,8 +121,8 @@ final class KeyboardButtonScreen extends BaseScreen
             case 'del':
                 return $admin->confirm(
                     'این دکمه از کیبورد حذف شود؟',
-                    Button::to('🗑 بله، حذف شود', self::ID, 'deld', $name, $key),
-                    Button::to('✖️ انصراف', self::ID, 'show', $name, $key),
+                    Button::to(Words::yes('حذف شود', '🗑'), self::ID, 'deld', $name, $key),
+                    Button::to(Words::CANCEL, self::ID, 'show', $name, $key),
                     'مشتری‌ها دیگر «' . Fmt::e((string) ($button['label'] ?? '')) . '» را در منو نمی‌بینند؛ با «➕ افزودن دکمه» برمی‌گردد.',
                 );
             case 'deld':
@@ -162,7 +173,7 @@ final class KeyboardButtonScreen extends BaseScreen
     }
 
     /**
-     * @param array{keyboard: array{name: string, title: string, is_default: bool, type: string, rows: list<list<array<string, mixed>>>}, actions: list<array<string, mixed>>, styles: list<string>, limits: array{rows: int, per_row: int, label: int}, count: int} $data
+     * @param array{keyboard: array{name: string, title: string, is_default: bool, type: string, rows: list<list<array<string, mixed>>>}, actions: list<array<string, mixed>>, styles: list<string>, limits: array{rows: int, per_row: int, label: int}} $data
      * @param array{0: int, 1: int} $at
      */
     private function view(array $data, array $at): View
@@ -176,44 +187,73 @@ final class KeyboardButtonScreen extends BaseScreen
         $style = self::STYLES[(string) ($button['style'] ?? '')] ?? null;
         $moves = $this->moves($rows, $r, $i, $data['limits']);
 
-        $view = View::make('🔘 ' . (string) ($button['label'] ?? ''), 'مدیریت', 'ربات', 'کیبوردها', $data['keyboard']['title'])
-            ->facts([
-                'دکمه' => Fmt::e((string) ($action['title'] ?? $key)) . ' ' . Fmt::ltr($key),
+        $view = View::make('🔘 ' . (string) ($button['label'] ?? ''), ...[...BotScreens::PATH, Fmt::bare(KeyboardsScreen::TITLE), $data['keyboard']['title']])
+            ->card([
+                'کار دکمه' => Fmt::e((string) ($action['title'] ?? $key)) . ' ' . Fmt::ltr($key),
                 'متن دکمه' => Fmt::e((string) ($button['label'] ?? '')),
                 'آیکون دکمه' => ($button['icon'] ?? null) !== null ? '<tg-emoji emoji-id="' . Fmt::e((string) $button['icon']) . '">✨</tg-emoji> ایموجی پرمیوم' : 'بدون آیکون',
-                'رنگ دکمه' => $style === null ? 'پیش‌فرض (رنگ خودکار)' : Fmt::e($style[0] . ' (' . $style[1] . ')'),
+                'رنگ دکمه' => Fmt::e(self::chip($style)),
                 'جای دکمه' => 'ردیف ' . Fmt::number($r + 1) . '، دکمه ' . Fmt::number($i + 1) . ' از ' . Fmt::number(count($rows[$r])),
             ]);
         $view->row(
             in_array('r', $moves, true) ? Button::to('➡️ به راست', self::ID, 'mv', $name, $key, 'r') : null,
             in_array('l', $moves, true) ? Button::to('⬅️ به چپ', self::ID, 'mv', $name, $key, 'l') : null,
         )->row(
-            in_array('u', $moves, true) ? Button::to('🔼 ردیف بالا', self::ID, 'mv', $name, $key, 'u') : null,
-            in_array('d', $moves, true) ? Button::to('🔽 ردیف پایین', self::ID, 'mv', $name, $key, 'd') : null,
+            in_array('u', $moves, true) ? Button::to(Words::UP . ' ردیف بالا', self::ID, 'mv', $name, $key, 'u') : null,
+            in_array('d', $moves, true) ? Button::to(Words::DOWN . ' ردیف پایین', self::ID, 'mv', $name, $key, 'd') : null,
         )
-            ->row(Button::to('✏️ متن دکمه', self::ID, 'lb', $name, $key), Button::to('🎨 رنگ دکمه', self::ID, 'st', $name, $key))
-            ->row(Button::to('✨ آیکون دکمه', self::ID, 'ic', $name, $key), Button::to('🔁 دکمه دیگر', self::ID, 'ac', $name, $key))
-            ->row(Button::to('🗑 حذف دکمه', self::ID, 'del', $name, $key));
+            ->tiles(
+                Button::to(Words::edit('متن دکمه'), self::ID, 'lb', $name, $key),
+                Button::to('🎨 رنگ دکمه', self::ID, 'st', $name, $key),
+                Button::to('✨ آیکون دکمه', self::ID, 'ic', $name, $key),
+                Button::to('🔁 کار دیگر', self::ID, 'ac', $name, $key),
+            )
+            ->row(Button::to(Words::DELETE . ' دکمه', self::ID, 'del', $name, $key)->danger());
 
         return $view->back(KeyboardScreen::ID, 'show', $name);
     }
 
     /**
-     * @param array{keyboard: array{name: string, title: string, is_default: bool, type: string, rows: list<list<array<string, mixed>>>}, actions: list<array<string, mixed>>, styles: list<string>, limits: array{rows: int, per_row: int, label: int}, count: int} $data
+     * A colour as its chip: «🔵 آبی (اصلی)», «⚪️ پیش‌فرض (رنگ خودکار)».
+     *
+     * @param array{0: string, 1: string, 2: string}|null $style
+     */
+    private static function chip(?array $style): string
+    {
+        return $style === null ? '⚪️ پیش‌فرض (رنگ خودکار)' : $style[2] . ' ' . $style[1] . ' (' . $style[0] . ')';
+    }
+
+    /**
+     * Where a button's own pickers are: its keyboard's path, the keyboard, and the button.
+     *
+     * @param array{keyboard: array{name: string, title: string, is_default: bool, type: string, rows: list<list<array<string, mixed>>>}, actions: list<array<string, mixed>>, styles: list<string>, limits: array{rows: int, per_row: int, label: int}} $data
+     * @param array<string, mixed> $button
+     * @return list<string>
+     */
+    private static function under(array $data, array $button): array
+    {
+        $label = Fmt::bare((string) ($button['label'] ?? ''));
+
+        return [...BotScreens::PATH, Fmt::bare(KeyboardsScreen::TITLE), $data['keyboard']['title'], ...($label === '' ? [] : [$label])];
+    }
+
+    /**
+     * @param array{keyboard: array{name: string, title: string, is_default: bool, type: string, rows: list<list<array<string, mixed>>>}, actions: list<array<string, mixed>>, styles: list<string>, limits: array{rows: int, per_row: int, label: int}} $data
      * @param array<string, mixed> $button
      */
     private function styles(array $data, array $button, string $key): View
     {
         $name = $data['keyboard']['name'];
         $current = (string) ($button['style'] ?? self::NONE);
-        $buttons = [Button::to(($current === self::NONE ? '● ' : '') . 'پیش‌فرض — رنگ خودکار', self::ID, 'sts', $name, $key, self::NONE)];
+        $buttons = [Button::to(($current === self::NONE ? Words::PICKED : '') . self::chip(null), self::ID, 'sts', $name, $key, self::NONE)];
         foreach ($data['styles'] as $style) {
             if (isset(self::STYLES[$style])) {
-                $buttons[] = Button::to(($current === $style ? '● ' : '') . self::STYLES[$style][0] . ' — ' . self::STYLES[$style][1], self::ID, 'sts', $name, $key, $style);
+                // Each in its own colour: the picker shows them as Telegram draws them.
+                $buttons[] = Button::to(($current === $style ? Words::PICKED : '') . self::chip(self::STYLES[$style]), self::ID, 'sts', $name, $key, $style)->styled($style);
             }
         }
 
-        return View::make('🎨 رنگ دکمه', 'مدیریت', 'ربات', 'کیبوردها')
+        return View::make('🎨 رنگ دکمه', ...self::under($data, $button))
             ->line('رنگی که تلگرام به دکمه می‌دهد؛ «پیش‌فرض» هر رنگی است که برنامه تلگرام برای دکمه‌های معمولی دارد.')
             ->grid(1, ...$buttons)->back(self::ID, 'show', $name, $key);
     }
@@ -221,9 +261,10 @@ final class KeyboardButtonScreen extends BaseScreen
     /**
      * The bot's buttons this one may become: those not on the keyboard, and itself.
      *
-     * @param array{keyboard: array{name: string, title: string, is_default: bool, type: string, rows: list<list<array<string, mixed>>>}, actions: list<array<string, mixed>>, styles: list<string>, limits: array{rows: int, per_row: int, label: int}, count: int} $data
+     * @param array{keyboard: array{name: string, title: string, is_default: bool, type: string, rows: list<list<array<string, mixed>>>}, actions: list<array<string, mixed>>, styles: list<string>, limits: array{rows: int, per_row: int, label: int}} $data
+     * @param array<string, mixed> $button
      */
-    private function actions(array $data, string $key): View
+    private function actions(array $data, array $button, string $key): View
     {
         $name = $data['keyboard']['name'];
         $taken = KeyboardScreen::taken($data['keyboard']['rows']);
@@ -231,11 +272,11 @@ final class KeyboardButtonScreen extends BaseScreen
         foreach ($data['actions'] as $action) {
             $other = (string) ($action['key'] ?? '');
             if ($other === $key || !in_array($other, $taken, true)) {
-                $buttons[] = Button::to(($other === $key ? '● ' : '') . (string) ($action['label'] ?? $other), self::ID, 'acs', $name, $key, $other);
+                $buttons[] = Button::to(($other === $key ? Words::PICKED : '') . (string) ($action['label'] ?? $other), self::ID, 'acs', $name, $key, $other);
             }
         }
 
-        return View::make('🔁 دکمه دیگر', 'مدیریت', 'ربات', 'کیبوردها')
+        return View::make('🔁 کار دیگر برای دکمه', ...self::under($data, $button))
             ->line('کاری که این دکمه در ربات انجام می‌دهد؛ هر دکمه یک بار روی کیبورد می‌آید. متن دکمه اگر همان متن پیش‌فرضش باشد، با دکمه عوض می‌شود.')
             ->grid(2, ...$buttons)->back(self::ID, 'show', $name, $key);
     }
@@ -301,7 +342,7 @@ final class KeyboardButtonScreen extends BaseScreen
     /**
      * Save the layout, saying so, and show the button (by its action) where it now is.
      *
-     * @param array{keyboard: array{name: string, title: string, is_default: bool, type: string, rows: list<list<array<string, mixed>>>}, actions: list<array<string, mixed>>, styles: list<string>, limits: array{rows: int, per_row: int, label: int}, count: int} $data
+     * @param array{keyboard: array{name: string, title: string, is_default: bool, type: string, rows: list<list<array<string, mixed>>>}, actions: list<array<string, mixed>>, styles: list<string>, limits: array{rows: int, per_row: int, label: int}} $data
      * @param list<list<array<string, mixed>>> $rows
      * @throws ApiRefusal
      */

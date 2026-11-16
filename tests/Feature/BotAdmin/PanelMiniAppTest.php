@@ -7,7 +7,6 @@ namespace Tests\Feature\BotAdmin;
 use App\Modules\Store\Models\MiniApp;
 use App\Modules\Store\Services\MiniApps;
 use App\Modules\Telegram\Admin\Ui\Nav;
-use App\Modules\Users\Models\User;
 use GuzzleHttp\Psr7\Response;
 use Tests\BotTestCase;
 
@@ -18,8 +17,6 @@ use Tests\BotTestCase;
  */
 final class PanelMiniAppTest extends BotTestCase
 {
-    private const OWNER = 7001;
-
     protected function setUp(): void
     {
         parent::setUp();
@@ -130,19 +127,5 @@ final class PanelMiniAppTest extends BotTestCase
         imagepng($image);
 
         return (string) ob_get_clean();
-    }
-
-    private function tapAs(string $data): void
-    {
-        $this->send($this->tap($data, chat: self::OWNER));
-    }
-
-    /** The account 7001 linked as the owner. */
-    private function owner(): User
-    {
-        $owner = User::query()->where('telegram_id', self::OWNER)->first() ?? $this->customer(['telegram_id' => self::OWNER, 'first_name' => 'Amir']);
-        $this->linkOwner(self::OWNER);
-
-        return $owner;
     }
 }

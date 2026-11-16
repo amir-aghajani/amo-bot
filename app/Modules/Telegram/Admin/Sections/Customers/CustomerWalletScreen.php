@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Telegram\Admin\Sections\Customers;
 
+use App\Core\Database\Ledger;
 use App\Modules\Auth\StaffGrant;
 use App\Modules\Telegram\Admin\Door\ApiRefusal;
 use App\Modules\Telegram\Admin\Ui\Admin;
@@ -11,17 +12,23 @@ use App\Modules\Telegram\Admin\Ui\Answer;
 use App\Modules\Telegram\Admin\Ui\BaseScreen;
 use App\Modules\Telegram\Admin\Ui\Button;
 use App\Modules\Telegram\Admin\Ui\Fmt;
+use App\Modules\Telegram\Admin\Ui\Icons;
 use App\Modules\Telegram\Admin\Ui\Json;
+use App\Modules\Telegram\Admin\Ui\Nav;
 use App\Modules\Telegram\Admin\Ui\Prompt;
 use App\Modules\Telegram\Admin\Ui\View;
+use App\Modules\Telegram\Admin\Ui\Words;
 use App\Modules\Telegram\Messages;
+use App\Support\Money;
+use App\Support\Persian;
 use App\Support\Unit;
 
 /**
- * A customer's wallet (the panel's «کیف پول» card and dialog): the balance, the ledger — a page of lines, each with what
- * it was, its date, the balance after, a transfer's other customer and the admin who wrote it by hand — and, for a seat
- * the `wallet` grant opens, a credit or a debit by hand: the amount, a note the customer sees (or none), the two said
- * once more, then sent once under its Idempotency-Key (the same change pressed twice is made once).
+ * A customer's wallet (the panel's «کیف پول» card and dialog): the balance as a card, then the ledger — a page of lines,
+ * each with what it was, its date, the balance after, a transfer's other customer and the admin who wrote it by hand —
+ * and, for a seat the `wallet` grant opens, a credit or a debit by hand: the amount, a note the customer sees (or none),
+ * then the change said once more with the balance it leaves, sent once under its Idempotency-Key (the same change
+ * pressed twice is made once).
  *
  * Opened with the customer's id and a ledger page. Actions: `add` / `sub` (id: a credit / a debit asked), `amt` (id:
  * the amount asked again), `note` (id: the note asked again), `skip` (id: no note), `do` (id: sent).
@@ -29,6 +36,8 @@ use App\Support\Unit;
 final class CustomerWalletScreen extends BaseScreen
 {
     public const ID = 'usw';
+
+    public const TITLE = Icons::WALLET . ' کیف پول';
 
     /** Ledger lines a page. */
     private const LINES = 10;
@@ -98,28 +107,27 @@ final class CustomerWalletScreen extends BaseScreen
         $lines = Json::rows($answer, 'transactions');
         [$shown, $page, $pages] = View::slice($lines, $page, self::LINES);
 
-        $view = View::make('👛 کیف پول', 'مدیریت', 'فروش', 'کاربران', Customer::name($user))
-            ->facts(['موجودی فعلی' => '<b>' . Fmt::e(Messages::balance(Customer::money($user['balance'] ?? null))) . '</b>'])
-            ->line('افزایش یا کاهش دستی، با توضیحی که مشتری در تاریخچه کیف پولش می‌بیند.')
-            ->line()
-            ->line('<b>تراکنش‌ها</b>' . ($pages > 1 ? ' · صفحه ' . Fmt::number($page) . ' از ' . Fmt::number($pages) : ''));
+        $view = View::make(self::TITLE, ...Customer::under(Customer::name($user)))
+            ->card(['موجودی' => Fmt::e(Messages::balance(Customer::balance($answer)))])
+            ->section('🧾 تراکنش‌ها');
         if ($lines === []) {
             $view->line('هنوز تراکنشی ندارد؛ شارژها، خریدها و تغییرهای دستی این‌جا ثبت می‌شوند.');
         }
         foreach ($shown as $line) {
             $view->line(self::ledgerLine($line));
         }
-
         if ($admin->seat->holds(StaffGrant::Wallet) && !Customer::own($admin, $id)) {
-            $view->row(Button::to('➕ افزایش موجودی', self::ID, 'add', $id), Button::to('➖ کاهش موجودی', self::ID, 'sub', $id));
+            $view->note('افزایش یا کاهش دستی، با توضیحی که مشتری در تاریخچه کیف پولش می‌بیند.')
+                ->row(Button::to('➕ افزایش موجودی', self::ID, 'add', $id)->success(), Button::to('➖ کاهش موجودی', self::ID, 'sub', $id));
         }
-        $view->pager($page, $pages, self::ID, 'show', $id);
 
-        return $view->back(CustomerScreen::ID, 'show', $id);
+        return $view->pager($page, $pages, self::ID, Nav::SHOW, $id)
+            ->back(CustomerScreen::ID, Nav::SHOW, $id)
+            ->refresh(self::ID, Nav::SHOW, $id, $page);
     }
 
     /**
-     * One ledger line as the panel's list says it: in or out and how much, what it was, when, the balance after, a
+     * One ledger line as the panel's list says it: in or out and how much, what it was, then when, the balance after, a
      * transfer's other customer, and who wrote it by hand.
      *
      * @param array<string, mixed> $line
@@ -152,7 +160,7 @@ final class CustomerWalletScreen extends BaseScreen
         return $id > 0 && ($draft['user'] ?? null) === $id && is_string($draft['type'] ?? null) ? $draft : null;
     }
 
-    /** The next step of the change: the amount, the note, then the change said once more. */
+    /** The next step of the change: the amount, the note, then the change said once more with the balance it leaves. */
     private function next(Admin $admin, int $id): View
     {
         $draft = $this->draft($admin, $id);
@@ -167,39 +175,61 @@ final class CustomerWalletScreen extends BaseScreen
         }
         $credit = $draft['type'] === 'credit';
         $note = is_string($draft['note'] ?? null) && $draft['note'] !== '' ? $draft['note'] : null;
+        $balance = Customer::balance(Customer::read($admin, $id));
+        $after = $credit ? Money::add($balance, $draft['amount']) : Money::subtract($balance, $draft['amount']);
+        // The panel takes a debit no further than the balance (UserActions::adjustWallet()): said before it is sent.
+        $short = !$credit && Money::compare($after, 0) < 0;
+        $do = Button::to($credit ? '✔️ افزایش موجودی' : '✔️ کاهش موجودی', self::ID, 'do', $id);
 
-        return View::make($credit ? '➕ افزایش موجودی' : '➖ کاهش موجودی', 'مدیریت', 'فروش', 'کاربران', Customer::known($admin, $id), 'کیف پول')
-            ->facts([
-                'مبلغ' => '<b>' . Fmt::money($draft['amount']) . '</b>',
-                'توضیح' => $note === null ? 'بدون توضیح' : Fmt::e($note),
+        $view = View::make($credit ? '➕ افزایش موجودی' : '➖ کاهش موجودی', ...Customer::under(Customer::known($admin, $id), Fmt::bare(self::TITLE)))
+            ->transient();
+        if ($short) {
+            $view->line('⚠️ بیشتر از موجودی فعلی کم نمی‌شود؛ مبلغ را عوض کنید.');
+        }
+
+        return $view
+            ->card([
+                'مبلغ' => Fmt::money($draft['amount']),
+                'توضیح' => $note === null ? '' : Fmt::e($note),
+                'موجودی فعلی' => Fmt::e(Messages::balance($balance)),
+                'موجودی بعد از آن' => $short ? null : Fmt::e(Messages::balance($after)),
             ])
             ->note('مشتری توضیح را در تاریخچه کیف پولش می‌بیند.')
-            ->row(Button::to($credit ? '✔️ افزایش موجودی' : '✔️ کاهش موجودی', self::ID, 'do', $id))
-            ->row(Button::to('✏️ مبلغ', self::ID, 'amt', $id), Button::to('✏️ توضیح', self::ID, 'note', $id))
-            ->row(Button::to('✖️ انصراف', self::ID, 'show', $id));
+            ->row($credit ? $do->success() : $do->danger())
+            ->row(Button::to(Words::edit('مبلغ'), self::ID, 'amt', $id), Button::to(Words::edit('توضیح'), self::ID, 'note', $id))
+            ->row(Button::to(Words::CANCEL, self::ID, Nav::SHOW, $id));
     }
 
+    /** The amount asked, over the balance now. */
     private function askAmount(Admin $admin, int $id): View
     {
         $draft = $this->draft($admin, $id) ?? [];
-
-        return $admin->ask(new Prompt(
+        $prompt = (new Prompt(
             ($draft['type'] ?? '') === 'debit' ? 'چه مبلغی از کیف پول کم شود؟' : 'چه مبلغی به کیف پول اضافه شود؟',
             self::ID,
             'amt',
             [$id],
-            'مبلغ را به تومان بنویسید، مثل ۵۰۰۰۰ یا «۵۰ هزار تومان».' . (is_int($draft['amount'] ?? null) ? "\nالان: " . Fmt::money($draft['amount']) : ''),
-        ));
+            'موجودی فعلی: <b>' . Fmt::e(Messages::balance(Customer::balance(Customer::read($admin, $id)))) . '</b>',
+        ))->example('۵۰۰۰۰')->limits('بیش از صفر، به تومان؛ «۵۰ هزار تومان» هم پذیرفته می‌شود');
+        if (is_int($draft['amount'] ?? null)) {
+            $prompt->current(Fmt::plain(Fmt::money($draft['amount'])), false);
+        }
+
+        return $admin->ask($prompt);
     }
 
     private function askNote(Admin $admin, int $id): View
     {
         $draft = $this->draft($admin, $id) ?? [];
-        $example = ($draft['type'] ?? '') === 'debit' ? 'مثلا: اصلاح اشتباه' : 'مثلا: هدیه، جبران قطعی';
-        $now = is_string($draft['note'] ?? null) && $draft['note'] !== '' ? "\nالان: " . Fmt::e($draft['note']) : '';
+        $prompt = (new Prompt('توضیح', self::ID, 'note', [$id], 'مشتری این متن را در تاریخچه کیف پولش می‌بیند.'))
+            ->example(($draft['type'] ?? '') === 'debit' ? 'اصلاح اشتباه' : 'هدیه تولد')
+            ->limits('تا ' . Persian::number(Ledger::NOTE_MAX) . ' نویسه')
+            ->choices(Button::to('⏭ بدون توضیح', self::ID, 'skip', $id));
+        if (is_string($draft['note'] ?? null) && $draft['note'] !== '') {
+            $prompt->current($draft['note']);
+        }
 
-        return $admin->ask((new Prompt('توضیح', self::ID, 'note', [$id], 'مشتری این متن را در تاریخچه کیف پولش می‌بیند. ' . $example . $now))
-            ->choices(Button::to('⏭ بدون توضیح', self::ID, 'skip', $id)));
+        return $admin->ask($prompt);
     }
 
     /** The change sent once, under the key its draft keeps for these very values; the wallet as it then stands. */
@@ -210,11 +240,9 @@ final class CustomerWalletScreen extends BaseScreen
             return $this->show($admin, [(string) $id]);
         }
         $body = ['type' => $draft['type'], 'amount' => (string) $draft['amount'], 'description' => is_string($draft['note'] ?? null) ? $draft['note'] : ''];
-        $key = 'bot-' . (string) ($draft['nonce'] ?? '') . '-' . substr(sha1((string) json_encode($body)), 0, 16);
-        $answer = $admin->api->post("/users/{$id}/wallet", $body, ['Idempotency-Key' => $key]);
+        $answer = $admin->api->post("/users/{$id}/wallet", $body, ['Idempotency-Key' => Customer::requestKey($draft, $body)]);
         $admin->forget(self::ID);
-        $user = Customer::row($answer);
-        $admin->notice(($draft['type'] === 'credit' ? '✅ افزایش' : '✅ کاهش') . ' موجودی ثبت شد · موجودی جدید: ' . Messages::balance(Customer::money($user['balance'] ?? null)));
+        $admin->notice(($draft['type'] === 'credit' ? '✅ افزایش' : '✅ کاهش') . ' موجودی ثبت شد · موجودی جدید: ' . Messages::balance(Customer::balance($answer)));
 
         return $this->view($admin, $answer, 1);
     }

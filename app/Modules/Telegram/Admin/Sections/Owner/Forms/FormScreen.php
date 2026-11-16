@@ -6,21 +6,27 @@ namespace App\Modules\Telegram\Admin\Sections\Owner\Forms;
 
 use App\Core\Security\Encrypter;
 use App\Modules\Telegram\Admin\Door\ApiRefusal;
+use App\Modules\Telegram\Admin\Sections\Owner\Words as OwnerWords;
 use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\Answer;
 use App\Modules\Telegram\Admin\Ui\BaseScreen;
 use App\Modules\Telegram\Admin\Ui\Button;
 use App\Modules\Telegram\Admin\Ui\Fmt;
+use App\Modules\Telegram\Admin\Ui\Icons;
 use App\Modules\Telegram\Admin\Ui\Nav;
 use App\Modules\Telegram\Admin\Ui\Prompt;
 use App\Modules\Telegram\Admin\Ui\View;
+use App\Modules\Telegram\Admin\Ui\Words;
 
 /**
  * A draft of a described form (DescribedForm) as a management screen — a server's connection, a payment method —: a new
- * one walks its fields one by one (the basic ones, «⏭ رد شدن» for those that may stay as they are), then — as an edit
- * opens at once — a card of every field shown with its value, «✏️» on each, the advanced ones behind «⚙️ تنظیمات
- * پیشرفته», and one save: the whole form in one API call, as the panel saves it. A form the API refuses (422) is said
- * under each field it names, and the draft stays.
+ * one walks its fields one by one (the basic ones, «⏭ رد شدن» for those that may stay as they are), each question saying
+ * the value now, an example and the limits, and offering the field emptied or put back as it comes; then — as an edit
+ * opens at once — the summary before it is saved: every field shown with its value in one card, a button each saying
+ * what it does (a switch the state a tap sets, «✏️ …» the rest), the advanced ones behind «⚙️ تنظیمات پیشرفته», and one
+ * save: the whole form in one API call, as the panel saves it. Its one way out: «⬅️ بازگشت» while nothing is changed,
+ * else «🗑 کنار گذاشتن», asked first. A form the API refuses (422) is said under the card, field by field, and the draft
+ * stays.
  *
  * State (the screen's): `key` (the row edited; 0 for a new one), `driver`, `draft`, `initial`, `stored` (the row's
  * values as the API presents them; null for a new one), `walk` (the field being asked, while walking), `adv`, `errors`,
@@ -28,13 +34,20 @@ use App\Modules\Telegram\Admin\Ui\View;
  *
  * Actions: `e` (i: edit field i), `c` (i, n: field i's choice n), `t` (i, 0/1: switch field i), `p` (i, n: field i's
  * preset n typed), `s` (i: skip field i in the walk), `x` (i: clear field i — a kept secret emptied), `k` (i: a
- * secret's kept one again), `sum` (the walk ended), `adv` (1/0: the advanced fields shown or hidden), `save`, `quit` (the
- * draft dropped).
+ * secret's kept one again), `df` (i: field i back to its default), `sum` (the walk ended), `adv` (1/0: the advanced
+ * fields shown or hidden), `save`, `quit` (the way out — an older window's «⬅️ بازگشت», a walk's «✖️ انصراف» —: a
+ * changed draft asked first), `gone` (the draft dropped).
  */
 abstract class FormScreen extends BaseScreen
 {
     /** The longest choice label laid two a row: more is cut on a phone's half row. */
     private const HALF_ROW = 20;
+
+    /** A walk's way straight to the summary. */
+    private const SUMMARY = '📋 خلاصه';
+
+    /** The fields behind a fold on the card: its section's heading and the button that opens it. */
+    private const ADVANCED = Icons::SETTINGS . ' تنظیمات پیشرفته';
 
     public function __construct(protected readonly Encrypter $crypt) {}
 
@@ -84,7 +97,7 @@ abstract class FormScreen extends BaseScreen
      */
     protected function saveLabel(array $state): string
     {
-        return self::isNew($state) ? '✔️ ساختن' : '💾 ذخیره تغییرات';
+        return self::isNew($state) ? Words::CREATE : Words::SAVE;
     }
 
     /**
@@ -103,6 +116,17 @@ abstract class FormScreen extends BaseScreen
      * @param array<string, mixed> $state
      */
     protected function intro(View $view, Admin $admin, array $state): void {}
+
+    /**
+     * What the form is for, at length (HTML: a driver's description): folded away under the card, first of its help —
+     * the fields' hints after it.
+     *
+     * @param array<string, mixed> $state
+     */
+    protected function folded(array $state): string
+    {
+        return '';
+    }
 
     /**
      * Lines and buttons under the fields (a connection test and its answer).
@@ -185,6 +209,10 @@ abstract class FormScreen extends BaseScreen
                 return $this->changed($admin, $state, $form, $index, DescribedForm::isSecret($field) ? [$name => '', 'clear_' . $name => true] : [$name => '']);
             case 'k':
                 return $field === null ? $this->card($admin, $state, $form) : $this->changed($admin, $state, $form, $index, [$name => '', 'clear_' . $name => false]);
+            case 'df':
+                $default = $field['default'] ?? null;
+
+                return $field === null || !is_scalar($default) || is_bool($default) ? $this->card($admin, $state, $form) : $this->changed($admin, $state, $form, $index, [$name => (string) $default]);
             case 'sum':
                 $state['walk'] = null;
                 $admin->remember($this->screen(), ['walk' => null]);
@@ -202,6 +230,11 @@ abstract class FormScreen extends BaseScreen
                     return $this->refused($admin, $state, $form, $refusal);
                 }
             case 'quit':
+            case 'gone':
+                // The way out — an older window's «⬅️ بازگشت» or a walk's «✖️ انصراف» too: a changed draft asked first.
+                if ($action === 'quit' && self::edited($state)) {
+                    return OwnerWords::discard($admin, $this->screen(), self::isNew($state));
+                }
                 $admin->forget($this->screen());
 
                 return $this->leave($admin, $state);
@@ -253,50 +286,56 @@ abstract class FormScreen extends BaseScreen
 
         $advanced = array_filter($shown, static fn(array $field): bool => ($field['advanced'] ?? false) === true);
         $open = ($state['adv'] ?? false) === true;
-        $basic = [];
-        $more = [];
+        $facts = ['basic' => [], 'more' => []];
+        $buttons = ['basic' => [], 'more' => []];
+        $refused = [];
+        $hints = [];
         foreach ($shown as $index => $field) {
             $deep = isset($advanced[$index]);
             if ($deep && !$open) {
                 continue;
             }
-            if ($deep && $more === []) {
-                $view->line()->line('<b>⚙️ تنظیمات پیشرفته</b>');
-            }
+            $part = $deep ? 'more' : 'basic';
             $name = DescribedForm::name($field);
-            $view->line('• ' . Fmt::e(DescribedForm::label($field)) . ': ' . $form->display($field, $draft, $stored));
+            $label = DescribedForm::label($field);
+            $facts[$part][$label] = $form->display($field, $draft, $stored);
+            if (is_string($field['hint'] ?? null) && $field['hint'] !== '') {
+                $hints[] = '<b>' . Fmt::e($label) . '</b>: ' . Fmt::e($field['hint']);
+            }
             if ($form->moved($field, $draft, $stored) && is_string($field['moved'] ?? null)) {
-                $view->line('   ⚠️ ' . Fmt::e($field['moved']));
+                $refused[] = '⚠️ ' . Fmt::e($label) . ': ' . Fmt::e($field['moved']);
             }
             foreach ((array) ($errors[$name] ?? []) as $message) {
-                $view->line('   ⚠️ ' . Fmt::e(is_scalar($message) ? (string) $message : ''));
+                $refused[] = '⚠️ ' . Fmt::e($label) . ': ' . Fmt::e(is_scalar($message) ? (string) $message : '');
             }
             // A switch's button carries the value it sets: a stale card or a second tap never flips it back.
-            $button = ($field['type'] ?? null) === 'toggle'
-                ? Button::to(DescribedForm::label($field) . ': ' . $form->brief($field, $draft, $stored), $this->screen(), 't', $index, ($draft[$name] ?? false) === true ? 0 : 1)
-                : Button::to(DescribedForm::label($field) . ': ' . $form->brief($field, $draft, $stored), $this->screen(), 'e', $index);
-            if ($deep) {
-                $more[] = $button;
-            } else {
-                $basic[] = $button;
-            }
+            $on = ($draft[$name] ?? false) === true;
+            $buttons[$part][] = ($field['type'] ?? null) === 'toggle'
+                ? Button::to(Words::turn(!$on, $label), $this->screen(), 't', $index, $on ? 0 : 1)
+                : Button::to(Words::edit($label), $this->screen(), 'e', $index);
         }
-        if (!self::isNew($state) && $draft !== self::draftOf(['draft' => $state['initial'] ?? []])) {
-            $view->note('تغییرها هنوز ذخیره نشده‌اند.');
+        $view->card($facts['basic']);
+        if ($facts['more'] !== []) {
+            $view->section(self::ADVANCED)->card($facts['more']);
+        }
+        if ($refused !== []) {
+            $view->line()->lines(...$refused);
+        }
+        $changed = self::edited($state);
+        if (!self::isNew($state) && $changed) {
+            $view->line()->line('✏️ <b>تغییرها هنوز ذخیره نشده‌اند.</b>');
         }
 
-        $view->grid(1, ...$basic);
+        $view->tiles(...$buttons['basic']);
         if ($advanced !== []) {
-            $view->row(Button::to(($open ? '▴ ' : '▾ ') . '⚙️ تنظیمات پیشرفته' . Fmt::badge(count($advanced)), $this->screen(), 'adv', $open ? 0 : 1));
+            $view->row(Button::to(($open ? '▴ ' : '▾ ') . self::ADVANCED . Fmt::badge(count($advanced)), $this->screen(), 'adv', $open ? 0 : 1));
         }
-        $view->grid(1, ...$more);
+        $view->tiles(...$buttons['more']);
         $this->extra($view, $admin, $state);
-        $view->row(...array_values(array_filter([
-            $this->ready($state) ? Button::to($this->saveLabel($state), $this->screen(), 'save') : null,
-            Button::to('✖️ انصراف', $this->screen(), 'quit'),
-        ])));
+        OwnerWords::wayOut($view, $this->screen(), $changed, $this->ready($state) ? Button::to($this->saveLabel($state), $this->screen(), 'save')->success() : null)
+            ->help(implode("\n\n", array_filter([$this->folded($state), ...$hints], static fn(string $part): bool => $part !== '')));
 
-        return $view->back($this->screen(), 'quit');
+        return $view;
     }
 
     /**
@@ -324,6 +363,16 @@ abstract class FormScreen extends BaseScreen
     protected static function isNew(array $state): bool
     {
         return (int) ($state['key'] ?? 0) === 0;
+    }
+
+    /**
+     * Whether the draft of `$state` is no longer what it started as: its way out asks first.
+     *
+     * @param array<string, mixed> $state
+     */
+    protected static function edited(array $state): bool
+    {
+        return self::draftOf($state) !== self::draftOf(['draft' => $state['initial'] ?? []]);
     }
 
     /**
@@ -393,14 +442,12 @@ abstract class FormScreen extends BaseScreen
         }
 
         if ($type === 'toggle' || $type === 'choice') {
-            $view = View::make(DescribedForm::label($field), ...[...$this->path($state), $this->title($state)]);
+            $view = View::make(DescribedForm::label($field), ...[...$this->path($state), Fmt::bare($this->title($state))]);
             $view->lines(...$hint);
+            $on = ($draft[$name] ?? false) === true;
             $choices = $type === 'toggle'
-                ? [Button::to('✅ بله', $this->screen(), 't', $index, 1), Button::to('⛔️ خیر', $this->screen(), 't', $index, 0)]
-                : array_map(fn(int $n, string $value): Button => Button::to((($draft[$name] ?? '') === $value ? '● ' : '') . (DescribedForm::option($field, $value) ?? $value), $this->screen(), 'c', $index, $n), array_keys(DescribedForm::values($field)), DescribedForm::values($field));
-            if (!$walking) {
-                $view->line('الان: ' . $form->display($field, $draft, $stored));
-            }
+                ? [Button::to(($on ? Words::PICKED : '') . 'روشن', $this->screen(), 't', $index, 1), Button::to(($on ? '' : Words::PICKED) . 'خاموش', $this->screen(), 't', $index, 0)]
+                : array_map(fn(int $n, string $value): Button => Button::to((($draft[$name] ?? '') === $value ? Words::PICKED : '') . (DescribedForm::option($field, $value) ?? $value), $this->screen(), 'c', $index, $n), array_keys(DescribedForm::values($field)), DescribedForm::values($field));
             // Two a row only while each label fits half a phone's row: a longer one would be cut where choices differ
             // («تتر روی شبکه ترون (TRC20)»).
             $short = max([0, ...array_map(static fn(Button $choice): int => mb_strlen($choice->label), $choices)]) <= self::HALF_ROW;
@@ -408,32 +455,27 @@ abstract class FormScreen extends BaseScreen
             if ($walking) {
                 // The walk's way out is its typed steps' «✖️ انصراف»: a «⬅️ بازگشت» here would read as a step back, yet drop
                 // the draft.
-                return $view->row(Button::to('⏭ رد شدن', $this->screen(), 's', $index), Button::to('📋 خلاصه', $this->screen(), 'sum'))
-                    ->row(Button::to('✖️ انصراف', $this->screen(), 'quit'));
+                return $view->row(Button::to(Words::SKIP, $this->screen(), 's', $index), Button::to(self::SUMMARY, $this->screen(), 'sum'))
+                    ->row(Button::to(Words::CANCEL, $this->screen(), 'quit'));
             }
 
             return $view->back($this->screen());
         }
 
         $kept = is_array($stored[$name] ?? null) && (($stored[$name]['set'] ?? false) === true);
-        if (DescribedForm::isSecret($field)) {
+        $secret = DescribedForm::isSecret($field);
+        $value = is_string($draft[$name] ?? null) ? (string) $draft[$name] : '';
+        if ($secret) {
             if ($kept) {
-                $hint[] = 'الان: ' . $form->display($field, $draft, $stored) . '؛ برای عوض کردنش، تازه‌اش را بفرستید.';
+                $hint[] = 'برای عوض کردنش، تازه‌اش را بفرستید.';
             }
             $hint[] = 'پیامتان بعد از خواندن پاک می‌شود و دیگر نشان داده نمی‌شود.';
-        } elseif (($draft[$name] ?? '') !== '') {
-            $hint[] = 'الان: ' . ($type === 'textarea' ? '<blockquote>' . Fmt::e((string) $draft[$name]) . '</blockquote>' : $form->display($field, $draft, $stored));
         }
         if ($type === 'premium_emoji') {
             $hint[] = 'یک ایموجی پرمیوم بفرستید؛ ایموجی معمولی آن جای اول نام می‌نشیند.';
-        } elseif (is_string($field['placeholder'] ?? null) && $field['placeholder'] !== '') {
-            $hint[] = 'مثلا: ' . Fmt::ltr($field['placeholder']);
         }
         if ($type === 'list') {
             $hint[] = 'عددها را با فاصله یا «،» جدا کنید.';
-        }
-        if ($type === 'number' && is_numeric($field['min'] ?? null) && is_numeric($field['max'] ?? null)) {
-            $hint[] = 'بین ' . Fmt::number($field['min']) . ' تا ' . Fmt::number($field['max']) . '.';
         }
 
         $prompt = new Prompt(
@@ -442,34 +484,58 @@ abstract class FormScreen extends BaseScreen
             'v',
             [$index],
             implode("\n", $hint),
-            $walking ? Button::to('✖️ انصراف', $this->screen(), 'quit') : Button::to('✖️ لغو', $this->screen(), Nav::SHOW),
+            $walking ? Button::to(Words::CANCEL, $this->screen(), 'quit') : Button::to(Words::CANCEL, $this->screen(), Nav::SHOW),
             file: $type === 'premium_emoji',
         );
+        // The value now: a secret only whether one is kept (never the draft's, typed or sealed), a premium emoji whether it
+        // has one; a number in Persian digits, any other as typed — to copy. Nothing yet, nothing said.
+        if ($secret || $type === 'premium_emoji') {
+            if ($kept || $value !== '' || ($draft['clear_' . $name] ?? false) === true) {
+                $prompt->current(Fmt::plain($form->display($field, $draft, $stored)), false);
+            }
+        } elseif ($value !== '') {
+            $prompt->current(in_array($type, ['number', 'decimal', 'amount'], true) ? Fmt::digits($value) : $value);
+        }
+        // A placeholder as the panel's input shows it («مثلا آلمان ۱»), said as the example its question gives.
+        $example = is_string($field['placeholder'] ?? null) ? trim((string) preg_replace('/^مثلا\s*:?\s*/u', '', $field['placeholder'])) : '';
+        if ($example !== '') {
+            $prompt->example($example);
+        }
+        if (in_array($type, ['number', 'decimal'], true) && is_numeric($field['min'] ?? null) && is_numeric($field['max'] ?? null)) {
+            $prompt->limits('از ' . Fmt::plain(Fmt::number($field['min'])) . ' تا ' . Fmt::plain(Fmt::number($field['max'])) . (is_string($field['unit'] ?? null) && $field['unit'] !== '' ? ' ' . $field['unit'] : ''));
+        }
         $choices = [];
         foreach ((array) ($field['presets'] ?? []) as $n => $preset) {
             if (is_array($preset)) {
                 $choices[] = Button::to((string) ($preset['label'] ?? ''), $this->screen(), 'p', $index, (int) $n);
             }
         }
-        // A required field may be passed by too while it holds a value already (a default: a method's label).
-        if ($walking && (DescribedForm::optional($field) || ($draft[$name] ?? '') !== '')) {
-            $choices[] = Button::to('⏭ رد شدن', $this->screen(), 's', $index);
-        }
-        if (DescribedForm::isSecret($field)) {
-            if ($kept && (($draft[$name] ?? '') !== '' || ($draft['clear_' . $name] ?? false) === true)) {
+        if ($secret) {
+            if ($kept && ($value !== '' || ($draft['clear_' . $name] ?? false) === true)) {
                 $choices[] = Button::to('↩️ همان قبلی بماند', $this->screen(), 'k', $index);
             }
             if ($kept && ($field['required'] ?? false) !== true && ($draft['clear_' . $name] ?? false) !== true) {
-                $choices[] = Button::to('🗑 پاک کردن', $this->screen(), 'x', $index);
+                $prompt->clearable($this->screen(), 'x', $index);
             }
-            if (!$kept && ($draft[$name] ?? '') !== '') {
-                $choices[] = Button::to('🗑 خالی کردن', $this->screen(), 'k', $index);
+            if (!$kept && $value !== '') {
+                $prompt->clearable($this->screen(), 'k', $index);
             }
-        } elseif (!$walking && ($draft[$name] ?? '') !== '' && ($field['required'] ?? false) !== true) {
-            $choices[] = Button::to('🗑 خالی کردن', $this->screen(), 'x', $index);
+        } else {
+            if (!$walking && $value !== '' && ($field['required'] ?? false) !== true) {
+                $prompt->clearable($this->screen(), 'x', $index);
+            }
+            $default = $field['default'] ?? null;
+            if (is_scalar($default) && !is_bool($default) && (string) $default !== '' && (string) $default !== $value) {
+                $prompt->resettable($this->screen(), 'df', $index);
+            }
         }
+        // The walk's ways on, a row of their own: past this field — a required one too while it holds a value already (a
+        // default: a method's label) — and straight to the summary.
         if ($walking) {
-            $choices[] = Button::to('📋 خلاصه', $this->screen(), 'sum');
+            $prompt->ways(
+                DescribedForm::optional($field) || $value !== '' ? Button::to(Words::SKIP, $this->screen(), 's', $index) : null,
+                Button::to(self::SUMMARY, $this->screen(), 'sum'),
+            );
         }
 
         return $admin->ask($prompt->choices(...$choices));

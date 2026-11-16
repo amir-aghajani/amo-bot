@@ -10,9 +10,13 @@ use App\Modules\Telegram\Admin\Ui\Answer;
 use App\Modules\Telegram\Admin\Ui\BaseScreen;
 use App\Modules\Telegram\Admin\Ui\Button;
 use App\Modules\Telegram\Admin\Ui\Fmt;
+use App\Modules\Telegram\Admin\Ui\Nav;
 use App\Modules\Telegram\Admin\Ui\Prompt;
 use App\Modules\Telegram\Admin\Ui\Settings\BotGroupSource;
 use App\Modules\Telegram\Admin\Ui\View;
+use App\Modules\Telegram\Admin\Ui\Words;
+use App\Modules\Users\Services\UserActions;
+use App\Support\Persian;
 
 /**
  * «✉️ ارسال پیام» (the panel's dialog of that name): a message from support the shop's bot sends the customer — kept on
@@ -25,6 +29,8 @@ final class CustomerMessageScreen extends BaseScreen
 {
     public const ID = 'usm';
 
+    public const TITLE = '✉️ ارسال پیام';
+
     public function show(Admin $admin, array $args): View
     {
         $id = Customer::current($admin, $args);
@@ -32,16 +38,20 @@ final class CustomerMessageScreen extends BaseScreen
             return $admin->open(UsersScreen::ID);
         }
         $draft = $admin->state(self::ID);
-        $now = ($draft['user'] ?? null) === $id && is_string($draft['text'] ?? null) ? "\n\nالان:\n<blockquote>" . Fmt::e($draft['text']) . '</blockquote>' : '';
-
-        return $admin->ask(new Prompt(
+        $heading = $this->heading($admin);
+        $prompt = (new Prompt(
             'پیام برای ' . Customer::known($admin, $id),
             self::ID,
             'text',
             [$id],
-            'پیامی از طرف پشتیبانی که ربات فروشگاه برای او می‌فرستد؛ در وب‌سایت و مینی‌اپ او هم می‌ماند. متن ساده؛ خط‌ها همان‌طور که می‌نویسید می‌رسند.' . "\n" . $this->heading($admin) . $now,
-            Button::to('✖️ لغو', CustomerScreen::ID, 'show', $id),
-        ));
+            'از طرف پشتیبانی فرستاده می‌شود و در وب‌سایت و مینی‌اپ او هم می‌ماند. متن ساده؛ خط‌ها همان‌طور که می‌نویسید می‌رسند.' . ($heading === '' ? '' : "\n" . $heading),
+            Button::to(Words::CANCEL, CustomerScreen::ID, Nav::SHOW, $id),
+        ))->limits('تا ' . Persian::number(UserActions::MESSAGE_MAX) . ' نویسه');
+        if (($draft['user'] ?? null) === $id && is_string($draft['text'] ?? null)) {
+            $prompt->current($draft['text']);
+        }
+
+        return $admin->ask($prompt);
     }
 
     public function act(Admin $admin, string $action, array $args): View
@@ -79,7 +89,7 @@ final class CustomerMessageScreen extends BaseScreen
         }
         $admin->forget(self::ID);
 
-        return $admin->open(CustomerScreen::ID, 'show', [$id]);
+        return $admin->open(CustomerScreen::ID, Nav::SHOW, [$id]);
     }
 
     public function input(Admin $admin, string $action, array $args, Answer $answer): View
@@ -96,33 +106,33 @@ final class CustomerMessageScreen extends BaseScreen
     /** The message read once more before it goes: «✔️ ارسال پیام», «✏️ ویرایش», «✖️ انصراف». */
     private function preview(Admin $admin, int $id, string $text): View
     {
-        return View::make('✉️ ارسال پیام', 'مدیریت', 'فروش', 'کاربران', Customer::known($admin, $id))
+        return View::make(self::TITLE, ...Customer::under(Customer::known($admin, $id)))
+            ->transient()
             ->line('<blockquote>' . Fmt::e($text) . '</blockquote>')
             ->note('ربات فروشگاه این پیام را از طرف پشتیبانی برای او می‌فرستد.')
-            ->row(Button::to('✔️ ارسال پیام', self::ID, 'send', $id))
-            ->row(Button::to('✏️ ویرایش', self::ID, 'show', $id), Button::to('✖️ انصراف', CustomerScreen::ID, 'show', $id));
+            ->row(Button::to('✔️ ارسال پیام', self::ID, 'send', $id)->success())
+            ->row(Button::to(Words::EDIT, self::ID, Nav::SHOW, $id), Button::to(Words::CANCEL, CustomerScreen::ID, Nav::SHOW, $id));
     }
 
     /**
      * How the message reads in Telegram — under the bot's heading «📩 پیام از طرف پشتیبانی:», or the words alone — as the
-     * bot settings' «عنوان پیام پشتیبانی» says, for a seat that reads them; both said otherwise.
+     * bot settings' «عنوان پیام پشتیبانی» says, for a seat that reads them; '' for a seat that does not.
      */
     private function heading(Admin $admin): string
     {
-        $header = null;
-        if ($admin->seat->configures()) {
-            try {
-                $settings = BotGroupSource::settings($admin);
-                $header = is_bool($settings['support_header'] ?? null) ? $settings['support_header'] : null;
-            } catch (ApiRefusal) {
-                $header = null;
-            }
+        if (!$admin->seat->configures()) {
+            return '';
+        }
+        try {
+            $header = BotGroupSource::settings($admin)['support_header'] ?? null;
+        } catch (ApiRefusal) {
+            return '';
         }
 
         return match ($header) {
-            true => 'در تلگرام زیر عنوان «📩 پیام از طرف پشتیبانی:» می‌رسد (متن «پیام پشتیبانی به مشتری» در متن‌های ربات؛ عنوان در «تنظیمات ربات › عمومی» خاموش می‌شود).',
-            false => 'در تلگرام بدون عنوان، فقط خود متن می‌رسد («عنوان پیام پشتیبانی» در «تنظیمات ربات › عمومی» خاموش است).',
-            null => 'با «عنوان پیام پشتیبانی» روشن در «تنظیمات ربات › عمومی»، در تلگرام زیر «📩 پیام از طرف پشتیبانی:» می‌رسد؛ خاموش، فقط خود متن.',
+            true => 'در تلگرام زیر عنوان «📩 پیام از طرف پشتیبانی:» می‌رسد.',
+            false => 'در تلگرام بدون عنوان، فقط خود متن می‌رسد.',
+            default => '',
         };
     }
 }

@@ -5,12 +5,15 @@ declare(strict_types=1);
 namespace App\Modules\Telegram\Admin\Sections\Owner\Servers;
 
 use App\Modules\Telegram\Admin\AdminSeat;
+use App\Modules\Telegram\Admin\Sections\Owner\Words as OwnerWords;
 use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\BaseScreen;
 use App\Modules\Telegram\Admin\Ui\Button;
 use App\Modules\Telegram\Admin\Ui\Fmt;
+use App\Modules\Telegram\Admin\Ui\Icons;
 use App\Modules\Telegram\Admin\Ui\Json;
 use App\Modules\Telegram\Admin\Ui\View;
+use App\Modules\Telegram\Admin\Ui\Words;
 
 /**
  * Starting a move of a server's services (the panel's migration dialog): the target (a server that cannot take services
@@ -23,7 +26,8 @@ use App\Modules\Telegram\Admin\Ui\View;
  *
  * Actions: `new` (server id), `target` (page: the targets), `tgt` (server id), `mode` (the ways), `md` (0 migrate, 1
  * rescue), `dis`, `ntf` (0/1: the switch set so), `plans` (page: the plans), `pl` (plan id, 0/1: ticked out or in),
- * `start`, `quit`.
+ * `start`, `quit` (the way out — an older window's «⬅️ بازگشت» too —: a changed draft asked first, as a form's), `gone`
+ * (the draft dropped).
  */
 final class ServerMigrationFormScreen extends BaseScreen
 {
@@ -62,6 +66,8 @@ final class ServerMigrationFormScreen extends BaseScreen
                 'notify' => true,
                 'plans' => [],
             ]);
+            // The draft as it starts: what a change is measured against.
+            $admin->remember(self::ID, ['was' => self::choices($admin->state(self::ID))]);
 
             return $this->form($admin, $admin->state(self::ID));
         }
@@ -95,12 +101,12 @@ final class ServerMigrationFormScreen extends BaseScreen
                 return $this->plans($admin, $admin->state(self::ID));
             case 'pl':
                 $plan = self::id($args);
-                $plans = array_values(array_diff(array_map(intval(...), (array) ($state['plans'] ?? [])), [$plan]));
+                $plans = array_values(array_diff(self::ticked($state), [$plan]));
                 $admin->remember(self::ID, ['plans' => self::id($args, 1) === 1 ? [...$plans, $plan] : $plans]);
 
                 return $this->plans($admin, $admin->state(self::ID));
             case 'start':
-                $plans = array_map(intval(...), (array) ($state['plans'] ?? []));
+                $plans = self::ticked($state);
                 $admin->api->post("/servers/{$id}/migrations", [
                     'target_server_id' => (int) ($state['target'] ?? 0),
                     'mode' => (string) ($state['mode'] ?? 'migrate'),
@@ -113,6 +119,10 @@ final class ServerMigrationFormScreen extends BaseScreen
 
                 return $admin->open(ServerMigrationsScreen::ID, 'show', [$id]);
             case 'quit':
+            case 'gone':
+                if ($action === 'quit' && self::edited($state)) {
+                    return OwnerWords::discard($admin, self::ID, true);
+                }
                 $admin->forget(self::ID);
 
                 return $admin->open(ServerMigrationsScreen::ID, 'show', [$id]);
@@ -129,28 +139,25 @@ final class ServerMigrationFormScreen extends BaseScreen
         $preview = $this->preview($admin, $state);
         $target = $this->server($admin, (int) ($state['target'] ?? 0));
         $mode = (string) ($state['mode'] ?? 'migrate');
-        $plans = array_map(intval(...), (array) ($state['plans'] ?? []));
+        $plans = self::ticked($state);
         $choices = Json::rows($preview, 'plans');
 
-        $view = View::make('🔀 انتقال سرویس‌ها', 'مدیریت', 'سرورها', (string) ($state['name'] ?? ''))
-            ->line('از «' . Fmt::e((string) ($state['name'] ?? '')) . '» به سرور دیگر')
-            ->line()
-            ->line('• سرور مقصد: ' . ($target === null ? 'یک سرور انتخاب کنید' : Fmt::e((string) ($target['name'] ?? ''))))
-            ->line('• روش: ' . Fmt::e(ServerMigrationsScreen::MODES[$mode] ?? $mode))
-            ->line('   <i>' . Fmt::e(self::MODE_HINTS[$mode] ?? '') . '</i>')
-            ->line('• سرویس‌های غیرفعال‌شده هم منتقل شوند: ' . Fmt::onOff(Json::on($state, 'include_disabled')))
-            ->line('   <i>سرویس‌هایی که پشتیبانی غیرفعال کرده است، غیرفعال روی سرور مقصد ساخته می‌شوند. سرویس‌های تمام‌شده منتقل نمی‌شوند.</i>')
-            ->line('• پیام به مشتری‌ها: ' . Fmt::onOff(($state['notify'] ?? true) === true))
-            ->line('   <i>هر مشتری لینک جدید را در تلگرام، از ربات فروشگاه خودش، یا با ایمیل می‌گیرد.</i>');
-        if (count($choices) > 1) {
-            $names = array_map(static fn(array $plan): string => (string) ($plan['name'] ?? ''), array_filter($choices, static fn(array $plan): bool => in_array((int) ($plan['id'] ?? 0), $plans, true)));
-            $view->line('• فقط سرویس‌های این پلن‌ها: ' . ($names === [] ? 'هیچ‌کدام انتخاب نشده است: همه سرویس‌ها منتقل می‌شوند.' : Fmt::e(implode('، ', $names))));
-            if ($names !== [] && (int) ($preview['unplanned'] ?? 0) > 0) {
-                $view->line('   <i>' . Fmt::number((int) $preview['unplanned']) . ' سرویس بدون پلن منتقل نمی‌شود.</i>');
-            }
+        $disabled = Json::on($state, 'include_disabled');
+        $notify = ($state['notify'] ?? true) === true;
+        $names = array_map(static fn(array $plan): string => (string) ($plan['name'] ?? ''), array_filter($choices, static fn(array $plan): bool => in_array((int) ($plan['id'] ?? 0), $plans, true)));
+        $view = View::make(ServerMigrationsScreen::TITLE, Words::ROOT, Fmt::bare(ServersScreen::TITLE), (string) ($state['name'] ?? ''))
+            ->card([
+                'از سرور' => Fmt::e((string) ($state['name'] ?? '')),
+                'سرور مقصد' => $target === null ? 'انتخاب نشده' : Fmt::e((string) ($target['name'] ?? '')),
+                'روش' => Fmt::e(ServerMigrationsScreen::MODES[$mode] ?? $mode),
+                'سرویس‌های غیرفعال‌شده هم منتقل شوند' => Fmt::onOff($disabled),
+                'پیام به مشتری‌ها' => Fmt::onOff($notify),
+                'فقط سرویس‌های این پلن‌ها' => count($choices) > 1 ? ($names === [] ? 'همه پلن‌ها' : Fmt::e(implode('، ', $names))) : null,
+            ]);
+        if ($names !== [] && (int) ($preview['unplanned'] ?? 0) > 0) {
+            $view->line('<i>' . Fmt::number((int) $preview['unplanned']) . ' سرویس بدون پلن منتقل نمی‌شود.</i>');
         }
 
-        $view->line();
         $services = (int) ($preview['services'] ?? 0);
         $problem = is_array($preview['target'] ?? null) && is_string($preview['target']['problem'] ?? null) ? $preview['target']['problem'] : null;
         if ($services === 0) {
@@ -167,21 +174,56 @@ final class ServerMigrationFormScreen extends BaseScreen
             }
         }
 
-        $disabled = Json::on($state, 'include_disabled');
-        $notify = ($state['notify'] ?? true) === true;
-        $view->row(Button::to('🎯 سرور مقصد: ' . ($target === null ? 'انتخاب' : (string) ($target['name'] ?? '')), self::ID, 'target', 1))
-            ->row(Button::to('روش: ' . (ServerMigrationsScreen::MODES[$mode] ?? $mode), self::ID, 'mode'))
-            ->row(Button::to(($disabled ? '✅ ' : '◻️ ') . 'سرویس‌های غیرفعال‌شده هم منتقل شوند', self::ID, 'dis', $disabled ? 0 : 1))
-            ->row(Button::to(($notify ? '✅ ' : '◻️ ') . 'پیام به مشتری‌ها', self::ID, 'ntf', $notify ? 0 : 1));
+        $view->tiles(
+            Button::to(Words::edit('سرور مقصد'), self::ID, 'target', 1)->styled($target === null ? 'primary' : null),
+            Button::to(Words::edit('روش'), self::ID, 'mode'),
+        )
+            ->row(Button::to(Words::turn(!$disabled, 'سرویس‌های غیرفعال‌شده'), self::ID, 'dis', $disabled ? 0 : 1))
+            ->row(Button::to(Words::turn(!$notify, 'پیام به مشتری‌ها'), self::ID, 'ntf', $notify ? 0 : 1));
         if (count($choices) > 1) {
-            $view->row(Button::to('📦 پلن‌ها' . Fmt::badge(count($plans)), self::ID, 'plans', 1));
+            $view->row(Button::to(Icons::PLANS . ' پلن‌ها' . Fmt::badge(count($plans)), self::ID, 'plans', 1));
         }
-        $view->row(
-            $target !== null && $services > 0 && $problem === null ? Button::to(($mode === 'rescue' ? '🛟' : '✔️') . ' شروع انتقال', self::ID, 'start') : null,
-            Button::to('✖️ انصراف', self::ID, 'quit'),
-        );
+        OwnerWords::wayOut($view, self::ID, self::edited($state), $target !== null && $services > 0 && $problem === null ? Button::to(($mode === 'rescue' ? '🛟' : '✔️') . ' شروع انتقال', self::ID, 'start')->success() : null);
 
-        return $view->back(self::ID, 'quit');
+        $view->help(implode("\n\n", [
+            '<b>' . Fmt::e(ServerMigrationsScreen::MODES['migrate']) . '</b>: ' . Fmt::e(self::MODE_HINTS['migrate']),
+            '<b>' . Fmt::e(ServerMigrationsScreen::MODES['rescue']) . '</b>: ' . Fmt::e(self::MODE_HINTS['rescue']),
+            '<b>سرویس‌های غیرفعال‌شده</b>: سرویس‌هایی که پشتیبانی غیرفعال کرده است، غیرفعال روی سرور مقصد ساخته می‌شوند. سرویس‌های تمام‌شده منتقل نمی‌شوند.',
+            '<b>پیام به مشتری‌ها</b>: هر مشتری لینک جدید را در تلگرام، از ربات فروشگاه خودش، یا با ایمیل می‌گیرد.',
+        ]));
+
+        return $view;
+    }
+
+    /**
+     * What the draft has chosen, as a change to it is measured.
+     *
+     * @param array<string, mixed> $state
+     * @return array{target: int, mode: string, include_disabled: bool, notify: bool, plans: list<int>}
+     */
+    private static function choices(array $state): array
+    {
+        $plans = self::ticked($state);
+        sort($plans);
+
+        return [
+            'target' => (int) ($state['target'] ?? 0),
+            'mode' => (string) ($state['mode'] ?? 'migrate'),
+            'include_disabled' => Json::on($state, 'include_disabled'),
+            'notify' => ($state['notify'] ?? true) === true,
+            'plans' => $plans,
+        ];
+    }
+
+    /**
+     * Whether the draft is no longer what it started as: its way out asks first (one of an older version, with nothing to
+     * measure against, never is).
+     *
+     * @param array<string, mixed> $state
+     */
+    private static function edited(array $state): bool
+    {
+        return is_array($state['was'] ?? null) && self::choices($state['was']) !== self::choices($state);
     }
 
     /**
@@ -192,7 +234,7 @@ final class ServerMigrationFormScreen extends BaseScreen
      */
     private function targets(Admin $admin, array $state): View
     {
-        $view = View::make('🎯 سرور مقصد', 'مدیریت', 'سرورها', (string) ($state['name'] ?? ''), 'انتقال سرویس‌ها');
+        $view = View::make('🎯 سرور مقصد', ...self::under($state));
         $buttons = [];
         foreach ((array) ($admin->api->get('/servers')['servers'] ?? []) as $server) {
             if (!is_array($server) || (int) ($server['id'] ?? 0) === (int) ($state['server'] ?? 0)) {
@@ -206,7 +248,7 @@ final class ServerMigrationFormScreen extends BaseScreen
             }
             $active = (int) ($server['counts']['active_subscriptions'] ?? 0);
             $chosen = (int) ($server['id'] ?? 0) === (int) ($state['target'] ?? 0);
-            $buttons[] = Button::to(($chosen ? '● ' : '') . $name . ' · ' . Fmt::number($active) . ' سرویس فعال' . (is_int($server['capacity'] ?? null) ? ' از ظرفیت ' . Fmt::number($server['capacity']) : ''), self::ID, 'tgt', (int) $server['id']);
+            $buttons[] = Button::to(($chosen ? Words::PICKED : '') . $name . ' · ' . Fmt::number($active) . ' سرویس فعال' . (is_int($server['capacity'] ?? null) ? ' از ظرفیت ' . Fmt::number($server['capacity']) : ''), self::ID, 'tgt', (int) $server['id']);
         }
         if ($buttons === []) {
             $view->line('سرور دیگری نیست که سرویس‌ها به آن بروند.');
@@ -222,13 +264,13 @@ final class ServerMigrationFormScreen extends BaseScreen
     {
         $mode = (string) ($state['mode'] ?? 'migrate');
 
-        return View::make('روش', 'مدیریت', 'سرورها', (string) ($state['name'] ?? ''), 'انتقال سرویس‌ها')
+        return View::make('روش', ...self::under($state))
             ->line('<b>' . ServerMigrationsScreen::MODES['migrate'] . '</b>: ' . Fmt::e(self::MODE_HINTS['migrate']))
             ->line()
             ->line('<b>' . ServerMigrationsScreen::MODES['rescue'] . '</b>: ' . Fmt::e(self::MODE_HINTS['rescue']))
             ->row(
-                Button::to(($mode === 'migrate' ? '● ' : '') . ServerMigrationsScreen::MODES['migrate'] . ' · پنل جواب می‌دهد', self::ID, 'md', 0),
-                Button::to(($mode === 'rescue' ? '● ' : '') . ServerMigrationsScreen::MODES['rescue'] . ' · پنل از دسترس خارج شده', self::ID, 'md', 1),
+                Button::to(($mode === 'migrate' ? Words::PICKED : '') . ServerMigrationsScreen::MODES['migrate'] . ' · پنل جواب می‌دهد', self::ID, 'md', 0),
+                Button::to(($mode === 'rescue' ? Words::PICKED : '') . ServerMigrationsScreen::MODES['rescue'] . ' · پنل از دسترس خارج شده', self::ID, 'md', 1),
             )
             ->back(self::ID);
     }
@@ -241,8 +283,8 @@ final class ServerMigrationFormScreen extends BaseScreen
     private function plans(Admin $admin, array $state): View
     {
         $preview = $this->preview($admin, $state);
-        $plans = array_map(intval(...), (array) ($state['plans'] ?? []));
-        $view = View::make('📦 فقط سرویس‌های این پلن‌ها', 'مدیریت', 'سرورها', (string) ($state['name'] ?? ''), 'انتقال سرویس‌ها')
+        $plans = self::ticked($state);
+        $view = View::make(Icons::PLANS . ' فقط سرویس‌های این پلن‌ها', ...self::under($state))
             ->line($plans === [] ? 'هیچ‌کدام انتخاب نشده است: همه سرویس‌ها منتقل می‌شوند.' : Fmt::number((int) ($preview['services'] ?? 0)) . ' سرویس منتقل می‌شود.');
         if ($plans !== [] && (int) ($preview['unplanned'] ?? 0) > 0) {
             $view->line(Fmt::number((int) $preview['unplanned']) . ' سرویس بدون پلن منتقل نمی‌شود.');
@@ -251,7 +293,7 @@ final class ServerMigrationFormScreen extends BaseScreen
         foreach ((array) ($preview['plans'] ?? []) as $plan) {
             if (is_array($plan)) {
                 $ticked = in_array((int) ($plan['id'] ?? 0), $plans, true);
-                $buttons[] = Button::to(($ticked ? '✅ ' : '◻️ ') . (string) ($plan['name'] ?? '') . ' · ' . (string) ($plan['shop'] ?? '') . ' · ' . Fmt::number((int) ($plan['services'] ?? 0)) . ' سرویس', self::ID, 'pl', (int) ($plan['id'] ?? 0), $ticked ? 0 : 1);
+                $buttons[] = Button::to(Words::tick($ticked) . (string) ($plan['name'] ?? '') . ' · ' . (string) ($plan['shop'] ?? '') . ' · ' . Fmt::number((int) ($plan['services'] ?? 0)) . ' سرویس', self::ID, 'pl', (int) ($plan['id'] ?? 0), $ticked ? 0 : 1);
             }
         }
 
@@ -271,8 +313,30 @@ final class ServerMigrationFormScreen extends BaseScreen
         return $admin->api->post('/servers/' . (int) ($state['server'] ?? 0) . '/migrations/preview', [
             'target_server_id' => $target === 0 ? null : $target,
             'include_disabled' => Json::on($state, 'include_disabled'),
-            'plan_ids' => array_map(intval(...), (array) ($state['plans'] ?? [])),
+            'plan_ids' => self::ticked($state),
         ]);
+    }
+
+    /**
+     * The plans ticked in (some plans only, plans()); none for all of them.
+     *
+     * @param array<string, mixed> $state
+     * @return array<int>
+     */
+    private static function ticked(array $state): array
+    {
+        return array_map(intval(...), (array) ($state['plans'] ?? []));
+    }
+
+    /**
+     * Where the draft's pickers are: under it, «مدیریت › سرورها › {server} › انتقال سرویس‌ها».
+     *
+     * @param array<string, mixed> $state
+     * @return list<string>
+     */
+    private static function under(array $state): array
+    {
+        return [Words::ROOT, Fmt::bare(ServersScreen::TITLE), (string) ($state['name'] ?? ''), Fmt::bare(ServerMigrationsScreen::TITLE)];
     }
 
     /**

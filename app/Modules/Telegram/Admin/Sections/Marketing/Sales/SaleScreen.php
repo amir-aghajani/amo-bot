@@ -5,16 +5,19 @@ declare(strict_types=1);
 namespace App\Modules\Telegram\Admin\Sections\Marketing\Sales;
 
 use App\Modules\Telegram\Admin\AdminSeat;
-use App\Modules\Telegram\Admin\Sections\Marketing\Words;
+use App\Modules\Telegram\Admin\Sections\Marketing\Words as Marketing;
 use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\BaseScreen;
 use App\Modules\Telegram\Admin\Ui\Button;
 use App\Modules\Telegram\Admin\Ui\Fmt;
+use App\Modules\Telegram\Admin\Ui\Icons;
+use App\Modules\Telegram\Admin\Ui\Json;
 use App\Modules\Telegram\Admin\Ui\View;
+use App\Modules\Telegram\Admin\Ui\Words;
 
 /**
- * One sale (the panel's row): its name, percent, the kinds of order and plans it is for, its window and state, and its
- * switch, «✏️ ویرایش» (SaleForm) and «🗑 حذف» — asked first, with the panel's words.
+ * One sale (the panel's row): its summary card — state, percent, the kinds of order and plans it is for, its window —,
+ * «✏️ ویرایش» (SaleForm), its switch and «🗑 حذف»: asked first, with the panel's words.
  *
  * Actions: `on` (id), `off` (id), `del` (id: asks), `gone` (id: deletes).
  */
@@ -29,7 +32,7 @@ final class SaleScreen extends BaseScreen
 
     public function show(Admin $admin, array $args): View
     {
-        $row = Words::one($admin, '/sales', 'sales', self::id($args));
+        $row = Marketing::one($admin, '/sales', 'sales', self::id($args));
 
         return $row === null ? $admin->open(SalesScreen::ID) : $this->view($row);
     }
@@ -40,22 +43,17 @@ final class SaleScreen extends BaseScreen
         switch ($action) {
             case 'on':
             case 'off':
-                $row = (array) ($admin->api->patch("/sales/{$id}", ['enabled' => $action === 'on'])['sale'] ?? []);
+                $row = Json::part($admin->api->patch("/sales/{$id}", ['enabled' => $action === 'on']), 'sale');
                 $admin->notice($action === 'on' ? '✅ فروش ویژه فعال شد' : '⏸ فروش ویژه غیرفعال شد');
 
                 return $this->view($row);
             case 'del':
-                $row = Words::one($admin, '/sales', 'sales', $id);
+                $row = Marketing::one($admin, '/sales', 'sales', $id);
                 if ($row === null) {
                     return $admin->open(SalesScreen::ID);
                 }
 
-                return $admin->confirm(
-                    '«' . (string) ($row['name'] ?? '') . '» حذف شود؟',
-                    Button::to('🗑 بله، حذف شود', self::ID, 'gone', $id),
-                    Button::to('✖️ انصراف', self::ID, 'show', $id),
-                    'سفارش‌هایی که با این فروش ویژه ثبت شده‌اند تخفیفشان را همان‌طور نگه می‌دارند. برای کنار گذاشتن موقت، کافی است آن را غیرفعال کنید.',
-                );
+                return Marketing::deletion($admin, self::ID, $id, '«' . (string) ($row['name'] ?? '') . '» حذف شود؟', 'سفارش‌هایی که با این فروش ویژه ثبت شده‌اند تخفیفشان را همان‌طور نگه می‌دارند. برای کنار گذاشتن موقت، غیرفعالش کنید.');
             case 'gone':
                 $admin->api->delete("/sales/{$id}");
                 $admin->notice('🗑 فروش ویژه حذف شد');
@@ -72,15 +70,16 @@ final class SaleScreen extends BaseScreen
         $id = (int) ($row['id'] ?? 0);
         $enabled = (bool) ($row['enabled'] ?? false);
 
-        return View::make('🔥 ' . (string) ($row['name'] ?? ''), ...[...Words::PATH, 'فروش ویژه'])
-            ->facts([
+        return View::make(Icons::SPECIAL_SALES . ' ' . (string) ($row['name'] ?? ''), ...Marketing::in(Marketing::SALES))
+            ->card([
+                'وضعیت' => Fmt::e(Marketing::state($row['state'] ?? null)),
                 'تخفیف' => Fmt::percent((int) ($row['percent'] ?? 0)),
-                'برای' => Fmt::e(Words::kinds($row['order_types'] ?? null) . ' · ' . (is_array($row['plans'] ?? null) ? Words::named('پلن', $row['plans']) : 'همه پلن‌ها')),
-                'زمان' => Fmt::e(Words::window($row['starts_at'] ?? null, $row['ends_at'] ?? null)),
-                'وضعیت' => Fmt::e(Words::state($row['state'] ?? null)),
+                'سفارش‌ها' => Fmt::e(Marketing::kinds($row['order_types'] ?? null)),
+                'پلن‌ها' => Fmt::e(is_array($row['plans'] ?? null) ? Marketing::named('پلن', $row['plans']) : 'همه پلن‌ها'),
+                'زمان' => Fmt::e(Marketing::window($row['starts_at'] ?? null, $row['ends_at'] ?? null)),
             ])
-            ->row($enabled ? Button::to('⏸ غیرفعال کردن', self::ID, 'off', $id) : Button::to('▶️ فعال کردن', self::ID, 'on', $id), Button::to('✏️ ویرایش', SaleForm::ID, 'edit', $id))
-            ->row(Button::to('🗑 حذف', self::ID, 'del', $id))
+            ->row($enabled ? null : Button::to(Words::ACTIVATE, self::ID, 'on', $id)->success(), Button::to(Words::EDIT, SaleForm::ID, 'edit', $id)->primary())
+            ->row($enabled ? Button::to(Words::DEACTIVATE, self::ID, 'off', $id)->danger() : null, Button::to(Words::DELETE, self::ID, 'del', $id)->danger())
             ->back(SalesScreen::ID);
     }
 }

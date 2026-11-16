@@ -12,6 +12,7 @@ use App\Modules\Telegram\Admin\Ui\Button;
 use App\Modules\Telegram\Admin\Ui\Fmt;
 use App\Modules\Telegram\Admin\Ui\Json;
 use App\Modules\Telegram\Admin\Ui\View;
+use App\Modules\Telegram\Admin\Ui\Words;
 
 /**
  * «به‌روزرسانی» (the owner's): the running version, the newest release and its notes, and the one-press update — a step
@@ -24,6 +25,8 @@ use App\Modules\Telegram\Admin\Ui\View;
 final class UpdateScreen extends BaseScreen
 {
     public const ID = 'ppu';
+
+    public const TITLE = '⬆️ به‌روزرسانی';
 
     /** The update by hand — a host the shop cannot update itself on: the guide's page. */
     private const BY_HAND = 'https://github.com/amir-aghajani/amo-bot/wiki/Upgrading';
@@ -63,8 +66,8 @@ final class UpdateScreen extends BaseScreen
 
                 return $admin->confirm(
                     'به‌روزرسانی به نسخه ' . $version . '؟',
-                    Button::to('⬇️ به‌روزرسانی', self::ID, 'go'),
-                    Button::to('✖️ انصراف', self::ID),
+                    Button::to(Words::yes('به‌روز شود'), self::ID, 'go'),
+                    Button::to(Words::CANCEL, self::ID),
                     "پیش از به‌روزرسانی از دیتابیس نسخه پشتیبان بگیرید («💾 پشتیبان‌گیری»). فایل‌های نسخه تازه از \u{2068}GitHub\u{2069} دانلود و امضایشان بررسی می‌شود، بعد فایل‌های برنامه عوض می‌شوند؛ در این چند لحظه فروشگاه به همه درخواست‌ها جواب «در حال به‌روزرسانی» می‌دهد. تنظیمات (\u{2068}config.php\u{2069}) و فایل‌های پوشه \u{2068}storage\u{2069} دست نمی‌خورند.",
                 );
             case 'go':
@@ -84,9 +87,10 @@ final class UpdateScreen extends BaseScreen
 
                 return $admin->confirm(
                     'بازگرداندن نسخه ' . (string) ($run['from'] ?? '') . '؟',
-                    Button::to('↩️ بازگرداندن', self::ID, 'rollback'),
-                    Button::to('✖️ انصراف', self::ID),
+                    Button::to(Words::yes('نسخه قبلی برگردد'), self::ID, 'rollback'),
+                    Button::to(Words::CANCEL, self::ID),
                     'نسخه ' . Fmt::ltr((string) ($run['version'] ?? '')) . ' برداشته می‌شود و نسخه ' . Fmt::ltr((string) ($run['from'] ?? '')) . ' که پیش از به‌روزرسانی روی فروشگاه بود برمی‌گردد؛ در این چند لحظه فروشگاه به همه درخواست‌ها جواب «در حال به‌روزرسانی» می‌دهد.',
+                    danger: true,
                 );
             case 'rollback':
                 $update = (array) ($admin->api->post('/system/update/rollback')['update'] ?? []);
@@ -122,16 +126,13 @@ final class UpdateScreen extends BaseScreen
         $current = (string) ($update['current'] ?? '');
         $latest = is_array($update['latest'] ?? null) ? $update['latest'] : null;
         $run = is_array($update['run'] ?? null) ? $update['run'] : null;
-        $view = View::make('⬆️ به‌روزرسانی', 'مدیریت', 'تنظیمات', 'تنظیمات پنل')
-            ->line("نسخه تازه AmoBot از \u{2068}GitHub\u{2069}، با یک دکمه. فقط نسخه‌ای نصب می‌شود که امضای سازنده AmoBot را دارد؛ تنظیمات و فایل‌های فروشگاه دست نمی‌خورند.")
-            ->line()
-            ->facts([
+        $view = View::make(self::TITLE, ...PanelSettingsScreen::under())
+            ->card([
                 'نسخه فعلی' => Fmt::ltr($current),
-                'آخرین بررسی' => is_string($update['checked_at'] ?? null) ? Fmt::date($update['checked_at'], true) : 'هنوز بررسی نشده است.',
+                'آخرین بررسی' => is_string($update['checked_at'] ?? null) ? Fmt::date($update['checked_at'], true) : 'هنوز بررسی نشده',
             ]);
 
         $buttons = [];
-        $view->line();
         if ($latest === null) {
             $view->line('نسخه‌ای منتشر نشده است.');
         } elseif (!version_compare((string) ($latest['version'] ?? '0'), $current, '>')) {
@@ -152,13 +153,15 @@ final class UpdateScreen extends BaseScreen
         }
         $view->grid(1, ...$buttons);
         if (Json::on($update, 'available') && $latest !== null && $blocker === null) {
-            $view->row(Button::to('⬇️ به‌روزرسانی به نسخه ' . (string) ($latest['version'] ?? ''), self::ID, 'start'));
+            $view->row(Button::to('⬇️ به‌روزرسانی به نسخه ' . (string) ($latest['version'] ?? ''), self::ID, 'start')->primary());
         }
         if ($run !== null) {
             $this->run($view, $run);
         }
 
-        return $view->row(Button::to('🔄 بررسی دوباره', self::ID, 'check'))->back(PanelSettingsScreen::ID);
+        return $view->row(Button::to('🔍 بررسی نسخه تازه', self::ID, 'check'))
+            ->help("نسخه تازه AmoBot از \u{2068}GitHub\u{2069}، با یک دکمه. فقط نسخه‌ای نصب می‌شود که امضای سازنده AmoBot را دارد؛ تنظیمات و فایل‌های فروشگاه دست نمی‌خورند. هر بار که «ادامه» را بزنید، یک مرحله انجام می‌شود؛ اگر کار را نیمه رها کنید، از همان‌جا ادامه می‌دهید.")
+            ->back(PanelSettingsScreen::ID);
     }
 
     /**
@@ -181,7 +184,7 @@ final class UpdateScreen extends BaseScreen
         if ($step === 'done') {
             $view->line('✅ فروشگاه از نسخه ' . $from . ' به نسخه ' . $version . ' به‌روز شد (' . $finished . ').');
             if (Json::on($run, 'rollback')) {
-                $view->row(Button::to('↩️ بازگرداندن نسخه قبلی', self::ID, 'back'));
+                $view->row(Button::to('↩️ بازگرداندن نسخه قبلی', self::ID, 'back')->danger());
             }
 
             return;
@@ -205,10 +208,9 @@ final class UpdateScreen extends BaseScreen
         if ($error !== null) {
             $view->line('⚠️ ' . Fmt::e($error));
         }
-        $view->note('هر بار که «ادامه» را بزنید، یک مرحله انجام می‌شود؛ اگر کار را نیمه رها کنید، از همان‌جا ادامه می‌دهید.');
         $view->row(
-            Button::to($error !== null ? '🔁 تلاش دوباره' : '▶️ ادامه به‌روزرسانی', self::ID, 'step'),
-            ...(Json::on($run, 'cancel') ? [Button::to('✖️ لغو به‌روزرسانی', self::ID, 'cancel')] : []),
+            Button::to($error !== null ? '🔁 تلاش دوباره' : '▶️ ادامه به‌روزرسانی', self::ID, 'step')->primary(),
+            Json::on($run, 'cancel') ? Button::to('⏹ لغو به‌روزرسانی', self::ID, 'cancel')->danger() : null,
         );
     }
 }

@@ -8,7 +8,9 @@ use App\Modules\Telegram\Admin\Sections\Panel\Forms\DraftForm;
 use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\Button;
 use App\Modules\Telegram\Admin\Ui\Fmt;
+use App\Modules\Telegram\Admin\Ui\Icons;
 use App\Modules\Telegram\Admin\Ui\View;
+use App\Modules\Telegram\Admin\Ui\Words;
 
 /**
  * «پیشرفته» of config.php: the log, the panels' session, the timeout of outgoing requests, and the cron run from the
@@ -20,6 +22,8 @@ use App\Modules\Telegram\Admin\Ui\View;
 final class AdvancedScreen extends ConfigScreen
 {
     public const ID = 'ppv';
+
+    public const TITLE = Icons::ADVANCED . ' پیشرفته';
 
     /** The whole cron address, for the update that asked for it (shownFor) alone. */
     private ?string $shown = null;
@@ -33,7 +37,7 @@ final class AdvancedScreen extends ConfigScreen
 
     protected function title(): string
     {
-        return '🛠 پیشرفته';
+        return self::TITLE;
     }
 
     protected function group(): string
@@ -71,16 +75,17 @@ final class AdvancedScreen extends ConfigScreen
             return;
         }
         $whole = $this->shownFor === $admin ? $this->shown : null;
-        $view->line()->line("<b>⏱ آدرس \u{2068}Cron\u{2069}</b>");
-        if ($whole !== null) {
-            $view->line(Fmt::code($whole))
-                ->line("خط \u{2068}Cron\u{2069}:")
-                ->line(Fmt::code('curl -fsS ' . $whole . ' > /dev/null'))
-                ->line('<i>این خط برای فرم «Cron Jobs» در cPanel است: زمان‌بندی را هر دقیقه بگذارید (Once Per Minute) و خط را در فیلد Command بچسبانید. آدرس، توکن را دارد؛ آن را جای عمومی نگذارید. با دکمه بعدی پنهان می‌شود.</i>');
+        $view->section("⏱ آدرس \u{2068}Cron\u{2069}");
+        if ($whole === null) {
+            $view->card(['آدرس' => Fmt::ltr($masked)])->row(Button::to("👁 آدرس و خط \u{2068}Cron\u{2069}", self::ID, 'cron'));
 
             return;
         }
-        $view->line(Fmt::ltr($masked))->row(Button::to("📋 آدرس و خط \u{2068}Cron\u{2069}", self::ID, 'cron'));
+        $line = 'curl -fsS ' . $whole . ' > /dev/null';
+        // Shown on this screen alone, and copied from it: the token is in it, and the next tap hides it again.
+        $view->card(['آدرس' => Fmt::code($whole), "خط \u{2068}Cron\u{2069}" => Fmt::code($line)])
+            ->note("این خط برای فرم «\u{2068}Cron Jobs\u{2069}» در \u{2068}cPanel\u{2069} است: زمان‌بندی را هر دقیقه بگذارید (\u{2068}Once Per Minute\u{2069}) و خط را در فیلد \u{2068}Command\u{2069} بچسبانید. آدرس، توکن را دارد؛ آن را جای عمومی نگذارید. با دکمه بعدی پنهان می‌شود.")
+            ->row(Button::copy(Words::copy('آدرس'), $whole), Button::copy(Words::copy('خط Cron'), $line));
     }
 
     protected function action(Admin $admin, string $action, array $args, DraftForm $form, string $driver, array $values): View

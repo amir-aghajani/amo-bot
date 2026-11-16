@@ -12,8 +12,10 @@ use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\BaseScreen;
 use App\Modules\Telegram\Admin\Ui\Button;
 use App\Modules\Telegram\Admin\Ui\Fmt;
+use App\Modules\Telegram\Admin\Ui\Icons;
 use App\Modules\Telegram\Admin\Ui\Json;
 use App\Modules\Telegram\Admin\Ui\View;
+use App\Modules\Telegram\Admin\Ui\Words;
 
 /**
  * «زمان‌بندی کارها» (the owner's, in the main shop): every scheduled task in the order a run takes them — how often it
@@ -27,6 +29,8 @@ final class ScheduleScreen extends BaseScreen
 {
     public const ID = 'ppj';
 
+    public const TITLE = '⏱ زمان‌بندی کارها';
+
     public function allows(AdminSeat $seat): bool
     {
         return Access::main($seat);
@@ -37,32 +41,29 @@ final class ScheduleScreen extends BaseScreen
         $schedule = self::read($admin);
         $tasks = self::tasks($schedule);
         $ran = is_string($schedule['last_run_at'] ?? null) ? $schedule['last_run_at'] : null;
-        $view = View::make('⏱ زمان‌بندی کارها', 'مدیریت', 'تنظیمات', 'تنظیمات پنل')
-            ->line('هر کار زمان‌بندی‌شده هر چند وقت یک بار اجرا شود، و زمان‌هایی که بر اساسشان تصمیم می‌گیرد. برای همه فروشگاه‌ها یکی است و در دیتابیس ذخیره می‌شود؛ پیش‌فرض‌ها همان‌هایی هستند که فروشگاه تا امروز با آن‌ها کار می‌کرد.')
-            ->line()
-            ->line('<i>کارها به ترتیبی آمده‌اند که اجرا می‌شوند: Cron هر دقیقه اجرا می‌شود و هر کاری را که موعدش رسیده، به همین ترتیب انجام می‌دهد. کاری که نشان «🏪 در هر فروشگاه» دارد، در فروشگاه اصلی و فروشگاه هر نماینده یکی پس از دیگری اجرا می‌شود؛ بقیه یک بار برای همه.</i>');
-        if ($ran !== null) {
-            $view->line("آخرین اجرای \u{2068}Cron\u{2069}: " . Fmt::date($ran, true));
-        } else {
+        $view = View::make(self::TITLE, ...PanelSettingsScreen::under());
+        if ($ran === null) {
             $view->line("⚠️ \u{2068}Cron\u{2069} هنوز اجرا نشده است؛ تا راه نیفتد، هیچ‌کدام از این کارها انجام نمی‌شود.");
         }
+        $changed = count(array_filter($tasks, static fn(array $task): bool => !self::atDefault($task)));
+        $view->card([
+            "آخرین اجرای \u{2068}Cron\u{2069}" => $ran !== null ? Fmt::date($ran, true) : 'هنوز اجرا نشده',
+            'کارها' => Fmt::number(count($tasks)) . ($changed > 0 ? ' · ' . Fmt::number($changed) . ' تغییرکرده ✏️' : ' · همه با پیش‌فرض'),
+        ]);
 
         $buttons = [];
         foreach ($tasks as $index => $task) {
             $interval = self::fields($task)[0] ?? null;
             $every = $interval === null ? '' : ' · هر ' . Fmt::number((int) ($interval['value'] ?? 0)) . ' ' . (string) ($interval['unit'] ?? '');
-            $changed = array_filter(self::fields($task), static fn(array $field): bool => (int) ($field['value'] ?? 0) !== (int) ($field['default'] ?? 0)) !== [];
-            $buttons[] = Button::to((Json::on($task, 'each_shop') ? '🏪 ' : '⚙️ ') . (string) ($task['title'] ?? '') . $every . ($changed ? ' ✏️' : ''), ScheduleTaskScreen::ID, 'show', $index);
-        }
-        $view->grid(1, ...$buttons);
-        if ($ran === null) {
-            $view->row(Button::to("🛠 راه‌اندازی \u{2068}Cron\u{2069}", AdvancedScreen::ID));
-        }
-        if (!self::allDefault($tasks)) {
-            $view->row(Button::to('↩️ بازگشت به همه پیش‌فرض‌ها', self::ID, 'reset'));
+            $buttons[] = Button::to((Json::on($task, 'each_shop') ? '🏪 ' : '⚙️ ') . (string) ($task['title'] ?? '') . $every . (self::atDefault($task) ? '' : ' ✏️'), ScheduleTaskScreen::ID, 'show', $index);
         }
 
-        return $view->back(PanelSettingsScreen::ID);
+        return $view->grid(1, ...$buttons)
+            ->row($ran === null ? Button::to(Icons::ADVANCED . " راه‌اندازی \u{2068}Cron\u{2069}", AdvancedScreen::ID)->primary() : null)
+            ->row($changed > 0 ? Button::to('↩️ بازگشت به همه پیش‌فرض‌ها', self::ID, 'reset')->danger() : null)
+            ->help('هر کار زمان‌بندی‌شده هر چند وقت یک بار اجرا شود، و زمان‌هایی که بر اساسشان تصمیم می‌گیرد. برای همه فروشگاه‌ها یکی است و در دیتابیس ذخیره می‌شود؛ پیش‌فرض‌ها همان‌هایی هستند که فروشگاه تا امروز با آن‌ها کار می‌کرد.'
+                . "\n\nکارها به ترتیبی آمده‌اند که اجرا می‌شوند: \u{2068}Cron\u{2069} هر دقیقه اجرا می‌شود و هر کاری را که موعدش رسیده، به همین ترتیب انجام می‌دهد. کاری که نشان «🏪» دارد، در فروشگاه اصلی و فروشگاه هر نماینده یکی پس از دیگری اجرا می‌شود؛ بقیه («⚙️») یک بار برای همه. «✏️» یعنی زمانی از آن کار با پیش‌فرض فرق دارد.")
+            ->back(PanelSettingsScreen::ID);
     }
 
     public function act(Admin $admin, string $action, array $args): View
@@ -71,9 +72,10 @@ final class ScheduleScreen extends BaseScreen
             case 'reset':
                 return $admin->confirm(
                     'همه زمان‌ها به پیش‌فرض برگردند؟',
-                    Button::to('↩️ بله، همه پیش‌فرض', self::ID, 'defaults'),
-                    Button::to('✖️ انصراف', self::ID),
+                    Button::to(Words::yes('همه پیش‌فرض شوند'), self::ID, 'defaults'),
+                    Button::to(Words::CANCEL, self::ID),
                     'هر کار و هر زمانی که تغییر داده‌اید، به همان پیش‌فرضی برمی‌گردد که فروشگاه تا امروز با آن کار می‌کرد.',
+                    danger: true,
                 );
             case 'defaults':
                 $tasks = self::tasks(self::read($admin));
@@ -141,14 +143,16 @@ final class ScheduleScreen extends BaseScreen
         return $body;
     }
 
-    /** @param list<array<string, mixed>> $tasks */
-    private static function allDefault(array $tasks): bool
+    /**
+     * Whether every timing of `$task` is its default.
+     *
+     * @param array<string, mixed> $task
+     */
+    private static function atDefault(array $task): bool
     {
-        foreach ($tasks as $task) {
-            foreach (self::fields($task) as $field) {
-                if ((int) ($field['value'] ?? 0) !== (int) ($field['default'] ?? 0)) {
-                    return false;
-                }
+        foreach (self::fields($task) as $field) {
+            if ((int) ($field['value'] ?? 0) !== (int) ($field['default'] ?? 0)) {
+                return false;
             }
         }
 

@@ -36,6 +36,17 @@ function prizeWorth(prize: Pick<WheelPrizeRow, 'kind' | 'amount' | 'plan'>): str
   }
 }
 
+/**
+ * Whether the wheel may land on a slice (LuckyWheel::spin()): switched on and, a free service, its plan still there — a
+ * slice whose plan was deleted is never drawn and its share goes to the rest.
+ */
+function isDrawn(prize: Pick<WheelPrizeRow, 'enabled' | 'kind' | 'plan'>): boolean {
+  return prize.enabled && (prize.kind !== 'plan' || prize.plan != null)
+}
+
+/** A drawn slice's weight as the wheel draws by it: at least one. */
+const drawWeight = (prize: Pick<WheelPrizeRow, 'weight'>) => Math.max(1, prize.weight)
+
 /** The wheel's slices in the admin's order (the order the wheel shows), each with its weight and resulting chance. */
 export function PrizesList() {
   const editor = useEditor<WheelPrizeRow>()
@@ -47,7 +58,7 @@ export function PrizesList() {
     remove: (prize) => api.delete(`/wheel/prizes/${prize.id}`),
     patch: (prize, changes: WheelPrizeSwitchRequest) => api.patch(`/wheel/prizes/${prize.id}`, changes).then((answer) => answer.prize),
   })
-  const total = list.rows.reduce((sum, prize) => sum + (prize.enabled ? prize.weight : 0), 0)
+  const total = list.rows.reduce((sum, prize) => sum + (isDrawn(prize) ? drawWeight(prize) : 0), 0)
 
   const add = (variant: 'default' | 'secondary') => (
     <Button variant={variant} icon={Plus} onClick={editor.create}>
@@ -95,7 +106,7 @@ export function PrizesList() {
                   <PhoneFacts>وزن {formatNumber(prize.weight)}</PhoneFacts>
                 </TableCell>
                 <TableCell className="hidden tabular md:table-cell">{formatNumber(prize.weight)}</TableCell>
-                <TableCell className="tabular">{prize.enabled && total > 0 ? formatPercent((prize.weight / total) * 100) : <Dash />}</TableCell>
+                <TableCell className="tabular">{isDrawn(prize) && total > 0 ? formatPercent((drawWeight(prize) / total) * 100) : <Dash />}</TableCell>
                 <TableCell>
                   <Switch checked={prize.enabled} onCheckedChange={(enabled) => list.patch.mutate({ row: prize, changes: { enabled } })} aria-label={`فعال بودن ${prize.label}`} />
                 </TableCell>

@@ -6,11 +6,13 @@ namespace App\Modules\Telegram\Admin\Sections\Support;
 
 use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\BaseScreen;
+use App\Modules\Telegram\Admin\Ui\ListScreen;
 use App\Modules\Telegram\Admin\Ui\View;
 
 /**
- * A row of a list the panel has no one-row route for (the referral program's lists): read from the page its list kept
- * (ListScreen::keepsRows()), shown on its own; gone from the page — the list moved on —, the list instead.
+ * A row of a list the panel has no one-row route for (a review, the referral program's lists): read from the page its
+ * list kept (ListScreen::keepsRows()), shown on its own; gone from the page — the list moved on —, the list instead,
+ * saying so.
  *
  * Shown with (id).
  */
@@ -28,21 +30,13 @@ abstract class KeptRowScreen extends BaseScreen
 
     public function show(Admin $admin, array $args): View
     {
-        $row = self::kept($admin, $this->list(), self::id($args));
+        $row = ListScreen::keptRow($admin, $this->list(), self::id($args));
+        if ($row === null) {
+            $admin->notice('این ردیف در صفحه فعلی فهرست نیست؛ فهرست تازه را ببینید.');
 
-        return $row === null ? $admin->open($this->list()) : $this->view($admin, $row);
-    }
+            return $admin->open($this->list());
+        }
 
-    /**
-     * Row `$id` of `$list`'s kept page; null when it is not there.
-     *
-     * @return array<string, mixed>|null
-     */
-    protected static function kept(Admin $admin, string $list, int $id): ?array
-    {
-        $rows = (array) ($admin->state($list)['rows'] ?? []);
-        $row = $rows[$id] ?? $rows[(string) $id] ?? null;
-
-        return is_array($row) ? $row : null;
+        return $this->view($admin, $row);
     }
 }

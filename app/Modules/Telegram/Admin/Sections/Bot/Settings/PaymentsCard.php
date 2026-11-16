@@ -5,8 +5,13 @@ declare(strict_types=1);
 namespace App\Modules\Telegram\Admin\Sections\Bot\Settings;
 
 use App\Modules\Telegram\Admin\Ui\Admin;
+use App\Modules\Telegram\Admin\Ui\Button;
+use App\Modules\Telegram\Admin\Ui\Icons;
 use App\Modules\Telegram\Admin\Ui\Json;
 use App\Modules\Telegram\Admin\Ui\Settings\FieldDef;
+use App\Modules\Telegram\Admin\Ui\Settings\SettingsScreen;
+use App\Modules\Telegram\Admin\Ui\View;
+use App\Modules\Telegram\Admin\Ui\Words;
 
 /**
  * «پرداخت کارت به کارت» (`payments`): the card's message protected from forwarding and screenshots, the customer sent to
@@ -15,6 +20,8 @@ use App\Modules\Telegram\Admin\Ui\Settings\FieldDef;
 final class PaymentsCard extends BotCard
 {
     public const ID = 'bsp';
+
+    public const TITLE = Icons::CARD_TO_CARD . ' پرداخت کارت به کارت';
 
     protected function group(): string
     {
@@ -28,7 +35,7 @@ final class PaymentsCard extends BotCard
 
     protected function title(): string
     {
-        return '💳 پرداخت کارت به کارت';
+        return self::TITLE;
     }
 
     protected function intro(): string
@@ -47,11 +54,25 @@ final class PaymentsCard extends BotCard
 
     protected function warnings(Admin $admin, array $values): array
     {
-        if (Json::on($values, 'card_to_support') && trim((string) ($values['support_contact'] ?? '')) === '') {
+        if (self::supportMissing($values)) {
             return ['راه ارتباط با پشتیبانی در بخش «عمومی» خالی است؛ تا آن را ننویسید، ربات و سایت شماره کارت را مثل قبل نشان می‌دهند.'];
         }
 
         return [];
+    }
+
+    /** While card payments go to support's chat and its contact is empty: the way to fill it in, on «عمومی». */
+    protected function extra(View $view, Admin $admin, array $values): void
+    {
+        if (self::supportMissing($values)) {
+            $view->row(Button::to(Words::edit('راه ارتباط با پشتیبانی'), GeneralCard::ID, SettingsScreen::FIELD, 'support_contact')->primary());
+        }
+    }
+
+    /** @param array<string, mixed> $values */
+    private static function supportMissing(array $values): bool
+    {
+        return Json::on($values, 'card_to_support') && trim((string) ($values['support_contact'] ?? '')) === '';
     }
 
     protected function notes(): array

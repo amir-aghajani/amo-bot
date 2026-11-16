@@ -18,6 +18,7 @@ use App\Modules\Telegram\Texts\BotTexts;
 use App\Modules\Telegram\Update\CallbackData;
 use App\Modules\Telegram\Update\Dispatcher;
 use App\Modules\Telegram\Update\Update;
+use App\Modules\Users\Enums\UserRole;
 use App\Modules\Users\Models\User;
 use App\Support\Money;
 use Tests\Support\FakeTelegram;
@@ -36,6 +37,9 @@ abstract class BotTestCase extends DatabaseTestCase
     /** In the report group: a bot admin's Telegram account (@boss, groupAdminActor()'s), and a member who is not one. */
     protected const GROUP_ADMIN = self::BOSS_TELEGRAM_ID;
     protected const GROUP_MEMBER = 9090;
+
+    /** The management's owner in these tests: the Telegram account owner() links as the shop's owner. */
+    protected const OWNER = 7001;
 
     /** The last update id handed out: each update a test makes is new to the bot, as each Telegram sends is. */
     private static int $updateId = 0;
@@ -76,6 +80,30 @@ abstract class BotTestCase extends DatabaseTestCase
         $link = $links->link();
         self::assertNotNull($link);
         $links->redeem(substr($link['url'], (int) strpos($link['url'], '=') + 1), $telegramId);
+    }
+
+    /**
+     * The management's owner (OWNER, «Amir»): made the first time — with `$role` if given (UserRole::Admin: a bot admin
+     * too) —, then linked as the shop's owner (linkOwner()).
+     */
+    protected function owner(?UserRole $role = null): User
+    {
+        $owner = User::query()->where('telegram_id', self::OWNER)->first() ?? $this->customer(['telegram_id' => self::OWNER, 'first_name' => 'Amir'] + ($role !== null ? ['role' => $role] : []));
+        $this->linkOwner(self::OWNER);
+
+        return $owner;
+    }
+
+    /** The owner (OWNER) taps an inline button. */
+    protected function tapAs(string $data): void
+    {
+        $this->send($this->tap($data, chat: self::OWNER));
+    }
+
+    /** The owner (OWNER) writes to the bot. */
+    protected function sayAs(string $text): void
+    {
+        $this->send($this->message($text, chat: self::OWNER));
     }
 
     /** The customer does something in an agent's bot: the update served in its shop, as bot:poll or its webhook would. */
@@ -127,6 +155,22 @@ abstract class BotTestCase extends DatabaseTestCase
     protected function callbacks(int $call): array
     {
         return array_values(array_filter(array_column(array_merge(...$this->inlineKeyboard($call)), 'callback_data')));
+    }
+
+    /**
+     * The callback data of every inline button since the last send(), call after call: what the window offers now,
+     * whichever call put it there (after a popup, the edit is the second).
+     *
+     * @return list<string>
+     */
+    protected function offered(): array
+    {
+        $offered = [];
+        foreach (array_keys($this->calls()) as $call) {
+            $offered = [...$offered, ...$this->callbacks($call)];
+        }
+
+        return $offered;
     }
 
     /** @return list<string> The labels of the n-th call's inline buttons, row after row. */
@@ -189,6 +233,14 @@ abstract class BotTestCase extends DatabaseTestCase
         }
 
         return array_values(array_filter($said, static fn(?string $text): bool => $text !== null));
+    }
+
+    /** The last thing the bot wrote since the last send() (said()): the window as it reads now; '' for nothing. */
+    protected function lastSaid(): string
+    {
+        $said = $this->said();
+
+        return (string) end($said);
     }
 
     /**

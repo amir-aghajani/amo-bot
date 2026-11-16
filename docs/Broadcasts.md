@@ -30,7 +30,9 @@ account. The panel follows the runs and controls them, and so does the bot's man
      سایت - https://example.com | پشتیبانی - https://t.me/support
      ```
    Sending another message replaces the message and keeps the rest.
-3. **«✅ ارسال به n نفر»** sends it; «❌ انصراف» drops the draft.
+3. **«✅ ارسال به n نفر»** asks once more, in the card's place — «❓ ارسال به n نفر شود؟», what goes, to whom, pinned or
+   not, and that a message once received stays —: **«✔️ بله، ارسال شود»** sends it, «✖️ انصراف» goes back to the card.
+   «❌ انصراف» on the card drops the draft.
 
 **Who is reached**: customers who are not banned and have a Telegram account — website customers without one are
 neither counted nor reached. One who blocked the bot is counted («مسدود») and not sent to. Nobody gets it twice.
@@ -39,7 +41,7 @@ neither counted nor reached. One who blocked the bot is counted («مسدود»)
 «▶️ ادامه» and «✖️ لغو ارسال» (in the bot, at one press; those already sent keep it). Once a pinned run is over, «📌 لغو
 پین» unpins it in every chat, with a progress card of its own.
 
-**The pace**: 20 messages a second at most (a pin is one more). The first 50 go as you press «ارسال»; the rest go with
+**The pace**: 20 messages a second at most (a pin is one more). The first 50 go as you confirm it; the rest go with
 the scheduler, up to 600 a run, and a run every minute by default
 ([«زمان‌بندی کارها»](Running-In-Production.md#the-task-schedule)) — **without the cron or the poller running, a broadcast
 stops at its first 50** ([Running in production](Running-In-Production.md)). When the scheduler finishes a run, the

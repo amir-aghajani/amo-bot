@@ -55,7 +55,8 @@ final class SalesOrdersTest extends BotTestCase
 
         $this->send($this->tap(Nav::to('orv', 'show', $order->id), chat: 7001));
         self::assertStringContainsString('سفارش ' . Fmt::id($order->id), $this->said()[0]);
-        self::assertStringContainsString('خطای تحویل', $this->said()[0]);
+        self::assertStringContainsString('تحویل انجام نشد', $this->said()[0], 'why it is stuck, said first');
+
         self::assertContains(Nav::to('pyv', 'show', $payment->id), $this->callbacks(0), 'its payment, on its own screen');
         self::assertContains(Nav::to('orv', 'rt', $order->id), $this->callbacks(0));
         self::assertNotContains(Nav::to('orv', 'cx', $order->id), $this->callbacks(0), 'paid: not cancelled here');
@@ -132,14 +133,5 @@ final class SalesOrdersTest extends BotTestCase
         $this->send($this->tap(Nav::to('or', 'search'), chat: 7001));
         $this->send($this->message('Basic', chat: 7001));
         self::assertSame([Nav::to('orv', 'show', $purchase->id)], array_values(array_filter($this->callbacks($this->windowCall()), static fn(string $data): bool => str_starts_with($data, 'a:orv:'))));
-    }
-
-    /** The account 7001 linked as the owner. */
-    private function owner(): void
-    {
-        if (User::query()->where('telegram_id', 7001)->doesntExist()) {
-            $this->customer(['telegram_id' => 7001, 'first_name' => 'Amir']);
-        }
-        $this->linkOwner(7001);
     }
 }

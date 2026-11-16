@@ -12,6 +12,7 @@ use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\Fmt;
 use App\Modules\Telegram\Admin\Ui\Json;
 use App\Modules\Telegram\Admin\Ui\View;
+use App\Modules\Telegram\Admin\Ui\Words as UiWords;
 
 /**
  * A payment method's form for any driver (the panel's MethodForm): the label customers see, the amounts it is offered
@@ -62,17 +63,17 @@ final class PaymentMethodFormScreen extends FormScreen
 
     protected function title(array $state): string
     {
-        return self::isNew($state) ? '➕ افزودن ' . (string) ($state['label'] ?? '') : '✏️ ویرایش «' . (string) ($state['label'] ?? '') . '»';
+        return self::isNew($state) ? UiWords::add((string) ($state['label'] ?? '')) : UiWords::EDIT . ' «' . (string) ($state['label'] ?? '') . '»';
     }
 
     protected function path(array $state): array
     {
-        return ['مدیریت', 'فروشگاه', 'روش‌های پرداخت'];
+        return PaymentWords::under();
     }
 
     protected function saveLabel(array $state): string
     {
-        return self::isNew($state) ? '✔️ افزودن روش پرداخت' : '💾 ذخیره تغییرات';
+        return self::isNew($state) ? UiWords::CREATE : UiWords::SAVE;
     }
 
     protected function leave(Admin $admin, array $state): View
@@ -80,19 +81,29 @@ final class PaymentMethodFormScreen extends FormScreen
         return self::isNew($state) ? $admin->open(PaymentDriversScreen::ID) : $admin->open(PaymentMethodScreen::ID, 'show', [(int) $state['key']]);
     }
 
+    /** An online gateway's notes (the address it calls, to paste by hand), over the card. */
     protected function intro(View $view, Admin $admin, array $state): void
     {
-        $view->line(Fmt::e(self::isNew($state)
-            ? (string) ($state['description'] ?? '')
-            : ((string) $state['driver'] === 'manual'
-                ? 'هر پرداخت کارتی را که به آن نشان داده شده نگه می‌دارد. شماره کارتی که با آن پرداخت شده عوض نمی‌شود؛ اگر کارت عوض شده، کارت تازه‌ای اضافه و قبلی را غیرفعال کنید.'
-                : 'کمترین و بیشترین مبلغ، مبلغ‌هایی است که این روش برای آن‌ها به مشتری پیشنهاد می‌شود.')));
         if (($state['kind'] ?? null) === 'online') {
             foreach ((array) ($state['notes'] ?? []) as $note) {
                 $view->line('ℹ️ ' . Words::note(is_scalar($note) ? (string) $note : ''));
             }
         }
-        $view->line();
+    }
+
+    /**
+     * What the driver is and how it is set up (its description), first in the card's folded help; on an edit, what the
+     * bounds are — and for a card method, what becomes of a card paid with.
+     *
+     * @param array<string, mixed> $state
+     */
+    protected function folded(array $state): string
+    {
+        return Fmt::e(self::isNew($state)
+            ? (string) ($state['description'] ?? '')
+            : ((string) $state['driver'] === 'manual'
+                ? 'هر پرداخت کارتی را که به آن نشان داده شده نگه می‌دارد. شماره کارتی که با آن پرداخت شده عوض نمی‌شود؛ اگر کارت عوض شده، کارت تازه‌ای اضافه و قبلی را غیرفعال کنید.'
+                : 'کمترین و بیشترین مبلغ، مبلغ‌هایی است که این روش برای آن‌ها به مشتری پیشنهاد می‌شود.'));
     }
 
     protected function action(Admin $admin, string $action, array $args, array $state, DescribedForm $form): View

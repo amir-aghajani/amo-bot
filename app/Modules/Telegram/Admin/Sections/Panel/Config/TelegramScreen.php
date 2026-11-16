@@ -9,6 +9,7 @@ use App\Modules\Telegram\Admin\Sections\Panel\SystemScreen;
 use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\Button;
 use App\Modules\Telegram\Admin\Ui\Fmt;
+use App\Modules\Telegram\Admin\Ui\Icons;
 use App\Modules\Telegram\Admin\Ui\Json;
 use App\Modules\Telegram\Admin\Ui\View;
 
@@ -23,11 +24,13 @@ final class TelegramScreen extends ConfigScreen
 {
     public const ID = 'ppt';
 
+    public const TITLE = '🤖 ربات تلگرام';
+
     /** When a save here reaches the main bot, by how it gets its messages (the panel's words, without the console's). */
     private const AFTER_SAVE = [
-        'webhook' => 'ربات روی Webhook است و مقادیر تازه از پیام بعدی به کار می‌روند؛ اگر توکن ربات دیگری را گذاشتید یا رمز Webhook را عوض کردید، Webhook را در «📡 دریافت پیام‌ها» دوباره ثبت کنید.',
-        'polling' => 'ربات با پولینگ کار می‌کند و مقادیر تازه را وقتی دوباره راه بیفتد می‌خواند؛ روی هاست، Webhook را در «📡 دریافت پیام‌ها» ثبت کنید تا از پیام بعدی به کار بروند.',
-        'offline' => 'ربات الان پیامی نمی‌گیرد: Webhook را در «📡 دریافت پیام‌ها» ثبت کنید.',
+        'webhook' => 'ربات روی Webhook است و مقادیر تازه از پیام بعدی به کار می‌روند؛ اگر توکن ربات دیگری را گذاشتید یا رمز Webhook را عوض کردید، Webhook را در «🛰 دریافت پیام‌ها» دوباره ثبت کنید.',
+        'polling' => 'ربات با پولینگ کار می‌کند و مقادیر تازه را وقتی دوباره راه بیفتد می‌خواند؛ روی هاست، Webhook را در «🛰 دریافت پیام‌ها» ثبت کنید تا از پیام بعدی به کار بروند.',
+        'offline' => 'ربات الان پیامی نمی‌گیرد: Webhook را در «🛰 دریافت پیام‌ها» ثبت کنید.',
     ];
 
     protected function screen(): string
@@ -37,7 +40,7 @@ final class TelegramScreen extends ConfigScreen
 
     protected function title(): string
     {
-        return '🤖 ربات اصلی';
+        return self::TITLE;
     }
 
     protected function group(): string
@@ -64,7 +67,7 @@ final class TelegramScreen extends ConfigScreen
             DraftForm::field('api_url', 'url', "آدرس \u{2068}API\u{2069} تلگرام", "برای سرور \u{2068}Bot API\u{2069} محلی یا آینه تغییر دهید؛ توکن همه ربات‌ها، ربات‌های نماینده‌ها هم، به همین آدرس فرستاده می‌شود.", required: true),
             DraftForm::field('current_password', 'secret', 'رمز عبور فعلی پنل', 'آدرس API تلگرام به جای دیگری می‌رود و از این به بعد توکن همه ربات‌ها، ربات‌های نماینده‌ها هم، به آن فرستاده می‌شود؛ برای همین رمز عبور ورود به پنل خواسته می‌شود.', required: true, transient: true),
             DraftForm::field('poll_timeout', 'number', "تایم‌اوت \u{2068}long polling\u{2069}", 'فقط در حالت polling استفاده می‌شود.', required: true, unit: 'ثانیه', min: 1, max: 60),
-            DraftForm::field('webhook_secret', 'secret', "رمز \u{2068}Webhook\u{2069}", 'بخشی از آدرس Webhook است' . ($webhook !== '' ? ': ' . $webhook : '') . '. بعد از تغییر، Webhook را در «📡 دریافت پیام‌ها» دوباره ثبت کنید.', generate: 24),
+            DraftForm::field('webhook_secret', 'secret', "رمز \u{2068}Webhook\u{2069}", 'بخشی از آدرس Webhook است' . ($webhook !== '' ? ': ' . $webhook : '') . '. بعد از تغییر، Webhook را در «🛰 دریافت پیام‌ها» دوباره ثبت کنید.', generate: 24),
         ], $group);
     }
 
@@ -76,8 +79,7 @@ final class TelegramScreen extends ConfigScreen
     protected function intro(Admin $admin, DraftForm $form, string $driver): array
     {
         $system = $admin->api->get('/system')['system'] ?? null;
-        $main = is_array($system) && Json::part($system, 'main_bot');
-        $mode = $main['mode'] ?? null;
+        $mode = is_array($system) ? (Json::part($system, 'main_bot')['mode'] ?? null) : null;
         $lines = ["توکن \u{2068}BotFather\u{2069} و نام کاربری ربات اصلی فروشگاه." . (is_string($mode) && isset(self::AFTER_SAVE[$mode]) ? ' ' . self::AFTER_SAVE[$mode] : '')];
         $test = $admin->state(self::ID)['test'] ?? null;
         if (is_array($test)) {
@@ -90,7 +92,7 @@ final class TelegramScreen extends ConfigScreen
 
     protected function extra(View $view, Admin $admin, DraftForm $form, string $driver, array $values): void
     {
-        $view->row(Button::to('🧪 بررسی توکن', self::ID, 'test'), Button::to('📡 دریافت پیام‌ها', SystemScreen::ID));
+        $view->row(Button::to('🧪 بررسی توکن', self::ID, 'test'), Button::to(Icons::SYSTEM . ' دریافت پیام‌ها', SystemScreen::ID));
     }
 
     protected function action(Admin $admin, string $action, array $args, DraftForm $form, string $driver, array $values): View

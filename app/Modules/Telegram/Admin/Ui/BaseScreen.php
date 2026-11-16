@@ -12,6 +12,9 @@ use App\Modules\Telegram\Admin\AdminSeat;
  */
 abstract class BaseScreen implements Screen
 {
+    /** The furthest page a button may name (page()). */
+    protected const PAGE_MOST = 100_000;
+
     public function allows(AdminSeat $seat): bool
     {
         return true;
@@ -38,12 +41,13 @@ abstract class BaseScreen implements Screen
     }
 
     /**
-     * The argument at `$index` as a page number, 1 for none.
+     * The argument at `$index` as a page number, 1 for none — held under PAGE_MOST: a list counts its rows from it, and
+     * a number past any list's is its last page all the same.
      *
      * @param list<string> $args
      */
     protected static function page(array $args, int $index = 0): int
     {
-        return max(1, self::id($args, $index));
+        return min(max(1, self::id($args, $index)), self::PAGE_MOST);
     }
 }

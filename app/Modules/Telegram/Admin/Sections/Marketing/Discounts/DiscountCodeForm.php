@@ -7,17 +7,19 @@ namespace App\Modules\Telegram\Admin\Sections\Marketing\Discounts;
 use App\Modules\Telegram\Admin\Sections\Marketing\Form\FormScreen;
 use App\Modules\Telegram\Admin\Sections\Marketing\Form\Moment;
 use App\Modules\Telegram\Admin\Sections\Marketing\Form\Step;
-use App\Modules\Telegram\Admin\Sections\Marketing\Words;
+use App\Modules\Telegram\Admin\Sections\Marketing\Words as Marketing;
 use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\Fmt;
 use App\Modules\Telegram\Admin\Ui\Json;
+use App\Modules\Telegram\Admin\Ui\ListScreen;
 use App\Modules\Telegram\Admin\Ui\View;
+use App\Modules\Telegram\Admin\Ui\Words;
 
 /**
- * «➕ ساخت کد تخفیف» / «✏️ ویرایش» (the panel's CodeForm): the code — typed, or made at random —, what it takes off (a
- * percent with an optional cap, Toman, or everything), the kinds of order, its window and its use limits asked on the
- * way; the plans, servers, least amount, first purchases only, note and switch (the panel's «محدودیت‌های بیشتر») from the
- * summary. One save: POST /discount-codes, or the code's PUT.
+ * «➕ افزودن کد تخفیف» / «✏️ ویرایش» (the panel's CodeForm): the code — typed, or made at random —, what it takes off (a
+ * percent with an optional cap, Toman, or everything), the kinds of order, its window and its use limits walked through;
+ * the plans, servers, least amount, first purchases only, note and switch (the panel's «محدودیت‌های بیشتر») set from the
+ * review. One save: POST /discount-codes, or the code's PUT.
  */
 final class DiscountCodeForm extends FormScreen
 {
@@ -33,35 +35,42 @@ final class DiscountCodeForm extends FormScreen
 
     protected function title(int $id, array $draft): string
     {
-        return $id === 0 ? '➕ ساخت کد تخفیف' : '✏️ ویرایش کد ' . Words::iso((string) ($draft['code'] ?? ''));
+        return $id === 0 ? Words::add('کد تخفیف') : Words::EDIT . ' کد ' . Marketing::iso((string) ($draft['code'] ?? ''));
     }
 
     protected function path(): array
     {
-        return [...Words::PATH, 'کدهای تخفیف'];
+        return Marketing::in(Marketing::DISCOUNTS);
+    }
+
+    protected function laterTitle(): string
+    {
+        return '🎯 محدودیت‌های بیشتر';
     }
 
     protected function steps(Admin $admin): array
     {
         return [
-            Step::code('code', 'کد', 'همان چیزی که مشتری می‌نویسد؛ ۳ تا ۳۲ حرف، رقم، خط تیره یا زیرخط. بزرگی و کوچکی حروف فرقی ندارد.')->quick('🎲 ساخت کد تصادفی', self::random()),
-            Step::choice('type', 'نوع تخفیف', ['percent' => 'درصدی', 'fixed' => 'مبلغ ثابت', 'free' => 'رایگان'], 'رایگان کل مبلغ سفارش را کم می‌کند و سفارش رایگان تحویل می‌شود.'),
-            Step::percent('percent', 'درصد تخفیف', 'بین ۱ تا ۱۰۰')->as('value')->range(1, 100)->when('type', ['percent'])->quick('۱۰٪', 10)->quick('۲۰٪', 20)->quick('۳۰٪', 30)->quick('۵۰٪', 50),
-            Step::money('fixed', 'مبلغ تخفیف', 'از مبلغ سفارش کم می‌شود، نه بیشتر از خود مبلغ.')->as('value')->when('type', ['fixed']),
-            Step::money('max_discount', 'سقف تخفیف', 'بیشتر از این کم نمی‌کند؛ خالی یعنی بدون سقف.')->optional('بدون سقف')->when('type', ['percent']),
-            Step::multi('order_types', 'برای چه سفارش‌هایی', Words::KINDS, 'شارژ کیف پول و خرید حجم نمایندگی هیچ‌وقت تخفیف نمی‌گیرند.')->all(Words::EVERY_KIND),
-            Step::moment('starts_at', 'شروع', 0, Moment::HINT)->optional('از همین حالا'),
-            Step::moment('ends_at', 'پایان', 23, Moment::HINT . ' برای کد ساعتی، روز و ساعت پایانش را بنویسید.')->optional('بدون پایان')
+            Step::code('code', 'کد', 'از ۳ تا ۳۲ حرف انگلیسی، رقم، خط تیره یا زیرخط؛ بزرگی و کوچکی حروف فرقی ندارد.')->asks('مشتری چه کدی بنویسد؟')->example('NOWRUZ')
+                ->quick('🎲 ساخت کد تصادفی', self::random()),
+            Step::choice('type', 'نوع تخفیف', ['percent' => 'درصدی', 'fixed' => 'مبلغ ثابت', 'free' => 'رایگان'], '«رایگان» کل مبلغ سفارش را کم می‌کند و سفارش رایگان تحویل می‌شود.')->asks('تخفیف از چه نوعی باشد؟'),
+            Step::percent('percent', 'درصد تخفیف')->asks('چند درصد کم شود؟')->as('value')->range(1, 100)->when('type', ['percent'])
+                ->quick('۱۰٪', 10)->quick('۲۰٪', 20)->quick('۳۰٪', 30)->quick('۵۰٪', 50),
+            Step::money('fixed', 'مبلغ تخفیف', 'از مبلغ سفارش کم می‌شود، نه بیشتر از خود مبلغ.')->asks('چه مبلغی کم شود؟')->example('۲۰۰۰۰')->as('value')->when('type', ['fixed']),
+            Step::money('max_discount', 'سقف تخفیف', 'تخفیف درصدی بیشتر از این مبلغ نمی‌شود.')->asks('تخفیف تا چه مبلغی باشد؟')->example('۵۰۰۰۰')->optional('بدون سقف')->when('type', ['percent']),
+            Step::multi('order_types', 'برای چه سفارش‌هایی', Marketing::KINDS, 'شارژ کیف پول و خرید حجم نمایندگی هیچ‌وقت تخفیف نمی‌گیرند.')->asks('برای چه سفارش‌هایی کار کند؟')->all(Marketing::EVERY_KIND),
+            Step::moment('starts_at', 'شروع', 0, Moment::HINT)->asks('از کی کار کند؟')->optional('از همین حالا'),
+            Step::moment('ends_at', 'پایان', 23, Moment::HINT . ' برای کد ساعتی، روز و ساعت پایانش را بنویسید.')->asks('تا کی کار کند؟')->optional('بدون پایان')
                 ->quick('۲۴ ساعت دیگر', Moment::inDays(1))->quick('۷ روز دیگر', Moment::inDays(7))->quick('۳۰ روز دیگر', Moment::inDays(30)),
-            Step::count('max_uses', 'سقف کل استفاده', 'بار', 'خالی یعنی بدون سقف؛ سفارشی که پرداخت نشود و لغو شود، سهمش را پس می‌دهد.')->range(1, 1_000_000)->optional('بدون سقف'),
-            Step::count('per_user', 'سقف استفاده هر مشتری', 'بار', 'خالی یعنی بدون سقف.')->range(1, 1_000_000)->optional('بدون سقف')->quick('۱ (یک‌بار مصرف)', 1)
+            Step::count('max_uses', 'سقف کل استفاده', 'بار', 'سفارشی که پرداخت نشود و لغو شود، سهمش را پس می‌دهد.')->asks('روی هم چند بار استفاده شود؟')->range(1, 1_000_000)->optional('بدون سقف'),
+            Step::count('per_user', 'سقف استفاده هر مشتری', 'بار')->asks('هر مشتری چند بار استفاده کند؟')->range(1, 1_000_000)->optional('بدون سقف')->quick('۱ (یک‌بار مصرف)', 1)
                 ->says(static fn(mixed $value): ?string => $value === 1 ? 'یک‌بار مصرف برای هر مشتری' : null),
-            Step::multi('plan_ids', 'پلن‌ها', static fn(): array => Words::plans($admin), 'برای تمدید و حجم، زمان و کاربر اضافه، پلن سرویس حساب می‌شود.')->all('همه پلن‌ها')->later(),
-            Step::multi('server_ids', 'سرورها', static fn(): array => Words::servers($admin), 'برای خرید، سروری که مشتری انتخاب می‌کند؛ برای تمدید و حجم، زمان و کاربر اضافه، سرور سرویس.')->all('همه سرورها')->later(),
-            Step::money('min_amount', 'حداقل مبلغ سفارش', 'مبلغ سفارش بعد از تخفیف خودکار؛ خالی یعنی هر مبلغی.')->optional('هر مبلغی')->later(),
-            Step::toggle('first_purchase_only', 'فقط برای خرید اول', 'فقط مشتری‌ای که هنوز سرویسی نخریده از این کد استفاده می‌کند.')->later(),
-            Step::text('note', 'یادداشت', 'فقط برای خودتان؛ مشتری آن را نمی‌بیند. مثلا: کمپین اینستاگرام')->optional('ندارد')->later(),
-            Step::toggle('enabled', 'فعال', 'کد غیرفعال از هیچ مشتری‌ای پذیرفته نمی‌شود.')->later(),
+            Step::multi('plan_ids', 'پلن‌ها', static fn(): array => Marketing::plans($admin), 'برای تمدید و حجم، زمان و کاربر اضافه، پلن سرویس حساب می‌شود.')->asks('برای کدام پلن‌ها؟')->all('همه پلن‌ها')->later(),
+            Step::multi('server_ids', 'سرورها', static fn(): array => Marketing::servers($admin), 'برای خرید، سروری که مشتری انتخاب می‌کند؛ برای تمدید و حجم، زمان و کاربر اضافه، سرور سرویس.')->asks('برای کدام سرورها؟')->all('همه سرورها')->later(),
+            Step::money('min_amount', 'حداقل مبلغ سفارش', 'مبلغ سفارش بعد از تخفیف خودکار.')->asks('سفارش دست‌کم چه مبلغی باشد؟')->example('۱۰۰۰۰۰')->optional('هر مبلغی')->later(),
+            Step::toggle('first_purchase_only', 'فقط برای خرید اول', 'فقط مشتری‌ای که هنوز سرویسی نخریده از این کد استفاده می‌کند.')->asks('فقط برای خرید اول باشد؟')->later(),
+            Step::text('note', 'یادداشت', 'فقط برای خودتان؛ مشتری آن را نمی‌بیند.')->asks('یادداشتی برای خودتان؟')->example('کمپین اینستاگرام')->optional('ندارد')->later(),
+            Step::active('enabled', 'کد غیرفعال از هیچ مشتری‌ای پذیرفته نمی‌شود.')->later(),
         ];
     }
 
@@ -108,8 +117,8 @@ final class DiscountCodeForm extends FormScreen
             'ends_at' => Moment::fromIso($row['ends_at'] ?? null),
             'max_uses' => is_int($row['max_uses'] ?? null) ? $row['max_uses'] : null,
             'per_user' => is_int($row['per_user'] ?? null) ? $row['per_user'] : null,
-            'plan_ids' => self::ids($row['plans'] ?? null),
-            'server_ids' => self::ids($row['servers'] ?? null),
+            'plan_ids' => Marketing::ids($row['plans'] ?? null),
+            'server_ids' => Marketing::ids($row['servers'] ?? null),
             'min_amount' => is_numeric($row['min_amount'] ?? null) ? (int) $row['min_amount'] : null,
             'first_purchase_only' => (bool) ($row['first_purchase_only'] ?? false),
             'note' => is_string($row['note'] ?? null) ? $row['note'] : null,
@@ -156,14 +165,14 @@ final class DiscountCodeForm extends FormScreen
     protected function done(Admin $admin, array $row, bool $created): View
     {
         DiscountCodesScreen::keep($admin, $row);
-        $admin->notice($created ? '✅ کد تخفیف ساخته شد' : '✅ کد تخفیف ذخیره شد');
+        $admin->notice($created ? '✅ کد تخفیف ساخته شد' : '✅ تغییرهای کد ذخیره شد');
 
         return $admin->open(DiscountCodeScreen::ID, 'show', [(int) ($row['id'] ?? 0)]);
     }
 
     protected function notes(Admin $admin, int $id, array $draft): array
     {
-        $uses = $id === 0 ? 0 : (int) (DiscountCodesScreen::kept($admin, $id)['uses'] ?? 0);
+        $uses = $id === 0 ? 0 : (int) (ListScreen::keptRow($admin, DiscountCodesScreen::ID, $id)['uses'] ?? 0);
 
         return $uses > 0 ? ['این کد تا حالا ' . Fmt::number($uses) . ' بار استفاده شده است؛ تغییرها روی سفارش‌های قبلی اثری ندارند.'] : [];
     }
@@ -177,15 +186,5 @@ final class DiscountCodeForm extends FormScreen
         }
 
         return $code;
-    }
-
-    /**
-     * The ids of the rows a code names; null for every one.
-     *
-     * @return list<int>|null
-     */
-    private static function ids(mixed $rows): ?array
-    {
-        return is_array($rows) ? array_values(array_map(static fn(mixed $row): int => is_array($row) ? (int) ($row['id'] ?? 0) : 0, $rows)) : null;
     }
 }

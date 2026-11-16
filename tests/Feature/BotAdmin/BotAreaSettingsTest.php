@@ -11,7 +11,6 @@ use App\Modules\Telegram\Admin\Ui\Nav;
 use App\Modules\Telegram\BotSettings;
 use App\Modules\Telegram\Qr\QrBackground;
 use App\Modules\Users\Enums\UserRole;
-use App\Modules\Users\Models\User;
 use GuzzleHttp\Psr7\Response;
 use Tests\BotTestCase;
 
@@ -23,8 +22,6 @@ use Tests\BotTestCase;
  */
 final class BotAreaSettingsTest extends BotTestCase
 {
-    private const OWNER = 7001;
-
     protected function setUp(): void
     {
         parent::setUp();
@@ -34,16 +31,20 @@ final class BotAreaSettingsTest extends BotTestCase
 
     public function testTheMenuHasEveryCardAndASwitchSavesAtATap(): void
     {
-        $this->owner();
+        $this->owner(UserRole::Admin);
 
         $this->send($this->tap(Nav::to('hc'), chat: self::OWNER));
         self::assertContains(Nav::to('bs'), $this->callbacks(0));
         $this->send($this->tap(Nav::to('bs'), chat: self::OWNER));
-        foreach (['bsg', 'bsn', 'ch', 'bsw', 'bst', 'bsp', 'bsr', 'bsx', 'bsm', 'bse', 'bsc', 'bsv', 'bsf', 'rg', 'bsq', 'ba'] as $card) {
-            self::assertContains(Nav::to($card, 'show', 'from.bs'), $this->callbacks(0), $card);
+        foreach (['bsg', 'bsn', 'bsw', 'bst', 'bsp', 'bsq', 'bsr', 'bsx', 'bsm', 'bse', 'bsv', 'bsc'] as $card) {
+            self::assertContains(Nav::to($card), $this->callbacks(0), $card);
         }
+        foreach (['ch', 'rg', 'ba', 'bsf', 'dcs', 'gcs', 'whs', 'cbs', 'lts', 'tss', 'css'] as $elsewhere) {
+            self::assertNotContains(Nav::to($elsewhere, 'show', 'from.bs'), $this->callbacks(0), "{$elsewhere}: reached from its own feature alone");
+        }
+        self::assertStringContainsString('کانال‌های اجباری و گروه گزارش‌ها', $this->said()[0], 'the folded help says where they went');
 
-        $this->send($this->tap(Nav::to('bsg', 'show', 'from.bs'), chat: self::OWNER));
+        $this->send($this->tap(Nav::to('bsg'), chat: self::OWNER));
         self::assertStringContainsString('ربات فعال باشد', $this->said()[0]);
         self::assertContains(Nav::to('bsg', 'e', 0, 0), $this->callbacks(0), 'the switch\'s button carries the value it sets');
 
@@ -77,7 +78,7 @@ final class BotAreaSettingsTest extends BotTestCase
 
     public function testACardOpenedFromTheMenuGoesBackThereAndFromItsOwnPlaceToThat(): void
     {
-        $this->owner();
+        $this->owner(UserRole::Admin);
 
         // A program's card: back to the menu it was opened from, across its own actions — and to its list otherwise.
         $this->send($this->tap(Nav::to('dcs', 'show', 'from.bs'), chat: self::OWNER));
@@ -117,7 +118,7 @@ final class BotAreaSettingsTest extends BotTestCase
 
     public function testAListOfNumbersIsSentAsTypedAndAPartThatIsNoNumberRefused(): void
     {
-        $this->owner();
+        $this->owner(UserRole::Admin);
         $this->botSettings('wallet', ['topup_presets' => [50_000]]);
 
         foreach (['پنجاه هزار', '50000 1oo000'] as $typed) {
@@ -130,7 +131,7 @@ final class BotAreaSettingsTest extends BotTestCase
 
     public function testTheExtrasRefusalSaysWhichPartFailed(): void
     {
-        $this->owner();
+        $this->owner(UserRole::Admin);
         $this->botSettings('extras', ['extras_enabled' => true]);
 
         $this->send($this->tap(Nav::to('bsx', 'e', 2), chat: self::OWNER));
@@ -140,7 +141,7 @@ final class BotAreaSettingsTest extends BotTestCase
 
     public function testTheOwnerSavesAnAgentShopsCardInThatShop(): void
     {
-        $this->owner();
+        $this->owner(UserRole::Admin);
         $shop = $this->agentBot();
         $present = fn(): array => CurrentBot::run($shop, fn(): array => $this->service(BotSettingsScreen::class)->present());
         self::assertFalse($present()['expiry_reminder'] ?? true);
@@ -155,7 +156,7 @@ final class BotAreaSettingsTest extends BotTestCase
 
     public function testATypedValueIsSavedAndAWarningFollowsTheValues(): void
     {
-        $this->owner();
+        $this->owner(UserRole::Admin);
         $this->botSettings('general', ['support_contact' => '@old_support']);
         $this->botSettings('payments', ['card_to_support' => true]);
 
@@ -174,7 +175,7 @@ final class BotAreaSettingsTest extends BotTestCase
 
     public function testAmountsAreReadAsTypedAndTheRulesRefuseWhatTheyRefuse(): void
     {
-        $this->owner();
+        $this->owner(UserRole::Admin);
 
         $this->send($this->tap(Nav::to('bsw', 'e', 1), chat: self::OWNER));
         $this->send($this->message('50000، ۱۰۰۰۰۰', chat: self::OWNER));
@@ -192,11 +193,13 @@ final class BotAreaSettingsTest extends BotTestCase
 
     public function testTheAmountsOfferedAreTypedWithTheirPrices(): void
     {
-        $this->owner();
+        $this->owner(UserRole::Admin);
 
         $this->send($this->tap(Nav::to('bsx', 'e', 0, 1), chat: self::OWNER));
         self::assertTrue($this->settings()['extras_enabled']);
-        self::assertContains(Nav::to('bsx', 'e', 2), $this->buttons(), 'the price list, shown while extras are sold');
+        self::assertContains(Nav::to('bsx', 'p', 0), $this->buttons(), 'the price list, a part each, shown while extras are sold');
+        $this->send($this->tap(Nav::to('bsx', 'p', 0), chat: self::OWNER));
+        self::assertContains(Nav::to('bsx', 'e', 2), $this->buttons(), '«حجم اضافه»: its own fields');
 
         $this->send($this->tap(Nav::to('bsx', 'e', 2), chat: self::OWNER));
         $this->send($this->message('10=30000، 20', chat: self::OWNER));
@@ -210,7 +213,7 @@ final class BotAreaSettingsTest extends BotTestCase
 
     public function testAMethodSwitchedOffTakesAutomaticRenewalsWithIt(): void
     {
-        $this->owner();
+        $this->owner(UserRole::Admin);
 
         $this->send($this->tap(Nav::to('bsr', 'e', 4, 1), chat: self::OWNER));
         $this->send($this->tap(Nav::to('bsr', 'e', 6), chat: self::OWNER));
@@ -226,7 +229,7 @@ final class BotAreaSettingsTest extends BotTestCase
 
     public function testTheReferralRewardsPlanIsPickedAmongThePlans(): void
     {
-        $this->owner();
+        $this->owner(UserRole::Admin);
         $plan = $this->plan(['name' => 'جایزه ماهانه']);
         $this->inlineStartMenu();
 
@@ -250,7 +253,7 @@ final class BotAreaSettingsTest extends BotTestCase
 
     public function testAPatternShowsTheNameItGivesAndTheReportTopicsSwitch(): void
     {
-        $this->owner();
+        $this->owner(UserRole::Admin);
 
         $this->send($this->tap(Nav::to('bsn', 'e', 0), chat: self::OWNER));
         self::assertStringContainsString('{username}', $this->said()[0], 'the variables listed where it is typed');
@@ -260,11 +263,16 @@ final class BotAreaSettingsTest extends BotTestCase
 
         $this->send($this->tap(Nav::to('rgt', 'e', 0, 0), chat: self::OWNER));
         self::assertFalse($this->settings()['report_purchases']);
+        // Many switches alike: chips, the state said once — on the chip, not in a summary too.
+        $topics = array_merge(...$this->inlineKeyboard($this->windowCall()));
+        self::assertContains(['text' => '⏸ خریدها', 'callback_data' => Nav::to('rgt', 'e', 0, 1)], $topics, 'the chip says its state and carries the other');
+        self::assertContains('🟢 تمدیدها', array_column($topics, 'text'));
+        self::assertStringNotContainsString('خریدها: <b>', implode("\n", $this->said()));
     }
 
     public function testTheQrPictureIsSentSeenAndPutBack(): void
     {
-        $this->owner();
+        $this->owner(UserRole::Admin);
         $png = (string) base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=', true);
 
         $this->send($this->tap(Nav::to('bsq'), chat: self::OWNER));
@@ -308,14 +316,5 @@ final class BotAreaSettingsTest extends BotTestCase
     private function settings(): array
     {
         return $this->service(BotSettingsScreen::class)->present();
-    }
-
-    /** The account OWNER linked as the owner — the bot's admin too, as the link makes it. */
-    private function owner(): User
-    {
-        $owner = User::query()->where('telegram_id', self::OWNER)->first() ?? $this->customer(['telegram_id' => self::OWNER, 'first_name' => 'Amir', 'role' => UserRole::Admin]);
-        $this->linkOwner(self::OWNER);
-
-        return $owner;
     }
 }

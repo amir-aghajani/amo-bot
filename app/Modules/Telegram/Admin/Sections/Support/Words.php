@@ -15,7 +15,7 @@ use Illuminate\Support\Carbon;
  */
 final class Words
 {
-    /** What a figure with no baseline says in its comparison's place (the panel's Trend). */
+    /** What is said, once, of figures whose period before had none to compare with (the panel's Trend). */
     public const NO_BASELINE = 'دوره قبل رقمی برای مقایسه نداشت';
 
     /** The bars of a curve, lowest first. */
@@ -64,14 +64,14 @@ final class Words
     }
 
     /**
-     * A figure against the period before (the panel's Trend): "📈 +۱۲٫۵٪", "📉 −۳٪", "➖ ۰٪"; NO_BASELINE when the period
-     * before had none.
+     * A figure against the period before (the panel's Trend): "📈 +۱۲٫۵٪", "📉 −۳٪", "➖ ۰٪"; null when the period before
+     * had none — NO_BASELINE, said once for all the figures by whoever shows them, not beside each.
      */
-    public static function change(int|float|string $value, int|float|string $previous): string
+    public static function trend(int|float|string $value, int|float|string $previous): ?string
     {
         $was = (float) $previous;
         if ($was == 0.0) {
-            return self::NO_BASELINE;
+            return null;
         }
         $change = ((float) $value - $was) / abs($was) * 100;
         $shown = abs($change) >= 1000 ? 999.0 : (abs($change) >= 100 ? round(abs($change)) : abs($change));
@@ -81,6 +81,12 @@ final class Words
         }
 
         return $change > 0 ? "📈 +{$percent}" : "📉 −{$percent}";
+    }
+
+    /** A figure of the panel's JSON — a count, or money as a decimal string — as it stands, "0" for none (plain text). */
+    public static function figure(mixed $value): string
+    {
+        return is_numeric($value) ? (string) $value : '0';
     }
 
     /** A number with at most one decimal, in Persian digits: "۱۲٫۵", "۳". */

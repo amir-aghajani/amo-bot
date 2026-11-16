@@ -10,15 +10,17 @@ use App\Modules\Telegram\Admin\Ui\Answer;
 use App\Modules\Telegram\Admin\Ui\BaseScreen;
 use App\Modules\Telegram\Admin\Ui\Button;
 use App\Modules\Telegram\Admin\Ui\Fmt;
+use App\Modules\Telegram\Admin\Ui\Icons;
 use App\Modules\Telegram\Admin\Ui\Json;
-use App\Modules\Telegram\Admin\Ui\Prompt;
+use App\Modules\Telegram\Admin\Ui\Nav;
 use App\Modules\Telegram\Admin\Ui\View;
+use App\Modules\Telegram\Admin\Ui\Words;
 
 /**
- * One customer group (a row of the panel's «گروه‌ها»; it has no route for one: read from the list): its members counted,
- * its «همکار» switch and its place in the admin's order; its customers on the users list; and, for a seat the `catalog`
- * grant opens, renamed (typed), «همکار» switched, moved up or down, deleted — asked first, in the panel's words (its
- * customers only leave it).
+ * One customer group (a row of the panel's «گروه‌ها»; it has no route for one: read from the list): a card of its members,
+ * its «همکار» switch and its place in the admin's order; its customers on the users list (the screen's main way on); and,
+ * for a seat the `catalog` grant opens, renamed (typed), «همکار» switched, moved up or down, deleted — asked first, red,
+ * in the panel's words (its customers only leave it).
  *
  * Opened with the group's id. Actions: `users` (id: the users list narrowed to it), `name` (id: asks), `ap` (id, 1|0:
  * «همکار» on or off), `up` / `down` (id), `del` (id: asks), `gone` (id: deleted). Answers: `name` (id).
@@ -49,20 +51,21 @@ final class GroupScreen extends BaseScreen
         $name = Customer::text($group, 'name') ?? '';
         switch ($action) {
             case 'users':
-                $admin->remember(UsersScreen::ID, ['group' => $id, 'group_name' => $name, 'page' => 1]);
+                // The list as the card counts it: a search or a pill left on it would hide some (its order stays).
+                $admin->remember(UsersScreen::ID, ['group' => $id, 'group_name' => $name, 'page' => 1, 'search' => '', 'f' => []]);
 
                 return $admin->open(UsersScreen::ID);
             case 'name':
-                return $admin->ask(new Prompt('نام گروه', self::ID, 'name', [$id], GroupsScreen::NAME_HINT . "\nالان: " . Fmt::e($name)));
+                return $admin->ask(GroupsScreen::nameQuestion(self::ID, 'name', [$id], $name));
             case 'ap':
                 $on = ($args[1] ?? '') === '1';
                 $admin->api->put("/customer-groups/{$id}", ['name' => $name, 'agent_pricing' => $on]);
-                $admin->notice($on ? '✅ «همکار» روشن شد' : '⏸ «همکار» خاموش شد');
+                $admin->notice($on ? '▶️ «همکار» روشن شد' : '⏸ «همکار» خاموش شد');
 
                 return $this->show($admin, [(string) $id]);
             case 'up':
             case 'down':
-                $ids = array_map(static fn(array $row): int => Customer::int($row, 'id'), $groups);
+                $ids = Customer::ids($groups);
                 $at = (int) array_search($id, $ids, true);
                 $to = $action === 'up' ? $at - 1 : $at + 1;
                 if (isset($ids[$to])) {
@@ -73,7 +76,7 @@ final class GroupScreen extends BaseScreen
 
                 return $this->show($admin, [(string) $id]);
             case 'del':
-                $count = is_array($group['counts'] ?? null) ? Customer::int($group['counts'], 'users') : 0;
+                $count = Customer::members($group);
                 $details = match (true) {
                     $count === 0 => 'هیچ مشتری‌ای در این گروه نیست.',
                     $count === 1 => 'یک مشتری در این گروه است؛ فقط از گروه بیرون می‌آید و حسابش دست نمی‌خورد.',
@@ -82,9 +85,10 @@ final class GroupScreen extends BaseScreen
 
                 return $admin->confirm(
                     'این گروه حذف شود؟',
-                    Button::to('🗑 بله، حذف شود', self::ID, 'gone', $id),
-                    Button::to('✖️ انصراف', self::ID, 'show', $id),
+                    Button::to(Words::yes('حذف شود'), self::ID, 'gone', $id),
+                    Button::to(Words::CANCEL, self::ID, Nav::SHOW, $id),
                     Fmt::e('«' . $name . '» حذف می‌شود.') . "\n" . $details,
+                    danger: true,
                 );
             case 'gone':
                 $admin->api->delete("/customer-groups/{$id}");
@@ -116,7 +120,7 @@ final class GroupScreen extends BaseScreen
      */
     private function read(Admin $admin, int $id): array
     {
-        $groups = Json::rows($admin->api->get('/customer-groups'), 'groups');
+        $groups = Customer::groups($admin);
         foreach ($groups as $group) {
             if (Customer::int($group, 'id') === $id) {
                 return [$group, $groups];
@@ -134,28 +138,26 @@ final class GroupScreen extends BaseScreen
     {
         $id = Customer::int($group, 'id');
         $partner = Json::on($group, 'agent_pricing');
-        $count = is_array($group['counts'] ?? null) ? Customer::int($group['counts'], 'users') : 0;
-        $ids = array_map(static fn(array $row): int => Customer::int($row, 'id'), $groups);
+        $ids = Customer::ids($groups);
         $at = (int) array_search($id, $ids, true);
 
-        $view = View::make('👫 ' . (Customer::text($group, 'name') ?? ''), 'مدیریت', 'فروشگاه', 'گروه‌های کاربران')
-            ->facts([
-                'مشتری‌ها' => $count > 0 ? Fmt::number($count) . ' نفر' : 'هیچ مشتری‌ای در این گروه نیست',
+        $view = View::make(Icons::GROUPS . ' ' . (Customer::text($group, 'name') ?? ''), ...GroupsScreen::under(Fmt::bare(GroupsScreen::TITLE)))
+            ->card([
+                'مشتری‌ها' => Fmt::number(Customer::members($group)) . ' نفر',
                 'همکار' => Fmt::onOff($partner),
                 'جایگاه' => Fmt::number($at + 1) . ' از ' . Fmt::number(count($ids)),
                 'ساخته شده' => Fmt::date(Customer::text($group, 'created_at')),
             ])
-            ->note('همکار: ' . GroupsScreen::PARTNER)
-            ->row(Button::to('👥 مشتری‌های این گروه', self::ID, 'users', $id));
+            ->row(Button::to(Icons::CUSTOMERS . ' مشتری‌های این گروه', self::ID, 'users', $id)->primary());
         if ($admin->seat->holds(StaffGrant::Catalog)) {
-            $view->row(Button::to('✏️ تغییر نام', self::ID, 'name', $id), Button::to('🤝 همکار: ' . Fmt::onOff($partner), self::ID, 'ap', $id, $partner ? 0 : 1))
+            $view->tiles(Button::to(Words::edit('نام'), self::ID, 'name', $id), Button::to(Words::turn(!$partner, 'همکار'), self::ID, 'ap', $id, $partner ? 0 : 1))
                 ->row(
-                    $at > 0 ? Button::to('🔼 بالاتر', self::ID, 'up', $id) : null,
-                    $at < count($ids) - 1 ? Button::to('🔽 پایین‌تر', self::ID, 'down', $id) : null,
+                    $at > 0 ? Button::to(Words::UP . ' بالاتر', self::ID, 'up', $id) : null,
+                    $at < count($ids) - 1 ? Button::to(Words::DOWN . ' پایین‌تر', self::ID, 'down', $id) : null,
                 )
-                ->row(Button::to('🗑 حذف گروه', self::ID, 'del', $id));
+                ->row(Button::to(Words::DELETE . ' گروه', self::ID, 'del', $id)->danger());
         }
 
-        return $view->back(GroupsScreen::ID);
+        return $view->help('همکار: ' . GroupsScreen::PARTNER)->back(GroupsScreen::ID);
     }
 }

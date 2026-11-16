@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Telegram\Admin\Sections\Bot\Settings;
 
 use App\Modules\Telegram\Admin\Ui\Fmt;
+use App\Modules\Telegram\Admin\Ui\Icons;
 use App\Modules\Telegram\Admin\Ui\Settings\FieldDef;
 
 /**
@@ -15,6 +16,8 @@ use App\Modules\Telegram\Admin\Ui\Settings\FieldDef;
 final class WalletTransfersCard extends BotCard
 {
     public const ID = 'bst';
+
+    public const TITLE = Icons::WALLET_TRANSFER . ' انتقال موجودی';
 
     protected function group(): string
     {
@@ -28,7 +31,7 @@ final class WalletTransfersCard extends BotCard
 
     protected function title(): string
     {
-        return '💸 انتقال موجودی';
+        return self::TITLE;
     }
 
     protected function intro(): string
@@ -38,12 +41,12 @@ final class WalletTransfersCard extends BotCard
 
     protected function fields(): array
     {
-        return [
+        return $this->described([
             FieldDef::toggle('wallet_transfer_enabled', 'انتقال موجودی به مشتری دیگر', 'روشن که باشد، مشتری شناسه عددی تلگرام گیرنده را می‌فرستد، نام او را می‌بیند، مبلغ را می‌نویسد و با تایید، مبلغ از کیف پول او کم و به کیف پول گیرنده اضافه می‌شود.'),
             FieldDef::money('wallet_transfer_min', 'کمترین مبلغ انتقال', 'کمتر از این مبلغ منتقل نمی‌شود.')->when('wallet_transfer_enabled', [true]),
             FieldDef::money('wallet_transfer_max', 'بیشترین مبلغ هر انتقال', 'بیشتر از این مبلغ در یک انتقال منتقل نمی‌شود.')->when('wallet_transfer_enabled', [true]),
             FieldDef::money('wallet_transfer_daily', 'سقف روزانه هر مشتری', '۰ یعنی بدون سقف روزانه؛ جز آن، کمتر از کمترین مبلغ انتقال نمی‌شود.')->when('wallet_transfer_enabled', [true]),
-        ];
+        ]);
     }
 
     protected function notes(): array

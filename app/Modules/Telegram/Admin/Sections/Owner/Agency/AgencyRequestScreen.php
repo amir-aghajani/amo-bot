@@ -12,8 +12,10 @@ use App\Modules\Telegram\Admin\Ui\BaseScreen;
 use App\Modules\Telegram\Admin\Ui\Button;
 use App\Modules\Telegram\Admin\Ui\Fmt;
 use App\Modules\Telegram\Admin\Ui\Json;
+use App\Modules\Telegram\Admin\Ui\ListScreen;
 use App\Modules\Telegram\Admin\Ui\Prompt;
 use App\Modules\Telegram\Admin\Ui\View;
+use App\Modules\Telegram\Admin\Ui\Words as UiWords;
 
 /**
  * One agency request (from the list's kept page — the panel has no route for one): the customer, what they wrote, its
@@ -46,14 +48,15 @@ final class AgencyRequestScreen extends BaseScreen
                 $row = self::row($admin, $id) ?? [];
 
                 return Words::withNote(
+                    $admin,
                     'درخواست ' . Words::user($row['user'] ?? null) . ' رد شود؟',
                     'درخواست نمایندگی ' . Fmt::e(Words::user($row['user'] ?? null)) . ' رد می‌شود و به او خبر داده می‌شود.',
-                    Button::to('✍️ با توضیح', self::ID, 'nw', $id),
-                    Button::to('⏭ بدون توضیح', self::ID, 'nn', $id),
-                    Button::to('✖️ انصراف', self::ID, 'show', $id),
+                    Button::to('✍️ رد با توضیح', self::ID, 'nw', $id)->danger(),
+                    Button::to('⏭ رد بدون توضیح', self::ID, 'nn', $id)->danger(),
+                    Button::to(UiWords::CANCEL, self::ID, 'show', $id),
                 );
             case 'nw':
-                return $admin->ask(new Prompt('توضیح رد درخواست', self::ID, 'no', [$id], Words::NOTE_HINT, Button::to('✖️ انصراف', self::ID, 'show', $id)));
+                return $admin->ask((new Prompt('توضیح رد درخواست', self::ID, 'no', [$id], Words::NOTE_HINT, Button::to(UiWords::CANCEL, self::ID, 'show', $id)))->example('فعلا ظرفیت نمایندگی تازه نداریم'));
             case 'nn':
                 return $this->reject($admin, $id, '');
         }
@@ -73,10 +76,7 @@ final class AgencyRequestScreen extends BaseScreen
      */
     public static function row(Admin $admin, int $id): ?array
     {
-        $rows = (array) ($admin->state(AgencyRequestsScreen::ID)['rows'] ?? []);
-        $row = $rows[$id] ?? $rows[(string) $id] ?? null;
-
-        return is_array($row) ? $row : null;
+        return ListScreen::keptRow($admin, AgencyRequestsScreen::ID, $id);
     }
 
     /**
@@ -107,23 +107,23 @@ final class AgencyRequestScreen extends BaseScreen
     {
         $id = (int) ($row['id'] ?? 0);
         $level = is_array($row['level'] ?? null) ? $row['level'] : null;
-        $view = View::make('📥 درخواست نمایندگی ' . Fmt::id($id), 'مدیریت', 'نمایندگان', 'درخواست‌ها')
-            ->line('👤 ' . Words::who($row['user'] ?? null) . (($row['user_status'] ?? null) === 'banned' ? ' · ⛔️ مسدود' : ''));
+        $view = View::make('📥 درخواست نمایندگی ' . Fmt::id($id), ...[...AgencyScreen::path(), 'درخواست‌ها'])
+            ->card([
+                'مشتری' => Words::who($row['user'] ?? null) . (($row['user_status'] ?? null) === 'banned' ? ' · ⛔️ مسدود' : ''),
+                'وضعیت' => Fmt::e(AgencyRequestsScreen::STATUSES[(string) ($row['status'] ?? '')] ?? (string) ($row['status'] ?? '')),
+                'سطح' => $level === null ? null : Fmt::e((string) ($level['name'] ?? '')) . ' · هر گیگابایت ' . Fmt::money((string) ($level['price_per_gb'] ?? '0')),
+                'توضیح پشتیبانی' => ($row['status'] ?? null) === 'rejected' && is_string($row['reason'] ?? null) && $row['reason'] !== '' ? Fmt::e($row['reason']) : null,
+                'تصمیم' => is_string($row['decided_at'] ?? null) ? implode(' · ', array_filter([Words::reviewer($row), Fmt::date($row['decided_at'], true)])) : null,
+                'زمان' => Fmt::date(is_string($row['created_at'] ?? null) ? $row['created_at'] : null, true),
+            ]);
         if (is_string($row['note'] ?? null) && $row['note'] !== '') {
-            $view->line('<blockquote>' . Fmt::e($row['note']) . '</blockquote>');
+            $view->section('✍️ نوشته مشتری')->line('<blockquote>' . Fmt::e($row['note']) . '</blockquote>');
         }
-        $view->facts([
-            'وضعیت' => Fmt::e(AgencyRequestsScreen::STATUSES[(string) ($row['status'] ?? '')] ?? (string) ($row['status'] ?? '')),
-            'سطح' => $level === null ? null : Fmt::e((string) ($level['name'] ?? '')) . ' · هر گیگابایت ' . Fmt::money((string) ($level['price_per_gb'] ?? '0')),
-            'توضیح پشتیبانی' => ($row['status'] ?? null) === 'rejected' && is_string($row['reason'] ?? null) && $row['reason'] !== '' ? Fmt::e($row['reason']) : null,
-            'تصمیم' => is_string($row['decided_at'] ?? null) ? implode(' · ', array_filter([Words::reviewer($row), Fmt::date($row['decided_at'], true)])) : null,
-            'زمان' => Fmt::date(is_string($row['created_at'] ?? null) ? $row['created_at'] : null, true),
-        ]);
         $actions = Json::part($row, 'actions');
 
         return $view->row(
-            Json::on($actions, 'approve') ? Button::to('✅ تایید', AgencyApproveScreen::ID, 'new', $id) : null,
-            Json::on($actions, 'reject') ? Button::to('🚫 رد', self::ID, 'no', $id) : null,
+            Json::on($actions, 'approve') ? Button::to('✅ تایید', AgencyApproveScreen::ID, 'new', $id)->success() : null,
+            Json::on($actions, 'reject') ? Button::to('🚫 رد', self::ID, 'no', $id)->danger() : null,
         )->back(AgencyRequestsScreen::ID);
     }
 }

@@ -12,6 +12,7 @@ use App\Modules\Telegram\Admin\Ui\Button;
 use App\Modules\Telegram\Admin\Ui\Fmt;
 use App\Modules\Telegram\Admin\Ui\Json;
 use App\Modules\Telegram\Admin\Ui\View;
+use App\Modules\Telegram\Admin\Ui\Words as Vocabulary;
 
 /**
  * An import that ended — done, failed or cancelled —: how it ended (a failure's words), what it did of each kind and why
@@ -40,7 +41,7 @@ final class ImportReportScreen extends BaseScreen
             return $admin->open(ImportsScreen::ID);
         }
         $started = is_string($import['started_at'] ?? null);
-        $view = View::make(self::TITLES[$phase], 'مدیریت', 'تنظیمات پنل', 'انتقال از ربات دیگر')
+        $view = View::make(self::TITLES[$phase], ...ImportsScreen::under())
             ->line('داده‌های ' . Fmt::ltr((string) ($import['migrator_label'] ?? '')) . ' از ' . Words::source($import)
                 . ' · ' . Fmt::date(is_string($import['finished_at'] ?? null) ? $import['finished_at'] : (is_string($import['updated_at'] ?? null) ? $import['updated_at'] : null), true)
                 . (is_string($import['reviewer'] ?? null) ? ' · ' . Fmt::e($import['reviewer']) : ''))
@@ -53,7 +54,7 @@ final class ImportReportScreen extends BaseScreen
 
         $counts = is_array($import['counts'] ?? null) ? $import['counts'] : null;
         if ($counts !== null) {
-            $view->line()->line('<b>آنچه منتقل شد</b>');
+            $view->section('✅ آنچه منتقل شد');
             $lines = [];
             $kinds = Words::COUNT_KINDS;
             foreach (array_keys($counts) as $kind) {
@@ -73,7 +74,7 @@ final class ImportReportScreen extends BaseScreen
         $reasons = array_values(array_filter(Json::part($problems, 'by_reason'), is_array(...)));
         $listed = array_filter($reasons, static fn(array $reason): bool => !in_array($reason['reason'] ?? '', Words::COUNTED, true));
         if ($reasons !== []) {
-            $view->line()->line('<b>آنچه نیامد</b>: هر مورد با دلیلش. مواردی که پنلشان جواب نداد، با اجرای دوباره انتقال از همان پشتیبان یا پشتیبان تازه‌تر منتقل می‌شوند.');
+            $view->section('📋 آنچه نیامد')->line('هر مورد با دلیلش. مواردی که پنلشان جواب نداد، با اجرای دوباره انتقال از همان پشتیبان یا پشتیبان تازه‌تر منتقل می‌شوند.');
             foreach ($reasons as $reason) {
                 $view->line('• ' . Fmt::e((string) ($reason['label'] ?? '')) . ': ' . Fmt::number((int) ($reason['count'] ?? 0)));
             }
@@ -82,7 +83,7 @@ final class ImportReportScreen extends BaseScreen
             $view->row(Button::to('📋 آنچه نیامد', ImportProblemsScreen::ID, 'show', $id));
         }
 
-        return $view->row(Button::to('➕ انتقال تازه', ImportStartScreen::ID), Button::to('🗑 حذف گزارش', self::ID, 'del', $id))
+        return $view->row(Button::to('➕ انتقال تازه', ImportStartScreen::ID)->primary(), Button::to('🗑 حذف گزارش', self::ID, 'del', $id)->danger())
             ->back(ImportsScreen::ID);
     }
 
@@ -93,9 +94,10 @@ final class ImportReportScreen extends BaseScreen
             case 'del':
                 return $admin->confirm(
                     'گزارش این انتقال حذف شود؟',
-                    Button::to('🗑 حذف گزارش', self::ID, 'gone', $id),
-                    Button::to('✖️ انصراف', self::ID, 'show', $id),
+                    Button::to(Vocabulary::yes('حذف شود'), self::ID, 'gone', $id),
+                    Button::to(Vocabulary::CANCEL, self::ID, 'show', $id),
                     'فقط گزارش این انتقال حذف می‌شود. آنچه منتقل شده در فروشگاه می‌ماند و انتقال بعدی هم آن را دوباره نمی‌آورد.',
+                    danger: true,
                 );
             case 'gone':
                 $admin->api->delete('/imports/' . $id);

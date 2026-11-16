@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Modules\Telegram\Admin\Sections\Sales;
 
-use App\Modules\Telegram\Admin\Door\ApiRefusal;
 use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\Button;
 use App\Modules\Telegram\Admin\Ui\Fmt;
@@ -14,14 +13,20 @@ use App\Modules\Telegram\Admin\Ui\View;
 
 /**
  * A list of the sales section's (orders, payments, services): the panel's status tabs as chips — those that count what
- * waits with the count beside them —, and what else narrows it (Narrowing: the panel's selects, set on its filter screen
- * «🎛 فیلتر و ترتیب»), said over the rows. Opened with `user` (a customer's id), it is that customer's alone, as a
- * customer's page links the panel's list.
+ * waits with the count beside them, the tab in force without it (the list's header says how many) —, and what else
+ * narrows it (Narrowing: the panel's selects, set on its filter screen «🎛 فیلتر و ترتیب»), said in the header. Opened
+ * with `user` (a customer's id), it is that customer's alone, as a customer's page links the panel's list.
  *
  * Actions: `user` (customer id), `unx` (every narrowing off).
  */
 abstract class SalesList extends ListScreen
 {
+    /** The way to the list's filter screen. */
+    public const FILTERS = '🎛 فیلتر و ترتیب';
+
+    /** The way to take every narrowing off. */
+    public const UNFILTER = '✖️ حذف فیلترها';
+
     /**
      * @var array<string, mixed> The list's state as this showing reads it (show())
      */
@@ -63,20 +68,6 @@ abstract class SalesList extends ListScreen
         return [];
     }
 
-    /** Buttons of the list's own, beside the narrowing's. */
-    protected function more(View $view, Admin $admin): void {}
-
-    /**
-     * An action of the list's own.
-     *
-     * @param list<string> $args
-     * @throws ApiRefusal
-     */
-    protected function own(Admin $admin, string $action, array $args): View
-    {
-        return $this->show($admin, []);
-    }
-
     public function show(Admin $admin, array $args): View
     {
         $this->state = $admin->state($this->screen());
@@ -92,14 +83,16 @@ abstract class SalesList extends ListScreen
 
     protected function path(): array
     {
-        return ['مدیریت', 'فروش'];
+        return Sales::under();
     }
 
     protected function filters(): array
     {
         $tabs = [];
+        $current = $this->tab();
         foreach ($this->statuses() as $value => $label) {
-            $tabs[$value] = $label . Fmt::badge($this->counts[$value] ?? 0);
+            // The tab in force says its count in the header already.
+            $tabs[$value] = $label . ((string) $value === $current ? '' : Fmt::badge($this->counts[$value] ?? 0));
         }
 
         return ['status' => $tabs];
@@ -115,18 +108,21 @@ abstract class SalesList extends ListScreen
         foreach ($this->counted() as $tab) {
             $this->counts[$tab] = is_numeric($meta[$tab] ?? null) ? (int) $meta[$tab] : 0;
         }
-        $words = Narrowing::words($this->state);
 
-        return [...($words === [] ? [] : ['🎛 ' . Fmt::e(implode(' · ', $words))]), ...$this->figures($meta)];
+        return $this->figures($meta);
     }
 
-    protected function extra(View $view, Admin $admin): void
+    protected function narrowedBy(): array
     {
-        $this->more($view, $admin);
-        $view->row(
-            Button::to('🎛 فیلتر و ترتیب', $this->narrower()),
-            Narrowing::query($this->state) === [] ? null : Button::to('✖️ حذف فیلترها', $this->screen(), 'unx'),
-        );
+        return Narrowing::words($this->state);
+    }
+
+    protected function tools(Admin $admin): array
+    {
+        return [
+            Button::to(self::FILTERS, $this->narrower()),
+            Narrowing::query($this->state) === [] ? null : Button::to(self::UNFILTER, $this->screen(), 'unx'),
+        ];
     }
 
     protected function action(Admin $admin, string $action, array $args): View
@@ -145,7 +141,7 @@ abstract class SalesList extends ListScreen
                 return $this->show($admin, []);
         }
 
-        return $this->own($admin, $action, $args);
+        return parent::action($admin, $action, $args);
     }
 
     /** How many a counting tab holds, as the list's meta said it (0 before it is read). */
@@ -177,13 +173,13 @@ abstract class SalesList extends ListScreen
     }
 
     /**
-     * The panel's line of what the listed rows brought in (ListTotal): «۱۲ سفارش فروخته‌شده · جمع ۳٬۶۰۰٬۰۰۰ تومان», or
-     * — narrowed to days that brought nothing — `$none`; nothing when nothing did and no days are picked.
+     * The panel's line of what the listed rows brought in (ListTotal): «💰 ۱۲ فروخته‌شده · جمع ۳٬۶۰۰٬۰۰۰ تومان», or —
+     * narrowed to days that brought nothing — `$none`; nothing when nothing did and no days are picked.
      *
      * @param array<string, mixed> $meta
      * @return list<string>
      */
-    protected function total(array $meta, string $count, string $amount, string $noun, string $none): array
+    protected function sold(array $meta, string $count, string $amount, string $noun, string $none): array
     {
         if (!is_numeric($meta[$count] ?? null)) {
             return [];

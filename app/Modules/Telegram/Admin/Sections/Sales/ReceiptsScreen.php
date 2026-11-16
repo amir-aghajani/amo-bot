@@ -14,14 +14,16 @@ use App\Modules\Telegram\Admin\Ui\Json;
 use App\Modules\Telegram\Admin\Ui\ListScreen;
 use App\Modules\Telegram\Admin\Ui\Prompt;
 use App\Modules\Telegram\Admin\Ui\View;
+use App\Modules\Telegram\Admin\Ui\Words;
 use Illuminate\Support\Carbon;
 
 /**
- * «رد رسیدها» (the panel's selection on the payments list and its DismissReceiptsModal; the grant to dismiss receipts in
- * bulk): the receipts waiting for review, each ticked or not at a tap — a page at once too —, then the ticked ones
- * rejected together, or every one waiting; asked first, with the panel's words of what it does, and with a reason for the
- * customers or without (POST /payments/dismiss, a hundred a request; «همه» round after round, held to the receipts
- * that had come when its confirmation was shown — one sent while the admin read it is left for them to see).
+ * «☑️ رد چند رسید» (the panel's selection on the payments list and its DismissReceiptsModal; the grant to dismiss
+ * receipts in bulk): the receipts waiting for review, each ticked or not at a tap — a page at once too —, then the ticked
+ * ones rejected together, or every one waiting; asked first, with the panel's words of what it does, and with a reason
+ * for the customers or without (POST /payments/dismiss, a hundred a request; «همه» round after round, held to the
+ * receipts that had come when its confirmation was shown — one sent while the admin read it is left for them to see).
+ * The way to review them one after another instead (PaymentScreen's queue) is beside them.
  *
  * Actions: `t` (id), `pa` (the page), `pn` (none), `dis` (asks) → `dig` | `din`; `all` (asks) → `alg` | `aln` (each with
  * the moment the confirmation was shown, in Unix seconds).
@@ -29,6 +31,12 @@ use Illuminate\Support\Carbon;
 final class ReceiptsScreen extends ListScreen
 {
     public const ID = 'pyx';
+
+    /** The screen's title, as the payments list's button says it. */
+    public const TITLE = '☑️ رد چند رسید';
+
+    /** The way to reject every receipt waiting. */
+    public const ALL = Sales::REJECT . ' رد همه رسیدهای در انتظار';
 
     /** The most receipts one request names (the panel's RECEIPT_DISMISSALS.MOST). */
     private const MOST = 100;
@@ -43,6 +51,9 @@ final class ReceiptsScreen extends ListScreen
      * @var list<int> The receipts ticked, as this showing reads them (show())
      */
     private array $ticked = [];
+
+    /** How many receipts wait, as this showing's meta said it (summary()). */
+    private int $waiting = 0;
 
     public function allows(AdminSeat $seat): bool
     {
@@ -63,12 +74,12 @@ final class ReceiptsScreen extends ListScreen
 
     protected function title(): string
     {
-        return '☑️ رد رسیدها';
+        return self::TITLE;
     }
 
     protected function path(): array
     {
-        return ['مدیریت', 'فروش', 'پرداخت‌ها'];
+        return Sales::under(Sales::PAYMENTS);
     }
 
     protected function parent(): string
@@ -101,6 +112,11 @@ final class ReceiptsScreen extends ListScreen
         return true;
     }
 
+    protected function noun(): string
+    {
+        return 'رسید در انتظار بررسی';
+    }
+
     protected function empty(): string
     {
         return 'فعلا رسیدی منتظر بررسی نیست.';
@@ -108,29 +124,36 @@ final class ReceiptsScreen extends ListScreen
 
     protected function summary(array $meta): array
     {
-        return [
-            'رسیدهایی را که می‌خواهید با هم رد کنید انتخاب کنید.',
-            '☑️ ' . Fmt::number(count($this->ticked)) . ' رسید انتخاب شده',
-        ];
+        $this->waiting = is_numeric($meta['total'] ?? null) ? (int) $meta['total'] : 0;
+        if ($this->waiting === 0) {
+            // Nothing to pick: the list says so (empty()).
+            return [];
+        }
+
+        return ['<i>رسیدهایی را که می‌خواهید با هم رد کنید انتخاب کنید.</i>', '☑️ ' . Fmt::number(count($this->ticked)) . ' رسید انتخاب شده'];
     }
 
     protected function item(array $row): Button
     {
         $id = (int) ($row['id'] ?? 0);
 
-        return Button::to((in_array($id, $this->ticked, true) ? '✅ ' : '◻️ ') . Fmt::id($id) . ' · ' . Fmt::money(Json::text($row, 'amount')) . ' · ' . Sales::customer(Json::part($row, 'user')), self::ID, 't', $id);
+        return Button::to(Words::tick(in_array($id, $this->ticked, true)) . Sales::paymentRow($row), self::ID, 't', $id);
     }
 
     protected function extra(View $view, Admin $admin): void
     {
+        if ($this->waiting === 0) {
+            return;
+        }
         $view->row(
-            Button::to('☑️ همه این صفحه', self::ID, 'pa'),
-            $this->ticked === [] ? null : Button::to('◻️ هیچ‌کدام', self::ID, 'pn'),
+            Button::to(Words::TICK_PAGE, self::ID, 'pa'),
+            $this->ticked === [] ? null : Button::to(Words::TICK_NONE, self::ID, 'pn'),
         );
         if ($this->ticked !== []) {
-            $view->row(Button::to('🚫 رد ' . Fmt::number(count($this->ticked)) . ' رسید انتخاب‌شده', self::ID, 'dis'));
+            $view->row(Button::to(Sales::REJECT . ' رد ' . Fmt::number(count($this->ticked)) . ' رسید انتخاب‌شده', self::ID, 'dis')->danger());
         }
-        $view->row(Button::to('🚫 رد همه رسیدهای در انتظار', self::ID, 'all'));
+        $view->row(Button::to(PaymentsScreen::START_REVIEW, PaymentScreen::ID, 'nx', 0))
+            ->row(Button::to(self::ALL, self::ID, 'all')->danger());
     }
 
     protected function action(Admin $admin, string $action, array $args): View
@@ -155,11 +178,13 @@ final class ReceiptsScreen extends ListScreen
                 }
 
                 return Sales::choose(
+                    $admin,
                     Fmt::number(count($ticked)) . ' رسید انتخاب‌شده رد شود؟',
                     'رسیدهای انتخاب‌شده رد می‌شوند. ' . self::DOES,
+                    true,
                     Button::to(Sales::WITH_NOTE, self::ID, 'din'),
                     Button::to(Sales::WITHOUT_NOTE, self::ID, 'dig'),
-                    Button::to('✖️ انصراف', self::ID),
+                    Button::to(Words::CANCEL, self::ID),
                 );
             case 'all':
                 $waiting = (int) (Json::part($admin->api->get('/payments', ['status' => PaymentsScreen::REVIEW]), 'meta')['total'] ?? 0);
@@ -172,11 +197,13 @@ final class ReceiptsScreen extends ListScreen
                 $shown = Carbon::now()->getTimestamp();
 
                 return Sales::choose(
+                    $admin,
                     'همه رسیدهای در انتظار رد شود؟',
                     'همه ' . Fmt::number($waiting) . ' رسیدی که الان در انتظار بررسی است رد می‌شود؛ رسیدی که از این لحظه برسد می‌ماند. ' . self::DOES,
+                    true,
                     Button::to(Sales::WITH_NOTE, self::ID, 'aln', $shown),
                     Button::to(Sales::WITHOUT_NOTE, self::ID, 'alg', $shown),
-                    Button::to('✖️ انصراف', PaymentsScreen::ID),
+                    Button::to(Words::CANCEL, PaymentsScreen::ID),
                 );
             case 'dig':
                 return $this->dismissed($admin, $this->dismiss($admin, ['ids' => $ticked], ''));
@@ -184,7 +211,9 @@ final class ReceiptsScreen extends ListScreen
                 return $this->dismissed($admin, $this->dismiss($admin, ['all' => self::id($args)], ''));
             case 'din':
             case 'aln':
-                return $admin->ask(new Prompt('دلیل رد برای مشتری', self::ID, $action, $action === 'aln' ? [self::id($args)] : [], 'مثلا: رسید تکراری بود — مشتری این متن را می‌بیند. ' . Sales::NOTE_HINT, Button::to('✖️ لغو', self::ID)));
+                return $admin->ask((new Prompt('دلیل رد برای مشتری', self::ID, $action, $action === 'aln' ? [self::id($args)] : [], 'هر مشتری این متن را با خبر رد رسیدش می‌بیند.', Button::to(Words::CANCEL, self::ID)))
+                    ->example('رسید تکراری بود')
+                    ->limits(Sales::NOTE_LIMIT));
         }
 
         return $this->show($admin, []);

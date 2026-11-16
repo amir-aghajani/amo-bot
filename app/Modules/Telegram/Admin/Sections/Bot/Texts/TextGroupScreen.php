@@ -5,10 +5,11 @@ declare(strict_types=1);
 namespace App\Modules\Telegram\Admin\Sections\Bot\Texts;
 
 use App\Modules\Telegram\Admin\AdminSeat;
+use App\Modules\Telegram\Admin\Sections\Bot\BotScreens;
 use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\BaseScreen;
 use App\Modules\Telegram\Admin\Ui\Fmt;
-use App\Modules\Telegram\Admin\Ui\Json;
+use App\Modules\Telegram\Admin\Ui\Icons;
 use App\Modules\Telegram\Admin\Ui\View;
 
 /**
@@ -34,13 +35,13 @@ final class TextGroupScreen extends BaseScreen
             if ($group['key'] !== $key) {
                 continue;
             }
-            $texts = $changed ? array_values(array_filter($group['texts'], static fn(array $text): bool => Json::on($text, 'customized'))) : $group['texts'];
-            $mine = count(array_filter($group['texts'], static fn(array $text): bool => Json::on($text, 'customized')));
+            $texts = $changed ? TextsScreen::reworded($group['texts']) : $group['texts'];
+            $mine = count(TextsScreen::reworded($group['texts']));
             [$shown, $page, $pages] = View::slice($texts, self::page($args, 1));
             $admin->remember(self::ID, ['group' => $key, 'page' => $page]);
 
-            $view = View::make('📝 ' . $group['title'], 'مدیریت', 'ربات', 'متن‌های ربات')
-                ->line(Fmt::number(count($group['texts'])) . ' متن' . ($mine > 0 ? ' · ' . Fmt::number($mine) . ' تغییر یافته' : '') . ($changed ? ' · فقط تغییر یافته‌ها' : '') . ($pages > 1 ? ' · صفحه ' . Fmt::number($page) . ' از ' . Fmt::number($pages) : ''));
+            $view = View::make(Icons::TEXTS . ' ' . $group['title'], ...[...BotScreens::PATH, Fmt::bare(TextsScreen::TITLE)])
+                ->total(count($texts), 'متن', $changed ? 'فقط تغییر یافته' : ($mine > 0 ? Fmt::plain(Fmt::number($mine)) . ' تغییر یافته' : ''));
             if ($texts === []) {
                 $view->line()->line('در این گروه متنی تغییر نکرده است.');
             }
@@ -49,7 +50,7 @@ final class TextGroupScreen extends BaseScreen
             }
             $view->pager($page, $pages, self::ID, 'show', $key);
 
-            return $view->back(TextsScreen::ID);
+            return $view->note('✏️ تغییر یافته · 📄 متن پیش‌فرض')->back(TextsScreen::ID);
         }
 
         return $admin->open(TextsScreen::ID);

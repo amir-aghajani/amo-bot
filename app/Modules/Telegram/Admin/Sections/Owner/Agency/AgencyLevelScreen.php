@@ -11,6 +11,7 @@ use App\Modules\Telegram\Admin\Ui\Button;
 use App\Modules\Telegram\Admin\Ui\Fmt;
 use App\Modules\Telegram\Admin\Ui\Json;
 use App\Modules\Telegram\Admin\Ui\View;
+use App\Modules\Telegram\Admin\Ui\Words;
 
 /**
  * One agency level: its name, its price per GB (what 100 GB costs its agents) and how many agents are on it; «✏️
@@ -38,20 +39,20 @@ final class AgencyLevelScreen extends BaseScreen
         $id = (int) ($level['id'] ?? 0);
         $price = (int) round((float) ($level['price_per_gb'] ?? 0));
 
-        return View::make('🏷 ' . (string) ($level['name'] ?? ''), 'مدیریت', 'نمایندگان', 'سطح‌ها')
-            ->facts([
+        return View::make('🏷 ' . (string) ($level['name'] ?? ''), ...[...AgencyScreen::path(), 'سطح‌ها'])
+            ->card([
                 'نام سطح' => Fmt::e((string) ($level['name'] ?? '')),
                 'قیمت هر گیگابایت' => Fmt::money((string) $price),
+                '۱۰۰ گیگابایت' => Fmt::money((string) ($price * 100)),
                 'نماینده‌ها' => Fmt::number((int) ($level['counts']['agents'] ?? 0)),
                 'جای آن' => Fmt::number($index + 1) . ' از ' . Fmt::number(count($levels)),
             ])
-            ->note('۱۰۰ گیگابایت برای نماینده‌های این سطح ' . Fmt::money((string) ($price * 100)) . ' است.')
-            ->row(Button::to('✏️ ویرایش', AgencyLevelFormScreen::ID, 'edit', $id))
+            ->row(Button::to(Words::EDIT, AgencyLevelFormScreen::ID, 'edit', $id)->primary())
             ->row(
-                $index > 0 ? Button::to('🔼 بالاتر', self::ID, 'up', $id) : null,
-                $index < count($levels) - 1 ? Button::to('🔽 پایین‌تر', self::ID, 'down', $id) : null,
+                $index > 0 ? Button::to(Words::UP . ' بالاتر', self::ID, 'up', $id) : null,
+                $index < count($levels) - 1 ? Button::to(Words::DOWN . ' پایین‌تر', self::ID, 'down', $id) : null,
             )
-            ->row(Button::to('🗑 حذف سطح', self::ID, 'del', $id))
+            ->row(Button::to(Words::DELETE . ' سطح', self::ID, 'del', $id)->danger())
             ->back(AgencyLevelsScreen::ID);
     }
 
@@ -82,8 +83,8 @@ final class AgencyLevelScreen extends BaseScreen
 
                 return $admin->confirm(
                     '«' . (string) ($level['name'] ?? '') . '» حذف شود؟',
-                    Button::to('🗑 بله، حذف شود', self::ID, 'gone', $id),
-                    Button::to('✖️ انصراف', self::ID, 'show', $id),
+                    Button::to(Words::yes('حذف شود', '🗑'), self::ID, 'gone', $id),
+                    Button::to(Words::CANCEL, self::ID, 'show', $id),
                     'هیچ نماینده‌ای روی این سطح نیست.',
                 );
             case 'gone':

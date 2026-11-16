@@ -471,26 +471,126 @@ for a typed answer the question asked again as it was asked — its hint and qui
 still waiting. A file Telegram refuses (its size limits) is said in a popup.
 
 **Screens** — `Ui\Screen` (`allows()`, `show()`, `act()`, `input()`, each answering a `Ui\View`), registered by a short
-id in `Ui\Screens`: the core's (`h` the home, `ba`, `ol`, `shop`) and each area's `Sections\<Area>\<Area>Screens::SCREENS`.
-The home's entries and the hubs (`hl`, `hs`, `hm`, `hb`, `hc`) are lists of ids there; an entry whose screen is missing
-or that the seat may not open is left out. The bases: `BaseScreen`; `ListScreen` — a panel list route, `PER_PAGE` (8)
-rows cut from the panel's pages of 25, its filters as chips, a search, the pages, `extra()` for «➕ افزودن», `keepsRows()`
-where no route reads one row —; `Settings\SettingsScreen` — a settings card as `FieldDef`s over a `SettingsSource`
-(`BotGroupSource` for a «تنظیمات ربات» group, `PatchSource`, `PutSource`), saved a field at a time —; `HubScreen`. A
-`View` is a title, the path over it (the hubs' chain), lines, facts, rows of `Button`s and the way back — `back()`'s
-«⬅️ بازگشت» with «🏠 مدیریت» beside it; it cuts a text past `TEXT_MOST` (4000) at a line and a caption past
-`CAPTION_MOST`, and a list of choices (plans, servers, inbounds, shops) goes `CHOICES_MOST` (40) a page. A button is `Button::to(label, screen, action, ...args)`
-— its label cut at 48 characters, its callback `Nav::to()`'s `a:<screen>:<action>:<args>`, 64 bytes at most, each part
-`[A-Za-z0-9_.-]` (Nav throws otherwise): never text in it.
+id in `Ui\Screens`: the core's (`h` the home, `sr` the search, `ba`, `ol`, `shop`, `pgi` the pages' middle button) and
+each area's `Sections\<Area>\<Area>Screens::SCREENS`. The home's entries (`Screens::homeEntries()`) and the hubs (`hl`,
+`hs`, `hm`, `hb`, `hc`) are lists of ids there, a hub's entry with the queue it counts (a badge; the home's waiting work
+is its «🔔 در انتظار» buttons instead, `HomeScreen::QUEUES`); an entry whose screen is
+missing or that the seat may not open is left out. **Each section has one entry**: a feature's settings card is reached
+from the feature's own screen, never from «🤖 تنظیمات ربات» too; a window of 0.10.0 that opened one from there still
+carries `from.<menu>` (`Settings\Origin`), and its «⬅️ بازگشت» goes back there. The bases: `BaseScreen`; `ListScreen`;
+`Settings\SettingsScreen`; `HubScreen`. A button is `Button::to(label, screen, action, ...args)` — its label cut at 48
+characters, its callback `Nav::to()`'s `a:<screen>:<action>:<args>`, 64 bytes at most, each part `[A-Za-z0-9_.-]` (Nav
+throws otherwise): never text in it.
+
+**The words and the icons** — `Ui\Words` holds every word the management repeats, and a screen never types one again:
+moving around (`BACK` «⬅️ بازگشت», `HOME` «🏠 خانه», `REFRESH`, `HELP`, `SEARCH`, `CLEAR_SEARCH`, `PREVIOUS`, `NEXT`), the
+actions (`EDIT`, `CREATE` «✔️ ساختن», `SAVE` «💾 ذخیره», `DELETE`, `CANCEL` «✖️ انصراف» — the one way out of a question, a
+confirmation or a form —, `TURN_ON` / `TURN_OFF` for a setting, `ACTIVATE` / `DEACTIVATE` for a row, `UP`, `DOWN`, `CLEAR`
+«🗑 خالی کردن», `RESET` «↩️ پیش‌فرض», `PREVIOUS_STEP`, `SKIP`), the chips (`ON`, `OFF`, `ACTIVE`, `INACTIVE`, `PENDING`,
+`FAILED`, `REJECTED`, `NONE` «—», `PICKED` «✅ », `CHIP` «● »), a multi-pick's marks (`tick($on)`: `PICKED` or
+`UNTICKED` «◻️ »; `TICK_PAGE`, `TICK_NONE`), a question's lines (`CURRENT`, `EXAMPLE`, `LIMITS`, the refusals
+`NOT_NUMBER` and `NOT_TOMAN`), the home's (`WAITING`, `NOTHING_WAITING`, `OLD_BUTTON`), and the builders: `edit($label)` «✏️ …»,
+`add($noun)` «➕ افزودن …», `yes($what, $icon)` «✔️ بله، …», `copy($what)` «📋 کپی …», `turn($on, $label)` «▶️ روشن
+کردن «…»» / «⏸ خاموش کردن «…»» (the state a tap sets), `page()`, `step()` «گام ۲ از ۶». `Ui\Icons` gives each thing
+one emoji — a section, a hub entry, a screen's title, a settings card — so it looks the same wherever it is reached
+from: a title is `Icons::X . ' ' . its name`. An area's own words live beside it (`Sections\Sales\Sales`,
+`Sections\Marketing\Words`, `Sections\Owner\Words`…).
+
+**The view** — a `View` is the title, the path under it (`View::make(title, ...path)`, small: «مدیریت › فروش ›
+پرداخت‌ها»), what was just done over the title (`notices()`), its lines and rows of `Button`s:
+- `card(facts)` — the summary card, a fact a line in one `<blockquote>` («label: <b>value</b>», a null value left out,
+  an empty one «—», a value in `<code>` not made bold); `section(heading)` — a blank line and a bold heading;
+  `help(html)` — help folded away, `<blockquote expandable>❔ …</blockquote>`; `note(html)` — one italic hint;
+  `total(count, noun, ...filters)` — a list's «۲۳ پرداخت · در انتظار بررسی».
+- `row(...)` — buttons in **reading order**: `keyboard()` reverses each row, as Telegram draws a row left to right (the
+  customer keyboards do the same), so the first button written is the rightmost; a null button is left out. `grid(n,
+  ...)` — rows of n; `tiles(...)` — two a row where both labels are short (`TILE_MOST`), else one; `pager(page, pages,
+  screen, action, ...args)` — «‹ قبلی» · «۲ / ۵» · «بعدی ›», the middle a button to `Screens::PAGE` (`PageScreen`),
+  which answers «صفحه ۲ از ۵» in a toast and leaves the window as it is (`View::stay()`); `paged()` — choices
+  `CHOICES_MOST` (40) a page; `slice()` — a page of a list read whole.
+- `back(screen, action, ...args)` — **the one way around**, drawn under every other row whatever was added after it:
+  «⬅️ بازگشت» and «🏠 خانه» (the home alone when the way back is the home); `refresh(screen, ...)` adds «🔄 تازه‌سازی»
+  beside them, for a screen whose figures move (the home, the dashboard, a list, a queue).
+- It cuts a text past `TEXT_MOST` (4000) between lines — a quote never cut open — and a caption past `CAPTION_MOST`;
+  `picture()` makes the screen a picture (a receipt); `transient()` marks a question or a confirmation, which takes no
+  place of its own in the trail the next one shows.
+
+**Buttons** — `Button::to()` an action, `Button::url()` a link, `Button::copy(label, text)` a value copied whole at a
+tap (Telegram's `copy_text`: an address, a key, a link, a code, a card number). A copy button of no value, or of one past
+`COPY_MOST` (256 characters, what Telegram copies), is left out of the keyboard (`fits()`): a key or a link cut short is
+a wrong one; the value stays on the screen to copy. A button to an action takes a
+colour — `success()` green for what confirms, saves, creates, turns on or approves; `danger()` red for what deletes,
+turns off, rejects or disconnects; `primary()` blue for the screen's one main action (at most one); each is a new button.
+`labelled()` renames one, `markup()` is Telegram's shape and `kept()` reads it back (a waiting question keeps its
+buttons so).
+
+**Questions and confirmations** — `Ui\Prompt` is a question: its field, the screen, action and arguments its answer goes
+to, a hint, `current(value, copyable)` («مقدار فعلی», shown to copy; a secret's «ذخیره شده» not), `example()`,
+`limits()`, quick picks (`choices()`), `clearable(screen, action, ...)` «🗑 خالی کردن», `resettable(...)` «↩️ پیش‌فرض»,
+and a wizard step's `ways()` («⬅️ گام قبل», «⏭ رد شدن») in a row of their own; `file` for a picture or a file, `anyText`
+for an answer that may be a menu button's label (`Admin::INPUT_ANY`). `Admin::ask()` draws it and waits in
+`adm.input`; the answer reaches the asking screen's `input()` as an `Answer` (`text()`, `latin()`, `integer()`,
+`amount(Unit)`, `decimal()`, `numbers()`, `picture()`, `document()`); refused, it is asked again as kept
+(`Prompt::kept()`), «⚠️» and the reason over it. `Admin::confirm(question, yes, no, detail, danger)` asks before a
+change that is not undone: the yes is green, or red where it destroys — `danger: true`, or left null a yes whose label
+starts with 🗑 🚫 ⛔ 🛑 ✂️; build it with `Words::yes('حذف شود', '🗑')` so the icon says it —, a yes given its own colour
+keeps it. Both draw any cancel word their way out has as `Words::CANCEL`.
+
+**Settings cards** — `Settings\SettingsScreen` is a card of the panel's as `FieldDef`s over a `SettingsSource`
+(`BotGroupSource` for a «تنظیمات ربات» group, `PatchSource`, `PutSource`), saved a field at a time as the panel saves
+the card. Its summary says every field's value once (a switch as its chip, the ones its conditions hide left out); its
+buttons say what they do — a switch `Words::turn()`, carrying the value it sets (so a second tap changes nothing), and
+asking first where `FieldDef::asks()`; any other field `Words::edit($label)`, its question with the value now, an
+example and the limits — a «تنظیمات ربات» card takes a number's bounds and default from the server's own form
+(`BotCard::described()`) —, «🗑 خالی کردن» where `FieldDef::nullable()`, «↩️ پیش‌فرض» where `FieldDef::byDefault()`. Hooks: `parts()` — the panel's FormParts (`[label, [api names]]`), each a
+screen of its own whose way back is the card, opened by `SettingsScreen::PART` (`p`, n); `chips()` — a card of many alike
+switches shows each as a chip («🟢 خریدها»), a tap the other state, left out of the summary (the report's topics);
+`warnings()`, `explain()` (the panel's hint that follows a value), `notes()`, `shows()`, `extra()`, `intro()`. **A field
+is opened by its API name** from anywhere — a search's result, a warning's way to fix it —: `Button::to(Words::edit($label),
+Card::ID, SettingsScreen::FIELD, 'topup_min')` asks a typed field, offers a choice's choices, and shows a switch on its
+card or part, never flipping it; a field another one hides now shows its card, saying which field shows it («این گزینه
+با روشن کردن «…» دیده می‌شود.»).
+
+**Lists** — `ListScreen` reads a panel list route (`endpoint()`, its rows under `key()`), `PER_PAGE` (8) rows cut from
+the panel's pages of 25 (or from every row, for a route that answers them all). It says **first** how many and what
+narrows them — `total()` with `noun()`, the chip in force, the search and `narrowedBy()` (a select, a range of days:
+«تاریخ: ۷ روز اخیر») —, then `summary()` (what the list adds up to), the rows (`item()`, each a button that is its row:
+chip, name, key figure), `extra()` (the list's own actions: «➕ افزودن …», a bulk action), the `filters()` as chips with
+`Words::CHIP` on the one in force, «🔎 جستجو» beside `tools()` (one or two: «🎛 فیلتر و ترتیب», «↕️ ترتیب», «✖️ حذف
+فیلترها»), the pager, and «🔄 تازه‌سازی». `keepsRows()` keeps a page's rows for a row's screen where no route reads one
+row, and that screen reads its row back with `ListScreen::keptRow()`. The filter, the search and the page are the
+screen's state; a hook reads a filter in force with `filterValue()`.
+
+**The old button** — a tap whose screen is gone, whose data Nav cannot read, or that the seat may no longer open lands on
+the home, `Words::OLD_BUTTON` over it («⚠️ این دکمه قدیمی است؛ از همین‌جا ادامه دهید.»), never an error; so does an
+answer to a question whose screen went. Screen ids and callback formats stay as they are once released, so an older
+window's buttons keep working.
+
+**The search** — `Core\SearchScreen` (`sr`, «🔎 جستجو» on the home) asks one value and looks for it through the lists'
+own searches (`/users`, `/orders`, `/payments`, `/subscriptions`), those the seat may open: `SHOWN` (5) rows of each, a
+phone typed the Iranian way read as its last ten digits, past them a button that opens the list searched.
+
+**The settings search** — «🔎 جستجوی تنظیمات» (`Panel\Search\SettingsSearchScreen`, `ss`, `$seat->configures()`) searches
+the panel's own settings index: `Panel\Search\PanelSettings` is a copy of the panel's
+`lib/settings-search/settings.generated.ts` that `pnpm settings:index` writes beside it (a release ships no panel
+source), never edited by hand. `Panel\Search\SettingsIndex` maps it onto the bot: `SECTIONS`, each panel address → the
+bot screen, its name, the menus it is under and other words; `SETTINGS`, the settings opened otherwise than their section
+— `f` a field by its API name (`SettingsScreen::FIELD`), `p` a part, `s`/`a` another screen and its arguments, `only` why
+the panel alone sets it, `w` more words. `find()` reads what is typed as the panel's search does (`normalize()`: Persian
+however typed, Arabic letters, digits and half-spaces folded), finds every word typed (AND) in a title, its words, its
+place or its hint — whole, as a word's start, inside a word, or a letter off in a title —, ranks the title most and keeps
+`MOST` (20), what the seat may open. **`SettingsParityTest`** holds the two together: `PanelSettings` is
+`settings.generated.ts` word for word; every panel section has its place in `SettingsIndex::SECTIONS`; every place names
+a screen the management has, and a field or a part that card has; what the panel alone sets says why. A setting the panel
+adds fails it until the bot has a place for it ([Extending](Extending.md#a-setting)).
 
 **State** — `Admin` is one update as a screen sees it: `seat`, `api` (the bridge for the seat), `state()`,
 `remember()` and `forget()` per screen (the chat fact `_adm`, so a customer's flow in between loses none of it — the
-owner's shop pick too: `pickShop()` empties every screen's state), `open()` another screen, `ask(Prompt)` (the chat waits
-in `adm.input`; the answer reaches the asking screen's `input()` as an `Answer`: `text()`, `latin()`, `integer()`,
-`amount(Unit)`, `decimal()`, `numbers()`, `picture()`, `document()`), `confirm()`, `notice()` (a toast for a tap, a line
-atop the next screen after a typed answer), `alert()` and `send(ApiFile)`. `Ui\Fmt` formats what a screen shows
-(`e()` for whatever came from a person or the panel, `ltr()` and `code()` for Latin in a Persian line, money, quotas,
-dates in the Jalali calendar).
+owner's shop pick too: `pickShop()` empties every screen's state), `open()` another screen, `ask()`, `confirm()`,
+`notice()` (a toast for a tap, a line atop the next screen after a typed answer), `alert()` and `send(ApiFile)`.
+`here()` keeps where the window is, for the path a question or a confirmation shows. `Ui\Fmt` formats what a screen
+shows (`e()` for whatever came from a person or the panel, `ltr()` and `code()` for Latin in a Persian line, money,
+quotas, dates in the Jalali calendar, `onOff()` and `active()` for the chips, `badge()` for a count).
 
 **Permissions mirror the door**: a screen over the daily work's routes allows every seat; over configuration,
 `$seat->configures()` (the owner and an agent); over the system, the servers, the agency, the mass gifts and the panel's
@@ -527,7 +627,11 @@ budget of queries and Telegram calls — a budget raised says what the new query
 `miniApp()` switches the shop's mini app on for a test of its button (`BotMenuTest`). Unit tests of the API, texts and
 keyboards are in `tests/Unit/Telegram`. The management's are in `tests/Feature/BotAdmin`: `BotAdminDoorTest` (the door's
 guards), `BotAdminFlowTest` (an owner linked by `OwnerLinks::link()` and `redeem()`, `/admin`, taps by `Nav::to()`,
-typed answers) and a file or more per area, named by its folder — `Support*`, `Customers*`, `Sales*`, `Catalog*`,
+typed answers), `BotAdminFoundationTest` (the `Ui` layer as every screen uses it: colours, copy buttons, rows drawn
+right to left, the one way around, the card and folded help, the pages' middle button, a question's value now and its
+«🗑 خالی کردن» / «↩️ پیش‌فرض», a confirmation's colour, an old window's button landing on the home, the home and the
+search), `SettingsParityTest` (every panel setting has its place in the bot — [above](#the-shops-management)) and a
+file or more per area, named by its folder — `Support*`, `Customers*`, `Sales*`, `Catalog*`,
 `Marketing*`, `BotArea*`, `Owner*` and `Panel*` (`PanelConfigTest`, `PanelWebsiteTest`, `PanelMiniAppTest`,
 `PanelUpdateTest`, `PanelImportsTest`, `PanelOperationsTest`) —, each walking list → row → action → the API's effect, a
 seat without the grant (no button, and the door's refusal), and a typed answer. See [Testing](Testing.md).

@@ -13,23 +13,30 @@ use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\BaseScreen;
 use App\Modules\Telegram\Admin\Ui\Button;
 use App\Modules\Telegram\Admin\Ui\Fmt;
+use App\Modules\Telegram\Admin\Ui\Icons;
 use App\Modules\Telegram\Admin\Ui\Json;
-use App\Modules\Telegram\Admin\Ui\Nav;
 use App\Modules\Telegram\Admin\Ui\Screens;
 use App\Modules\Telegram\Admin\Ui\View;
+use App\Modules\Telegram\Admin\Ui\Words;
 
 /**
- * «💼 حساب نمایندگی», the agent's own page (the agent panel's account page, GET /account): their bot and how it stands,
- * why it sells nothing when it does not (its token, its traffic, the terms of selling), the traffic left and where it
- * is bought, the level's price per GB, their wallet and credit with the shop, the terms of selling, and the traffic
- * ledger (GET /account/traffic) a page at a time. Read only, as the panel's page: traffic is bought — and a token handed
- * over — in the main bot, a button away.
+ * «💼 حساب نمایندگی», the agent's own page (the agent panel's account page, GET /account): why their bot sells nothing
+ * when it does not (its token, its traffic, the terms of selling) said first; then one card of what they have with the
+ * shop — the traffic left, the level and its price per GB, their wallet and credit —, their bot and how it stands, the
+ * terms of selling, and how it all works folded away. Read only, as the panel's page: traffic is bought — and a token
+ * handed over — in the main bot, a button away; the traffic ledger (GET /account/traffic) a page at a time.
  *
  * Shown as the account; action `l` (page: 1 the newest) the ledger.
  */
 final class AgentAccountScreen extends BaseScreen
 {
     public const ID = 'acc';
+
+    /** The page's title, as the home's button says it. */
+    public const TITLE = Icons::AGENT_ACCOUNT . ' حساب نمایندگی';
+
+    /** The ledger's title. */
+    private const LEDGER = '📒 گردش حجم';
 
     /** Ledger lines a page, cut from the panel's pages. */
     private const LINES = 10;
@@ -40,7 +47,7 @@ final class AgentAccountScreen extends BaseScreen
     /** What a line of the traffic was (the panel's ledger words). */
     private const TYPES = ['purchase' => 'خرید حجم', 'sale' => 'فروش', 'renewal' => 'تمدید', 'extension' => 'افزایش حجم', 'refund' => 'بازگشت حجم', 'adjust' => 'اصلاح پشتیبانی'];
 
-    /** The page in a paragraph (the panel's header). */
+    /** How it works (the panel's header). */
     private const INTRO = 'ربات شما با همین فروشگاه کار می‌کند: پلن‌ها، قیمت‌ها و مشتری‌هایش مال شماست و سرویس‌ها روی سرورهای فروشگاه ساخته می‌شوند. هر سرویسی که ربات می‌فروشد یا تمدید می‌کند، حجم پلنش را از حجم شما برمی‌دارد؛ حجمی هم که از صفحه اشتراک‌ها به سرویسی اضافه می‌کنید از همین حجم کم می‌شود.';
 
     public function __construct(private readonly Bots $bots) {}
@@ -57,74 +64,62 @@ final class AgentAccountScreen extends BaseScreen
         $bot = Json::part($account, 'bot');
         $standing = Json::part($account, 'standing');
         $shortage = Json::part($answer, 'traffic_shortage');
+        $level = Json::part($account, 'level');
+        $balance = Json::text($account, 'balance') ?? '0';
+        $debt = str_starts_with($balance, '-');
+        $credit = Json::text($account, 'credit_limit') ?? '0';
 
-        $view = View::make('💼 حساب نمایندگی', 'مدیریت');
-        $warnings = array_values(array_filter([
-            // A bot this update came through has its token: the panel's «not connected» notices never apply here.
+        $view = View::make(self::TITLE, Words::ROOT);
+        // A bot this update came through has its token: the panel's «not connected» notices never apply here.
+        foreach (array_filter([
             Json::text($bot, 'problem') !== null ? '⚠️ ' . Fmt::e(Json::text($bot, 'problem')) : null,
             $shortage !== [] ? Standing::shortage($shortage, Fmt::e(Standing::BUY_TRAFFIC)) : null,
             Standing::toAgent($standing === [] ? null : $standing),
-        ]));
-        foreach ($warnings as $warning) {
-            $view->line($warning);
+        ]) as $warning) {
+            $view->line($warning)->line();
         }
-        if ($warnings !== []) {
-            $view->line();
-        }
-        $this->figures($view, $account, $shortage === []);
 
-        $view->line()->line('<b>🤖 ربات شما</b>');
+        $view->card([
+            'حجم باقی‌مانده' => $bot === [] ? Fmt::NONE : Fmt::bytes((int) ($bot['traffic_balance'] ?? 0)),
+            'سطح نمایندگی' => $level === [] ? 'نمایندگی فعال نیست' : Fmt::e(Json::text($level, 'name')),
+            'قیمت هر گیگابایت' => $level === [] ? null : Fmt::money(Json::text($level, 'price_per_gb')),
+            'کیف پول شما در فروشگاه' => Fmt::money(ltrim($balance, '-')) . ($debt ? ' بدهی' : ''),
+            'اعتبار خرید' => (float) $credit > 0 ? Fmt::money($credit) . ($debt ? ' (در حال استفاده)' : '') : 'بدون اعتبار خرید',
+        ]);
+
+        $view->section(Icons::BOT . ' ربات شما');
         if ($bot === []) {
             $view->line(Fmt::NONE);
         } else {
             $username = Json::text($bot, 'username');
-            $view->facts([
+            $view->card([
                 'ربات' => ($username !== null ? Fmt::ltr('@' . $username) : 'بدون توکن') . ' · ' . self::status($bot),
                 'نام' => Fmt::e(Json::text($bot, 'title') ?? Fmt::NONE),
                 'اولین اتصال' => Json::text($bot, 'connected_at') !== null ? Fmt::date(Json::text($bot, 'connected_at')) : Fmt::NONE,
-            ])->line('<i>برای عوض کردن توکن، توکن تازه را از ربات اصلی بفرستید.</i>');
+            ]);
         }
-
-        $view->line()->line('<b>📋 شرایط فروش</b>');
         if ($standing !== []) {
-            $view->facts(Standing::facts($standing));
+            $view->section('📋 شرایط فروش')->card(Standing::facts($standing));
         }
-        $view->line('<i>پایان نمایندگی و کف خرید حجم ماهانه را پشتیبانی فروشگاه اصلی تعیین می‌کند. بعد از پایان نمایندگی، یا ماهی که خرید حجمش به کف نرسد، در ربات شما ' . Standing::SUSPENDED_SALES . ' تازه انجام نمی‌شود؛ سرویس‌های فعلی مشتری‌ها کار می‌کنند.</i>')
-            ->note(Fmt::e(self::INTRO));
 
         $main = $this->bots->username(CurrentBot::main());
         $view->row(
-            Button::to('📊 گردش حجم', self::ID, 'l', 1),
-            $main !== '' ? Button::url('🛒 خرید حجم در ربات اصلی', 'https://t.me/' . rawurlencode($main)) : null,
+            $main !== '' ? Button::url('➕ خرید حجم در ربات اصلی', 'https://t.me/' . rawurlencode($main)) : null,
+            Button::to(self::LEDGER, self::ID, 'l', 1),
         );
 
-        return $view->row(Button::to('🔄 تازه‌سازی', self::ID))->back(Screens::HOME);
+        return $view->help(implode("\n\n", array_filter([
+            Fmt::e(self::INTRO),
+            // Where traffic is bought, said once: in the shortage's notice while it sells nothing.
+            $shortage === [] ? Fmt::e(Standing::BUY_TRAFFIC) . '.' : null,
+            'برای عوض کردن توکن، توکن تازه را از ربات اصلی بفرستید.',
+            'پایان نمایندگی و کف خرید حجم ماهانه را پشتیبانی فروشگاه اصلی تعیین می‌کند. بعد از پایان نمایندگی، یا ماهی که خرید حجمش به کف نرسد، در ربات شما ' . Standing::SUSPENDED_SALES . ' تازه انجام نمی‌شود؛ سرویس‌های فعلی مشتری‌ها کار می‌کنند.',
+        ])))->back(Screens::HOME)->refresh(self::ID);
     }
 
     public function act(Admin $admin, string $action, array $args): View
     {
         return $action === 'l' ? $this->ledger($admin, self::page($args)) : $this->show($admin, $args);
-    }
-
-    /**
-     * The traffic left, the price per GB of their level, their wallet (a debt below zero) and credit — and where traffic
-     * is bought, under the traffic while it still sells (else the shortage's notice says it).
-     *
-     * @param array<string, mixed> $account
-     */
-    private function figures(View $view, array $account, bool $sells): void
-    {
-        $bot = Json::part($account, 'bot');
-        $level = Json::part($account, 'level');
-        $balance = Json::text($account, 'balance') ?? '0';
-        $debt = str_starts_with($balance, '-');
-        $credit = Json::text($account, 'credit_limit') ?? '0';
-        $view->lines(
-            '📦 حجم باقی‌مانده: <b>' . ($bot === [] ? Fmt::NONE : Fmt::bytes((int) ($bot['traffic_balance'] ?? 0))) . '</b>' . ($sells ? "\n<i>" . Fmt::e(Standing::BUY_TRAFFIC) . '</i>' : ''),
-            '🏷 قیمت هر گیگابایت: ' . ($level === [] ? 'نمایندگی فعال نیست' : '<b>' . Fmt::money(Json::text($level, 'price_per_gb')) . '</b> · سطح «' . Fmt::e(Json::text($level, 'name')) . '»'),
-            '👛 کیف پول شما در فروشگاه: <b>' . Fmt::money(ltrim($balance, '-')) . ($debt ? ' بدهی' : '') . '</b> · '
-                . ((float) $credit > 0 ? 'اعتبار خرید: ' . Fmt::money($credit) . ($debt ? ' (در حال استفاده)' : '') : 'بدون اعتبار خرید'),
-        );
     }
 
     /**
@@ -135,15 +130,15 @@ final class AgentAccountScreen extends BaseScreen
     private static function status(array $bot): string
     {
         return match (true) {
-            ($bot['status'] ?? '') === 'disabled' => '⏸ غیرفعال',
+            ($bot['status'] ?? '') === 'disabled' => Words::INACTIVE,
             !Json::on($bot, 'connected') => '🟡 وصل نشده',
             Json::text($bot, 'problem') !== null => '🟡 مشکل دارد',
-            default => '🟢 فعال',
+            default => Words::ACTIVE,
         };
     }
 
     /**
-     * «📊 گردش حجم»: page `$page` of the traffic's lines, the newest first — purchases, sales, renewals, extensions,
+     * «📒 گردش حجم»: page `$page` of the traffic's lines, the newest first — purchases, sales, renewals, extensions,
      * refunds and adjustments, each with the balance after it.
      *
      * @throws ApiRefusal
@@ -166,12 +161,9 @@ final class AgentAccountScreen extends BaseScreen
             return $this->ledger($admin, $pages);
         }
 
-        $view = View::make('📊 گردش حجم', 'مدیریت', 'حساب نمایندگی')
-            ->line('خرید حجم، فروش، تمدید و افزایش حجم سرویس‌ها، و بازگشت حجمی که به سرویس نرسید.')
-            ->line(Fmt::number($total) . ' مورد' . ($pages > 1 ? ' · صفحه ' . Fmt::number($page) . ' از ' . Fmt::number($pages) : ''))
-            ->line();
+        $view = View::make(self::LEDGER, Words::ROOT, Fmt::bare(self::TITLE))->total($total, 'تراکنش حجم');
         if ($lines === []) {
-            $view->line('هنوز گردشی ندارد. خرید حجم، فروش، تمدید و افزایش حجم سرویس‌های ربات این‌جا ثبت می‌شوند.');
+            $view->line()->line('هنوز گردشی ندارد. خرید حجم، فروش، تمدید و افزایش حجم سرویس‌های ربات این‌جا ثبت می‌شوند.');
         }
         foreach ($lines as $line) {
             $bytes = (int) ($line['bytes'] ?? 0);
@@ -179,12 +171,13 @@ final class AgentAccountScreen extends BaseScreen
             $reviewer = Json::text($line, 'reviewer');
             $view->line(($bytes > 0 ? '➕ ' : '➖ ') . Fmt::bytes(abs($bytes)) . ' · ' . Fmt::e(Sales::word(self::TYPES, $line['type'] ?? ''))
                 // The shop's own notes name orders by number («فروش · سفارش #33»): each kept whole.
-                . ($description !== null ? ' · ' . (preg_replace('/#\d+/', "\u{2068}\$0\u{2069}", Fmt::e(Fmt::cut($description, 60))) ?? '') : '')
-                . "\n    " . Fmt::date(Json::text($line, 'created_at')) . ' · مانده ' . Fmt::bytes((int) ($line['balance_after'] ?? 0))
-                . ($reviewer !== null ? ' · ' . Sales::reviewer($reviewer, Json::text($line, 'reviewer_name')) : ''));
+                . ($description !== null ? ' · ' . (preg_replace('/#\d+/', "\u{2068}\$0\u{2069}", Fmt::e(Fmt::cut($description, 60))) ?? '') : ''))
+                ->line('<i>' . Fmt::date(Json::text($line, 'created_at')) . ' · مانده ' . Fmt::bytes((int) ($line['balance_after'] ?? 0))
+                . ($reviewer !== null ? ' · ' . Sales::reviewer($reviewer, Json::text($line, 'reviewer_name')) : '') . '</i>');
         }
         $view->pager($page, $pages, self::ID, 'l');
 
-        return $view->back(self::ID, Nav::SHOW);
+        return $view->help('خرید حجم، فروش، تمدید و افزایش حجم سرویس‌ها، و بازگشت حجمی که به سرویس نرسید؛ تازه‌ترین اول.')
+            ->back(self::ID)->refresh(self::ID, 'l', $page);
     }
 }

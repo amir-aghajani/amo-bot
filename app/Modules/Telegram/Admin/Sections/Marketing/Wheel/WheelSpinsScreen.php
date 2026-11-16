@@ -5,19 +5,21 @@ declare(strict_types=1);
 namespace App\Modules\Telegram\Admin\Sections\Marketing\Wheel;
 
 use App\Modules\Telegram\Admin\AdminSeat;
-use App\Modules\Telegram\Admin\Sections\Marketing\Words;
+use App\Modules\Telegram\Admin\Sections\Marketing\Words as Marketing;
 use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\Button;
 use App\Modules\Telegram\Admin\Ui\Fmt;
+use App\Modules\Telegram\Admin\Ui\Icons;
 use App\Modules\Telegram\Admin\Ui\ListScreen;
 use App\Modules\Telegram\Admin\Ui\View;
 
 /**
  * «🎡 چرخش‌ها» (the panel's «گردونه شانس › چرخش‌ها»): every spin, newest first, searched by customer — or one customer's
- * (`u`, as a customer's page opens it; the panel's ?user=) —, each opening its own screen (WheelSpinScreen). The panel
- * has no route for one spin: the page's rows are kept for it.
+ * (`u`, as a customer's page or a spin opens it; the panel's ?user=) —, each a button with whether its prize was given,
+ * who spun and the slice, opening its own screen (WheelSpinScreen). The panel has no route for one spin: the page's rows
+ * are kept for it.
  *
- * Actions: `u` (customer id), `nou` (every customer).
+ * Actions: ListScreen's; `u` (customer id), `nou` (every customer).
  */
 final class WheelSpinsScreen extends ListScreen
 {
@@ -45,12 +47,12 @@ final class WheelSpinsScreen extends ListScreen
 
     protected function title(): string
     {
-        return '🎡 چرخش‌ها';
+        return Icons::WHEEL . ' چرخش‌ها';
     }
 
     protected function path(): array
     {
-        return [...Words::PATH, 'گردونه شانس'];
+        return Marketing::in(Marketing::WHEEL);
     }
 
     protected function endpoint(): string
@@ -73,14 +75,19 @@ final class WheelSpinsScreen extends ListScreen
         return 'نام، نام کاربری یا شناسه تلگرام مشتری';
     }
 
+    protected function noun(): string
+    {
+        return 'چرخش';
+    }
+
     protected function empty(): string
     {
         return 'چرخشی نیست. هر بار که مشتری‌ای در ربات گردونه را بچرخاند، جایزه‌اش این‌جا می‌آید.';
     }
 
-    protected function summary(array $meta): array
+    protected function narrowedBy(): array
     {
-        return $this->user > 0 ? ['👤 فقط چرخش‌های مشتری ' . Fmt::id($this->user)] : ['هر بار که مشتری‌ای گردونه را چرخانده، تازه‌ترین اول: جایزه‌اش و این‌که داده شد یا نه.'];
+        return $this->user > 0 ? ['مشتری ' . Fmt::plain(Fmt::id($this->user))] : [];
     }
 
     protected function keepsRows(): bool
@@ -95,14 +102,17 @@ final class WheelSpinsScreen extends ListScreen
 
     protected function item(array $row): Button
     {
-        return Button::to(((bool) ($row['given'] ?? false) ? '✅ ' : '❌ ') . Words::customer($row['customer'] ?? null) . ' · ' . (string) ($row['label'] ?? ''), WheelSpinScreen::ID, 'show', (int) ($row['id'] ?? 0));
+        return Button::to(((bool) ($row['given'] ?? false) ? '✅ ' : '❌ ') . Marketing::customer($row['customer'] ?? null) . ' · ' . (string) ($row['label'] ?? ''), WheelSpinScreen::ID, 'show', (int) ($row['id'] ?? 0));
     }
 
     protected function extra(View $view, Admin $admin): void
     {
-        if ($this->user > 0) {
-            $view->row(Button::to('✖️ همه مشتری‌ها', self::ID, 'nou'));
-        }
+        $view->help('هر بار که مشتری‌ای گردونه را چرخانده، تازه‌ترین اول: ✅ جایزه‌اش داده شد، ❌ داده نشد (چرخشی که جایزه‌اش نرسید حساب نمی‌شود و هزینه‌اش برمی‌گردد).');
+    }
+
+    protected function tools(Admin $admin): array
+    {
+        return [$this->user > 0 ? Button::to('✖️ همه مشتری‌ها', self::ID, 'nou') : null];
     }
 
     protected function action(Admin $admin, string $action, array $args): View

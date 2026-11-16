@@ -8,6 +8,7 @@ use App\Modules\Subscriptions\Models\Grant;
 use App\Modules\Subscriptions\Services\Grants;
 use App\Modules\Telegram\Admin\BotAdminSettings;
 use App\Modules\Telegram\Admin\Ui\Nav;
+use App\Modules\Telegram\Admin\Ui\Words;
 use App\Modules\Telegram\Broadcasts\Audience;
 use App\Modules\Telegram\Broadcasts\BroadcastMode;
 use App\Modules\Telegram\Broadcasts\BroadcastService;
@@ -15,7 +16,6 @@ use App\Modules\Telegram\Broadcasts\BroadcastStatus;
 use App\Modules\Telegram\Messages;
 use App\Modules\Telegram\Models\Broadcast;
 use App\Modules\Users\Enums\UserRole;
-use App\Modules\Users\Models\User;
 use Tests\BotTestCase;
 
 /**
@@ -26,7 +26,6 @@ use Tests\BotTestCase;
  */
 final class BotAreaBroadcastsTest extends BotTestCase
 {
-    private const OWNER = 7001;
     private const STAFF = 7100;
 
     protected function setUp(): void
@@ -113,7 +112,7 @@ final class BotAreaBroadcastsTest extends BotTestCase
 
     public function testAnotherShopsBroadcastsAreSentFromItsOwnBot(): void
     {
-        $this->owner();
+        $this->owner(UserRole::Admin);
         $shop = $this->agentBot();
 
         $this->send($this->tap(Nav::to('shop', 'pick', $shop->id), chat: self::OWNER));
@@ -125,7 +124,7 @@ final class BotAreaBroadcastsTest extends BotTestCase
 
     public function testTheOwnerGivesAMassGiftFieldByFieldAndStopsIt(): void
     {
-        $this->owner();
+        $this->owner(UserRole::Admin);
         $server = $this->fakeServer();
         $plan = $this->plan();
         $this->subscription($this->customer(['telegram_id' => 1001]), $plan, $server, 'ali_1');
@@ -147,23 +146,68 @@ final class BotAreaBroadcastsTest extends BotTestCase
 
         $this->send($this->tap(Nav::to('mgn', 'gb'), chat: self::OWNER));
         $this->send($this->message('۰٫۵', chat: self::OWNER));
-        self::assertStringContainsString('حجم: ۰٫۵ گیگابایت', $this->said()[0], 'a fraction in Persian, its separator too');
+        self::assertStringContainsString('حجم: <b>۰٫۵ گیگابایت</b>', $this->said()[0], 'a fraction in Persian, its separator too');
         self::assertContains(Nav::to('mgn', 'msg', 0), $this->buttons(), 'a switch carries what it sets');
         $this->send($this->tap(Nav::to('mgn', 'msg', 0), chat: self::OWNER));
         $this->send($this->tap(Nav::to('mgn', 'msg', 0), chat: self::OWNER));
-        self::assertStringContainsString('پیام به مشتری‌ها: خیر', $this->said()[0], 'a second tap leaves it off');
+        self::assertStringContainsString('پیام به مشتری‌ها: <b>⏸ خاموش</b>', $this->said()[0], 'a second tap leaves it off');
 
         $this->send($this->tap(Nav::to('mgn', 'go'), chat: self::OWNER));
         $grant = Grant::query()->sole();
         self::assertSame([7, 'هدیه نوروز'], [$grant->days, $grant->reason], 'one request, as the panel\'s form sends it');
         self::assertGreaterThan(0, (int) $grant->traffic_bytes);
         self::assertStringContainsString('۷ روز', $this->said()[0]);
+        self::assertStringContainsString('پیشرفت: <b>', $this->said()[0], 'running: how far it got');
+        self::assertStringNotContainsString('بررسی شد', $this->said()[0], 'said once, as its «پیشرفت»');
+        self::assertStringContainsString('تا این‌جا: <b>به ', $this->said()[0], 'and what came of it so far');
 
         $this->send($this->tap(Nav::to('mgv', 'stop', $grant->id), chat: self::OWNER));
         self::assertStringContainsString('به بقیه سرویس‌ها اضافه نمی‌شود', $this->said()[0], 'asked first');
         $this->send($this->tap(Nav::to('mgv', 'stopped', $grant->id), chat: self::OWNER));
         self::assertStringContainsString('لغو', (string) $this->popup());
         self::assertSame('cancelled', $this->service(Grants::class)->present($grant->refresh()->load(['parts.server', 'customerGroup']))['status']);
+    }
+
+    public function testTheMassGiftsWalkGoesBackAStepAndACancelledQuestionLandsOnTheReviewForGood(): void
+    {
+        $this->owner(UserRole::Admin);
+        $this->send($this->tap(Nav::to('mgn', 'new'), chat: self::OWNER));
+        self::assertStringContainsString('گام ۱ از ۴', $this->said()[0]);
+        $this->send($this->tap(Nav::to('mgn', 'a', 'all'), chat: self::OWNER));
+        self::assertStringContainsString('گام ۲ از ۴', $this->said()[0]);
+        self::assertStringContainsString('<i>مدیریت › ربات › هدیه همگانی › هدیه تازه</i>', $this->said()[0], 'the new gift\'s question, whichever window came before');
+        self::assertSame([Words::SKIP, Words::PREVIOUS_STEP], array_column($this->inlineKeyboard(0)[1], 'text'), 'the walk\'s ways a row of their own, «⬅️ گام قبل» on the right');
+        self::assertSame([Nav::to('mgn', 'skip', 'days'), Nav::to('mgn', 'aud')], array_column($this->inlineKeyboard(0)[1], 'callback_data'));
+
+        $this->send($this->message('۷', chat: self::OWNER));
+        self::assertContains(Nav::to('mgn', 'days'), $this->callbacks(0), '«⬅️ گام قبل» from the traffic: the days');
+        $this->send($this->tap(Nav::to('mgn', 'days'), chat: self::OWNER));
+        self::assertStringContainsString('مقدار فعلی: <b>۷ روز</b>', $this->said()[0], 'the step before, with its answer');
+
+        // Cancelled: the review, from which each field comes straight back to it.
+        $this->send($this->tap(Nav::to('mgn', 'sum'), chat: self::OWNER));
+        self::assertStringContainsString('بازبینی', $this->said()[0]);
+        $this->send($this->tap(Nav::to('mgn', 'days'), chat: self::OWNER));
+        self::assertStringNotContainsString('گام ', $this->said()[0], 'no walk from the review');
+        self::assertNotContains(Words::PREVIOUS_STEP, array_column(array_merge(...$this->inlineKeyboard(0)), 'text'));
+        $this->send($this->message('۳۰', chat: self::OWNER));
+        self::assertStringContainsString('بازبینی', $this->said()[0], 'back on the review, not on to the traffic');
+        self::assertStringContainsString('تعداد روز: <b>۳۰ روز</b>', $this->said()[0]);
+    }
+
+    public function testTheGroupsAreOfferedForAMassGiftAPageAtATime(): void
+    {
+        $this->owner(UserRole::Admin);
+        foreach (range(1, 45) as $n) {
+            $this->customerGroup('گروه ' . $n);
+        }
+        $this->send($this->tap(Nav::to('mgn', 'new'), chat: self::OWNER));
+        $this->send($this->tap(Nav::to('mgn', 'a', 'group'), chat: self::OWNER));
+        $picks = array_values(array_filter($this->callbacks(0), static fn(string $data): bool => str_starts_with($data, Nav::to('mgn', 't') . ':')));
+        self::assertCount(40, $picks, 'forty a page');
+        self::assertContains(Nav::to('mgn', 'tp', 2), $this->callbacks(0));
+        $this->send($this->tap(Nav::to('mgn', 'tp', 2), chat: self::OWNER));
+        self::assertCount(5, array_filter($this->callbacks(0), static fn(string $data): bool => str_starts_with($data, Nav::to('mgn', 't') . ':')), 'the rest on the next');
     }
 
     public function testAShopsAdminHasNoMassGift(): void
@@ -186,14 +230,5 @@ final class BotAreaBroadcastsTest extends BotTestCase
         }
 
         return [];
-    }
-
-    /** The account OWNER linked as the owner — the bot's admin too, as the link makes it, unless `$role` says otherwise. */
-    private function owner(UserRole $role = UserRole::Admin): User
-    {
-        $owner = User::query()->where('telegram_id', self::OWNER)->first() ?? $this->customer(['telegram_id' => self::OWNER, 'first_name' => 'Amir', 'role' => $role]);
-        $this->linkOwner(self::OWNER);
-
-        return $owner;
     }
 }

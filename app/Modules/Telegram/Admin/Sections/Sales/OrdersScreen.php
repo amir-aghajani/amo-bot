@@ -6,6 +6,7 @@ namespace App\Modules\Telegram\Admin\Sections\Sales;
 
 use App\Modules\Telegram\Admin\Ui\Button;
 use App\Modules\Telegram\Admin\Ui\Fmt;
+use App\Modules\Telegram\Admin\Ui\Icons;
 use App\Modules\Telegram\Admin\Ui\Json;
 
 /**
@@ -17,14 +18,17 @@ final class OrdersScreen extends SalesList
 {
     public const ID = 'or';
 
-    /** The panel's tabs: «همه», then what waits on support first. */
+    /** The list's title. */
+    public const TITLE = Icons::ORDERS . ' ' . Sales::ORDERS;
+
+    /** The panel's tabs: «همه», then what waits on support first — a status said as its rows say it. */
     private const TABS = [
         self::ANY => 'همه',
         'stuck' => '🆘 نیازمند رسیدگی',
-        'pending' => '⏳ در انتظار پرداخت',
-        'fulfilled' => '✅ تکمیل‌شده',
-        'cancelled' => '🚫 لغوشده',
-        'refunded' => '↩️ بازپرداخت‌شده',
+        'pending' => Sales::ORDER_STATUS['pending'],
+        'fulfilled' => Sales::ORDER_STATUS['fulfilled'],
+        'cancelled' => Sales::ORDER_STATUS['cancelled'],
+        'refunded' => Sales::ORDER_STATUS['refunded'],
     ];
 
     protected function screen(): string
@@ -34,7 +38,7 @@ final class OrdersScreen extends SalesList
 
     protected function title(): string
     {
-        return '🛒 سفارش‌ها';
+        return self::TITLE;
     }
 
     protected function endpoint(): string
@@ -45,6 +49,11 @@ final class OrdersScreen extends SalesList
     protected function key(): string
     {
         return 'orders';
+    }
+
+    protected function noun(): string
+    {
+        return 'سفارش';
     }
 
     protected function narrower(): string
@@ -64,12 +73,12 @@ final class OrdersScreen extends SalesList
 
     protected function searchHint(): string
     {
-        return 'شماره سفارش، مشتری، پلن یا سرویس';
+        return 'شماره سفارش، نام پلن، نام کاربری سرویس، یا نام، یوزرنیم، ایمیل یا شناسه تلگرام مشتری.';
     }
 
     protected function figures(array $meta): array
     {
-        return $this->total($meta, 'sold', 'sold_amount', 'سفارش فروخته‌شده', 'در این روزها سفارشی فروخته نشده است.');
+        return $this->sold($meta, 'sold', 'sold_amount', 'سفارش فروخته‌شده', 'در این روزها سفارشی فروخته نشده است.');
     }
 
     protected function empty(): string
@@ -86,9 +95,10 @@ final class OrdersScreen extends SalesList
     {
         $id = (int) ($row['id'] ?? 0);
 
+        // Chip, what it was for, amount and customer — what a row is looked for by —, the number last.
         return Button::to(
-            Sales::mark(Sales::ORDER_STATUS, $row['status'] ?? '') . ' ' . Fmt::id($id) . ' · ' . Sales::word(Sales::ORDER_TYPE, $row['type'] ?? '')
-                . ' · ' . Fmt::money(Json::text($row, 'amount')) . ' · ' . Sales::customer(Json::part($row, 'user')),
+            Sales::mark(Sales::ORDER_STATUS, $row['status'] ?? '') . ' ' . Sales::word(Sales::ORDER_TYPE, $row['type'] ?? '') . ' · ' . Fmt::money(Json::text($row, 'amount'))
+                . ' · ' . Fmt::cut(Sales::customer(Json::part($row, 'user')), 14) . ' · ' . Fmt::id($id),
             OrderScreen::ID,
             'show',
             $id,

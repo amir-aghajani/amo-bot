@@ -23,18 +23,18 @@ final class PaymentFilters extends NarrowScreen
 
     protected function listTitle(): string
     {
-        return 'پرداخت‌ها';
+        return Sales::PAYMENTS;
     }
 
     protected function days(): string
     {
-        return 'بر اساس زمان ثبت پرداخت';
+        return 'زمان ثبت پرداخت';
     }
 
     protected function groups(Admin $admin): array
     {
         return [
-            ['key' => 'sort', 'label' => 'ترتیب', 'options' => ['' => 'تازه‌ترین', 'created.asc' => 'قدیمی‌ترین', 'amount.desc' => 'بیشترین مبلغ', 'amount.asc' => 'کمترین مبلغ']],
+            ['key' => 'sort', 'label' => 'ترتیب', 'options' => self::SORT_BY_AMOUNT],
         ];
     }
 }

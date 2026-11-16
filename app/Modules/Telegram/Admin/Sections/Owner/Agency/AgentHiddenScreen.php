@@ -10,11 +10,13 @@ use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\BaseScreen;
 use App\Modules\Telegram\Admin\Ui\Button;
 use App\Modules\Telegram\Admin\Ui\Fmt;
+use App\Modules\Telegram\Admin\Ui\Icons;
 use App\Modules\Telegram\Admin\Ui\Json;
 use App\Modules\Telegram\Admin\Ui\View;
+use App\Modules\Telegram\Admin\Ui\Words as UiWords;
 
 /**
- * «🙈 سرورها و پلن‌های پنهان» of an agent (the panel's HiddenModal): every server of the installation and the agent's own
+ * «🙈 پنهان از فروشگاه نماینده» (the panel's HiddenModal): every server of the installation and the agent's own
  * plans — one list at a time, its tab a chip, a page of it at a time (View::paged) —, a button each to keep it from
  * their shop or show it again; each saved at once (PUT …/hidden, exactly the ones hidden), as the API then has them.
  * Each button carries what it sets: a stale screen or a second tap never undoes the first.
@@ -26,7 +28,7 @@ final class AgentHiddenScreen extends BaseScreen
     public const ID = 'agh';
 
     /** The two lists, by the tab's key: [the chip's words, the action that sets one of it]. */
-    private const TABS = ['s' => ['🖥 سرورها', 'srv'], 'p' => ['📦 پلن‌ها', 'pln']];
+    private const TABS = ['s' => [Icons::SERVERS . ' سرورها', 'srv'], 'p' => [Icons::PLANS . ' پلن‌ها', 'pln']];
 
     public function allows(AdminSeat $seat): bool
     {
@@ -89,7 +91,7 @@ final class AgentHiddenScreen extends BaseScreen
         $plans = Json::rows($hidden, 'plans');
         $items = $tab === 's' ? $servers : $plans;
 
-        $view = View::make('🙈 سرورها و پلن‌های پنهان', 'مدیریت', 'نمایندگان', Words::user($row['user'] ?? null));
+        $view = View::make('🙈 پنهان از فروشگاه نماینده', ...[...AgencyScreen::path(), Words::user($row['user'] ?? null)]);
         if ($tab === 's') {
             $view->line('<b>سرورهای پنهان</b>')
                 ->line('پلن‌های نماینده روی این سرورها فروخته نمی‌شود، اکانت تست در آن‌ها داده نمی‌شود و نماینده سرویسی به آن‌ها منتقل نمی‌کند. سرویس‌هایی که نماینده همین حالا روی آن‌ها دارد مثل قبل کار می‌کنند و تمدید می‌شوند.');
@@ -103,7 +105,7 @@ final class AgentHiddenScreen extends BaseScreen
         $count = static fn(array $all): int => count(array_filter($all, static fn(array $one): bool => Json::on($one, 'hidden')));
         $view->line()->line('پنهان: ' . Fmt::number($count($servers)) . ' از ' . Fmt::number(count($servers)) . ' سرور · ' . Fmt::number($count($plans)) . ' از ' . Fmt::number(count($plans)) . ' پلن');
 
-        $view->row(...array_map(static fn(string $key, array $one): Button => Button::to(($key === $tab ? '● ' : '') . $one[0], self::ID, 'tab', $key), array_keys(self::TABS), self::TABS));
+        $view->row(...array_map(static fn(string $key, array $one): Button => Button::to(($key === $tab ? UiWords::CHIP : '') . $one[0], self::ID, 'tab', $key), array_keys(self::TABS), self::TABS));
         $buttons = array_map(static fn(array $one): Button => Button::to(
             (Json::on($one, 'hidden') ? '🙈 ' : '👁 ') . (string) ($one['name'] ?? '') . (($one['is_active'] ?? true) === true ? '' : ' (غیرفعال)'),
             self::ID,

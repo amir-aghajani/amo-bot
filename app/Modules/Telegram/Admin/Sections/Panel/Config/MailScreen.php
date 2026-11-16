@@ -78,14 +78,14 @@ final class MailScreen extends ConfigScreen
 
     protected function extra(View $view, Admin $admin, DraftForm $form, string $driver, array $values): void
     {
-        $view->line()->line('<i>«📧 ارسال ایمیل تست»: یک ایمیل کوتاه با تنظیمات ذخیره‌شده فرستاده می‌شود؛ تغییرات را اول ذخیره کنید.</i>')
+        $view->note('«📧 ارسال ایمیل تست»: یک ایمیل کوتاه با تنظیمات ذخیره‌شده فرستاده می‌شود؛ تغییرات را اول ذخیره کنید.')
             ->row(Button::to('📧 ارسال ایمیل تست', self::ID, 'mt'));
     }
 
     protected function action(Admin $admin, string $action, array $args, DraftForm $form, string $driver, array $values): View
     {
         if ($action === 'mt') {
-            return $admin->ask(new Prompt('ایمیل گیرنده', self::ID, 'mt', [], "ایمیل تست به کدام آدرس برود؟ مثل \u{2068}you@example.com\u{2069}"));
+            return $admin->ask((new Prompt('ایمیل گیرنده', self::ID, 'mt', [], 'ایمیل تست به کدام آدرس برود؟'))->example('you@example.com'));
         }
 
         return parent::action($admin, $action, $args, $form, $driver, $values);

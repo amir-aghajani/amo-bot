@@ -6,18 +6,22 @@ namespace App\Modules\Telegram\Admin\Sections\Owner\Payments;
 
 use App\Modules\Telegram\Admin\AdminSeat;
 use App\Modules\Telegram\Admin\Door\ApiRefusal;
+use App\Modules\Telegram\Admin\Sections\Catalog\CatalogFmt;
 use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\BaseScreen;
 use App\Modules\Telegram\Admin\Ui\Button;
 use App\Modules\Telegram\Admin\Ui\Fmt;
+use App\Modules\Telegram\Admin\Ui\Icons;
 use App\Modules\Telegram\Admin\Ui\Json;
 use App\Modules\Telegram\Admin\Ui\View;
+use App\Modules\Telegram\Admin\Ui\Words;
 
 /**
- * One payment method (the panel's row and its menu): its driver, how it settles, its summary or cards, the amounts it
- * is offered for and its payments; switched on or off, «✏️ ویرایش» (PaymentMethodFormScreen; not for one whose driver is
- * gone), a card method's cards, moved up or down the checkout order, and «🗑 حذف» — not the wallet, and not one payments
- * were made with (make it inactive instead, as the panel says), asked first.
+ * One payment method (the panel's row and its menu): why nobody is offered it, first; then its card — driver, how it
+ * settles, state, the amounts it is offered for, its gateway's word or a card method's automatic approval, payments, its
+ * place in checkout —, a card method's cards; «✏️ ویرایش» (PaymentMethodFormScreen, the main action; not for one whose
+ * driver is gone) with the switch beside it, a card method's cards, moved up or down the checkout order, and «🗑 حذف» —
+ * not the wallet, and not one payments were made with (make it inactive instead, as the panel says), asked first, red.
  *
  * A gateway that takes its webhook address from the shop (`registers_webhook`: Rialit, one address an account) says
  * where its webhooks go, read when the screen opens — a failed read said as unknown, the screen still shown —: the
@@ -95,15 +99,14 @@ final class PaymentMethodScreen extends BaseScreen
             case 'on':
                 $on = self::id($args, 1) === 1;
                 $admin->api->patch("/payment-methods/{$id}", ['enabled' => $on]);
-                $admin->notice($on ? '✅ فعال شد' : '⏸ غیرفعال شد');
+                $admin->notice($on ? '✅ فعال شد' : Words::INACTIVE . ' شد');
                 break;
             case 'up':
             case 'down':
-                $other = $index + ($action === 'up' ? -1 : 1);
-                if (isset($methods[$other])) {
-                    [$methods[$index], $methods[$other]] = [$methods[$other], $methods[$index]];
-                    $admin->api->post('/payment-methods/reorder', ['ids' => array_map(static fn(array $row): int => (int) ($row['id'] ?? 0), $methods)]);
-                    $admin->notice('✅ جابه‌جا شد');
+                $ids = CatalogFmt::moved($methods, $id, $action === 'up' ? -1 : 1, static fn(array $row): bool => true);
+                if ($ids !== null) {
+                    $admin->api->post('/payment-methods/reorder', ['ids' => $ids]);
+                    $admin->notice($action === 'up' ? Words::UP . ' یک جا بالاتر رفت' : Words::DOWN . ' یک جا پایین‌تر رفت');
                 }
                 break;
             case 'del':
@@ -115,9 +118,10 @@ final class PaymentMethodScreen extends BaseScreen
 
                 return $admin->confirm(
                     'این روش پرداخت حذف شود؟',
-                    Button::to('🗑 بله، حذف شود', self::ID, 'gone', $id),
-                    Button::to('✖️ انصراف', self::ID, 'show', $id),
+                    Button::to(Words::yes('حذف شود', CatalogFmt::emoji(Words::DELETE)), self::ID, 'gone', $id),
+                    Button::to(Words::CANCEL, self::ID, 'show', $id),
                     '«' . Fmt::e((string) ($method['label'] ?? '')) . '» حذف می‌شود و دیگر به مشتری نشان داده نمی‌شود.' . "\n" . 'هنوز پرداختی با این روش ثبت نشده است. اگر فقط می‌خواهید موقتا کنار برود، به جای حذف غیرفعالش کنید.',
+                    danger: true,
                 );
             case 'gone':
                 $admin->api->delete("/payment-methods/{$id}");
@@ -146,12 +150,13 @@ final class PaymentMethodScreen extends BaseScreen
 
                 return $admin->confirm(
                     'آدرس وب‌هوک ریالیت با آدرس فروشگاه جایگزین شود؟',
-                    Button::to('🔁 بله، جایگزین شود', self::ID, 'swapped', $id),
-                    Button::to('✖️ انصراف', self::ID, 'show', $id),
+                    Button::to(Words::yes('جایگزین شود', '🔁'), self::ID, 'swapped', $id),
+                    Button::to(Words::CANCEL, self::ID, 'show', $id),
                     'ریالیت برای هر حساب فقط یک آدرس وب‌هوک دارد و الان خبر پرداخت‌ها را به این آدرس می‌فرستد:' . "\n" . Fmt::code($url) . "\n"
                     . ($ours !== null ? 'از این به بعد به آدرس فروشگاه می‌فرستد:' . "\n" . Fmt::code($ours) . "\n" : '')
                     . "\n" . 'آن آدرس دیگر وب‌هوک‌های ریالیت را نمی‌گیرد؛ اگر سایت یا ربات دیگری با همین حساب ریالیت کار می‌کند، خبر پرداخت‌هایش دیگر به آن نمی‌رسد.' . "\n"
                     . 'ریالیت این تغییر را در تلگرام و ایمیل به صاحب حساب خبر می‌دهد.',
+                    danger: true,
                 );
             case 'look':
                 if (!self::registers($method)) {
@@ -178,46 +183,54 @@ final class PaymentMethodScreen extends BaseScreen
         $method = $methods[$index];
         $id = (int) ($method['id'] ?? 0);
         $on = Json::on($method, 'enabled');
-        $view = View::make('🏦 ' . (string) ($method['label'] ?? ''), 'مدیریت', 'فروشگاه', 'روش‌های پرداخت')
-            ->facts([
-                'درایور' => Fmt::e((string) ($method['driver_label'] ?? '')),
-                'نوع' => Fmt::e(PaymentWords::kind($method)),
-                'وضعیت' => $on ? '🟢 فعال' : '⏸ غیرفعال',
-                'پرداخت‌ها' => Fmt::number((int) ($method['counts']['payments'] ?? 0)),
-                'جای آن' => Fmt::number($index + 1) . ' از ' . Fmt::number(count($methods)),
-            ]);
-        $details = PaymentWords::details($method);
-        if ($details !== []) {
-            $view->line()->lines(...$details);
+        $manual = ($method['driver'] ?? null) === 'manual';
+        $cards = Json::rows($method, 'cards');
+        $toSupport = Json::on($method, 'to_support');
+        $why = PaymentWords::unoffered($method);
+        $view = View::make(Icons::METHODS . ' ' . (string) ($method['label'] ?? ''), ...PaymentWords::under());
+        if ($why !== null) {
+            $view->line('⚠️ ' . Fmt::e($why));
+        }
+        $view->card([
+            'درایور' => Fmt::e((string) ($method['driver_label'] ?? '')),
+            'نوع' => Fmt::e(PaymentWords::kind($method)),
+            'وضعیت' => Fmt::active($on),
+            'مبلغ' => PaymentWords::bounds($method),
+            ...PaymentWords::facts($method),
+            'پرداخت‌ها' => Fmt::number((int) ($method['counts']['payments'] ?? 0)),
+            'جای آن در صفحه پرداخت' => CatalogFmt::place($index + 1, count($methods)),
+        ]);
+        if ($manual) {
+            $view->section(PaymentCardsScreen::TITLE)->lines(...($cards === [] && !$toSupport ? [Words::NONE] : PaymentWords::cards($cards, $toSupport)));
         }
         if ($webhook !== null) {
             $view->line()->lines(...self::hookLines($webhook, $said));
         }
-        $manual = ($method['driver'] ?? null) === 'manual';
 
+        // The main action first, the switch beside it; the ways about after; the delete last.
         $view->row(
-            Button::to($on ? '⏸ غیرفعال کردن' : '▶️ فعال کردن', self::ID, 'on', $id, $on ? 0 : 1),
-            ($method['kind'] ?? null) !== null ? Button::to('✏️ ویرایش', PaymentMethodFormScreen::ID, 'edit', $id) : null,
+            ($method['kind'] ?? null) !== null ? Button::to(Words::EDIT, PaymentMethodFormScreen::ID, 'edit', $id)->primary() : null,
+            $on ? Button::to(Words::DEACTIVATE, self::ID, 'on', $id, 0)->danger() : Button::to(Words::ACTIVATE, self::ID, 'on', $id, 1)->success(),
         );
         if ($manual) {
-            $view->row(Button::to('💳 کارت‌ها' . Fmt::badge(count((array) ($method['cards'] ?? []))), PaymentCardsScreen::ID, 'show', $id));
+            $view->row(Button::to(PaymentCardsScreen::TITLE . Fmt::badge(count($cards)), PaymentCardsScreen::ID, 'show', $id));
         }
         if ($webhook !== null) {
             $view->row(match ($webhook['state'] ?? null) {
                 'ours' => null,
-                'none' => Button::to('🔗 ثبت آدرس در ریالیت', self::ID, 'hook', $id),
+                'none' => Button::to('🔗 ثبت آدرس در ریالیت', self::ID, 'hook', $id)->success(),
                 'elsewhere' => Button::to(self::SWAP, self::ID, 'swap', $id),
                 default => Button::to('🔄 دوباره امتحان', self::ID, 'look', $id),
             });
         }
         $view->row(
-            $index > 0 ? Button::to('🔼 بالاتر', self::ID, 'up', $id) : null,
-            $index < count($methods) - 1 ? Button::to('🔽 پایین‌تر', self::ID, 'down', $id) : null,
+            $index > 0 ? Button::to(Words::UP . ' بالاتر', self::ID, 'up', $id) : null,
+            $index < count($methods) - 1 ? Button::to(Words::DOWN . ' پایین‌تر', self::ID, 'down', $id) : null,
         );
         if (($method['builtin'] ?? false) !== true) {
-            $view->row(Button::to('🗑 حذف روش پرداخت', self::ID, 'del', $id));
+            $view->row(Button::to(Words::DELETE . ' روش پرداخت', self::ID, 'del', $id)->danger());
         } else {
-            $view->note('کیف پول همیشه هست و حذف نمی‌شود؛ فقط نامش، کمترین و بیشترین مبلغش و فعال یا غیرفعال بودنش عوض می‌شود.');
+            $view->note('کیف پول داخلی است و حذف نمی‌شود؛ نامش، مبلغ‌ها و وضعیتش عوض می‌شود.');
         }
 
         return $view->back(PaymentMethodsScreen::ID);
@@ -263,8 +276,8 @@ final class PaymentMethodScreen extends BaseScreen
         $message = self::text($webhook, 'message');
         $lines = match ($webhook['state'] ?? null) {
             'ours' => [self::HOOK . ': 🟢 آدرس فروشگاه ثبت است'],
-            'none' => [self::HOOK . ': ⚪️ ثبت نشده'],
-            'elsewhere' => [self::HOOK . ': 🟠 به آدرس دیگری می‌رود', ...($url === null ? [] : [Fmt::code($url)])],
+            'none' => [self::HOOK . ': ' . CatalogFmt::emoji(Words::OFF) . ' ثبت نشده'],
+            'elsewhere' => [self::HOOK . ': ⚠️ به آدرس دیگری می‌رود', ...($url === null ? [] : [Fmt::code($url)])],
             default => [self::HOOK . ': ⚠️ ' . Fmt::e($message ?? 'وضعیتش خوانده نشد.')],
         };
         if (!$said && $message !== null && in_array($webhook['state'] ?? null, ['none', 'elsewhere'], true)) {

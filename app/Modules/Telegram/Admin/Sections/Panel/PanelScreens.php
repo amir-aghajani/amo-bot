@@ -4,7 +4,10 @@ declare(strict_types=1);
 
 namespace App\Modules\Telegram\Admin\Sections\Panel;
 
-/** The management screens of the website, the mini app and the panel's own settings (config.php, update, schedule, backups, imports): their ids (Telegram\Admin\Ui\Screens) and classes. */
+/**
+ * The management screens of the website, the mini app, the panel's own settings (config.php, update, schedule, backups,
+ * imports) and the settings search over all of them: their ids (Telegram\Admin\Ui\Screens) and classes.
+ */
 final class PanelScreens
 {
     /**
@@ -46,5 +49,6 @@ final class PanelScreens
         Imports\ImportReportScreen::ID => Imports\ImportReportScreen::class,
         Imports\ImportProblemsScreen::ID => Imports\ImportProblemsScreen::class,
         SystemScreen::ID => SystemScreen::class,
+        Search\SettingsSearchScreen::ID => Search\SettingsSearchScreen::class,
     ];
 }

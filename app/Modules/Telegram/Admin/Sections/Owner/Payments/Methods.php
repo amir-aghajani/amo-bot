@@ -46,6 +46,17 @@ final class Methods
     }
 
     /**
+     * The gateway drivers installed, as the API describes them.
+     *
+     * @return list<array<string, mixed>>
+     * @throws ApiRefusal
+     */
+    public static function drivers(Admin $admin): array
+    {
+        return Json::rows($admin->api->get('/payment-methods/drivers'), 'drivers');
+    }
+
+    /**
      * The gateway driver `$key` as the API describes it; null for one not installed.
      *
      * @return array<string, mixed>|null
@@ -53,8 +64,8 @@ final class Methods
      */
     public static function driver(Admin $admin, string $key): ?array
     {
-        foreach ((array) ($admin->api->get('/payment-methods/drivers')['drivers'] ?? []) as $driver) {
-            if (is_array($driver) && ($driver['key'] ?? null) === $key) {
+        foreach (self::drivers($admin) as $driver) {
+            if (($driver['key'] ?? null) === $key) {
                 return $driver;
             }
         }

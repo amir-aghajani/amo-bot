@@ -80,6 +80,16 @@ final class Messages
     public const BROADCAST_BTN_PIN = '📌 پین: %state%';
     public const BROADCAST_BTN_BUTTONS = '🔘 دکمه‌ها';
     public const BROADCAST_SEND = '✅ ارسال به %count% نفر';
+    /** «ارسال» asked once more, what goes to how many said: the run starts only at its yes. */
+    public const BROADCAST_CONFIRM = '❓ <b>ارسال به %count% نفر شود؟</b>
+
+📝 %content%
+👥 %audience%%blocked%%pin%
+
+بعد از شروع، ارسال را می‌شود متوقف یا لغو کرد؛ ولی پیامی که به کسی رسیده برنمی‌گردد.';
+    public const BROADCAST_CONFIRM_PIN = ' · 📌 پین می‌شود';
+    public const BROADCAST_CONFIRM_YES = '✔️ بله، ارسال شود';
+    public const BROADCAST_CONFIRM_NO = '✖️ انصراف';
     /** What the admin's message is, on the draft card — by the update's field that carries it. */
     public const BROADCAST_CONTENT = [
         'text' => 'متن',

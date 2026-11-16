@@ -4,23 +4,28 @@ declare(strict_types=1);
 
 namespace App\Modules\Telegram\Admin\Sections\Support;
 
+use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\Button;
 use App\Modules\Telegram\Admin\Ui\Fmt;
 use App\Modules\Telegram\Admin\Ui\Json;
 use App\Modules\Telegram\Admin\Ui\ListScreen;
 use App\Modules\Telegram\Admin\Ui\Nav;
+use App\Modules\Telegram\Admin\Ui\View;
 
 /**
- * «🧾 پورسانت‌ها» (GET /referrals/commissions): the commissions paid into referrers' wallets, newest first — or the
- * largest —, searched by a payment's number or the customers on either side, each opening its own screen
- * (CommissionScreen).
+ * «💰 پورسانت‌ها» (GET /referrals/commissions): the commissions paid into referrers' wallets, ordered by when or how
+ * much — either way —, searched by a payment's number or the customers on either side, each a row «amount · referrer ·
+ * payment» opening its own screen (CommissionScreen).
  */
 final class CommissionsScreen extends ListScreen
 {
     public const ID = 'rfc';
 
     /** The panel's sortable headers, its own order first. */
-    private const SORTS = ['created' => 'تازه‌ترین', 'commission' => 'بیشترین پورسانت'];
+    private const SORTS = ['created' => 'زمان', 'commission' => 'مبلغ پورسانت'];
+
+    /** The ones of them that are moments. */
+    private const MOMENTS = ['created'];
 
     protected function screen(): string
     {
@@ -29,12 +34,12 @@ final class CommissionsScreen extends ListScreen
 
     protected function title(): string
     {
-        return '🧾 پورسانت‌ها';
+        return ReferralsScreen::COMMISSIONS;
     }
 
     protected function path(): array
     {
-        return ['مدیریت', 'فروش', 'زیرمجموعه‌گیری'];
+        return ReferralsScreen::under();
     }
 
     protected function endpoint(): string
@@ -49,7 +54,12 @@ final class CommissionsScreen extends ListScreen
 
     protected function filters(): array
     {
-        return ['sort' => self::SORTS];
+        return ['sort' => self::SORTS, Sorting::DIR => Sorting::directions($this->here, self::ID, self::SORTS, self::MOMENTS)];
+    }
+
+    protected function noun(): string
+    {
+        return 'پورسانت';
     }
 
     protected function searchHint(): string
@@ -62,9 +72,9 @@ final class CommissionsScreen extends ListScreen
         return 'هنوز پورسانتی پرداخت نشده است. اولین پرداخت موفق یک زیرمجموعه، پورسانت معرفش را این‌جا می‌آورد.';
     }
 
-    protected function summary(array $meta): array
+    protected function extra(View $view, Admin $admin): void
     {
-        return ['پورسانت‌هایی که بابت پرداخت زیرمجموعه‌ها به کیف پول معرف‌ها اضافه شده.'];
+        $view->help('پورسانت‌هایی که بابت پرداخت زیرمجموعه‌ها به کیف پول معرف‌ها اضافه شده؛ هر کدام بابت یک پرداخت.');
     }
 
     protected function keepsRows(): bool
@@ -83,7 +93,7 @@ final class CommissionsScreen extends ListScreen
         $payment = Json::part($row, 'payment');
 
         return Button::to(
-            Fmt::plain(Fmt::money(is_numeric($row['commission'] ?? null) ? (string) $row['commission'] : '0')) . ' · ' . Words::name($referrer) . ' · پرداخت ' . Fmt::id(is_int($payment['id'] ?? null) ? $payment['id'] : null),
+            Fmt::plain(Fmt::money(Words::figure($row['commission'] ?? null))) . ' · ' . Fmt::cut(Words::name($referrer), 20) . ' · پرداخت ' . Fmt::id(is_int($payment['id'] ?? null) ? $payment['id'] : null),
             CommissionScreen::ID,
             Nav::SHOW,
             (int) ($row['id'] ?? 0),

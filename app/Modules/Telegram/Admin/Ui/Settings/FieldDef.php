@@ -11,7 +11,8 @@ use App\Modules\Telegram\Admin\Ui\Fmt;
  * label, a hint, and how it is set — a switch flipped at a tap, a choice among buttons (or several: `multi`), a text, a
  * number, an amount of money, a list of numbers, an address or a secret typed. Its label, hint and choices are the
  * panel's words for it (the panel's card is where they come from). `when` shows it only while another field's value
- * is one of those (the panel's own conditions); `nullable` offers «🗑 خالی کردن».
+ * is one of those (the panel's own conditions); `nullable` offers «🗑 خالی کردن», byDefault() «↩️ پیش‌فرض»; example()
+ * and limits() are said in its question, under the value now.
  */
 final class FieldDef
 {
@@ -39,6 +40,18 @@ final class FieldDef
      * @var array<int, array{question: string, yes: string, detail: string}>
      */
     public array $asks = [];
+
+    /** What an answer looks like, its question says (plain text); '' for the type's own (example()). */
+    public string $example = '';
+
+    /** What an answer may be — its least, its most —, its question says (plain text); '' for none. */
+    public string $limits = '';
+
+    /** Whether it has a value it comes with (byDefault()): its question offers «↩️ پیش‌فرض». */
+    public bool $defaulted = false;
+
+    /** The value it comes with, as the API takes it (byDefault()). */
+    public mixed $default = null;
 
     /**
      * @param array<int|string, string> $options A choice's values and their labels
@@ -145,6 +158,63 @@ final class FieldDef
     }
 
     /**
+     * What an answer looks like, said in its question (plain text): «۵۰۰۰۰», «@support».
+     */
+    public function example(string $example): self
+    {
+        $this->example = $example;
+
+        return $this;
+    }
+
+    /**
+     * What an answer may be, said in its question (plain text): «از ۰ تا ۸».
+     */
+    public function limits(string $limits): self
+    {
+        $this->limits = $limits;
+
+        return $this;
+    }
+
+    /**
+     * The value it comes with (as the API takes it): its question offers «↩️ پیش‌فرض» while it holds another.
+     */
+    public function byDefault(mixed $value): self
+    {
+        $this->defaulted = true;
+        $this->default = $value;
+
+        return $this;
+    }
+
+    /**
+     * Its value as its question says it now («مقدار فعلی»), plain text in the form an answer takes — a list's numbers,
+     * a number's digits, a text as kept — so copied it may be sent back changed; a secret only whether one is kept.
+     */
+    public function current(mixed $value, ?string $shown = null): string
+    {
+        return match ($this->type) {
+            self::LIST => is_array($value) ? implode('، ', array_map(static fn(mixed $v): string => Fmt::digits(is_scalar($v) ? (string) $v : ''), $value)) : '',
+            self::NUMBER => is_numeric($value) ? Fmt::digits((string) $value) : '',
+            self::TEXT, self::TEXTAREA, self::URL => is_scalar($value) ? (string) $value : '',
+            default => (string) preg_replace('/[\x{2066}-\x{2069}]/u', '', Fmt::plain($shown ?? $this->display($value))),
+        };
+    }
+
+    /** The example its question gives: its own, else its type's (an amount of money, a list of them). */
+    public function exampleOf(): string
+    {
+        return match (true) {
+            $this->example !== '' => $this->example,
+            $this->type === self::MONEY => '۵۰۰۰۰',
+            $this->type === self::LIST => '۵۰۰۰۰، ۱۰۰۰۰۰',
+            $this->type === self::URL => 'https://example.com',
+            default => '',
+        };
+    }
+
+    /**
      * Whether it shows among `$values` (its `when`).
      *
      * @param array<string, mixed> $values
@@ -173,16 +243,6 @@ final class FieldDef
             self::SECRET => $value === null || $value === '' || $value === false ? 'ندارد' : '•••• (ذخیره شده)',
             self::URL => Fmt::ltr(is_scalar($value) ? (string) $value : null),
             default => $value === null || $value === '' ? Fmt::NONE : Fmt::e(Fmt::cut(is_scalar($value) ? (string) $value : '', 60)),
-        };
-    }
-
-    /** Its value as a button's label shows it (plain text, short). */
-    public function brief(mixed $value): string
-    {
-        return match ($this->type) {
-            self::TOGGLE => (bool) $value ? '✅' : '⛔️',
-            self::TEXTAREA => $value === null || $value === '' ? Fmt::NONE : '✏️',
-            default => Fmt::plain($this->display($value)),
         };
     }
 }

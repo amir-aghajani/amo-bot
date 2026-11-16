@@ -9,6 +9,7 @@ use App\Modules\Telegram\Admin\Door\ApiRefusal;
 use App\Modules\Telegram\Admin\Ui\Answer;
 use App\Modules\Telegram\Admin\Ui\DescribedFields;
 use App\Modules\Telegram\Admin\Ui\Fmt;
+use App\Modules\Telegram\Admin\Ui\Words;
 use App\Modules\Telegram\Texts\PremiumText;
 use App\Support\Persian;
 use App\Support\Unit;
@@ -179,25 +180,6 @@ final class DescribedForm
     }
 
     /**
-     * The value as a button's label shows it (plain text, short).
-     *
-     * @param array<string, mixed> $field
-     * @param array<string, string|bool> $draft
-     * @param array<string, mixed>|null $stored
-     */
-    public function brief(array $field, array $draft, ?array $stored): string
-    {
-        if ($field['type'] === 'toggle') {
-            return ($draft[self::name($field)] ?? false) === true ? '✅' : '⛔️';
-        }
-        if ($field['type'] === 'textarea' && ($draft[self::name($field)] ?? '') !== '') {
-            return '✏️';
-        }
-
-        return Fmt::plain($this->display($field, $draft, $stored));
-    }
-
-    /**
      * Whether a blank secret would keep the stored one although a field it is bound to moved, which the API refuses: its
      * `moved` words are said before the save.
      *
@@ -227,9 +209,9 @@ final class DescribedForm
             return $this->emoji($field, $answer, $draft) ?? throw $refused('یک ایموجی پرمیوم بفرستید؛ ایموجی معمولی شناسه پرمیوم ندارد.');
         }
         $value = match ($field['type']) {
-            'number' => (string) ($answer->integer() ?? throw $refused('یک عدد بنویسید.')),
+            'number' => (string) ($answer->integer() ?? throw $refused(Words::NOT_NUMBER)),
             'decimal' => $answer->decimal() ?? throw $refused('یک عدد بنویسید؛ مثل ۱۰ یا ۱٫۵.'),
-            'amount' => (string) ($answer->amount(Unit::Toman) ?? throw $refused('مبلغ را به تومان بنویسید، مثل ۵۰۰۰۰ یا «۵۰ هزار تومان».')),
+            'amount' => (string) ($answer->amount(Unit::Toman) ?? throw $refused(Words::NOT_TOMAN)),
             'list' => $answer->numbers() !== [] ? implode(', ', $answer->numbers()) : throw $refused('عددها را با فاصله یا «،» جدا بنویسید.'),
             'card' => preg_replace('/\D/', '', $answer->latin()) ?? '',
             'url', 'email', 'path' => $answer->latin(),

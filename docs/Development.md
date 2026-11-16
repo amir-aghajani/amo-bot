@@ -87,7 +87,7 @@ composer analyse    # PHPStan alone
 pnpm check          # the panels: API types + settings index current + typecheck + oxlint + knip + prettier + tests
 pnpm format         # prettier: import order, Tailwind's class order
 pnpm api:types      # regenerate the panels' API types after changing resources/api/openapi.yaml
-pnpm settings:index # regenerate the settings search's index after changing a settings section
+pnpm settings:index # regenerate the settings search's index (the panels' and the bot's) after changing a settings section
 php scripts/docs.php          # regenerate the documentation's generated pages
 php scripts/docs.php --check  # the documentation current, and every link between its pages leading somewhere
 ```
@@ -98,9 +98,13 @@ configuration with them: `vendor/bin/php-cs-fixer fix --config=.php-cs-fixer.php
 The panels' settings search («جستجوی تنظیمات», `lib/settings-search/*`, drawn by `components/settings-search`) finds
 every single setting by an index generated from the settings sections' own source: `pnpm settings:index`
 (`scripts/settings-index.mjs`, TypeScript's parser) writes `lib/settings-search/settings.generated.ts` — each section's
-cards, fields, switches and folds with their labels and hints, as the source writes them — and `pnpm check` fails
-(`node scripts/settings-index.mjs --check`) while that file is not what the sources give. So after changing a settings
-section's words, run it and commit what it wrote ([Extending](Extending.md#a-setting)).
+cards, fields, switches and folds with their labels and hints, as the source writes them —, and the same index for the
+bot's «🔎 جستجوی تنظیمات», `app/Modules/Telegram/Admin/Sections/Panel/Search/PanelSettings.php` (a release ships no
+panel source); `pnpm check` fails (`node scripts/settings-index.mjs --check`) while either is not what the sources give.
+So after changing a settings section's words, run it and commit what it wrote ([Extending](Extending.md#a-setting)). The
+bot maps each of the panel's settings onto its own screens in `Sections/Panel/Search/SettingsIndex.php`, and
+`tests/Feature/BotAdmin/SettingsParityTest.php` fails while a section of the panel's has no place there, or a place
+names a screen, a field or a part the bot does not have — a new setting is not done until the bot sets it too.
 
 ## Project layout
 

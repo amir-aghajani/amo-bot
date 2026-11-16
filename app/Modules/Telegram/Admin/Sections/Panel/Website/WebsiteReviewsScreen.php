@@ -5,8 +5,10 @@ declare(strict_types=1);
 namespace App\Modules\Telegram\Admin\Sections\Panel\Website;
 
 use App\Modules\Telegram\Admin\Sections\Panel\Forms\DraftForm;
+use App\Modules\Telegram\Admin\Sections\Support\ReviewsScreen;
 use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\Button;
+use App\Modules\Telegram\Admin\Ui\Icons;
 use App\Modules\Telegram\Admin\Ui\Settings\FieldDef;
 use App\Modules\Telegram\Admin\Ui\View;
 
@@ -43,10 +45,9 @@ final class WebsiteReviewsScreen extends WebsiteCard
     protected function extra(View $view, Admin $admin, array $values): void
     {
         $none = (self::part($values, 'captcha')['driver'] ?? DraftForm::NONE) === DraftForm::NONE;
-        $view->line()
-            ->line('<i>هر نظر تا وقتی در «⭐️ نظرات» تایید نشود، در وب‌سایت دیده نمی‌شود. ' . ($none
-                ? 'تایید امنیتی وب‌سایت خاموش است، پس فقط مشتری‌هایی که وارد حسابشان شده‌اند نظر می‌نویسند؛ برای نظر مهمان، تایید امنیتی را روشن کنید.'
-                : 'مهمان‌ها هم پشت تایید امنیتی وب‌سایت نظر می‌نویسند.') . '</i>')
-            ->row(Button::to('⭐️ نظرات', 'rv'), ...($none ? [Button::to('🛡 تایید امنیتی', CaptchaScreen::ID)] : []));
+        $view->note('هر نظر تا وقتی در «' . Icons::REVIEWS . ' نظرات» تایید نشود، در وب‌سایت دیده نمی‌شود. ' . ($none
+            ? 'تایید امنیتی وب‌سایت خاموش است، پس فقط مشتری‌هایی که وارد حسابشان شده‌اند نظر می‌نویسند؛ برای نظر مهمان، تایید امنیتی را روشن کنید.'
+            : 'مهمان‌ها هم پشت تایید امنیتی وب‌سایت نظر می‌نویسند.'))
+            ->row(Button::to(Icons::REVIEWS . ' نظرات', ReviewsScreen::ID), $none ? Button::to('🛡 تایید امنیتی', CaptchaScreen::ID) : null);
     }
 }

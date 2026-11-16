@@ -5,17 +5,20 @@ declare(strict_types=1);
 namespace App\Modules\Telegram\Admin\Sections\Bot\Gifts;
 
 use App\Modules\Telegram\Admin\AdminSeat;
+use App\Modules\Telegram\Admin\Sections\Bot\BotScreens;
 use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\BaseScreen;
 use App\Modules\Telegram\Admin\Ui\Button;
 use App\Modules\Telegram\Admin\Ui\Fmt;
+use App\Modules\Telegram\Admin\Ui\Icons;
 use App\Modules\Telegram\Admin\Ui\Json;
 use App\Modules\Telegram\Admin\Ui\View;
+use App\Modules\Telegram\Admin\Ui\Words;
 
 /**
  * One mass gift (among the latest the panel lists): what it gives and to whom, the reason, how far it got — each server's
- * part, the panels it waits on, the last refusal —, who gave it and when; while it runs, «🔄» works it a few seconds as
- * the panel's open card does (the scheduler carries on without it) and «🚫 لغو هدیه» stops it, asked first.
+ * part, the panels it waits on, the last refusal —, who gave it and when; while it runs, «⏩ پیشبرد» works it a few
+ * seconds as the panel's open card does (the scheduler carries on without it) and «🚫 لغو هدیه» stops it, asked first.
  *
  * Actions: `run` (id), `stop` (id: asks), `stopped` (id).
  */
@@ -32,14 +35,9 @@ final class MassGiftScreen extends BaseScreen
 
     public function show(Admin $admin, array $args): View
     {
-        $id = self::id($args);
-        foreach ((array) ($admin->api->get('/mass-grants')['grants'] ?? []) as $grant) {
-            if (is_array($grant) && (int) ($grant['id'] ?? 0) === $id) {
-                return $this->view($grant);
-            }
-        }
+        $grant = self::find($admin, self::id($args));
 
-        return $admin->open(MassGiftsScreen::ID);
+        return $grant === null ? $admin->open(MassGiftsScreen::ID) : $this->view($grant);
     }
 
     public function act(Admin $admin, string $action, array $args): View
@@ -55,18 +53,13 @@ final class MassGiftScreen extends BaseScreen
 
                 return $this->view($grant);
             case 'stop':
-                $grant = (array) ($admin->api->get('/mass-grants')['grants'] ?? []);
-                $gift = '';
-                foreach ($grant as $row) {
-                    if (is_array($row) && (int) ($row['id'] ?? 0) === $id) {
-                        $gift = MassGiftsScreen::gift($row);
-                    }
-                }
+                $grant = self::find($admin, $id);
+                $gift = $grant === null ? '' : MassGiftsScreen::gift($grant);
 
                 return $admin->confirm(
                     'این هدیه همگانی لغو شود؟',
-                    Button::to('🚫 بله، لغو شود', self::ID, 'stopped', $id),
-                    Button::to('✖️ انصراف', self::ID, 'show', $id),
+                    Button::to(Words::yes('لغو شود', '🚫'), self::ID, 'stopped', $id),
+                    Button::to(Words::CANCEL, self::ID, 'show', $id),
                     Fmt::e($gift) . ' به بقیه سرویس‌ها اضافه نمی‌شود. سرویس‌هایی که تا این لحظه گرفته‌اند همان را نگه می‌دارند؛ روی همه سرورها لغو می‌شود.',
                 );
             case 'stopped':
@@ -79,26 +72,43 @@ final class MassGiftScreen extends BaseScreen
         return $this->show($admin, $args);
     }
 
+    /**
+     * The gift of `$id` among the latest the panel lists (it has no route for one); null when it is not there.
+     *
+     * @return array<string, mixed>|null
+     */
+    private static function find(Admin $admin, int $id): ?array
+    {
+        foreach ((array) ($admin->api->get('/mass-grants')['grants'] ?? []) as $grant) {
+            if (is_array($grant) && (int) ($grant['id'] ?? 0) === $id) {
+                return $grant;
+            }
+        }
+
+        return null;
+    }
+
     /** @param array<string, mixed> $grant */
     private function view(array $grant): View
     {
         $id = (int) ($grant['id'] ?? 0);
         $running = ($grant['status'] ?? null) === 'running';
         $parts = Json::rows($grant, 'parts');
-        $view = View::make('🎁 هدیه همگانی ' . Fmt::plain(Fmt::id($id)), 'مدیریت', 'ربات', 'هدیه همگانی')
-            ->line('<b>' . Fmt::e(MassGiftsScreen::gift($grant)) . '</b> · ' . Fmt::e(MassGiftsScreen::audience($grant)));
+        $total = (int) ($grant['total'] ?? 0);
+        $view = View::make(Icons::MASS_GIFT . ' هدیه همگانی ' . Fmt::plain(Fmt::id($id)), ...[...BotScreens::PATH, Fmt::bare(MassGiftsScreen::TITLE)])
+            ->card([
+                'وضعیت' => (MassGiftsScreen::MARKS[(string) ($grant['status'] ?? '')] ?? '') . ' ' . Fmt::e(self::STATUS[(string) ($grant['status'] ?? '')] ?? ''),
+                'هدیه' => Fmt::e(MassGiftsScreen::gift($grant)),
+                'به' => Fmt::e(MassGiftsScreen::audience($grant)),
+                'پیشرفت' => $running ? self::bar(self::reached($grant), $total) . ' ' . Fmt::number(self::reached($grant)) . ' از ' . Fmt::number($total) : null,
+                $running ? 'تا این‌جا' : 'نتیجه' => self::tally($grant, $running),
+                'سرورها' => $running && $parts !== [] ? implode('، ', array_map(static fn(array $part): string => Fmt::e((string) ($part['server']['name'] ?? '')) . ' ' . Fmt::number(self::reached($part)) . '/' . Fmt::number((int) ($part['total'] ?? 0)), $parts)) : null,
+                'سرویس‌های در انتظار اولین اتصال' => Json::on($grant, 'include_unstarted') ? 'شامل می‌شوند' : null,
+                'پیام به مشتری‌ها' => ($grant['notify'] ?? true) === false ? Words::OFF : null,
+                'داده شده' => Fmt::date(is_string($grant['created_at'] ?? null) ? $grant['created_at'] : null, true) . (is_string($grant['reviewer'] ?? null) ? ' · ' . Fmt::e((string) ($grant['reviewer_name'] ?? $grant['reviewer'])) : ''),
+            ]);
         if (is_string($grant['reason'] ?? null) && $grant['reason'] !== '') {
-            $view->line('<blockquote>' . Fmt::e($grant['reason']) . '</blockquote>');
-        }
-        $view->facts([
-            'وضعیت' => (MassGiftsScreen::MARKS[(string) ($grant['status'] ?? '')] ?? '') . ' ' . Fmt::e(self::STATUS[(string) ($grant['status'] ?? '')] ?? ''),
-            $running ? 'پیشرفت' : 'نتیجه' => self::tally($grant, $running),
-            'سرورها' => $running && $parts !== [] ? 'روی ' . Fmt::number(count($parts)) . ' سرور: ' . implode('، ', array_map(static fn(array $part): string => Fmt::e((string) ($part['server']['name'] ?? '')) . ' ' . Fmt::number(self::reached($part)) . '/' . Fmt::number((int) ($part['total'] ?? 0)), $parts)) : null,
-            'داده شده' => Fmt::date(is_string($grant['created_at'] ?? null) ? $grant['created_at'] : null, true) . (is_string($grant['reviewer'] ?? null) ? ' · ' . Fmt::e((string) ($grant['reviewer_name'] ?? $grant['reviewer'])) : ''),
-        ]);
-        $about = array_filter([Json::on($grant, 'include_unstarted') ? 'با سرویس‌های در انتظار اولین اتصال' : null, ($grant['notify'] ?? true) === false ? 'بدون پیام به مشتری‌ها' : null]);
-        if ($about !== []) {
-            $view->line(Fmt::e(implode(' · ', $about)));
+            $view->section('✍️ دلیل')->line('<blockquote>' . Fmt::e($grant['reason']) . '</blockquote>');
         }
         $waiting = array_filter($parts, static fn(array $part): bool => ($part['status'] ?? null) === 'running' && is_string($part['waiting_reason'] ?? null));
         if ($running && $waiting !== []) {
@@ -114,16 +124,23 @@ final class MassGiftScreen extends BaseScreen
             }
         }
         if ($running) {
-            $view->row(Button::to('🔄 پیشبرد', self::ID, 'run', $id), Button::to('🚫 لغو هدیه', self::ID, 'stop', $id));
-        } else {
-            $view->row(Button::to('🔄 تازه‌سازی', self::ID, 'show', $id));
+            $view->row(Button::to('⏩ پیشبرد', self::ID, 'run', $id)->primary(), Button::to('🚫 لغو هدیه', self::ID, 'stop', $id)->danger())
+                ->note('«⏩ پیشبرد» چند ثانیه هدیه را جلو می‌برد و جایش را نشان می‌دهد؛ بی آن هم کارهای زمان‌بندی‌شده ادامه‌اش می‌دهند.');
         }
 
-        return $view->back(MassGiftsScreen::ID);
+        return $view->back(MassGiftsScreen::ID)->refresh(self::ID, 'show', $id);
+    }
+
+    /** A bar of ten for how far it got: «▰▰▰▱▱▱▱▱▱▱». */
+    private static function bar(int $done, int $total): string
+    {
+        $filled = $total > 0 ? min(10, (int) round(10 * $done / $total)) : 0;
+
+        return str_repeat('▰', $filled) . str_repeat('▱', 10 - $filled);
     }
 
     /**
-     * How far it got, in the panel's words: running, the services checked of every active one; over, what came of it.
+     * What came of it, in the panel's words — so far, while it runs (how many were checked is its «پیشرفت»).
      *
      * @param array<string, mixed> $grant
      */
@@ -132,9 +149,7 @@ final class MassGiftScreen extends BaseScreen
         $granted = (int) ($grant['granted'] ?? 0);
         $skipped = (int) ($grant['skipped'] ?? 0);
         $failed = (int) ($grant['failed'] ?? 0);
-        $parts = $running
-            ? [Fmt::number(self::reached($grant)) . ' از ' . Fmt::number((int) ($grant['total'] ?? 0)) . ' سرویس فعال بررسی شد', 'به ' . Fmt::number($granted) . ' سرویس اضافه شد']
-            : [$granted > 0 ? 'به ' . Fmt::number($granted) . ' سرویس اضافه شد' : 'به سرویسی اضافه نشد'];
+        $parts = [$running || $granted > 0 ? 'به ' . Fmt::number($granted) . ' سرویس اضافه شد' : 'به سرویسی اضافه نشد'];
         if ($skipped > 0) {
             $parts[] = Fmt::number($skipped) . ' سرویس شامل نشد';
         }

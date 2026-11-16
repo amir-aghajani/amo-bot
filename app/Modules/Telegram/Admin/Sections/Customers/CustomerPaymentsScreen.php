@@ -4,16 +4,21 @@ declare(strict_types=1);
 
 namespace App\Modules\Telegram\Admin\Sections\Customers;
 
+use App\Modules\Telegram\Admin\Sections\Sales\Sales;
 use App\Modules\Telegram\Admin\Ui\Button;
 use App\Modules\Telegram\Admin\Ui\Fmt;
+use App\Modules\Telegram\Admin\Ui\Icons;
 
-/** «💳 پرداخت‌ها» of a customer's page: their payments, newest first, each opening the payment's screen (`pyv`). */
+/**
+ * «💳 پرداخت‌ها» of a customer's page: their payments, newest first, each a button — its state (✋ one held for support),
+ * number, amount and method — opening the payment's screen (`pyv`).
+ */
 final class CustomerPaymentsScreen extends CustomerRowsScreen
 {
     public const ID = 'uslp';
 
-    /** A payment's state, by its status. */
-    private const STATUS = ['pending' => '⏳', 'awaiting_review' => '🧾', 'paid' => '✅', 'failed' => '⚠️', 'cancelled' => '✖️', 'refunded' => '↩️'];
+    public const TITLE = Icons::PAYMENTS . ' پرداخت‌ها';
+
 
     protected function screen(): string
     {
@@ -22,7 +27,7 @@ final class CustomerPaymentsScreen extends CustomerRowsScreen
 
     protected function title(): string
     {
-        return '💳 پرداخت‌ها';
+        return self::TITLE;
     }
 
     protected function endpoint(): string
@@ -35,20 +40,29 @@ final class CustomerPaymentsScreen extends CustomerRowsScreen
         return 'payments';
     }
 
+    protected function noun(): string
+    {
+        return 'پرداخت';
+    }
+
     protected function empty(): string
     {
         return 'هنوز پرداختی نکرده است. پرداخت‌های این مشتری — کارت به کارت، آنلاین یا از کیف پول — این‌جا می‌آیند.';
     }
 
-    protected function summary(array $meta): array
+    protected function legend(): string
     {
-        return ['✅ پرداخت‌شده · 🧾 در انتظار بررسی · ⏳ در انتظار پرداخت · ⚠️ ناموفق · ✖️ لغوشده · ↩️ بازپرداخت‌شده'];
+        return implode(' · ', [...array_values(Sales::PAYMENT_STATUS), Sales::HELD_MARK . ' ' . Sales::HELD]);
     }
 
     protected function item(array $row): Button
     {
         return $this->open(
-            (self::STATUS[(string) ($row['status'] ?? '')] ?? '•') . ' ' . Fmt::id(Customer::int($row, 'id')) . ' · ' . Fmt::money(Customer::money($row['amount'] ?? null)) . ' · ' . (Customer::text($row, 'method') ?? ''),
+            Sales::paymentMark($row) . ' ' . implode(' · ', array_filter([
+                Fmt::id(Customer::int($row, 'id')),
+                Fmt::money(Customer::money($row['amount'] ?? null)),
+                Customer::text($row, 'method'),
+            ])),
             'pyv',
             Customer::int($row, 'id'),
         );

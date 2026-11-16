@@ -5,31 +5,34 @@ declare(strict_types=1);
 namespace App\Modules\Telegram\Admin\Sections\Sales;
 
 use App\Modules\Telegram\Admin\Door\ApiRefusal;
+use App\Modules\Telegram\Admin\Sections\Owner\Payments\DepositSettingsScreen;
 use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\Button;
 use App\Modules\Telegram\Admin\Ui\Fmt;
+use App\Modules\Telegram\Admin\Ui\Icons;
 use App\Modules\Telegram\Admin\Ui\Json;
 use App\Modules\Telegram\Admin\Ui\ListScreen;
 use App\Modules\Telegram\Admin\Ui\View;
 
 /**
  * «📩 واریزهای پیامکی» (the payments page's «واریزهای پیامکی»): the bank deposits the phone app forwarded or Rikhtam told
- * («تایید خودکار واریز»), newest first, by what came of each (the tabs — what waits on support first) or searched by sum or words; a
- * row opens with the SMS as it came, or what Rikhtam sent (DepositScreen). The panel lists them alone: the page's rows are kept for it. While
- * «تایید خودکار واریز» is off, the owner and an agent read so over the list, with the way to its switch.
+ * («تایید خودکار واریز»), newest first, by what came of each (the tabs — what waits on support first) or searched by sum
+ * or words; a row opens with the SMS as it came, or what Rikhtam sent (DepositScreen). The panel lists them alone: the
+ * page's rows are kept for it. While «تایید خودکار واریز» is off, the owner and an agent read so over the list, with the
+ * way to its switch («⚡️ تایید خودکار واریز»).
  */
 final class DepositsScreen extends ListScreen
 {
     public const ID = 'dp';
 
-    /** The panel's tabs: «همه», a deposit no payment asks, one several do, then the rest. */
+    /** The panel's tabs: «همه», a deposit no payment asks, one several do, then the rest — each as its rows say it. */
     private const TABS = [
         self::ANY => 'همه',
-        'unmatched' => '❓ بدون پرداخت',
-        'ambiguous' => '⚖️ چند پرداخت',
-        'matched' => '✅ تایید شده',
-        'ignored' => '🙈 نادیده',
-        'test' => '🧪 آزمایشی',
+        'unmatched' => Sales::DEPOSIT_STATUS['unmatched'],
+        'ambiguous' => Sales::DEPOSIT_STATUS['ambiguous'],
+        'matched' => Sales::DEPOSIT_STATUS['matched'],
+        'ignored' => Sales::DEPOSIT_STATUS['ignored'],
+        'test' => Sales::DEPOSIT_STATUS['test'],
     ];
 
     /** What a tab with nothing in it says. */
@@ -40,9 +43,6 @@ final class DepositsScreen extends ListScreen
         'ignored' => 'پیامک نادیده‌ای نیست.',
         'test' => 'هنوز پیام آزمایشی نرسیده است.',
     ];
-
-    /** The payment methods' screen, where «تایید خودکار واریز» is switched on (the Owner section's). */
-    private const METHODS = 'pm';
 
     /** Whether «تایید خودکار واریز» is off, as this showing read it (show()). */
     private bool $off = false;
@@ -74,12 +74,17 @@ final class DepositsScreen extends ListScreen
 
     protected function title(): string
     {
-        return '📩 واریزهای پیامکی';
+        return Icons::DEPOSITS . ' ' . Sales::DEPOSITS;
     }
 
     protected function path(): array
     {
-        return ['مدیریت', 'فروش'];
+        return Sales::under();
+    }
+
+    protected function noun(): string
+    {
+        return 'واریز';
     }
 
     protected function parent(): string
@@ -114,9 +119,9 @@ final class DepositsScreen extends ListScreen
 
     protected function summary(array $meta): array
     {
-        $lines = ['پیامک‌های واریز بانک که فوراپ از گوشی فروشگاه یا ریختم به فروشگاه رسانده، تازه‌ترین اول.'];
+        $lines = ['<i>پیامک‌های واریز بانک که فوراپ از گوشی فروشگاه یا ریختم به فروشگاه رسانده، تازه‌ترین اول.</i>'];
         if ($this->off) {
-            $lines[] = '⚠️ تایید خودکار واریز خاموش است و پیامک‌های بانک پرداختی را تایید نمی‌کنند.';
+            $lines[] = '⚠️ <b>تایید خودکار واریز خاموش است</b> و پیامک‌های بانک پرداختی را تایید نمی‌کنند.';
         }
 
         return $lines;
@@ -136,8 +141,8 @@ final class DepositsScreen extends ListScreen
 
     protected function extra(View $view, Admin $admin): void
     {
-        if ($this->off && $admin->opens(self::METHODS)) {
-            $view->row(Button::to('💳 روشن کردن در روش‌های پرداخت', self::METHODS));
+        if ($this->off && $admin->opens(DepositSettingsScreen::ID)) {
+            $view->row(Button::to(DepositSettingsScreen::TITLE, DepositSettingsScreen::ID)->primary());
         }
     }
 
@@ -146,7 +151,7 @@ final class DepositsScreen extends ListScreen
         $amount = Json::text($row, 'amount');
 
         return Button::to(
-            Sales::mark(Sales::DEPOSIT_STATUS, $row['status'] ?? '') . ' ' . ($amount === null ? 'بدون مبلغ' : Fmt::money($amount)) . ' · ' . (Json::text($row, 'bank') ?? Json::text($row, 'sender') ?? '—')
+            Sales::mark(Sales::DEPOSIT_STATUS, $row['status'] ?? '') . ' ' . ($amount === null ? 'بدون مبلغ' : Fmt::money($amount)) . ' · ' . Fmt::cut(Json::text($row, 'bank') ?? Json::text($row, 'sender') ?? Fmt::NONE, 12)
                 . ' · ' . Fmt::date(Json::text($row, 'received_at') ?? Json::text($row, 'created_at'), true),
             DepositScreen::ID,
             'show',

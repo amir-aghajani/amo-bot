@@ -7,8 +7,9 @@
  * with their props as the caller writes them, and a `.map()` over a constant list is drawn once per item; only words
  * written in the source are taken — a label the server sends, or one computed at run time, is skipped and said so.
  *
- *   pnpm settings:index            writes resources/panel/src/lib/settings-search/settings.generated.ts
- *   pnpm settings:index --check    fails when that file is not what the sources give (`pnpm check` runs it)
+ *   pnpm settings:index            writes resources/panel/src/lib/settings-search/settings.generated.ts, and the bot's
+ *                                  copy of it, app/Modules/Telegram/Admin/Sections/Panel/Search/PanelSettings.php
+ *   pnpm settings:index --check    fails when either is not what the sources give (`pnpm check` runs it)
  *
  * Which components draw which section is the hand-written SECTIONS below: a section added to the panel's nav is added
  * here too (the settings search's tests check every address here is one the nav has).
@@ -23,6 +24,8 @@ import { API } from 'typescript/unstable/sync'
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const src = path.join(root, 'resources/panel/src')
 const outPath = path.join(src, 'lib/settings-search/settings.generated.ts')
+/** The same index as the bot's settings search reads it (phpOf()): a release ships no panel source. */
+const phpPath = path.join(root, 'app/Modules/Telegram/Admin/Sections/Panel/Search/PanelSettings.php')
 
 /**
  * Each section's address in the shop (components/shell/nav, apps/admin/nav) → the components its page draws there, as
@@ -993,10 +996,9 @@ function slugOf(text) {
     .replace(/-+$/, '')
 }
 
-/** The generated module: each section's words and settings, each setting under a key unique in its section (its id, else its label's slug). */
-function moduleOf() {
-  const lines = []
-  for (const section of [...sections.keys()].sort()) {
+/** Each section's words and settings, each setting under a key unique in its section (its id, else its label's slug), in address order. */
+function indexed() {
+  return [...sections.keys()].sort().map((section) => {
     const { hint, alias, settings } = sections.get(section)
     const keys = new Set()
     const rows = settings.map((setting) => {
@@ -1006,6 +1008,14 @@ function moduleOf() {
       keys.add(key)
       return { key, ...setting }
     })
+    return { section, hint, alias, rows }
+  })
+}
+
+/** The generated module: each section's words and settings (indexed()). */
+function moduleOf() {
+  const lines = []
+  for (const { section, hint, alias, rows } of indexed()) {
     const words = [hint && `hint: ${JSON.stringify(hint)}`, alias && `alias: ${JSON.stringify(alias)}`, `settings: ${JSON.stringify(rows)}`].filter(Boolean)
     lines.push(`  ${JSON.stringify(section)}: { ${words.join(', ')} },`)
   }
@@ -1048,6 +1058,61 @@ ${lines.join('\n')}
 `
 }
 
+/**
+ * A PHP string literal of `text`: single-quoted, or double-quoted when it holds a line break, a control character or a
+ * direction mark — each written as an escape («\u{200E}»), as the code writes every mark (DirectionMarksTest).
+ */
+function phpString(text) {
+  const escapes = /[\u0000-\u001f‎‏؜‪-‮⁦-⁩]/g
+  if (!new RegExp(escapes.source).test(text)) return `'${text.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`
+  const escaped = text.replace(/[\\"$]/g, (c) => `\\${c}`).replace(escapes, (c) => ({ '\n': '\\n', '\t': '\\t', '\r': '\\r' })[c] ?? `\\u{${c.charCodeAt(0).toString(16).toUpperCase()}}`)
+  return `"${escaped}"`
+}
+
+/**
+ * The same index for the bot's settings search («⚙️ جستجوی تنظیمات», Telegram\Admin\Sections\Panel\Search): a PHP class
+ * of one constant, every field of every setting written (empty when none), as php-cs-fixer leaves it.
+ */
+function phpOf() {
+  const lines = []
+  for (const { section, hint, alias, rows } of indexed()) {
+    const head = `'hint' => ${phpString(hint ?? '')}, 'alias' => ${phpString(alias ?? '')}`
+    if (rows.length === 0) {
+      lines.push(`        ${phpString(section)} => [${head}, 'settings' => []],`)
+      continue
+    }
+    lines.push(`        ${phpString(section)} => [`, `            ${head.replace(', ', `,\n            `)},`, `            'settings' => [`)
+    for (const row of rows) {
+      const fields = ['key', 'title', 'hint', 'card', 'part'].map((name) => `'${name}' => ${phpString(row[name] ?? '')}`)
+      lines.push(`                [${fields.join(', ')}],`)
+    }
+    lines.push(`            ],`, `        ],`)
+  }
+
+  return `<?php
+
+declare(strict_types=1);
+
+namespace App\\Modules\\Telegram\\Admin\\Sections\\Panel\\Search;
+
+/**
+ * The panel's settings search index (resources/panel/src/lib/settings-search/settings.generated.ts) for the bot's own,
+ * «⚙️ جستجوی تنظیمات»: each settings section of the panel by its address, its words and its single settings — generated
+ * with it from the sections' source by \`pnpm settings:index\` (scripts/settings-index.mjs): do not edit by hand. Where
+ * the bot has each is SettingsIndex's, and SettingsParityTest fails while one has no place there.
+ */
+final class PanelSettings
+{
+    /**
+     * @var array<string, array{hint: string, alias: string, settings: list<array{key: string, title: string, hint: string, card: string, part: string}>}>
+     */
+    public const SECTIONS = [
+${lines.join('\n')}
+    ];
+}
+`
+}
+
 const api = new API({ cwd: root })
 let sections
 try {
@@ -1061,7 +1126,9 @@ try {
 
 const options = await prettier.resolveConfig(outPath)
 const formatted = await prettier.format(moduleOf(), { ...options, filepath: outPath })
+const php = phpOf()
 const total = [...sections.values()].reduce((sum, section) => sum + section.settings.length, 0)
+const phpName = path.relative(root, phpPath).replaceAll('\\', '/')
 
 if (process.argv.includes('--check')) {
   const current = fs.existsSync(outPath) ? fs.readFileSync(outPath, 'utf8') : ''
@@ -1069,10 +1136,17 @@ if (process.argv.includes('--check')) {
     console.error('resources/panel/src/lib/settings-search/settings.generated.ts is not what the settings sections give: run `pnpm settings:index`.')
     process.exit(1)
   }
-  console.log(`settings.generated.ts matches the settings sections (${total} settings; ${warnings.length} skipped or found by label: \`pnpm settings:index\` lists them).`)
+  if ((fs.existsSync(phpPath) ? fs.readFileSync(phpPath, 'utf8') : '') !== php) {
+    console.error(`${phpName} (the bot's copy of the index) is not what the settings sections give: run \`pnpm settings:index\`.`)
+    process.exit(1)
+  }
+  console.log(
+    `settings.generated.ts and the bot's PanelSettings.php match the settings sections (${total} settings; ${warnings.length} skipped or found by label: \`pnpm settings:index\` lists them).`,
+  )
 } else {
   for (const warning of warnings) console.warn(`  ${warning}`)
   for (const [section, { settings }] of [...sections.entries()].sort(([a], [b]) => a.localeCompare(b))) console.log(`  ${section}: ${settings.length}`)
   fs.writeFileSync(outPath, formatted)
-  console.log(`Wrote ${path.relative(root, outPath).replaceAll('\\', '/')} (${total} settings in ${sections.size} sections; ${warnings.length} warnings above).`)
+  fs.writeFileSync(phpPath, php)
+  console.log(`Wrote ${path.relative(root, outPath).replaceAll('\\', '/')} and ${phpName} (${total} settings in ${sections.size} sections; ${warnings.length} warnings above).`)
 }

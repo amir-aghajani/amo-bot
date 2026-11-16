@@ -19,7 +19,6 @@ use App\Modules\Updates\ReleaseKey;
 use App\Modules\Updates\Releases;
 use App\Modules\Updates\Updater;
 use App\Modules\Updates\Workspace;
-use App\Modules\Users\Models\User;
 use Illuminate\Database\Connection;
 use PHPUnit\Framework\Attributes\RequiresPhpExtension;
 use Psr\Log\LoggerInterface;
@@ -35,8 +34,6 @@ use Tests\Support\FakeRelease;
 #[RequiresPhpExtension('zip')]
 final class PanelUpdateTest extends BotTestCase
 {
-    private const OWNER = 7001;
-
     private string $folder;
 
     private string $keyFile;
@@ -113,19 +110,5 @@ final class PanelUpdateTest extends BotTestCase
         $bot = $this->agentBot();
         $this->sendTo($bot, $this->tap(Nav::to('ppu'), chat: self::AGENT_TELEGRAM_ID));
         self::assertStringContainsString('مدیریت فروشگاه', $this->said()[0], 'a screen it may not open is the home');
-    }
-
-    private function tapAs(string $data): void
-    {
-        $this->send($this->tap($data, chat: self::OWNER));
-    }
-
-    /** The account 7001 linked as the owner. */
-    private function owner(): User
-    {
-        $owner = User::query()->where('telegram_id', self::OWNER)->first() ?? $this->customer(['telegram_id' => self::OWNER, 'first_name' => 'Amir']);
-        $this->linkOwner(self::OWNER);
-
-        return $owner;
     }
 }

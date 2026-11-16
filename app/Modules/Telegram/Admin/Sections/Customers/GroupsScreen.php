@@ -5,19 +5,26 @@ declare(strict_types=1);
 namespace App\Modules\Telegram\Admin\Sections\Customers;
 
 use App\Modules\Auth\StaffGrant;
+use App\Modules\Telegram\Admin\Sections\Catalog\CatalogFmt;
 use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\Answer;
 use App\Modules\Telegram\Admin\Ui\BaseScreen;
 use App\Modules\Telegram\Admin\Ui\Button;
 use App\Modules\Telegram\Admin\Ui\Fmt;
+use App\Modules\Telegram\Admin\Ui\Icons;
 use App\Modules\Telegram\Admin\Ui\Json;
+use App\Modules\Telegram\Admin\Ui\Nav;
 use App\Modules\Telegram\Admin\Ui\Prompt;
 use App\Modules\Telegram\Admin\Ui\View;
+use App\Modules\Telegram\Admin\Ui\Words;
+use App\Modules\Users\Services\CustomerGroups;
+use App\Support\Persian;
 
 /**
- * «👫 گروه‌های کاربران» (the users page's «گروه‌ها» section): the admin's customer groups in their order, each with its
- * members counted and «همکار» marked (agent prices), opening the group's own screen (GroupScreen); and, for a seat the
- * `catalog` grant opens, «➕ افزودن گروه» — its name typed, «همکار» switched on the form, then one POST.
+ * «👫 گروه‌های کاربران» (the users page's «گروه‌ها» section): the admin's customer groups in their order, how many over
+ * them, each a button with its members counted and «همکار» marked (agent prices), opening the group's own screen
+ * (GroupScreen); and, for a seat the `catalog` grant opens, «➕ افزودن گروه» — its name typed, «همکار» switched on the
+ * form, then one POST.
  *
  * The panel lists every group at once (no pages): this screen pages them itself. Actions: `page` (n), `add` (the name
  * asked; `new` for a new group, else the draft's again), `ap` (1|0: the draft's «همکار» on or off), `make` (added).
@@ -27,33 +34,59 @@ final class GroupsScreen extends BaseScreen
 {
     public const ID = 'ug';
 
+    public const TITLE = Icons::GROUPS . ' گروه‌های کاربران';
+
     /** What a «همکار» group's members pay, in the panel's words. */
     public const PARTNER = 'مشتری‌های این گروه مثل نماینده‌ها قیمت نماینده پلن‌ها را می‌پردازند.';
 
     /** What a group's name is for, as the panel's form says. */
     public const NAME_HINT = 'فقط برای شما؛ مشتری آن را نمی‌بیند. پیام همگانی را می‌شود فقط برای یک گروه فرستاد.';
 
+    /**
+     * The sections the group screens are under, then `$more`: «مدیریت › فروشگاه › …».
+     *
+     * @return list<string>
+     */
+    public static function under(string ...$more): array
+    {
+        return [Words::ROOT, 'فروشگاه', ...array_values($more)];
+    }
+
+    /**
+     * A group's name asked: its value now (a rename, a draft's again), an example and the panel's bound.
+     *
+     * @param list<int|string> $args
+     */
+    public static function nameQuestion(string $screen, string $action, array $args, ?string $now): Prompt
+    {
+        $prompt = (new Prompt('نام گروه', $screen, $action, $args, self::NAME_HINT))
+            ->example('VIP')
+            ->limits('تا ' . Persian::number(CustomerGroups::NAME_MAX) . ' نویسه');
+
+        return $now === null || $now === '' ? $prompt : $prompt->current($now);
+    }
+
     public function show(Admin $admin, array $args): View
     {
-        $groups = Json::rows($admin->api->get('/customer-groups'), 'groups');
+        $groups = Customer::groups($admin);
         [$shown, $page, $pages] = View::slice($groups, (int) ($admin->state(self::ID)['page'] ?? 1));
+        $catalog = $admin->seat->holds(StaffGrant::Catalog);
 
-        $view = View::make('👫 گروه‌های کاربران', 'مدیریت', 'فروشگاه')
-            ->line('مشتری‌ها را برای خودتان دسته کنید — ' . Fmt::ltr('VIP') . '، همکاران، یک کمپین —؛ پیام همگانی را می‌شود فقط برای یک گروه فرستاد.')
-            ->line(Fmt::number(count($groups)) . ' گروه' . ($pages > 1 ? ' · صفحه ' . Fmt::number($page) . ' از ' . Fmt::number($pages) : ''));
+        $view = View::make(self::TITLE, ...self::under())->total(count($groups), 'گروه');
         if ($groups === []) {
-            $view->line()->line('هنوز گروهی ندارید. مشتری‌ها را از صفحه هر مشتری، «👫 گروه‌ها»، به گروه اضافه کنید.');
+            $view->line()->line('هنوز گروهی ندارید.');
         }
         foreach ($shown as $group) {
-            $count = is_array($group['counts'] ?? null) ? Customer::int($group['counts'], 'users') : 0;
-            $view->row(Button::to((Customer::text($group, 'name') ?? '') . ' · ' . Fmt::number($count) . ' نفر' . (Json::on($group, 'agent_pricing') ? ' · 🤝 همکار' : ''), GroupScreen::ID, 'show', Customer::int($group, 'id')));
+            $view->row(Button::to(self::label($group), GroupScreen::ID, Nav::SHOW, Customer::int($group, 'id')));
         }
-        $view->pager($page, $pages, self::ID, 'page');
-        if ($admin->seat->holds(StaffGrant::Catalog)) {
-            $view->row(Button::to('➕ افزودن گروه', self::ID, 'add', 'new'));
+        if ($catalog) {
+            $view->row(Button::to(Words::add('گروه'), self::ID, 'add', 'new')->success());
         }
 
-        return $view->back('hs');
+        return $view->pager($page, $pages, self::ID, 'page')
+            ->help('مشتری‌ها را برای خودتان دسته کنید — ' . Fmt::ltr('VIP') . '، همکاران، یک کمپین —؛ پیام همگانی را می‌شود فقط برای یک گروه فرستاد. مشتری را از صفحه خودش، «' . Icons::GROUPS . ' گروه‌ها»، در گروه بگذارید.' . "\n" . 'گروه «همکار»: ' . self::PARTNER)
+            ->back(CatalogFmt::HUB)
+            ->refresh(self::ID);
     }
 
     public function act(Admin $admin, string $action, array $args): View
@@ -66,8 +99,9 @@ final class GroupsScreen extends BaseScreen
                 if (($args[0] ?? '') === 'new') {
                     $admin->remember(self::ID, ['name' => null, 'partner' => false]);
                 }
+                $name = $admin->state(self::ID)['name'] ?? null;
 
-                return $admin->ask(new Prompt('نام گروه', self::ID, 'name', [], self::NAME_HINT . "\nمثلا «" . Fmt::ltr('VIP') . '» یا «همکاران».'));
+                return $admin->ask(self::nameQuestion(self::ID, 'name', [], is_string($name) ? $name : null));
             case 'ap':
                 $draft = $admin->state(self::ID);
                 if (is_string($draft['name'] ?? null)) {
@@ -85,7 +119,7 @@ final class GroupsScreen extends BaseScreen
                 $admin->remember(self::ID, ['name' => null, 'partner' => false]);
                 $admin->notice('✅ گروه اضافه شد');
 
-                return $admin->open(GroupScreen::ID, 'show', [is_array($group) ? Customer::int($group, 'id') : 0]);
+                return $admin->open(GroupScreen::ID, Nav::SHOW, [is_array($group) ? Customer::int($group, 'id') : 0]);
         }
 
         return $this->show($admin, []);
@@ -101,20 +135,31 @@ final class GroupsScreen extends BaseScreen
         return $this->draft($admin);
     }
 
-    /** The new group said once more: its name, its «همکار» switch to flip, «✔️ افزودن گروه». */
+    /**
+     * A group as its button: its name, its members, «همکار» marked.
+     *
+     * @param array<string, mixed> $group
+     */
+    private static function label(array $group): string
+    {
+        return (Customer::text($group, 'name') ?? '') . ' · ' . Fmt::plain(Fmt::number(Customer::members($group))) . ' نفر' . (Json::on($group, 'agent_pricing') ? ' · ' . Icons::AGENTS . ' همکار' : '');
+    }
+
+    /** The new group said once more: its name and «همکار» as a card, the switch to flip, «✔️ ساختن». */
     private function draft(Admin $admin): View
     {
         $draft = $admin->state(self::ID);
         $partner = Json::on($draft, 'partner');
 
-        return View::make('➕ افزودن گروه', 'مدیریت', 'فروشگاه', 'گروه‌های کاربران')
-            ->facts([
+        return View::make(Words::add('گروه'), ...self::under(Fmt::bare(self::TITLE)))
+            ->transient()
+            ->card([
                 'نام گروه' => Fmt::e(is_string($draft['name'] ?? null) ? $draft['name'] : ''),
                 'همکار' => Fmt::onOff($partner),
             ])
-            ->note(self::PARTNER)
-            ->row(Button::to('🤝 همکار: ' . Fmt::onOff($partner), self::ID, 'ap', $partner ? 0 : 1))
-            ->row(Button::to('✔️ افزودن گروه', self::ID, 'make'))
-            ->row(Button::to('✏️ نام', self::ID, 'add'), Button::to('✖️ انصراف', self::ID));
+            ->note('همکار: ' . self::PARTNER)
+            ->row(Button::to(Words::turn(!$partner, 'همکار'), self::ID, 'ap', $partner ? 0 : 1))
+            ->row(Button::to(Words::CREATE, self::ID, 'make')->success())
+            ->row(Button::to(Words::edit('نام'), self::ID, 'add'), Button::to(Words::CANCEL, self::ID));
     }
 }

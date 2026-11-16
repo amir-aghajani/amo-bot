@@ -7,28 +7,34 @@ namespace App\Modules\Telegram\Admin\Sections\Bot\Channels;
 use App\Modules\Settings\Services\BotSettingsScreen;
 use App\Modules\Telegram\Admin\AdminSeat;
 use App\Modules\Telegram\Admin\Door\ApiRefusal;
+use App\Modules\Telegram\Admin\Sections\Bot\BotScreens;
 use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\Answer;
 use App\Modules\Telegram\Admin\Ui\BaseScreen;
 use App\Modules\Telegram\Admin\Ui\Button;
 use App\Modules\Telegram\Admin\Ui\Fmt;
+use App\Modules\Telegram\Admin\Ui\Icons;
 use App\Modules\Telegram\Admin\Ui\Json;
 use App\Modules\Telegram\Admin\Ui\Prompt;
 use App\Modules\Telegram\Admin\Ui\Settings\BotGroupSource;
 use App\Modules\Telegram\Admin\Ui\Settings\Origin;
 use App\Modules\Telegram\Admin\Ui\View;
+use App\Modules\Telegram\Admin\Ui\Words;
 
 /**
  * «📢 کانال‌های اجباری» (the owner's and an agent's; the panel's «کانال‌ها» section): the rule's switch (`channels`), the
  * channels and groups a customer must join, in order — those the bot is no admin of any more warned of —, each opening
  * its own screen (ChannelScreen), and «➕ افزودن کانال» by its link, which the panel refuses unless the bot is an admin
- * there. Each change applies at once. Opened from «🤖 تنظیمات ربات», its «⬅️ بازگشت» goes back there (Origin).
+ * there. Each change applies at once. Opened from a 0.10.0 window's «🤖 تنظیمات ربات», its «⬅️ بازگشت» goes back there
+ * (Origin).
  *
  * Actions: `join` (1 on, 0 off — on asked first: `y` once asked), `add` (asks), `v` (the list again, its origin kept).
  */
 final class ChannelsScreen extends BaseScreen
 {
     public const ID = 'ch';
+
+    public const TITLE = Icons::CHANNELS . ' کانال‌های اجباری';
 
     /** The list again where it was left, its origin kept: the way back of a channel's screen. */
     public const VIEW = 'v';
@@ -64,8 +70,8 @@ final class ChannelsScreen extends BaseScreen
                     // On holds back every customer who is no member: asked first; off is one tap.
                     return $admin->confirm(
                         'عضویت اجباری روشن شود؟',
-                        Button::to('✅ بله، روشن شود', self::ID, 'join', 1, 'y'),
-                        Button::to('✖️ انصراف', self::ID, self::VIEW),
+                        Button::to(Words::yes('روشن شود'), self::ID, 'join', 1, 'y'),
+                        Button::to(Words::CANCEL, self::ID, self::VIEW),
                         'از این به بعد مشتری‌ای که عضو همه کانال‌های لیست نیست، به جای منو لینک کانال‌ها و دکمه «عضو شدم» را می‌بیند (بعد از تایید شماره). مدیریت فروشگاه معاف است.'
                             . (self::channels($admin) === [] ? ' لیست هنوز خالی است؛ تا کانالی اضافه نشود، از کسی چیزی خواسته نمی‌شود.' : ''),
                     );
@@ -74,7 +80,8 @@ final class ChannelsScreen extends BaseScreen
                 $admin->notice(Json::on($values, 'join_required') ? '✅ عضویت اجباری روشن شد' : '⏸ عضویت اجباری خاموش شد');
                 break;
             case 'add':
-                return $admin->ask(new Prompt('افزودن کانال', self::ID, 'add', [], "لینک عمومی یا نام کاربری (مثل \u{2068}https://t.me/mychannel\u{2069} یا \u{2068}@mychannel\u{2069}). برای کانال خصوصی شناسه عددی آن را بدهید؛ لینک عضویت را ربات خودش می‌سازد.", Button::to('✖️ لغو', self::ID, self::VIEW)));
+                return $admin->ask((new Prompt('افزودن کانال', self::ID, 'add', [], 'لینک عمومی یا نام کاربری کانال یا گروه؛ برای کانال خصوصی شناسه عددی آن را بدهید، لینک عضویت را ربات خودش می‌سازد. ربات باید پیش از این مدیر آن‌جا شده باشد.', Button::to(Words::CANCEL, self::ID, self::VIEW)))
+                    ->example('@mychannel'));
         }
 
         return $this->view($admin);
@@ -101,23 +108,32 @@ final class ChannelsScreen extends BaseScreen
         $channels = self::channels($admin);
         $lost = array_filter($channels, static fn(array $channel): bool => ($channel['bot_is_admin'] ?? false) !== true);
 
-        $view = View::make('📢 کانال‌های اجباری', 'مدیریت', 'ربات')
-            ->line('عضویت اجباری در کانال: ' . Fmt::onOff($required))
-            ->line('لینک کانال یا گروه را وارد کنید. ربات باید قبلا مدیر آن‌جا شده باشد تا بتواند عضویت مشتری‌ها را ببیند.'
-                . ($required ? ($channels === [] ? ' تا وقتی این لیست خالی است، چیزی از مشتری خواسته نمی‌شود.' : '') : ' فعلا کلید «عضویت اجباری در کانال» خاموش است و این لیست اعمال نمی‌شود.'));
+        $view = View::make(self::TITLE, ...BotScreens::PATH);
+        if (!$required) {
+            $view->line('ℹ️ عضویت اجباری خاموش است و این لیست اعمال نمی‌شود.');
+        } elseif ($channels === []) {
+            $view->line('ℹ️ تا وقتی این لیست خالی است، چیزی از مشتری خواسته نمی‌شود.');
+        }
         if ($lost !== []) {
-            $view->line()->line('⚠️ ربات در ' . Fmt::e(implode('، ', array_map(static fn(array $channel): string => '«' . (string) ($channel['title'] ?? '') . '»', $lost))) . ' مدیر نیست؛ تا وقتی درست نشود، آن کانال بررسی نمی‌شود و جلوی کسی را نمی‌گیرد.');
+            $view->line('⚠️ ربات در ' . Fmt::e(implode('، ', array_map(static fn(array $channel): string => '«' . (string) ($channel['title'] ?? '') . '»', $lost))) . ' مدیر نیست؛ تا وقتی درست نشود، آن کانال بررسی نمی‌شود و جلوی کسی را نمی‌گیرد.');
         }
+        $view->card([
+            'عضویت اجباری' => Fmt::onOff($required),
+            'کانال‌ها' => Fmt::number(count($channels)) . ($lost !== [] ? ' · ' . Fmt::number(count($lost)) . ' بدون دسترسی ربات' : ''),
+        ]);
         if ($channels === []) {
-            $view->line()->line('<b>هنوز کانالی اضافه نشده.</b> اولین کانال را با لینکش اضافه کنید؛ مشتری قبل از استفاده از ربات باید عضو همه کانال‌های این لیست باشد.');
+            $view->line('<b>هنوز کانالی اضافه نشده.</b> اولین کانال را با لینکش اضافه کنید.');
         }
-        $view->note('عضویت اجباری: مشتری باید عضو همه کانال‌های لیست باشد؛ وگرنه به جای منو، لینک کانال‌ها و دکمه «عضو شدم» را می‌بیند. بعد از تایید شماره بررسی می‌شود و فقط برای مشتری‌ها؛ مدیریت فروشگاه (مالک، نماینده و مدیران ربات) معاف است.');
         foreach ($channels as $channel) {
-            $view->row(Button::to((Json::on($channel, 'bot_is_admin') ? '✅ ' : '⚠️ ') . (string) ($channel['title'] ?? ''), ChannelScreen::ID, 'show', (int) ($channel['id'] ?? 0)));
+            $view->row(Button::to((Json::on($channel, 'bot_is_admin') ? '🟢 ' : '⚠️ ') . (string) ($channel['title'] ?? ''), ChannelScreen::ID, 'show', (int) ($channel['id'] ?? 0)));
         }
 
-        return $view->row(Button::to('➕ افزودن کانال', self::ID, 'add'), Button::to($required ? '⏸ خاموش کردن عضویت اجباری' : '▶️ روشن کردن عضویت اجباری', self::ID, 'join', $required ? 0 : 1))
-            ->back(Origin::back($admin, self::ID, 'hb'));
+        return $view->row(
+            Button::to(Words::add('کانال'), self::ID, 'add')->success(),
+            Button::to(Words::turn(!$required, 'عضویت اجباری'), self::ID, 'join', $required ? 0 : 1),
+        )
+            ->help('مشتری باید عضو همه کانال‌ها و گروه‌های این لیست باشد؛ وگرنه به جای منو، لینک کانال‌ها و دکمه «عضو شدم» را می‌بیند. بعد از تایید شماره بررسی می‌شود و فقط برای مشتری‌ها؛ مدیریت فروشگاه (مالک، نماینده و مدیران ربات) معاف است. ربات باید مدیر هر کانال باشد تا عضویت مشتری‌ها را ببیند. 🟢 ربات مدیر است · ⚠️ مدیر نیست.')
+            ->back(Origin::back($admin, self::ID, BotScreens::MENU));
     }
 
     /**
