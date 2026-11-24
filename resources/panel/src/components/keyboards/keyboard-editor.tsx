@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { Plus, RotateCcw } from 'lucide-react'
 import { toast } from 'sonner'
+import type { EmojiLookup } from '@/components/bot-texts/emoji-map'
 import { ConfirmModal } from '@/components/confirm-modal'
 import { ChangedElsewhere, FormError, SaveFooter } from '@/components/form-footer'
 import { ButtonModal, type ButtonMoves } from '@/components/keyboards/button-modal'
@@ -25,6 +26,8 @@ interface KeyboardEditorProps {
   limits: KeyboardsResponse['limits']
   /** The bot's greeting the keyboard goes with, as the preview shows it (Telegram HTML, samples in); undefined while it loads. */
   welcome: string | undefined
+  /** «ایموجی پرمیوم متن‌ها» while it is on: the icons the preview gives buttons without their own. */
+  icons?: EmojiLookup
   onSaved: (keyboard: KeyboardLayoutData) => void
 }
 
@@ -45,7 +48,7 @@ const TYPE_HINT: Record<KeyboardType, string> = {
  * One keyboard's editor with a live preview: buttons dragged anywhere or moved from their dialog, rows reordered, added
  * and removed. Each action appears once, so «افزودن دکمه» holds while none is left. Saves the whole layout.
  */
-export function KeyboardEditor({ keyboard, actions, styles, limits, welcome, onSaved }: KeyboardEditorProps) {
+export function KeyboardEditor({ keyboard, actions, styles, limits, welcome, icons, onSaved }: KeyboardEditorProps) {
   const draft = useKeyboardDraft(keyboard, limits, onSaved)
   const { form } = draft
   const { type } = form.values
@@ -173,7 +176,7 @@ export function KeyboardEditor({ keyboard, actions, styles, limits, welcome, onS
 
         <div className="lg:sticky lg:top-20 lg:self-start">
           <p className="mb-2 text-footnote font-medium text-muted-foreground">پیش‌نمایش</p>
-          <KeyboardPreview type={type} rows={rows} message={welcome} />
+          <KeyboardPreview type={type} rows={rows} message={welcome} icons={icons} />
         </div>
       </CardContent>
 

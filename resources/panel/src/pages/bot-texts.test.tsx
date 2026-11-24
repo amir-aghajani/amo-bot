@@ -1,14 +1,22 @@
 import { fireEvent, render, screen } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
-import type { BotTextRow, BotTextsResponse } from '@/lib/api-types'
+import { beforeEach, describe, expect, it } from 'vitest'
+import type { BotTextRow, BotTextsResponse, CustomEmojisResponse } from '@/lib/api-types'
 import { BotTextsPage } from '@/pages/bot-texts'
 import { providers, until } from '@/test/render'
+import { premiumTextsResponse } from '@/test/rows'
 import { json, refusal, server } from '@/test/server'
 
 /*
  * The bot texts (pages/bot-texts): the «همه» and «تغییر یافته» tabs count what the search finds, so a number never
  * promises texts the list below does not show; a read that failed is asked again once, the retry spinning meanwhile.
+ * «ایموجی پرمیوم متن‌ها» is the page's first card, and a text saved reads its counts again.
  */
+
+beforeEach(() => {
+  server()
+    .on('GET', '/api/admin/bot/premium-texts', json(premiumTextsResponse({ enabled: false, items: [] })))
+    .on('GET', '/api/admin/bot/custom-emojis', json({ emojis: [], status: null } satisfies CustomEmojisResponse))
+})
 
 function text(key: string, title: string, customized: boolean): BotTextRow {
   return { key, group: 'shop', kind: 'message', html: true, limit: 4096, title, description: '', variables: [], default: title, value: title, customized }
@@ -103,5 +111,26 @@ describe('the bot texts’ search', () => {
     fireEvent.change(search, { target: { value: 'دیگری /menu' } })
     expect(screen.getByRole('button', { name: 'منتظر رسید' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'پرداخت انجام شد' })).toBeNull()
+  })
+})
+
+describe('the premium emoji card', () => {
+  it('is the page’s first card, above the texts, and counts again once a text is saved', async () => {
+    const welcome = text('welcome', 'خوش‌آمد', true)
+    server()
+      .on('GET', '/api/admin/bot/texts', json(TEXTS))
+      .on('PUT', '/api/admin/bot/texts/welcome', json({ text: { ...welcome, value: 'سلام ❤️' } }))
+    render(<BotTextsPage />, { wrapper: providers().wrapper })
+
+    const toggle = await screen.findByRole('switch', { name: 'ایموجی پرمیوم متن‌ها روشن باشد' })
+    const tabs = screen.getByRole('tablist', { name: 'متن‌های نمایش‌داده‌شده' })
+    expect(toggle.compareDocumentPosition(tabs) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(server().sent('GET', '/api/admin/bot/premium-texts')).toHaveLength(1)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'خوش‌آمد' }))
+    fireEvent.change(await screen.findByRole('textbox', { name: /متن/ }), { target: { value: 'سلام ❤️' } })
+    fireEvent.click(screen.getByRole('button', { name: 'ذخیره متن' }))
+
+    await until(() => expect(server().sent('GET', '/api/admin/bot/premium-texts')).toHaveLength(2))
   })
 })

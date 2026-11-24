@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { MessageSquareText, Pencil, RotateCcw, Search } from 'lucide-react'
 import { toast } from 'sonner'
 import { KIND_LABELS } from '@/components/bot-texts/kinds'
+import { PremiumTextsCard } from '@/components/bot-texts/premium-texts-card'
 import { plainText } from '@/components/bot-texts/telegram-html'
 import { TextModal } from '@/components/bot-texts/text-modal'
 import { WithTokens } from '@/components/bot-texts/tokens'
@@ -24,6 +25,7 @@ import type { BotTextRow } from '@/lib/api-types'
 import { messageOf } from '@/lib/failure'
 import { formatNumber } from '@/lib/format'
 import { botTextsQuery } from '@/lib/queries'
+import { queryKeys } from '@/lib/query-keys'
 
 type Filter = 'all' | 'customized'
 
@@ -64,11 +66,14 @@ export function BotTextsPage() {
   const matches = (text: BotTextRow) => term === '' || (words.get(text.key) ?? '').includes(term)
   const shows = (text: BotTextRow) => (listed === 'all' || text.customized) && matches(text)
 
-  const replace = (text: BotTextRow) =>
+  const replace = (text: BotTextRow) => {
     queryClient.setQueryData(
       botTextsQuery.queryKey,
       (current) => current && { groups: current.groups.map((group) => ({ ...group, texts: group.texts.map((row) => (row.key === text.key ? text : row)) })) },
     )
+    // How many texts each premium emoji is in follows the wordings.
+    void queryClient.invalidateQueries({ queryKey: queryKeys.premiumTexts })
+  }
 
   // Quiet: the dialog that asked says why it was refused.
   const reset = useMutation({
@@ -122,6 +127,8 @@ export function BotTextsPage() {
           </>
         }
       />
+
+      <PremiumTextsCard />
 
       <PageTabs id={tabsId} value={filter} tabs={tabs} onChange={setFilter} aria-label="متن‌های نمایش‌داده‌شده" />
 

@@ -281,6 +281,73 @@ Subscriptions، Support…)، هرگز در خود هندلر: ربات فقط �
 (<code dir="ltr">html()</code>). متد <code dir="ltr">problem()</code> آن هر تگ دیگری را در چنین عبارتی رد می‌کند، و در برچسب
 یک دکمه بیش از یک ایموجی پرمیوم، ایموجی‌ای که جایی جز ابتدای برچسب باشد، یا ایموجی‌ای که کلمه‌ای کنارش نیست.
 
+**ایموجی پرمیوم فروشگاه در همه متن‌ها**: کلاس `Emoji\EmojiMap` («ایموجی پرمیوم متن‌ها»)، که برای هر فروشگاه در ردیف
+تنظیمات `bot.premium_texts` نگه داشته می‌شود، به شکل <code dir="ltr">{enabled, items: [{emoji, emoji_id}]}</code>
+(<code dir="ltr">stored()</code>؛ ردیف وقتی خاموش و خالی ذخیره شود فراموش می‌شود):
+
+- **متد <code dir="ltr">save($input)</code>** کلید و کل فهرست را می‌گیرد. `enabled` فقط تا وقتی
+  <code dir="ltr">canEnable()</code> درست است از خاموش به روشن می‌رود (یعنی
+  <code dir="ltr">PremiumEmojiStatus::current()['ok'] === true</code>)، وگرنه یک 422 روی `enabled` می‌آید (`NOT_ABLE`)؛
+  کلیدی که روشن است روشن می‌ماند و فهرستش هم عوض‌شدنی است، هر چه از آن به بعد معلوم شده باشد. `items` حداکثر `MAX`
+  یعنی ۱۰۰ مورد: هر `emoji` یک ایموجی همان‌طور که خواننده می‌بیند (<code dir="ltr">isOne()</code>: نتیجه
+  <code dir="ltr">PremiumText::leadingEmoji()</code> روی آن خود آن است)، یکتا با <code dir="ltr">key()</code>
+  (که U+FE0E و U+FE0F را کنار می‌گذارد، پس ❤ و ❤️ یکی‌اند؛ `TWICE_EMOJI`)؛ هر `emoji_id` از ۱ تا ۲۰ رقم
+  (`ID_REFUSED`)، یکتا (`TWICE_ID`)، و یکی که فهرست داشته یا ربات می‌شناسد (یک ردیف `CustomEmoji`؛ وگرنه `NOT_KNOWN`).
+  ردها روی `items.N.emoji` و `items.N.emoji_id` می‌آیند.
+- **متد <code dir="ltr">apply($wording, $kind)</code>**، تا وقتی روشن است: در نوعی که تلگرام به شکل HTML می‌خواند (پیام،
+  کپشن، بخشی از پیام)، <code dir="ltr">TelegramHtml::mapWords()</code> هر تکه کلمه بیرون از `SKIP` (`tg-emoji`، `code`،
+  `pre`، `a`، `tg-time`) را بازنویسی می‌کند و هر grapheme (<code dir="ltr">\X</code>) را که
+  <code dir="ltr">key()</code> آن در فهرست هست و <code dir="ltr">TelegramHtml::isEmoji()</code> آن را ایموجی می‌داند در
+  <code dir="ltr">&lt;tg-emoji emoji-id="…"&gt;…&lt;/tg-emoji&gt;</code> می‌گذارد؛ دو بار اعمال کردنش چیزی را عوض نمی‌کند.
+  عبارت دکمه و popup همان‌طور که هست برمی‌گردد. این متد هرگز از `PremiumEmojiStatus` نمی‌پرسد: تا وقتی معلوم شده ربات
+  نمی‌تواند، `BotApi` پیام را ساده می‌فرستد ([پایین‌تر](#رابط-api-تلگرام)).
+- **متد <code dir="ltr">label($wording, $label)</code>** آیکون یک دکمه را روی برچسب پرشده‌اش تعیین می‌کند: ایموجی اول در
+  تگ گذاشته می‌شود وقتی عبارت پرنشده با همان شروع شود، فهرست آن را داشته باشد و برچسب هنوز با آن شروع شود؛ نه وقتی بعد
+  از آن و چند فاصله یک <code dir="ltr">&lt;tg-emoji&gt;</code> بیاید (مال یک نام، `PremiumText`، که آن وقت آیکون همان
+  است)، و نه وقتی چیزی بعدش نیاید (تلگرام دکمه بدون کلمه نمی‌پذیرد). <code dir="ltr">PlainWording::icons()</code> هنگام
+  فرستادن `BotApi` آن را آیکون می‌کند.
+- **متد <code dir="ltr">icon($label)</code>** شناسه‌ای است که فهرست به ایموجی اول برچسب یک دکمه منو می‌دهد (تا وقتی خاموش
+  است null)، برای `KeyboardLayout` ([پایین‌تر](#کیبوردها-و-گیت‌ها))؛ **متد <code dir="ltr">uses($emojis, $wordings)</code>**
+  با <code dir="ltr">key()</code> می‌شمارد هر ایموجی در چند عبارت پرمیوم می‌شد، با همان بازنویسی و هر وضعیتی که کلید
+  داشته باشد: همان `texts` در API.
+
+متد <code dir="ltr">TelegramHtml::mapWords($text, $map, $skip)</code> هر تکه کلمه بیرون از تگ‌هایی را که
+<code dir="ltr">$skip</code> نام می‌برد از <code dir="ltr">$map</code> می‌گذراند، و خود تگ‌ها، attributeهایشان و
+کلمه‌های داخلشان دست نمی‌خورند؛ متنی که هیچ «<» ندارد یک‌جا بازنویسی می‌شود، و متنی که
+<code dir="ltr">problem()</code> ردش کند همان‌طور که هست برمی‌گردد. متد <code dir="ltr">BotTexts::compose()</code> عبارت در
+حال استفاده را (<code dir="ltr">template()</code>، پرنشده) پیش از آنکه <code dir="ltr">marked()</code> و
+<code dir="ltr">Messages::fill()</code> مقدارها را بگذارند با <code dir="ltr">apply()</code> بازنویسی می‌کند (پس هیچ
+مقدار پرشده‌ای بازنویسی نمی‌شود)، و برچسب پرشده یک دکمه را از <code dir="ltr">label()</code> می‌گذراند. متد
+<code dir="ltr">BotTexts::wordings()</code> همه متن‌هایی است که <code dir="ltr">TextCatalog::says()</code> در فروشگاه
+می‌گوید، به شکل <code dir="ltr">[kind, template]</code>.
+
+کلاس `Emoji\PremiumCheck` می‌فهمد ربات می‌تواند ایموجی پرمیوم بفرستد یا نه، از تنها راهی که تلگرام می‌گذارد:
+<code dir="ltr">sample()</code> اولین مورد فهرست است، وگرنه تازه‌ترین ایموجی پرمیومی که ربات می‌شناسد (null اگر هیچ)؛
+<code dir="ltr">probe($chat, $sample)</code> وضعیت را فراموش می‌کند («نه»ای که نگه داشته شده باعث می‌شد `BotApi` آن را
+ساده بفرستد)، «🔍 بررسی ایموجی پرمیوم: …» را با آن می‌فرستد، ثبت می‌کند که یک entity از نوع `custom_emoji` برگشته یا نه،
+و پیام را پاک می‌کند (تا جایی که بشود؛ اگر بماند، خودش می‌گوید چیست)؛ و وقتی اصلا فرستاده نشود null است، بدون ثبت چیزی و
+با برگرداندن وضعیتی که پیش از آن بود (<code dir="ltr">PremiumEmojiStatus::restore()</code>). <code dir="ltr">/emoji</code>
+(`CustomEmojiHandler`) هم با نسخه خودش همین کار را می‌کند.
+
+رابط API پنل‌ها، `Admin\Api\PremiumTextsController` در گروه <code dir="ltr">$configuration</code> فایل `routes/api.php`:
+
+- مسیر <code dir="ltr">GET /bot/premium-texts</code> پاسخ
+  <code dir="ltr">{premium_texts: {enabled, items: [{emoji, emoji_id, texts}], status: {ok, checked_at} | null, can_enable, max}}</code>
+  را می‌دهد، که `texts` آن از <code dir="ltr">EmojiMap::uses()</code> روی <code dir="ltr">BotTexts::wordings()</code> می‌آید؛
+- مسیر <code dir="ltr">PUT /bot/premium-texts</code> با <code dir="ltr">{enabled?, items?}</code> (کل فهرست) همان را پاسخ
+  می‌دهد؛
+- مسیر <code dir="ltr">POST /bot/premium-texts/check</code> همان را با وضعیت تازه پاسخ می‌دهد. به
+  <code dir="ltr">?chat=</code> فقط از راه ورودی ربات می‌رود (<code dir="ltr">Principal::$inBot</code>: گفتگویی که مدیر در
+  آن لمس کرده)؛ برای نماینده، به حساب خود او و از ربات خودش؛ برای مالک، به حساب‌های وصل‌شده فروشگاه اصلی
+  (<code dir="ltr">OwnerLinks::ids()</code>)، یکی یکی تا یکی فرستاده شود. یک 422 روی `check` می‌گوید چرا نه:
+  `PremiumCheck::NOTHING_TO_TEST`، `NOWHERE` (هیچ حسابی)، `OTHER_BOT` (مالک روی فروشگاه یک نماینده، که رباتش با او
+  گفتگویی ندارد) یا `NOT_SENT`.
+
+صفحه ربات `Sections\Bot\Texts\PremiumTextsScreen` (`txp`) است و کارت پنل
+<code dir="ltr">components/bot-texts/premium-texts-card.tsx</code>؛ جستجوی تنظیمات هر دو را در
+<code dir="ltr">/bot-texts</code> دارد (`SECTIONS` در `scripts/settings-index.mjs` ← `PremiumTextsCard`، و
+<code dir="ltr">SettingsIndex::SECTIONS</code> ← `txp`).
+
 طول‌ها همان‌طور شمرده می‌شوند که تلگرام می‌شمارد: واحدهای UTF-16 از آنچه نشان داده می‌شود (`Api\Limits`،
 <code dir="ltr">TelegramHtml::visibleLength()</code>). `Messages` آنچه را ادمین بازنویسی نمی‌کند نگه می‌دارد: واحدهای
 قالب‌دهنده‌ها، برچسب‌های پیش‌فرض منو، و متن‌های خود مدیران ربات (<code dir="ltr">/broadcast</code>، <code dir="ltr">/emoji</code>، گروه گزارش‌ها). `WebText` یک متن را برای
@@ -295,6 +362,16 @@ Subscriptions، Support…)، هرگز در خود هندلر: ربات فقط �
 اولین دکمه راست‌ترین دکمه در یک صفحه فارسی — و هنگام رندر برعکس می‌شوند، چون تلگرام یک ردیف را از چپ به راست می‌چیند. چیدمان
 ذخیره‌شده با همان بررسی‌های ذخیره کردن پس خوانده می‌شود؛ چیدمانی که در این بررسی‌ها رد شود منوی داخلی را نشان می‌دهد، پس یک ردیف بد
 هرگز منو را از بین نمی‌برد. ضربه یک کیبورد پاسخ به شکل برچسبش می‌رسد، پس برچسب‌ها یکتا هستند و در نقش مسیر هم کار می‌کنند.
+
+ایموجی‌های پرمیوم فروشگاه ([بالاتر](#متن‌ها)) به منوی شیشه‌ای آیکون می‌دهند: <code dir="ltr">MainMenu::markup()</code>
+چیدمان <code dir="ltr">KeyboardLayout::premium(EmojiMap::icon(...))</code> را می‌فرستد، که در آن هر دکمه شیشه‌ای که
+`icon` خودش را ندارد و برچسبش با ایموجی‌ای از فهرست شروع می‌شود، همان ایموجی را در برچسبش به شکل یک
+<code dir="ltr">&lt;tg-emoji&gt;</code> می‌گیرد؛ `BotApi` آن را آیکون دکمه می‌فرستد، و وقتی پیام ساده برود دوباره ساده و
+در برچسب. برچسبی که فقط همان ایموجی است دست نمی‌خورد. «⚙️ مدیریت» بعد از آن اضافه می‌شود
+(<code dir="ltr">withManagement()</code>) و هرگز آیکون نمی‌گیرد. کیبورد پایین صفحه همان‌طور می‌ماند: لمس دکمه آن برچسب را
+بدون آیکون می‌فرستد، و آن کلمه‌ها به تنهایی هر جا کاربر نوشته باشدشان دکمه شناخته می‌شدند، در جواب یک سوال هم؛ پس آنجا فقط
+`icon` خود دکمه نشان داده می‌شود و برچسب‌ها مثل همیشه مسیر دارند (<code dir="ltr">labels()</code>،
+<code dir="ltr">actionFor()</code>).
 
 کیبوردهایی که کد می‌سازد همان ترتیب خواندن را نگه می‌دارند. <code dir="ltr">InlineKeyboard::row()</code> دکمه‌هایش را از چپ
 به راست می‌گیرد، همان‌طور که تلگرام؛ <code dir="ltr">grid()</code> دکمه‌ها را N تا در هر ردیف می‌چیند با اولین دکمه هر ردیف در
@@ -628,10 +705,28 @@ principal آن اجرا می‌شود، و هر تغییر (نه GET) با جا�
 
 کلاس `Api\BotApi` یک کلاینت نازک است: یک متد برای هر فراخوانی، ردها به شکل `TelegramApiException`، که
 <code dir="ltr">refusal()</code> آن (`Api\Refusal`) تنها جایی است که کدها و توضیح‌های تلگرام خوانده می‌شوند. flood wait کوتاه
-یک بار رعایت می‌شود. جواب دادن به یک ضربه و حذف یک پیام هرگز استثنا پرتاب نمی‌کنند. پیامی که تلگرام به خاطر ایموجی پرمیومش
-رد کند (که فقط تا وقتی صاحب ربات Telegram Premium دارد مجاز است) با ایموجی ساده دوباره فرستاده می‌شود، و این «نه» تا مدتی به
-خاطر سپرده می‌شود (`PremiumEmojiStatus`). <code dir="ltr">BotApi::longestCall()</code> اندازه هر lease را روی کاری که تلگرام را
-صدا می‌زند تعیین می‌کند.
+یک بار رعایت می‌شود. جواب دادن به یک ضربه و حذف یک پیام هرگز استثنا پرتاب نمی‌کنند.
+<code dir="ltr">BotApi::longestCall()</code> اندازه هر lease را روی کاری که تلگرام را صدا می‌زند تعیین می‌کند.
+
+**ایموجی پرمیوم** فقط تا وقتی صاحب ربات Telegram Premium دارد می‌رود، و هیچ فراخوانی این را نمی‌گوید؛ متد
+<code dir="ltr">call()</code> آن را از کاری که تلگرام با آن‌ها می‌کند می‌فهمد (`PremiumEmojiStatus`،
+با تنظیم `bot.premium_emoji` به شکل <code dir="ltr">{ok, at}</code>). فراخوانی‌ای که ایموجی پرمیوم دارد (یک
+<code dir="ltr">&lt;tg-emoji&gt;</code> در متن یا کپشنش، یا آیکون یک دکمه؛ <code dir="ltr">withoutPremiumEmoji()</code>
+نسخه ساده‌اش را می‌دهد، با تگ‌های برداشته‌شده، ایموجی معمولی برچسب سر جایش و بدون آیکون‌ها):
+
+- تا وقتی <code dir="ltr">refusedLately()</code> درست است از همان اول ساده می‌رود: «نه»ای که از `HOLD_SECONDS` (۶۰۰
+  ثانیه) جوان‌تر است؛
+- وگرنه <code dir="ltr">capped()</code> با آیکون‌هایش (<code dir="ltr">withIcons()</code>) می‌رود: حداکثر
+  `Limits::CUSTOM_EMOJI` یعنی ۱۰۰ (همان که تلگرام در یک پیام نشان می‌دهد) <code dir="ltr">&lt;tg-emoji&gt;</code> در یک
+  `text`، `caption` یا `media.caption`، و بقیه بدون تگ؛
+- اگر با `Refusal::CustomEmoji`، یا با هر 400 دیگری جز `Refusal::NotModified`، رد شود یک بار ساده فرستاده می‌شود، تا
+  کاربر هرگز پیامی را به خاطر یک ایموجی از دست ندهد؛ فقط `CustomEmoji` «نه» را ثبت می‌کند؛
+- وقتی فرستاده شد، <code dir="ltr">learn()</code> می‌خواند تلگرام چه نگه داشته: برای `text`، `caption` یا `media.caption`
+  تصویری ویرایش‌شده که به صورت HTML خوانده می‌شود (`parse_mode`) و یک <code dir="ltr">&lt;tg-emoji&gt;</code> دارد و به گفتگوی `private`، `group` یا `supergroup` رفته، یک entity
+  از نوع `custom_emoji` (در `entities` یا `caption_entities`) «بله» را ثبت می‌کند مگر از قبل «بله» بوده؛ و نبودنش «نه» را — که
+  تا پایان نگه داشتن همه پیام‌ها را ساده می‌فرستد — فقط از یک پیام تازه (`sendMessage`) به گفتگوی `private`، تنها جایی که
+  معلوم است افتادنشان همین معنا را دارد، و فقط اگر «نه»ای هنوز نگه داشته نشده باشد: ویرایش، کپشن یا پیام یک گروه که آن‌ها را
+  نگه ندارد چیزی ثبت نمی‌کند. <code dir="ltr">/emoji</code> (`CustomEmojiHandler`) و `PremiumCheck` آن را از پیام خودشان ثبت می‌کنند.
 
 کلاس `Polling\Poller` برای هر ربات هم‌زمان یک long poll باز نگه می‌دارد (`LongPolls`) و زمان‌بند را در پروسه‌ای جدا اجرا
 می‌کند، چون pollها فقط وقتی جلو می‌روند که پولینگ منتظرشان باشد. ربات نماینده‌ای که توکن تازه بگیرد ربات تازه‌ای حساب می‌شود:
@@ -656,7 +751,9 @@ pollی که هنوز با توکن قدیمی باز است رها می‌شود
 <code dir="ltr">groupReply()</code> و <code dir="ltr">botMembership()</code> را دارد. `BotQueryBudgetTest` هر صفحه رایج را به
 سهمیه ثابتی از کوئری‌ها و فراخوانی‌های تلگرام پایبند نگه می‌دارد — سهمیه‌ای که بالا برود می‌گوید کوئری تازه چه چیزی می‌خرد
 (مثلا ردیف مینی‌اپ در منو). <code dir="ltr">miniApp()</code> مینی‌اپ فروشگاه را برای تست دکمه‌اش روشن می‌کند (`BotMenuTest`).
-unit testهای API، متن‌ها و کیبوردها در `tests/Unit/Telegram` هستند. تست‌های مدیریت در `tests/Feature/BotAdmin` هستند:
+unit testهای API، متن‌ها و کیبوردها در `tests/Unit/Telegram` هستند. ایموجی پرمیوم فروشگاه: `PremiumTextsTest` (فهرست
+در متن‌ها، بخش‌های پیام، popupها، دکمه‌ها، منو و لمس‌هایش)، `AdminPremiumTextsApiTest` (کلید، ردهای فهرست، جایی که
+بررسی می‌رود) و `PremiumEmojiTest` (آنچه `BotApi` یاد می‌گیرد، فرستادن دوباره به شکل ساده، سقف). تست‌های مدیریت در `tests/Feature/BotAdmin` هستند:
 `BotAdminDoorTest` (نگهبان‌های ورودی)، `BotAdminFlowTest` (مالکی که با <code dir="ltr">OwnerLinks::link()</code> و
 <code dir="ltr">redeem()</code> وصل شده، <code dir="ltr">/admin</code>، ضربه‌ها با <code dir="ltr">Nav::to()</code>، پاسخ‌های
 نوشتنی)، `BotAdminFoundationTest` (لایه `Ui` همان‌طور که هر صفحه از آن استفاده می‌کند: رنگ‌ها، دکمه‌های کپی، ردیف‌هایی که از

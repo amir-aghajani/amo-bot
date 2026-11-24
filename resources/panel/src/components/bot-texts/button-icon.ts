@@ -2,9 +2,41 @@ import { premiumEmojiTag } from '@/components/bot-texts/premium-emoji-picker'
 import { isEmoji, leadingPremium } from '@/components/bot-texts/wording-problem'
 import type { CustomEmojiRow } from '@/lib/api-types'
 
-/** A label's first character as a reader sees one: an emoji with its modifiers and joiners, whole. */
+/**
+ * The prepended marks (Grapheme_Cluster_Break=Prepend, Unicode 15 as PCRE2 10.44 has it): the Arabic number signs, the
+ * end of an ayah and their like, which go with the character after them.
+ */
+const PREPENDED = /^[\u0600-\u0605\u06DD\u070F\u0890\u0891\u08E2\u0D4E\u{110BD}\u{110CD}\u{111C2}\u{111C3}\u{1193F}\u{11941}\u{11A3A}\u{11A84}-\u{11A89}\u{11D46}\u{11F02}]*/u
+const PICTOGRAPH = /^\p{Extended_Pictographic}/u
+/** A flag, or a regional indicator alone, after the marks prepended to it. */
+const FLAG = new RegExp(`${PREPENDED.source}[\\u{1F1E6}-\\u{1F1FF}]{1,2}`, 'u')
+
+/**
+ * A text's characters as a reader sees them — an emoji with its modifiers and joiners, whole — split as the server's PCRE
+ * splits them (`\X`, PCRE2 10.44 as PHP bundles it), which the browser's segmenter does otherwise in two places: a
+ * prepended mark before an emoji is a character of its own, and a flag (or a regional indicator alone) ends where it
+ * does, a variation selector, a joiner or a mark after it a character of its own.
+ */
+export function* graphemes(text: string): Generator<string> {
+  for (const { segment } of new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(text)) {
+    let rest = segment
+    const prepended = PREPENDED.exec(rest)?.[0] ?? ''
+    if (prepended !== '' && PICTOGRAPH.test(rest.slice(prepended.length))) {
+      yield prepended
+      rest = rest.slice(prepended.length)
+    }
+    const flag = FLAG.exec(rest)?.[0] ?? ''
+    if (flag !== '' && flag.length < rest.length) {
+      yield flag
+      rest = rest.slice(flag.length)
+    }
+    yield rest
+  }
+}
+
+/** A label's first character as a reader sees one (graphemes()): an emoji with its modifiers and joiners, whole. */
 function firstGrapheme(text: string): string {
-  for (const { segment } of new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(text)) return segment
+  for (const grapheme of graphemes(text)) return grapheme
   return ''
 }
 

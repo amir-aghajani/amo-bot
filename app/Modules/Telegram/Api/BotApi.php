@@ -42,6 +42,9 @@ final class BotApi
      */
     public const LONG_POLL_SLACK = 60;
 
+    /** A premium emoji in a text or a caption: its tag, the plain emoji inside it (`$1`). */
+    private const PREMIUM_EMOJI = '~<tg-emoji\b[^>]*>(.*?)</tg-emoji\s*>~is';
+
     private readonly string $apiUrl;
 
     /** A token this client speaks with whatever the current bot (forToken()). */
@@ -49,7 +52,7 @@ final class BotApi
 
     /**
      * @param \Closure(): string $mainToken The main bot's token, read per call (the settings screen may rewrite it)
-     * @param PremiumEmojiStatus|null $premiumEmoji Remembers a "no" to premium emoji; without it a message is still resent plain
+     * @param PremiumEmojiStatus|null $premiumEmoji Remembers whether premium emoji go through; without it a message is still resent plain
      */
     public function __construct(
         private readonly ClientInterface $http,
@@ -462,11 +465,13 @@ final class BotApi
     }
 
     /**
-     * One Bot API call (arrays as JSON, multipart with files; a short flood wait honoured once). A message Telegram
-     * refuses over its premium emoji — only allowed while the bot's owner has Telegram Premium — is sent again with plain
-     * emoji and buttons without icons, so a customer never loses a message to an emoji; the "no" is remembered for a
-     * while (PremiumEmojiStatus) so later messages go plain at once. A button label's leading premium emoji (a bot text's,
-     * PlainWording) goes as the button's icon — plain, in the label, when the message goes plain.
+     * One Bot API call (arrays as JSON, multipart with files; a short flood wait honoured once). A message with premium
+     * emoji carries no more than Telegram draws in one (capped()); refused while it carries them, it is sent again with
+     * plain emoji and buttons without icons, so a customer never loses a message to an emoji. Refused over the emoji
+     * themselves — only allowed while the bot's owner has Telegram Premium —, the "no" is remembered for a while
+     * (PremiumEmojiStatus) so later messages go plain at once; taken, what Telegram kept of them is learned (learn()). A
+     * button label's leading premium emoji (a bot text's, PlainWording) goes as the button's icon — plain, in the label,
+     * when the message goes plain.
      *
      * @param array<string, mixed> $params
      * @param array<string, array{string|StreamInterface, string}> $files Upload parts: field name => [bytes or a stream, filename]
@@ -480,17 +485,89 @@ final class BotApi
         }
 
         try {
-            return $this->request($method, self::withIcons($params), $files);
+            $result = $this->request($method, self::withIcons(self::capped($params)), $files);
         } catch (TelegramApiException $e) {
-            if ($plain === null || !$e->is(Refusal::CustomEmoji)) {
+            // Refused over its premium emoji — or refused at all (a 400) while it carries some, which may be why: sent plain
+            // once. Only the first says the bot may not send them. An edit to what the message shows already is no
+            // refusal: plain, it would change the message.
+            if ($plain === null || $e->errorCode !== 400 || $e->is(Refusal::NotModified)) {
                 throw $e;
             }
 
             $result = $this->request($method, $plain, $files);
-            $this->premiumEmoji?->record(false);
+            if ($e->is(Refusal::CustomEmoji)) {
+                $this->premiumEmoji?->record(false);
+            }
 
             return $result;
         }
+
+        if ($plain !== null) {
+            $this->learn($method, $params, $result);
+        }
+
+        return $result;
+    }
+
+    /**
+     * What a message sent with premium emoji tells: Telegram keeps them (custom_emoji entities) while the bot may send them
+     * and drops them silently while it may not — learned (PremiumEmojiStatus) as it changes, in the chats Telegram lets a
+     * bot send them to at all (private, group, supergroup). A "yes" from any of them; a "no" — which sends every message
+     * plain for a while — only from a new message to a private chat, the one place a drop is known to mean it (/emoji's
+     * own copy): an edit, a caption or a group's message dropping them says too little to turn them off for the shop.
+     *
+     * @param array<string, mixed> $params
+     */
+    private function learn(string $method, array $params, mixed $result): void
+    {
+        // Words Telegram reads as HTML alone: shown as typed, a tag's words are no premium emoji it could drop.
+        $media = is_array($params['media'] ?? null) ? $params['media'] : [];
+        $words = ($params['parse_mode'] ?? null) === 'HTML' ? $params['text'] ?? $params['caption'] ?? null : null;
+        $words ??= ($media['parse_mode'] ?? null) === 'HTML' ? $media['caption'] ?? null : null;
+        if ($this->premiumEmoji === null || !is_array($result) || !is_string($words) || stripos($words, '<tg-emoji') === false
+            || !in_array($result['chat']['type'] ?? null, ['private', 'group', 'supergroup'], true)) {
+            return;
+        }
+
+        $kept = PremiumEmojiStatus::kept($result);
+        if (!$kept && ($method !== 'sendMessage' || ($result['chat']['type'] ?? null) !== 'private')) {
+            return;
+        }
+        if ($kept ? ($this->premiumEmoji->current()['ok'] ?? null) !== true : !$this->premiumEmoji->refusedLately()) {
+            $this->premiumEmoji->record($kept);
+        }
+    }
+
+    /**
+     * The parameters with no more premium emoji in a text or a caption — a picture's inside its media too — than Telegram
+     * draws in one message (Limits::CUSTOM_EMOJI): the rest their plain emoji.
+     *
+     * @param array<string, mixed> $params
+     * @return array<string, mixed>
+     */
+    private static function capped(array $params): array
+    {
+        $cap = static function (mixed $words): mixed {
+            if (!is_string($words) || preg_match_all('~<tg-emoji\b~i', $words) <= Limits::CUSTOM_EMOJI) {
+                return $words;
+            }
+            $count = 0;
+
+            return (string) preg_replace_callback(self::PREMIUM_EMOJI, static function (array $tag) use (&$count): string {
+                return ++$count > Limits::CUSTOM_EMOJI ? $tag[1] : $tag[0];
+            }, $words);
+        };
+
+        foreach (['text', 'caption'] as $key) {
+            if (array_key_exists($key, $params)) {
+                $params[$key] = $cap($params[$key]);
+            }
+        }
+        if (isset($params['media']) && is_array($params['media']) && array_key_exists('caption', $params['media'])) {
+            $params['media']['caption'] = $cap($params['media']['caption']);
+        }
+
+        return $params;
     }
 
     /**
@@ -541,7 +618,7 @@ final class BotApi
             }
             $changed = true;
 
-            return (string) preg_replace('~<tg-emoji\b[^>]*>(.*?)</tg-emoji\s*>~is', '$1', $value);
+            return (string) preg_replace(self::PREMIUM_EMOJI, '$1', $value);
         };
 
         foreach (['text', 'caption'] as $key) {

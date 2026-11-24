@@ -45,6 +45,11 @@ describe('a name’s leading emoji', () => {
     expect(leadingEmoji('1 ماهه')).toBeNull()
   })
 
+  it('is read as the server’s PCRE reads a character (\\X): a prepended mark is one alone, a flag takes no mark after it', () => {
+    expect(leadingEmoji('\u06DD🔥 طلایی')).toBeNull()
+    expect(leadingEmoji('🇩🇪\uFE0F آلمان')).toBe('🇩🇪')
+  })
+
   it('takes the picked emoji’s place, run into the words or not, or goes before a name without one', () => {
     expect(withLeadingEmoji('⭐ طلایی', '🔥')).toBe('🔥 طلایی')
     expect(withLeadingEmoji('⭐طلایی', '🔥')).toBe('🔥 طلایی')

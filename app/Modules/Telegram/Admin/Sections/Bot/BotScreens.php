@@ -30,6 +30,7 @@ use App\Modules\Telegram\Admin\Sections\Bot\Settings\ServiceTransfersCard;
 use App\Modules\Telegram\Admin\Sections\Bot\Settings\WalletCard;
 use App\Modules\Telegram\Admin\Sections\Bot\Settings\WalletTransfersCard;
 use App\Modules\Telegram\Admin\Sections\Bot\Texts\PremiumEmojisScreen;
+use App\Modules\Telegram\Admin\Sections\Bot\Texts\PremiumTextsScreen;
 use App\Modules\Telegram\Admin\Sections\Bot\Texts\TextGroupScreen;
 use App\Modules\Telegram\Admin\Sections\Bot\Texts\TextScreen;
 use App\Modules\Telegram\Admin\Sections\Bot\Texts\TextsScreen;
@@ -57,6 +58,7 @@ final class BotScreens
         TextGroupScreen::ID => TextGroupScreen::class,
         TextScreen::ID => TextScreen::class,
         PremiumEmojisScreen::ID => PremiumEmojisScreen::class,
+        PremiumTextsScreen::ID => PremiumTextsScreen::class,
         KeyboardsScreen::ID => KeyboardsScreen::class,
         KeyboardScreen::ID => KeyboardScreen::class,
         KeyboardButtonScreen::ID => KeyboardButtonScreen::class,

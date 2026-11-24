@@ -11,6 +11,37 @@ While a version is being made its changes collect under **Unreleased**; releasin
 
 ## Unreleased
 
+## Version 0.10.2
+
+### Added
+
+- **«ایموجی پرمیوم متن‌ها»** — give a plain emoji a premium one (❤️ your own premium heart) and every text the bot sends
+  draws it premium, the default wordings and yours alike, with no text to edit. Only the shop's own words change — never
+  a name, a link or what a customer typed, nor code, a link's words or a date —; a premium emoji a text carries itself
+  wins, and a notice stays plain. A button's leading emoji becomes its icon, an inline menu's buttons' too where they have
+  none of their own (a keyboard under the text field keeps its labels: a tap there sends the words, which a customer
+  could as well type). It turns on once the bot is found able — the account
+  that made it in `@BotFather` has Telegram Premium —, which «بررسی دوباره» finds out with a short test message to your
+  linked Telegram account (an agent's, from their own bot), deleted at once. Up to 100 emoji, from the bot's own premium
+  emoji; the texts' and keyboards' previews show them. The first card of «متن‌های ربات» in both panels, and «💎 ایموجی
+  پرمیوم متن‌ها» in the bot's «📝 متن‌های ربات»
+  ([Bot texts and keyboards](Bot-Texts-And-Keyboards.md#premium-emoji-in-every-text)).
+
+### Changed
+
+- **A message Telegram refuses while it carries premium emoji is sent again plain**, whatever the reason, so a customer
+  never loses one to an emoji; only a refusal over the emoji themselves says the bot may not send them.
+- **The bot learns whether it may send premium emoji from what Telegram keeps** of the messages it sends with them: kept
+  in any, to a customer or a group, it may; dropped from a new message in a private chat, messages go plain for ten
+  minutes before they are tried again. A lapsed or renewed Premium is noticed without `/emoji`.
+- **The keyboard editor's preview** shows the icons «ایموجی پرمیوم متن‌ها» gives an inline menu's buttons, and the
+  greeting with its premium emoji.
+
+### Upgrading
+
+- **Update from «تنظیمات پنل › به‌روزرسانی»**: nothing else to do, and the database does not change — the list is a
+  setting of each shop's. «ایموجی پرمیوم متن‌ها» stays off until you turn it on.
+
 ## Version 0.10.1
 
 ### Added

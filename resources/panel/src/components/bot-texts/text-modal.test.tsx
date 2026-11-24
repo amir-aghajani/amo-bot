@@ -1,9 +1,11 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { TextModal } from '@/components/bot-texts/text-modal'
 import { LeaveQuestion } from '@/components/leave-question'
 import type { BotTextRow, CustomEmojisResponse } from '@/lib/api-types'
+import { queryKeys } from '@/lib/query-keys'
 import { providers, until } from '@/test/render'
+import { premiumTextsResponse } from '@/test/rows'
 import { json, refusal, server } from '@/test/server'
 
 /*
@@ -11,8 +13,16 @@ import { json, refusal, server } from '@/test/server'
  * the server's own wording (wordingProblem()) —, and goes once the wording is one Telegram takes; the tags such a line
  * names (its own, or the server's refusal's) read as typed in the Persian sentence, each set apart in Unicode's isolates.
  * The counter counts the wording the server would keep, and «متن پیش‌فرض» asks before it drops a wording typed and not
- * saved, which nothing brings back.
+ * saved, which nothing brings back. The preview draws the shop's mapped plain emoji premium («ایموجی پرمیوم متن‌ها», while
+ * on) as the bot sends them: in its own words, not a sample's, nor inside code; a button's leading one as its icon.
  */
+
+/** «ایموجی پرمیوم متن‌ها»: off, unless a test turns it on. */
+const PREMIUM = '/api/admin/bot/premium-texts'
+
+beforeEach(() => {
+  server().on('GET', PREMIUM, json(premiumTextsResponse({ enabled: false, items: [] })))
+})
 
 const WELCOME: BotTextRow = {
   key: 'welcome',
@@ -188,6 +198,60 @@ describe('a button text’s premium emoji', () => {
 
     expect(wording().value).toBe('ثبت شد<tg-emoji emoji-id="41">🚫</tg-emoji>')
     expect(screen.getByRole('figure', { name: 'پیش‌نمایش در تلگرام' }).textContent).toContain('ثبت شد🚫')
+  })
+})
+
+describe('the shop’s premium emoji in the preview', () => {
+  const emojis = { emojis: [], status: null } satisfies CustomEmojisResponse
+  /** ❤️ → 41, 🔥 → 42, on. */
+  const on = () => server().on('GET', PREMIUM, json(premiumTextsResponse())).on('GET', '/api/admin/bot/custom-emojis', json(emojis))
+  const preview = () => screen.getByRole('figure', { name: 'پیش‌نمایش در تلگرام' })
+  const drawn = () => [...preview().querySelectorAll('img')].map((picture) => picture.getAttribute('src'))
+
+  it('draws a mapped emoji of the wording premium — not inside code, nor in a sample filled in —, and says so', async () => {
+    on()
+    const text: BotTextRow = { ...WELCOME, variables: [{ name: 'name', description: 'نام', sample: 'سارا ❤️', html: false, required: false }] }
+    render(<TextModal text={text} onClose={vi.fn()} onSaved={vi.fn()} />, { wrapper: providers().wrapper })
+
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: '❤ سلام %name% <code>🔥</code>' } })
+
+    await until(() => expect(drawn()).toEqual(['/api/admin/bot/custom-emojis/41/image?shop=1']))
+    expect(preview().textContent).toContain('سارا ❤️')
+    expect(preview().querySelector('code')?.textContent).toBe('🔥')
+    expect(screen.getByText('ایموجی‌های «ایموجی پرمیوم متن‌ها» به شکل پرمیوم نشان داده شده‌اند.')).toBeTruthy()
+  })
+
+  it('draws a button’s leading mapped emoji as its icon, and none in a popup', async () => {
+    on()
+    const buy: BotTextRow = { ...WELCOME, key: 'buy', kind: 'button', html: false, limit: 60, value: '🔥 خرید ❤️', default: '🔥 خرید ❤️' }
+    const { rerender } = render(<TextModal text={buy} onClose={vi.fn()} onSaved={vi.fn()} />, { wrapper: providers().wrapper })
+
+    await until(() => expect(drawn()).toEqual(['/api/admin/bot/custom-emojis/42/image?shop=1']))
+    expect(preview().textContent).toBe(' خرید ❤️')
+
+    rerender(<TextModal text={{ ...buy, key: 'saved', kind: 'popup', limit: 190 }} onClose={vi.fn()} onSaved={vi.fn()} />)
+    expect(drawn()).toEqual([])
+    expect(preview().textContent).toContain('🔥 خرید ❤️')
+    expect(screen.queryByText(/به شکل پرمیوم نشان داده شده‌اند/)).toBeNull()
+  })
+
+  it('draws by the wording the server keeps: spaces typed before a button’s emoji are none', async () => {
+    on()
+    const buy: BotTextRow = { ...WELCOME, key: 'buy', kind: 'button', html: false, limit: 60, value: 'خرید', default: 'خرید' }
+    render(<TextModal text={buy} onClose={vi.fn()} onSaved={vi.fn()} />, { wrapper: providers().wrapper })
+
+    fireEvent.change(screen.getByRole('textbox', { name: /متن/ }), { target: { value: '  🔥 خرید' } })
+
+    await until(() => expect(drawn()).toEqual(['/api/admin/bot/custom-emojis/42/image?shop=1']))
+  })
+
+  it('draws none while the map is off', async () => {
+    const { client, wrapper } = providers()
+    render(<TextModal text={{ ...WELCOME, value: '❤️ سلام' }} onClose={vi.fn()} onSaved={vi.fn()} />, { wrapper })
+
+    await until(() => expect(client.getQueryData(queryKeys.premiumTexts)).toBeDefined())
+    expect(drawn()).toEqual([])
+    expect(preview().textContent).toContain('❤️ سلام')
   })
 })
 

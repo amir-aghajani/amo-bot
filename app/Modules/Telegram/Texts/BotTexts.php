@@ -7,6 +7,7 @@ namespace App\Modules\Telegram\Texts;
 use App\Core\Exceptions\ValidationException;
 use App\Modules\Settings\Services\Settings;
 use App\Modules\Telegram\Api\Limits;
+use App\Modules\Telegram\Emoji\EmojiMap;
 use App\Modules\Telegram\Messages;
 use App\Support\Text;
 use App\Support\Validation;
@@ -29,7 +30,10 @@ final class BotTexts
 
     private const EMPTY = 'متن نمی‌تواند خالی باشد.';
 
-    public function __construct(private readonly Settings $settings) {}
+    public function __construct(
+        private readonly Settings $settings,
+        private readonly EmojiMap $emojis,
+    ) {}
 
     /** A text without variables (one with them is render()'s). */
     public function get(BotText $text): string
@@ -270,6 +274,7 @@ final class BotTexts
         }
 
         $html = $spec->kind->html();
+        $wording = $this->template($text);
         $filled = [];
         foreach ($values as $name => $value) {
             $filled[$name] = match (true) {
@@ -280,7 +285,29 @@ final class BotTexts
             };
         }
 
-        return Messages::fill(self::marked($this->template($text), $filled), $filled);
+        // The shop's premium emoji (EmojiMap) go into its own words, before the values: a name, a link or what a customer
+        // typed stays as it is; a button's leading one is decided on the label filled, where a name's own may stand.
+        $sent = Messages::fill(self::marked($this->emojis->apply($wording, $spec->kind), $filled), $filled);
+
+        return $spec->kind === TextKind::Button ? $this->emojis->label($wording, $sent) : $sent;
+    }
+
+    /**
+     * Every text the bot says in this shop as it would be sent — its kind and its wording in use, variables unfilled —:
+     * what EmojiMap::uses() counts a premium emoji's texts in.
+     *
+     * @return list<array{TextKind, string}>
+     */
+    public function wordings(): array
+    {
+        $wordings = [];
+        foreach (BotText::cases() as $text) {
+            if (TextCatalog::says($text)) {
+                $wordings[] = [$text->spec()->kind, $this->template($text)];
+            }
+        }
+
+        return $wordings;
     }
 
     /**

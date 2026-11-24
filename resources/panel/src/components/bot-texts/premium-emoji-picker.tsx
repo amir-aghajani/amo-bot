@@ -21,6 +21,8 @@ interface PremiumEmojiPickerProps {
   onPick: (emoji: CustomEmojiRow) => void
   /** The one chosen, when the picker is a choice (a keyboard button's icon): it is marked. Left out, a tap inserts. */
   selected?: string | null
+  /** The ids not offered: ones taken already (the premium texts' map). */
+  except?: readonly string[]
 }
 
 /**
@@ -28,12 +30,13 @@ interface PremiumEmojiPickerProps {
  * an icon); the cross removes one from the list. Warns when Telegram is stripping premium emoji from the bot's messages:
  * the bot's owner needs Telegram Premium.
  */
-export function PremiumEmojiPicker({ onPick, selected }: PremiumEmojiPickerProps) {
+export function PremiumEmojiPicker({ onPick, selected, except = [] }: PremiumEmojiPickerProps) {
   const queryClient = useQueryClient()
   const read = useCustomEmojis()
   const { data, refetch } = read
   const failure = useReadFailure(read)
   const choosing = selected !== undefined
+  const offered = data?.emojis.filter((emoji) => !except.includes(emoji.id)) ?? []
 
   /** The list item of the emoji being taken off. */
   const leaving = useRef<HTMLElement | null>(null)
@@ -71,10 +74,12 @@ export function PremiumEmojiPicker({ onPick, selected }: PremiumEmojiPickerProps
         )
       ) : data.emojis.length === 0 ? (
         <p className="text-footnote text-muted-foreground">هنوز ایموجی پرمیومی ذخیره نشده است.</p>
+      ) : offered.length === 0 ? (
+        <p className="text-footnote text-muted-foreground">همه ایموجی‌های پرمیوم ربات انتخاب شده‌اند.</p>
       ) : (
         // A long list scrolls in place, so the form under it stays in reach; its padding is the room the crosses take.
         <ul className="flex max-h-48 flex-wrap gap-1 overflow-y-auto p-2" aria-label="ایموجی‌های پرمیوم">
-          {data.emojis.map((emoji) => {
+          {offered.map((emoji) => {
             const chosen = choosing && emoji.id === selected
             return (
               <li key={emoji.id} className="group relative">

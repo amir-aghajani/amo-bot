@@ -84,6 +84,8 @@ const SECTIONS = {
   '/lottery': ['components/lottery/lottery-settings-card.tsx#LotterySettingsCard'],
   '/custom-services': ['components/custom-services/custom-services-card.tsx#CustomServicesCard'],
   '/payment-methods': ['components/payments/deposits/deposit-settings-card.tsx#DepositSettings'],
+  // «متن‌های ربات»: its own settings are the premium emoji card at its top; the texts themselves are the page.
+  '/bot-texts': ['components/bot-texts/premium-texts-card.tsx#PremiumTextsCard'],
 }
 
 /**

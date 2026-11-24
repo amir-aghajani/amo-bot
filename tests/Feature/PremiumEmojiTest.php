@@ -7,6 +7,7 @@ namespace Tests\Feature;
 use App\Modules\Bots\CurrentBot;
 use App\Modules\Bots\Models\Bot;
 use App\Modules\Telegram\Api\BotApi;
+use App\Modules\Telegram\Api\Limits;
 use App\Modules\Telegram\Emoji\PremiumEmojiStatus;
 use Illuminate\Support\Carbon;
 use Tests\DatabaseTestCase;
@@ -80,6 +81,103 @@ final class PremiumEmojiTest extends DatabaseTestCase
         self::assertNull($this->service(PremiumEmojiStatus::class)->current(), 'the main bot was never told no');
         self::assertSame(self::PREMIUM, $this->sentBy(null), 'the main bot has an owner of its own');
         self::assertSame(self::PLAIN, $this->sentBy($bot), "and the agent's bot heeds its own no from the start");
+    }
+
+    /** A message Telegram took but dropped the premium emoji of says the bot may not; one it kept them in says it may. */
+    public function testWhatTelegramKeepsOfASentMessageIsLearnedAsItChanges(): void
+    {
+        $status = $this->service(PremiumEmojiStatus::class);
+
+        $this->telegram()->reply(['message_id' => 1, 'chat' => ['id' => 42, 'type' => 'private'], 'text' => '🔥 سلام']);
+        $this->api()->sendMessage(42, self::PREMIUM);
+        self::assertFalse($status->current()['ok'] ?? null, 'dropped silently: may not');
+        self::assertTrue($status->refusedLately());
+
+        Carbon::setTestNow(now()->addSeconds(PremiumEmojiStatus::HOLD_SECONDS + 1));
+        $this->telegram()->reply(['message_id' => 2, 'chat' => ['id' => 42, 'type' => 'private'], 'text' => '🔥 سلام', 'entities' => [['type' => 'custom_emoji', 'offset' => 0, 'length' => 2, 'custom_emoji_id' => '111']]]);
+        $this->api()->sendMessage(42, self::PREMIUM);
+        self::assertTrue($status->current()['ok'] ?? null, 'kept: the owner has Premium now');
+
+        // A channel is no chat Telegram lets a bot send them to: what it keeps there says nothing of the bot.
+        $this->telegram()->reply(['message_id' => 3, 'chat' => ['id' => -100, 'type' => 'channel'], 'text' => '🔥 سلام']);
+        $this->api()->sendMessage(-100, self::PREMIUM);
+        self::assertTrue($status->current()['ok'] ?? null);
+    }
+
+    public function testAnyRefusalOfAMessageWithPremiumEmojiSendsItPlainOnceButOnlyTheirOwnSaysTheBotMayNot(): void
+    {
+        $this->telegram()->fail(400, "Bad Request: can't parse entities: Character '<' is reserved");
+        $this->api()->sendMessage(42, self::PREMIUM);
+
+        self::assertSame(['sendMessage', 'sendMessage'], $this->telegram()->calls(), 'refused, then sent plain: the customer still gets it');
+        self::assertSame(self::PLAIN, $this->telegram()->params(1)['text']);
+        self::assertNull($this->service(PremiumEmojiStatus::class)->current(), 'nothing about the bot being allowed');
+
+        // An edit to what the message shows already is no refusal: sent plain, it would change the message.
+        $this->telegram()->reset();
+        $this->telegram()->fail(400, 'Bad Request: message is not modified');
+        $this->api()->editMessageText(42, 7, self::PREMIUM);
+        self::assertSame(['editMessageText'], $this->telegram()->calls());
+    }
+
+    public function testNoMoreThanTelegramDrawsInOneMessageGoPremium(): void
+    {
+        $this->api()->sendMessage(42, str_repeat(self::PREMIUM . ' ', Limits::CUSTOM_EMOJI + 5));
+
+        $sent = $this->telegram()->params(0)['text'];
+        self::assertSame(Limits::CUSTOM_EMOJI, substr_count($sent, '<tg-emoji'));
+        self::assertSame(Limits::CUSTOM_EMOJI + 5, substr_count($sent, '🔥'), 'the rest their plain emoji');
+    }
+
+    /** A picture taking a message's place carries its caption inside the media: capped, and learned from, the same. */
+    public function testAnEditedPicturesCaptionIsCappedAndLearnedFromToo(): void
+    {
+        $status = $this->service(PremiumEmojiStatus::class);
+        $this->telegram()->reply(['message_id' => 7, 'chat' => ['id' => 42, 'type' => 'private'], 'caption' => '🔥', 'caption_entities' => [['type' => 'custom_emoji', 'offset' => 0, 'length' => 2, 'custom_emoji_id' => '111']]]);
+
+        $this->api()->editMessageMedia(42, 7, 'JPEG-BYTES', 'card.jpg', ['caption' => str_repeat(self::PREMIUM . ' ', Limits::CUSTOM_EMOJI + 5)]);
+
+        $caption = json_decode($this->telegram()->params(0)['media'], true)['caption'];
+        self::assertSame(Limits::CUSTOM_EMOJI, substr_count($caption, '<tg-emoji'), 'no more than Telegram draws in one');
+        self::assertSame(Limits::CUSTOM_EMOJI + 5, substr_count($caption, '🔥'));
+        self::assertTrue($status->current()['ok'] ?? null, 'kept in the caption: the bot may');
+    }
+
+    /**
+     * A message shown as typed (no parse mode) reads no tag: words that spell a premium emoji's there — a name in a
+     * report sent as plain words — are no premium emoji Telegram dropped.
+     */
+    public function testWordsShownAsTypedSayNothingOfPremiumEmoji(): void
+    {
+        $this->telegram()->reply(['message_id' => 1, 'chat' => ['id' => -100, 'type' => 'supergroup'], 'text' => self::PREMIUM]);
+
+        $this->api()->sendText(-100, self::PREMIUM);
+
+        self::assertNull($this->service(PremiumEmojiStatus::class)->current());
+    }
+
+    /**
+     * A drop says "no" — every message plain for a while — only from a new message to a private chat, where it is known
+     * to mean it: an edit, a picture's caption or a group's message dropping them says nothing; keeping them, any says yes.
+     */
+    public function testOnlyANewMessageToAPrivateChatDroppingThemSaysTheBotMayNot(): void
+    {
+        // Read afresh each time: what the bot learns changes between the reads.
+        $found = fn(): ?bool => $this->service(PremiumEmojiStatus::class)->current()['ok'] ?? null;
+
+        $this->telegram()->reply(['message_id' => 1, 'chat' => ['id' => 42, 'type' => 'private'], 'text' => '🔥 سلام']);
+        $this->api()->editMessageText(42, 1, self::PREMIUM);
+        $this->telegram()->reply(['message_id' => 2, 'chat' => ['id' => -100, 'type' => 'supergroup'], 'text' => '🔥 سلام']);
+        $this->api()->sendMessage(-100, self::PREMIUM);
+        self::assertNull($found(), 'an edit and a group\'s message say nothing');
+
+        $this->telegram()->reply(['message_id' => 3, 'chat' => ['id' => -100, 'type' => 'supergroup'], 'text' => '🔥 سلام', 'entities' => [['type' => 'custom_emoji', 'offset' => 0, 'length' => 2, 'custom_emoji_id' => '111']]]);
+        $this->api()->sendMessage(-100, self::PREMIUM);
+        self::assertTrue($found(), 'kept in a group: may');
+
+        $this->telegram()->reply(['message_id' => 4, 'chat' => ['id' => 42, 'type' => 'private'], 'text' => '🔥 سلام']);
+        $this->api()->sendMessage(42, self::PREMIUM);
+        self::assertFalse($found(), 'dropped from a new private message: may not');
     }
 
     private function api(): BotApi

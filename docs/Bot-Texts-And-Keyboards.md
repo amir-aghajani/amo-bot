@@ -40,7 +40,8 @@ A text's title opens its editor:
   empty lines), and turns red past the limit. A wording the customer would see nothing of counts 0.
 - **Under the field**, as you type, comes the first thing a save would refuse (the save still checks the wording
   itself, and refuses with the same words). [What Telegram refuses](#what-telegram-refuses) lists them.
-- **«پیش‌نمایش»** shows the text in Telegram's dark look, the variables filled with examples.
+- **«پیش‌نمایش»** shows the text in Telegram's dark look, the variables filled with examples — and, while
+  «ایموجی پرمیوم متن‌ها» is on, its emoji premium ([below](#premium-emoji-in-every-text)).
 - **«متن پیش‌فرض»** puts the shop's own wording in the editor — asking first when you typed something unsaved, which it
   would replace —, and **«ذخیره متن»** keeps it.
 
@@ -113,9 +114,51 @@ the label, its plain emoji. **In a notice** («اعلان»), Telegram draws no
 premium emoji: each shows its plain emoji, and the premium one where the same words go as a message (a refusal to
 something typed, the bot switched off).
 
-Nothing is lost when Telegram turns them away: the message goes again with their plain emoji (and buttons without their
-icons, a label's plain emoji back in its place), and for ten minutes every message goes plain from the start before they are tried again. The picker warns while
-the bot last found them refused — by `/emoji`, or by a message Telegram turned away.
+Nothing is lost when Telegram turns them away: a message refused while it carries premium emoji — over them, or for any
+other reason — goes again once with their plain emoji (and buttons without their icons, a label's plain emoji back in
+its place). The bot also learns from what Telegram keeps: a message it sends with premium emoji comes back with them, or
+with them dropped, which is how Telegram treats a bot that may not send them. Kept in any — to a customer or a group —,
+it is able. A refusal over the emoji, or emoji dropped from a new message in a private chat, says the bot is not able:
+for ten minutes every message goes plain from the start, then they are tried again. The picker and «ایموجی پرمیوم متن‌ها» warn while the bot was last found not able — by
+`/emoji`, by «بررسی دوباره» or by a message.
+
+#### Premium emoji in every text
+
+«ایموجی پرمیوم متن‌ها», the first card of «متن‌های ربات» in both panels: plain emoji you give a premium emoji each —
+❤️ your own premium heart, 🛒 a premium cart. While it is on, every ❤️ in every text the bot sends goes as that premium
+heart: the default wordings and the ones you reworded alike, without a text to edit.
+
+- **Only the shop's own words.** What the bot fills into a variable — a plan's or a customer's name, a link, what a
+  customer typed — stays as it is. So do code, a link's words and a date (`<code>`, `<a>`, `<tg-time>`), and a premium
+  emoji a text carries itself: it is the text's own, and wins. A notice («اعلان») shows the plain emoji: Telegram draws
+  no premium emoji there.
+- **Buttons.** A «دکمه» text whose label starts with a mapped emoji gets that premium emoji as its icon — unless the
+  label has its own («آیکون دکمه»), or a plan's, a category's or a server's name brings its own premium emoji right after
+  it, which is the icon then ([above](#premium-emoji)). A menu laid out as «دکمه‌های شیشه‌ای» ([below](#the-menu)) gets
+  icons the same way where a button has no «آیکون دکمه» of their own. A button of the emoji alone stays as it is:
+  Telegram takes no button without words. A «کیبورد پایین صفحه» keeps its labels as they are: its tap would arrive as the
+  words without the icon, which a customer may as well type at any question — there a button shows a premium icon with
+  its own «آیکون دکمه» alone.
+- **Turning it on** waits until the bot is found able: the account that made the bot in @BotFather has Telegram
+  Premium. Until then the switch «ایموجی پرمیوم متن‌ها روشن باشد» holds, saying why; the list may be laid out meanwhile.
+- **Is the bot able?** The card says it — «ربات می‌تواند ایموجی پرمیوم بفرستد», «ربات هنوز نمی‌تواند ایموجی پرمیوم
+  بفرستد», or not checked yet — and when it was last found. **«بررسی دوباره»** finds out now: the bot sends a short test
+  message with a premium emoji to your Telegram account linked to the panel («تنظیمات پنل › ورود به پنل») — an agent's
+  bot to the agent —, reads whether Telegram kept the premium emoji, and deletes the message; where it cannot, it says
+  why. `/emoji` finds it out too,
+  and so does every message the bot sends with premium emoji. An agent's shop is checked from the agent's own panel or
+  bot: the owner's panel cannot, as the agent's bot has no chat with the owner.
+- **The list** — each plain emoji, the premium one in its place, and how many of the bot's texts it is in now («در ۱۲
+  متن»); ✕ takes one off. ❤ and ❤️ count as one. «افزودن ایموجی» picks a premium emoji from the bot's own — one the bot
+  knows, shown it with `/emoji` ([above](#premium-emoji)) — and fills in its own plain emoji: keep it, or write the one
+  it should stand for; «افزودن» adds it, and «ذخیره» keeps the card. At most 100. Telegram draws at most 100 premium emoji in
+  one message; any past that show plain.
+- **The previews show them**: a text's «پیش‌نمایش» draws the mapped emoji premium and says so under it, and the
+  keyboard's preview gives the menu's buttons their icons.
+- **When the owner's Premium lapses**, Telegram stops drawing them: messages go with their plain emoji and nothing is
+  lost — the switch and the list stay as they are, and the premium emoji come back with Premium.
+
+In the bot: «💎 ایموجی پرمیوم متن‌ها» ([Managing the shop from the bot](Bot-Management.md#the-bot)).
 
 ## The menu
 
@@ -131,12 +174,14 @@ the bot last found them refused — by `/emoji`, or by a message Telegram turned
     short guide you may reword), «پشتیبانی», «کد هدیه» or «گردونه شانس». Each once.
   - «متن دکمه» — its label, 64 characters, an emoji welcome; no two alike (a keyboard's tap arrives as its label).
   - «آیکون دکمه» — a premium emoji before the label (seen only as [above](#premium-emoji)). A premium emoji's tag pasted
-    into the label is offered «انتقال به آیکون دکمه».
+    into the label is offered «انتقال به آیکون دکمه». Without one, «ایموجی پرمیوم متن‌ها» may give the button its icon
+    ([above](#premium-emoji-in-every-text)).
   - «رنگ دکمه» — «پیش‌فرض», «اصلی» (blue), «موفقیت» (green) or «خطر» (red), Telegram's own.
   - «جای دکمه» — «به راست», «به چپ», «ردیف بالا», «ردیف پایین».
   - «حذف دکمه» takes it off the keyboard.
 
-The preview shows the menu under your greeting. «ذخیره» checks the keyboard as a whole and says what is wrong under its
+The preview shows the menu under your greeting, each button with the icon it goes with — «ایموجی پرمیوم متن‌ها»'s
+too. «ذخیره» checks the keyboard as a whole and says what is wrong under its
 row; «بازگشت به پیش‌فرض» brings the shop's own layout back — saved at once, asked first, no way back.
 
 The shop's layout: «خرید اشتراک»; «اپلیکیشن»; «اکانت تست»; «سرویس‌های من» | «تمدید سرویس»; «آموزش» | «کیف پول + شارژ»;

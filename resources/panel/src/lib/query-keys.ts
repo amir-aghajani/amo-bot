@@ -103,6 +103,8 @@ export const queryKeys = {
   keyboards: ['keyboards'] as const,
   botTexts: ['bot-texts'] as const,
   customEmojis: ['custom-emojis'] as const,
+  /** «ایموجی پرمیوم متن‌ها» (the bot texts page): the switch, the map, whether the bot may send premium emoji — and the editor's preview draws by the map. */
+  premiumTexts: ['premium-texts'] as const,
   broadcasts: ['broadcasts'] as const,
   /** The support tickets (pages/tickets — and a customer's page, narrowed to them). */
   tickets: ['tickets'] as const,

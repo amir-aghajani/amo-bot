@@ -115,6 +115,8 @@ const REFUSED: Record<string, [string, string]> = {
   'past the last character': ['&#1114111;', '«&#1114111;»'],
   'too long to be a number': ['&#00000000065;', '«&#00000000065;»'],
   'half an emoji': ['&#55357;&#56832;', 'نیمی از یک نویسه'],
+  // A tag name in capitals is read in ASCII alone: the Kelvin sign (U+212A) is no «k».
+  'a lookalike of a letter in a tag name': ['<stri\u212Ae>x</strike>', 'را نمی‌شناسد'],
 }
 
 /** A message in Telegram's HTML whose one variable, the link, may be left out: what a wording is read as there alone. */

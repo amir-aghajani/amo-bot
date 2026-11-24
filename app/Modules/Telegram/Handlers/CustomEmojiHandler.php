@@ -94,14 +94,17 @@ final class CustomEmojiHandler implements Handler
         }
         $template = EntityHtml::of($text, $entities);
 
-        // The bot's own copy: whether Telegram kept its premium emoji is whether the bot may use them.
+        // The bot's own copy: whether Telegram kept its premium emoji is whether the bot may use them — asked afresh, a
+        // "no" held from before would send it plain (BotApi).
+        $was = $this->status->current();
         $this->status->forget();
         $kept = null;
         try {
-            $kept = self::carriesPremiumEmoji($ctx->reply($template));
+            $kept = PremiumEmojiStatus::kept($ctx->reply($template));
             $this->status->record($kept);
         } catch (TelegramApiException) {
-            // Not sent at all: what the bot may use stays unknown; the emoji are kept all the same.
+            // Not sent at all: what was found before stands; the emoji are kept all the same.
+            $this->status->restore($was);
         }
 
         $summary = Messages::fill(Messages::EMOJI_SAVED, ['count' => Persian::number(count($found)), 'new' => Persian::number($new)]);
@@ -126,17 +129,5 @@ final class CustomEmojiHandler implements Handler
         } catch (TelegramApiException | TelegramUnreachableException) {
             // The window is gone or past editing: the result below says it all.
         }
-    }
-
-    /** @param array<string, mixed> $message A message the bot sent, as Telegram answered it */
-    private static function carriesPremiumEmoji(array $message): bool
-    {
-        foreach ((array) ($message['entities'] ?? []) as $entity) {
-            if (is_array($entity) && ($entity['type'] ?? null) === 'custom_emoji') {
-                return true;
-            }
-        }
-
-        return false;
     }
 }

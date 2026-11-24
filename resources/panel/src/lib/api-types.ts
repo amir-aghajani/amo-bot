@@ -4202,6 +4202,49 @@ export interface CustomEmojisResponse {
   } | null
 }
 
+/** A plain emoji the bot's texts draw as a premium one. */
+export interface PremiumTextItem {
+  /** One plain emoji (❤ and ❤️ are the same one). */
+  emoji: string
+  /** The premium emoji's Telegram id: digits, as a string. Each premium emoji once. */
+  emoji_id: string
+}
+
+/** A plain emoji the bot's texts draw as a premium one, and how many texts it is in. */
+export interface PremiumTextRow {
+  /** One plain emoji. */
+  emoji: string
+  /** The premium emoji's Telegram id: digits, as a string. */
+  emoji_id: string
+  /** How many of the shop's texts it is drawn premium in, as they are worded now. */
+  texts: number
+}
+
+export interface PremiumTextsRequest {
+  /** Left out: as it is. */
+  enabled?: boolean
+  /** The whole map, in order; left out: as it is. */
+  items?: PremiumTextItem[]
+}
+
+export interface PremiumTextsResponse {
+  premium_texts: {
+    /** The texts draw the mapped emoji premium — every text's own words, the default and the reworded alike; a premium emoji a text carries itself wins. */
+    enabled: boolean
+    /** In the admin’s order. */
+    items: PremiumTextRow[]
+    /** Whether the bot can send premium emoji, as last found — by the check, /emoji or a message Telegram answered —; null before it was ever found. */
+    status: {
+      ok: boolean
+      checked_at: string
+    } | null
+    /** The switch may be turned on: the bot was found able to send premium emoji. */
+    can_enable: boolean
+    /** The most emoji the map holds. */
+    max: number
+  }
+}
+
 /** What a gift code gives: Toman in the wallet, or a free service of a plan. */
 export type GiftCodeKind = 'wallet' | 'plan'
 
@@ -8913,6 +8956,10 @@ export type PanelWrite =
   | { method: 'DELETE'; path: `/agency/levels/${number}`; body: undefined; answer: void }
   /** Remove a premium emoji from the picker. Texts that use it keep it. A 404 for one the picker does not have. */
   | { method: 'DELETE'; path: `/bot/custom-emojis/${string}`; body: undefined; answer: void }
+  /** Save the switch and the map. Turning it on is refused (422 on `enabled`) until the bot was found able to send premium emoji (`can_enable`); a premium emoji new to the map must be one the bot knows (`…/custom-emojis`). */
+  | { method: 'PUT'; path: '/bot/premium-texts'; body: PremiumTextsRequest; answer: PremiumTextsResponse }
+  /** The bot of the shop on screen sends a short message with a premium emoji and reads whether Telegram kept it — to the owner's Telegram accounts linked to the panel (the main shop) or to the agent (their bot's shop) —, records the answer in `status` and deletes the message. A 422 on `check` when the bot knows no premium emoji yet, has nowhere to send, or could not send. */
+  | { method: 'POST'; path: '/bot/premium-texts/check'; body: undefined; answer: PremiumTextsResponse }
   /** Save a text's wording. */
   | { method: 'PUT'; path: `/bot/texts/${string}`; body: BotTextRequest; answer: BotTextResponse }
   /** Reset a text to its default wording. */

@@ -1,8 +1,10 @@
 import { useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { Bold, Check, Code, EyeOff, Italic, Link2, Quote, RotateCcw, Sparkles, Strikethrough, TriangleAlert, Underline, type LucideIcon } from 'lucide-react'
 import { flushSync } from 'react-dom'
 import { toast } from 'sonner'
 import { iconPrefix, withButtonIcon, withoutButtonIcon } from '@/components/bot-texts/button-icon'
+import { emojiLookup, mapLabel, mapWording } from '@/components/bot-texts/emoji-map'
 import { KIND_LABELS } from '@/components/bot-texts/kinds'
 import { PremiumEmojiPicker, premiumEmojiTag } from '@/components/bot-texts/premium-emoji-picker'
 import { PremiumIconField } from '@/components/bot-texts/premium-icon-field'
@@ -20,6 +22,7 @@ import { api } from '@/lib/api'
 import type { BotTextKind, BotTextRow } from '@/lib/api-types'
 import { isolateMarkup } from '@/lib/direction'
 import { formatNumber } from '@/lib/format'
+import { premiumTextsQuery } from '@/lib/queries'
 import { useForm } from '@/lib/use-form'
 import { useConfirmDiscard } from '@/lib/use-unsaved-guard'
 import { cn } from '@/lib/utils'
@@ -101,6 +104,16 @@ function TextForm({ text, onCancel, onSaved }: { text: BotTextRow; onCancel: () 
   // says tags: each kept whole and as typed in the Persian sentence (isolateMarkup — bare, «</b>» would read «<b/>»).
   const problem = useMemo(() => wordingProblem(text, values.value), [text, values.value])
   const refused = error('value')
+  // The preview as the bot sends it, of the wording the server would keep: the shop's premium emoji (its map, while on)
+  // drawn in its own words, then the samples — a button's leading one decided on the label filled, as the server does.
+  const { data: premium } = useQuery(premiumTextsQuery)
+  const map = useMemo(() => emojiLookup(premium), [premium])
+  const plain = fillSamples(kept, samples, text.html)
+  const preview = useMemo(() => {
+    const wording = keptWording(text.kind, values.value)
+    const filled = fillSamples(mapWording(wording, text.kind, map), samples, text.html)
+    return text.kind === 'button' ? mapLabel(wording, filled, map) : filled
+  }, [values.value, text.kind, text.html, samples, map])
 
   /**
    * Write `open` and `close` around the selection — the selection, or the caret, stays between them —, or, with
@@ -209,8 +222,9 @@ function TextForm({ text, onCancel, onSaved }: { text: BotTextRow; onCancel: () 
 
         <div className="lg:sticky lg:top-0 lg:self-start">
           <p className="mb-2 text-footnote font-medium text-muted-foreground">پیش‌نمایش</p>
-          <TextPreview kind={text.kind} text={fillSamples(values.value, samples, text.html)} />
+          <TextPreview kind={text.kind} text={preview} />
           {text.variables.length > 0 && <p className="mt-2 text-caption leading-relaxed text-muted-foreground">به جای متغیرها مقدار نمونه نشسته است.</p>}
+          {preview !== plain && <p className="mt-2 text-caption leading-relaxed text-muted-foreground">ایموجی‌های «ایموجی پرمیوم متن‌ها» به شکل پرمیوم نشان داده شده‌اند.</p>}
         </div>
       </div>
 

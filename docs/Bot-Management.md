@@ -458,6 +458,23 @@ A start or an end is typed as a Jalali day, an hour after it if you like, in the
   «📄 دیدن متن پیش‌فرض», and «↩️ پیش‌فرض», asked first, its yes red. «✨ ایموجی‌های پرمیوم» lists the premium emoji the bot
   knows — one taken off after a question — and adds more, as `/emoji` does
   ([Bot texts and keyboards](Bot-Texts-And-Keyboards.md)).
+- **«💎 ایموجی پرمیوم متن‌ها»** (the owner's and an agent's), under «📝 متن‌های ربات» and from «✨ ایموجی‌های پرمیوم» —
+  the panel's card of the same name ([Bot texts and keyboards](Bot-Texts-And-Keyboards.md#premium-emoji-in-every-text)),
+  each change saved at once; «🔎 جستجوی تنظیمات» finds it as «ایموجی پرمیوم» or «premium emoji». Its card says whether the
+  bot can send premium emoji («✅ می‌تواند ایموجی پرمیوم بفرستد», «⚠️ نمی‌تواند ایموجی پرمیوم بفرستد» with why, «❔
+  نامشخص، هنوز بررسی نشده») and «آخرین بررسی», the switch's state and how full the list is («۳ ایموجی از ۱۰۰»):
+  - **«🔍 بررسی دوباره»**, in the shop's own bot only: the bot sends its short test message to this chat, reads it and
+    deletes it, then says what it found. In another shop's bot — the owner on an agent's shop — it is not offered: that
+    bot has no chat with you, and the agent checks from their own bot or panel.
+  - **The switch** says the state a tap sets («▶️ روشن کردن «ایموجی پرمیوم متن‌ها»», «⏸ خاموش کردن …»). Until the bot is
+    found able it reads «🔒 روشن کردن، بعد از بررسی موفق», and a tap is answered with why; one already on goes off at a tap.
+  - **The list**, 20 a page: each plain emoji with its premium one in its place and how many texts it is in («در ۴ متن»),
+    a «🗑» button each. A tap asks first — «این ایموجی از فهرست حذف شود؟», the texts back to the plain emoji, the premium
+    one kept in «✨ ایموجی‌های پرمیوم» — before «🗑 بله، حذف شود».
+  - **«➕ افزودن ایموجی»** (gone once the list holds 100): the bot's premium emoji not in the list yet, numbered, 24 a page;
+    picked, it asks which plain emoji it stands for — «✔️ همین … بماند» keeps its own, or send another. What is not one
+    emoji, or one the list has already, is refused with the panel's words, the question kept. While the bot knows none,
+    it says how to show it some with `/emoji` («✨ افزودن ایموجی تازه» in the shop's own bot).
 - **«⌨️ کیبوردها»** — the keyboards, the start menu one tap in. A keyboard: a card of its type, layout and size, its
   buttons drawn as customers see them, each a tap to its own card (its action, words, icon, colour and place): «✏️ متن
   دکمه», «🎨 رنگ دکمه» (each colour shown as itself), «✨ آیکون دکمه», «🔁 کار دیگر», moved («➡️ به راست», «⬅️ به چپ»,

@@ -215,13 +215,25 @@ function entityAt(text: string, at: number): { length: number } | { problem: str
   return { length: 1 }
 }
 
+/** A tag of an HTML text as it was read: from its «<» to its «>» (both its own), its name in lower case, and whether it closes one. */
+export interface HtmlTag {
+  start: number
+  end: number
+  name: string
+  closing: boolean
+}
+
+/** A tag's or an attribute's name as PHP's strtolower() reads it: ASCII capitals alone — the Kelvin sign (U+212A) is no «k». */
+const lower = (name: string): string => name.replace(/[A-Z]+/g, (capitals) => capitals.toLowerCase())
+
 /**
  * The first thing Telegram would not take in an HTML text, or null — mirroring TelegramHtml::problem(), which reads it
  * as Telegram's parser does (tag names in any case, attribute names exactly as written): Bot API tags only,
  * `name="value"` attributes, tags closed in order, no stray «<», entities Telegram reads, nothing Telegram would silently
- * drop, and a premium emoji as a numeric id around one plain emoji.
+ * drop, and a premium emoji as a numeric id around one plain emoji. Each tag read goes into `tags`, in order — those of a
+ * text with nothing wrong are where TelegramHtml::mapWords() finds them, for it reads them the same way.
  */
-function telegramHtmlProblem(text: string): string | null {
+export function telegramHtmlProblem(text: string, tags: HtmlTag[] = []): string | null {
   const open: string[] = []
   let i = 0
 
@@ -250,7 +262,7 @@ function telegramHtmlProblem(text: string): string | null {
       // As written: Telegram reads `href`, not `HREF`.
       const name = text.slice(start, i)
       if (name === '') return `در تگ <${tag}> پیش از = نام ویژگی نیامده است.`
-      const read = name.toLowerCase()
+      const read = lower(name)
       if (name !== read && (ATTRIBUTES[tag] ?? []).includes(read)) {
         return `در تگ <${tag}> نام «${name}» را با حروف کوچک بنویسید: ${read}؛ تلگرام آن را با حروف بزرگ نمی‌خواند.`
       }
@@ -294,9 +306,10 @@ function telegramHtmlProblem(text: string): string | null {
     }
     if (text[i] !== '<') continue
 
+    const start = i
     if (text[i + 1] === '/') {
       i += 2
-      const name = word().toLowerCase()
+      const name = lower(word())
       skipSpaces()
       if (text[i] !== '>') return `تگ </${name}> با > بسته نشده است.`
       const current = open.pop()
@@ -304,11 +317,12 @@ function telegramHtmlProblem(text: string): string | null {
       if (name !== '' && name !== current) {
         return open.includes(name) ? `پیش از </${name}> باید </${current}> بسته شود.` : `تگ </${name}> بسته شده ولی پیش از آن باز نشده است.`
       }
+      tags.push({ start, end: i, name, closing: true })
       continue
     }
 
     i++
-    const name = word().toLowerCase()
+    const name = lower(word())
     if (!/^[a-z]/.test(name)) return STRAY
     if (!TAGS.includes(name)) {
       return name === 'br' || name === 'br/' ? 'تلگرام تگ <br> ندارد؛ برای رفتن به خط بعد فقط Enter بزنید.' : `تلگرام تگ <${name}> را نمی‌شناسد؛ تگ‌های مجاز: ${ALLOWED}.`
@@ -323,6 +337,7 @@ function telegramHtmlProblem(text: string): string | null {
     const problem = nesting(name, open)
     if (problem !== null) return problem
     open.push(name)
+    tags.push({ start, end: i, name, closing: false })
   }
 
   const last = open.at(-1)

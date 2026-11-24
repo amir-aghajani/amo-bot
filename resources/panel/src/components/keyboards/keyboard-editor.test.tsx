@@ -122,3 +122,53 @@ describe('the reset to the default layout', () => {
     expect(screen.getAllByRole('listitem').map((row) => row.textContent?.includes('🛍️ خرید'))).toEqual([true, false])
   })
 })
+
+describe('the preview with the shop’s premium emoji', () => {
+  /** The ids of the premium emoji the preview draws, and whether it shows these labels. */
+  function preview(type: KeyboardLayoutData['type'], rows: KeyboardButtonSpec[][], icons: Map<string, string>, labels: string[]) {
+    const { unmount } = render(
+      <KeyboardEditor
+        keyboard={{ name: 'start', title: 'منوی اصلی', is_default: false, type, rows }}
+        actions={ACTIONS}
+        styles={[]}
+        limits={{ rows: 3, per_row: 3, label: 32 }}
+        welcome={undefined}
+        icons={icons}
+        onSaved={vi.fn()}
+      />,
+      { wrapper: providers().wrapper },
+    )
+    const figure = screen.getByRole('figure', { name: 'پیش‌نمایش در تلگرام' })
+    const drawn = {
+      icons: within(figure)
+        .queryAllByRole('img')
+        .map((img) => img.getAttribute('src')?.split('/').at(-2)),
+      labels: labels.map((label) => within(figure).queryByText(label) !== null),
+    }
+    unmount()
+    return drawn
+  }
+
+  it('draws a mapped leading emoji as an inline button’s icon, out of its label — a button’s own icon first', () => {
+    const icons = new Map([
+      ['🎧', '666'],
+      ['🛍', '888'],
+    ])
+    const rows = [[{ ...BUY, icon: '42' }, SUPPORT], [WALLET]]
+
+    expect(preview('inline', rows, icons, ['پشتیبانی', '🛍️ خرید', '💰 کیف پول'])).toEqual({ icons: ['42', '666'], labels: [true, true, true] })
+  })
+
+  it('leaves a reply keyboard’s labels as they are: its tap sends the words without the icon', () => {
+    const icons = new Map([
+      ['🎧', '666'],
+      ['🛍', '888'],
+    ])
+
+    expect(preview('reply', [[{ ...BUY, icon: '42' }, SUPPORT]], icons, ['🎧 پشتیبانی', 'پشتیبانی'])).toEqual({ icons: ['42'], labels: [true, false] })
+  })
+
+  it('reads a label’s spaces as the server does: a no-break space after the emoji is words to it, the icon taken', () => {
+    expect(preview('inline', [[{ ...BUY, label: '🛍️ ' }]], new Map([['🛍', '888']]), []).icons).toEqual(['888'])
+  })
+})

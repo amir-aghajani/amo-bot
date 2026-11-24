@@ -8,9 +8,9 @@ use App\Modules\Settings\Services\Settings;
 use Illuminate\Support\Carbon;
 
 /**
- * Whether the bot may send premium emoji (only while its owner has Telegram Premium), as last found out — by /emoji, or
- * by a message Telegram refused over one (BotApi). While a "no" is fresh (HOLD_SECONDS), messages go plain from the
- * start instead of paying a refused call each.
+ * Whether the bot may send premium emoji (only while its owner has Telegram Premium), as last found out — by /emoji, by
+ * the check (PremiumCheck), or by a message with some that Telegram refused over them or sent without them (BotApi).
+ * While a "no" is fresh (HOLD_SECONDS), messages go plain from the start instead of paying a refused call each.
  */
 final class PremiumEmojiStatus
 {
@@ -42,11 +42,43 @@ final class PremiumEmojiStatus
         $this->settings->forget(self::KEY);
     }
 
+    /**
+     * Put back what was found before (current()'s, as of when it was found) — nothing, when nothing was.
+     *
+     * @param array{ok: bool, checked_at: string}|null $was
+     */
+    public function restore(?array $was): void
+    {
+        if ($was === null) {
+            $this->forget();
+
+            return;
+        }
+        $this->settings->set(self::KEY, ['ok' => $was['ok'], 'at' => $was['checked_at']]);
+    }
+
     /** Whether the bot was told no within the hold: send the plain emoji from the start. */
     public function refusedLately(): bool
     {
         $status = $this->current();
 
         return $status !== null && !$status['ok'] && Carbon::parse($status['checked_at'])->addSeconds(self::HOLD_SECONDS)->isFuture();
+    }
+
+    /**
+     * Whether Telegram kept a premium emoji in a message the bot sent (a custom_emoji entity in its text or caption): it
+     * drops them silently while the bot may not send them.
+     *
+     * @param array<string, mixed> $message A message the bot sent, as Telegram answered it
+     */
+    public static function kept(array $message): bool
+    {
+        foreach ((array) ($message['entities'] ?? $message['caption_entities'] ?? []) as $entity) {
+            if (is_array($entity) && ($entity['type'] ?? null) === 'custom_emoji') {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

@@ -259,6 +259,59 @@ it then takes the place of («🌍 %server%») — becomes the button's icon, wh
 message keep it (`html()`). Its `problem()` refuses any other tag in such a wording, and in a button's label more than
 one premium emoji, one anywhere but at the start, or one with no words beside it.
 
+**The shop's premium emoji in every text** — `Emoji\EmojiMap` («ایموجی پرمیوم متن‌ها»), kept per shop in the settings
+row `bot.premium_texts`, `{enabled, items: [{emoji, emoji_id}]}` (`stored()`; the row is forgotten when saved off and
+empty):
+
+- **`save($input)`** takes the switch and the whole list. `enabled` turns on (from off) only while `canEnable()` —
+  `PremiumEmojiStatus::current()['ok'] === true` —, else a 422 on `enabled` (`NOT_ABLE`); one on stays on, and its list
+  may change, whatever was found since. `items`, at most `MAX` (100): each `emoji` one emoji as a reader sees it
+  (`isOne()`: `PremiumText::leadingEmoji()` of it is itself), unique by `key()` — U+FE0E and U+FE0F dropped, so ❤ and ❤️
+  are one (`TWICE_EMOJI`); each `emoji_id` 1 to 20 digits (`ID_REFUSED`), unique (`TWICE_ID`), and one the list had or
+  the bot knows (a `CustomEmoji` row; else `NOT_KNOWN`). Refusals go on `items.N.emoji` and `items.N.emoji_id`.
+- **`apply($wording, $kind)`**, while on: in a kind Telegram reads as HTML (a message, a caption, a part),
+  `TelegramHtml::mapWords()` rewrites each run of words outside `SKIP` — `tg-emoji`, `code`, `pre`, `a`, `tg-time` —:
+  each grapheme (`\X`) whose `key()` the map has, and that `TelegramHtml::isEmoji()` calls an emoji, becomes
+  `<tg-emoji emoji-id="…">…</tg-emoji>`; applied twice, it changes nothing. A button's wording and a popup's come back as
+  they are. It never asks `PremiumEmojiStatus`: while the bot is found unable, `BotApi` sends the message plain
+  ([below](#telegrams-api)).
+- **`label($wording, $label)`** decides a button's icon on its filled label: the leading emoji wrapped when the unfilled
+  wording starts with it, the map has it and the label still starts with it — not when a `<tg-emoji>` follows it after
+  spaces (a name's own, `PremiumText`, which is the icon then), nor when nothing does (Telegram takes no button without
+  words). `PlainWording::icons()` makes it the icon as `BotApi` sends.
+- **`icon($label)`** is the id the map gives a menu label's leading emoji (null while off), for `KeyboardLayout`
+  ([below](#keyboards-and-gates)); **`uses($emojis, $wordings)`** counts by `key()` the wordings each emoji would be drawn
+  in, through the same rewrite whatever the switch — the API's `texts`.
+
+`TelegramHtml::mapWords($text, $map, $skip)` passes each run of words outside the tags `$skip` names through `$map` —
+the tags, their attributes and the words inside them untouched; a text with no «<» is mapped whole, and one `problem()`
+refuses comes back as it is. `BotTexts::compose()` maps the wording in use (`template()`, unfilled) with `apply()`
+before `marked()` and `Messages::fill()` put the values in — so a filled-in value is never mapped —, and passes a
+button's filled label through `label()`. `BotTexts::wordings()` is every text `TextCatalog::says()` in the shop, as
+`[kind, template]`.
+
+`Emoji\PremiumCheck` finds out whether the bot may send premium emoji, the one way Telegram allows: `sample()` is the
+list's first item, else the newest premium emoji the bot knows (null for none); `probe($chat, $sample)` forgets the
+status (a "no" held would have `BotApi` send it plain), sends «🔍 بررسی ایموجی پرمیوم: …» with it, records whether a
+`custom_emoji` entity came back, and deletes the message (best effort: left, it says what it is) — null when it could
+not be sent, nothing learned and the status as it was before put back (`PremiumEmojiStatus::restore()`). `/emoji`
+(`CustomEmojiHandler`) does the same with its own copy.
+
+The panels' API, `Admin\Api\PremiumTextsController` in `routes/api.php`'s `$configuration` group:
+
+- `GET /bot/premium-texts` → `{premium_texts: {enabled, items: [{emoji, emoji_id, texts}], status: {ok, checked_at} | null,
+  can_enable, max}}`, `texts` from `EmojiMap::uses()` over `BotTexts::wordings()`;
+- `PUT /bot/premium-texts` `{enabled?, items?}` (the whole list) → the same;
+- `POST /bot/premium-texts/check` → the same, with the new status. It goes to `?chat=` only through the bot's door
+  (`Principal::$inBot`: the chat the admin tapped in); for an agent, to their own account, from their bot; for the owner,
+  to the main shop's linked accounts (`OwnerLinks::ids()`), each tried until one is sent. A 422 on `check` says why not:
+  `PremiumCheck::NOTHING_TO_TEST`, `NOWHERE` (no account), `OTHER_BOT` (the owner on an agent's shop, whose bot has no
+  chat with them) or `NOT_SENT`.
+
+The bot's screen is `Sections\Bot\Texts\PremiumTextsScreen` (`txp`), the panel's card
+`components/bot-texts/premium-texts-card.tsx`; the settings search has both at `/bot-texts`
+(`scripts/settings-index.mjs`'s `SECTIONS` → `PremiumTextsCard`, `SettingsIndex::SECTIONS` → `txp`).
+
 Lengths are counted as Telegram counts them: UTF-16 units of what is shown (`Api\Limits`,
 `TelegramHtml::visibleLength()`). `Messages` keeps what the admin does not reword: the formatters' units, the default menu labels, and
 the admins' own words (/broadcast, /emoji, the report group). `WebText` turns a text into plain text or safe HTML for the
@@ -274,6 +327,14 @@ order — the first button the rightmost on a Persian screen — and reversed wh
 left to right. A stored layout is read back through the same checks as a save; one that fails them shows the built-in
 menu, so a bad row never takes the menu away. A reply keyboard's tap arrives as its label, so labels are unique and
 double as routes.
+
+The shop's premium emoji ([above](#texts)) give an inline menu its icons: `MainMenu::markup()` sends
+`KeyboardLayout::premium(EmojiMap::icon(...))`, where each inline button with no `icon` of its own whose label starts with
+a mapped emoji has that emoji wrapped as a `<tg-emoji>` in its label — which `BotApi` sends as the button's icon, and
+plain again, in the label, when the message goes plain; a label of the emoji alone is left. «⚙️ مدیریت» is added after
+(`withManagement()`) and never gets one. A reply keyboard is left as it is: its tap sends the label without its icon, and
+those words alone would be taken for the button wherever a customer typed them — a step's answer too —, so there only a
+button's own `icon` shows, and labels route as they always did (`labels()`, `actionFor()`).
 
 The keyboards the code builds keep the same reading order. `InlineKeyboard::row()` takes its buttons left to right, as
 Telegram does; `grid()` lays buttons out N to a row with each row's first button on the right (the top-up amounts, the
@@ -601,9 +662,23 @@ screens' courtesy: the door refuses anything else.
 
 `Api\BotApi` is a thin client: one method per call, refusals as `TelegramApiException`, whose `refusal()` (`Api\Refusal`)
 is the one place Telegram's codes and descriptions are read. A short flood wait is honoured once. Answering a tap and
-deleting a message never throw. A message Telegram refuses over its premium emoji (allowed only while the bot's owner
-has Telegram Premium) is resent with plain emoji, and the "no" is remembered for a while (`PremiumEmojiStatus`).
-`BotApi::longestCall()` sizes every lease on work that calls Telegram.
+deleting a message never throw. `BotApi::longestCall()` sizes every lease on work that calls Telegram.
+
+**Premium emoji** go only while the bot's owner has Telegram Premium, which no call tells — `call()` finds it out from
+what Telegram does with them (`PremiumEmojiStatus`, settings `bot.premium_emoji` `{ok, at}`). A call that carries
+some — a `<tg-emoji>` in its text or caption, a button's icon; `withoutPremiumEmoji()` gives its plain twin, tags
+unwrapped, a label's plain emoji back, icons off —:
+
+- goes plain from the start while `refusedLately()`: a "no" younger than `HOLD_SECONDS` (600);
+- else goes `capped()` — no more than `Limits::CUSTOM_EMOJI` (100, what Telegram draws in one message) `<tg-emoji>` in
+  a `text`, a `caption` or a `media.caption`, the rest unwrapped — with its icons (`withIcons()`);
+- refused with `Refusal::CustomEmoji`, or with any other 400 but `Refusal::NotModified`, is sent plain once, so a
+  customer never loses a message to an emoji; only `CustomEmoji` records "no";
+- sent, `learn()` reads what Telegram kept: for a `text`, a `caption` or an edited picture's `media.caption` read as
+  HTML (`parse_mode`) with a `<tg-emoji>`, sent to a `private`, `group` or `supergroup` chat, a `custom_emoji` entity (in
+  `entities` or `caption_entities`) records yes unless it was yes already; none records no — every message plain for the
+  hold — only from a new message (`sendMessage`) to a `private` chat, the one place a drop is known to mean it, and only
+  unless a "no" is still held: an edit, a caption or a group's message dropping them records nothing. `/emoji` (`CustomEmojiHandler`) and `PremiumCheck` record it from their own message.
 
 `Polling\Poller` keeps one long poll open per bot at once (`LongPolls`) and runs the scheduler in a process of its own,
 because the polls only move while the poller waits on them. An agent's bot given a new token counts as a new bot: the
@@ -625,7 +700,9 @@ against the fake Telegram, and `said()`, `popup()`, `calls()`, `inlineKeyboard()
 group has `groupTap()`, `groupReply()` and `botMembership()`. `BotQueryBudgetTest` holds each common screen to a fixed
 budget of queries and Telegram calls — a budget raised says what the new query buys (the menu's mini app row, for one).
 `miniApp()` switches the shop's mini app on for a test of its button (`BotMenuTest`). Unit tests of the API, texts and
-keyboards are in `tests/Unit/Telegram`. The management's are in `tests/Feature/BotAdmin`: `BotAdminDoorTest` (the door's
+keyboards are in `tests/Unit/Telegram`. The shop's premium emoji: `PremiumTextsTest` (the map in texts, parts, popups,
+buttons, the menu and its taps), `AdminPremiumTextsApiTest` (the switch, the list's refusals, where the check goes) and
+`PremiumEmojiTest` (what `BotApi` learns, the plain resend, the cap). The management's are in `tests/Feature/BotAdmin`: `BotAdminDoorTest` (the door's
 guards), `BotAdminFlowTest` (an owner linked by `OwnerLinks::link()` and `redeem()`, `/admin`, taps by `Nav::to()`,
 typed answers), `BotAdminFoundationTest` (the `Ui` layer as every screen uses it: colours, copy buttons, rows drawn
 right to left, the one way around, the card and folded help, the pages' middle button, a question's value now and its

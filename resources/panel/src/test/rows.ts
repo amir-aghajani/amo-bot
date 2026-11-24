@@ -26,6 +26,7 @@ import type {
   PaymentRow,
   PlanCategoryRow,
   PlanRow,
+  PremiumTextsResponse,
   QrBackgroundInfo,
   ReviewRow,
   RialitMethodRow,
@@ -197,6 +198,26 @@ export function qrBackgroundRow(overrides: Partial<QrBackgroundInfo> = {}): QrBa
 /** The bot settings as their page reads them (GET /bot/settings): `settings`, the shipped QR background, and the name variables `more` gives (none). */
 export function botSettingsResponse(settings: BotSettingsData = botSettingsRow(), more: Partial<Omit<BotSettingsResponse, 'settings'>> = {}): BotSettingsResponse {
   return { settings, qr_background: qrBackgroundRow(), name_variables: [], ...more }
+}
+
+/**
+ * «ایموجی پرمیوم متن‌ها» as the bot texts page reads it (GET /bot/premium-texts): on, ❤️ drawn as premium emoji 41 in
+ * three texts and 🔥 as 42 in none; the bot found able to send premium emoji on 2026-10-06, so the switch may go on.
+ */
+export function premiumTextsResponse(overrides: Partial<PremiumTextsResponse['premium_texts']> = {}): PremiumTextsResponse {
+  return {
+    premium_texts: {
+      enabled: true,
+      items: [
+        { emoji: '❤️', emoji_id: '41', texts: 3 },
+        { emoji: '🔥', emoji_id: '42', texts: 0 },
+      ],
+      status: { ok: true, checked_at: '2026-10-06T08:55:00Z' },
+      can_enable: true,
+      max: 100,
+      ...overrides,
+    },
+  }
 }
 
 /** A term's whole days as the API says them beside its hours: rounded up — 0 only for none. */

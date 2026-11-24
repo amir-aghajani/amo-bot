@@ -28,6 +28,9 @@ final class Limits
     /** Premium emoji asked for in one getCustomEmojiStickers. */
     public const CUSTOM_EMOJI_IDS = 200;
 
+    /** Premium emoji Telegram draws in one message (its `message_animated_emoji_max`); past it, their plain emoji. */
+    public const CUSTOM_EMOJI = 100;
+
     /** Messages a minute to one group. */
     public const GROUP_PER_MINUTE = 20;
 

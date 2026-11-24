@@ -54,6 +54,7 @@ final class SettingsIndex
         '/bot-settings/service-transfers' => ['bsv', 'انتقال سرویس', [...self::SETTINGS_MENU, 'تنظیمات ربات'], ['transfer', 'انتقال', 'انتقال سرویس', 'دادن سرویس']],
         '/bot-settings/wallet' => ['bsw', 'کیف پول', [...self::SETTINGS_MENU, 'تنظیمات ربات'], ['wallet', 'balance', 'top up', 'topup', 'charge', 'کیف پول', 'موجودی', 'شارژ', 'افزایش موجودی', 'حداقل شارژ']],
         '/bot-settings/wallet-transfers' => ['bst', 'انتقال موجودی', [...self::SETTINGS_MENU, 'تنظیمات ربات'], ['transfer', 'wallet', 'انتقال', 'انتقال پول', 'ارسال موجودی', 'کیف پول']],
+        '/bot-texts' => ['txp', 'ایموجی پرمیوم متن‌ها', ['ربات', 'متن‌های ربات'], ['premium emoji', 'custom emoji', 'ایموجی پرمیوم', 'اموجی پرمیوم', 'استیکر', 'ایموجی متحرک', 'پرمیوم']],
         '/cashback' => ['cbs', 'کش‌بک', ['تخفیف و جوایز', 'کش‌بک'], ['cashback', 'cash back', 'کش بک', 'کشبک', 'برگشت پول']],
         '/custom-services' => ['css', 'تنظیمات سرویس دلخواه', ['فروشگاه', 'سرویس دلخواه'], ['custom', 'builder', 'دلخواه', 'ساخت سرویس', 'حجم دلخواه']],
         '/discounts' => ['dc', 'کدهای تخفیف', ['تخفیف و جوایز'], ['discount', 'coupon', 'promo', 'تخفیف', 'کد تخفیف', 'کوپن']],

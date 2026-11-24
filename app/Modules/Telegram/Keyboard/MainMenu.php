@@ -17,6 +17,7 @@ use App\Modules\Telegram\Admin\Ui\Nav;
 use App\Modules\Telegram\Admin\Ui\Screens;
 use App\Modules\Telegram\Context;
 use App\Modules\Telegram\Contracts\MiniAppAddress;
+use App\Modules\Telegram\Emoji\EmojiMap;
 use App\Modules\Telegram\Messages;
 use App\Modules\Telegram\Texts\BotText;
 use App\Modules\Telegram\Texts\BotTexts;
@@ -80,6 +81,7 @@ final class MainMenu
         private readonly Buttons $buttons,
         private readonly BotTexts $texts,
         private readonly AdminSeats $seats,
+        private readonly EmojiMap $emojis,
     ) {}
 
     /**
@@ -219,7 +221,8 @@ final class MainMenu
         ]));
         $layout = $this->layout();
         $shown = $layout->without(...$off);
-        $markup = ($shown->rows === [] ? self::builtIn($layout)->without(...$off) : $shown)->markup($app === null ? [] : ['app' => $app]);
+        // An inline button the shop's premium emoji give an icon (EmojiMap) — its own icon, set on the keyboard, comes first.
+        $markup = ($shown->rows === [] ? self::builtIn($layout)->without(...$off) : $shown)->premium($this->emojis->icon(...))->markup($app === null ? [] : ['app' => $app]);
 
         return $this->seats->of($user) === null ? $markup : self::withManagement($markup);
     }

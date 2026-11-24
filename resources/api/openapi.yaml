@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: AmoBot API
-  version: 0.10.1
+  version: 0.10.2
   description: |
     AmoBot's HTTP API. Every answer is JSON; the panels are static files that render their own pages.
 
@@ -2687,6 +2687,41 @@ paths:
       summary: "Remove a premium emoji from the picker. Texts that use it keep it. A 404 for one the picker does not have."
       responses:
         '204': { $ref: '#/components/responses/NoContent' }
+        default: { $ref: '#/components/responses/Error' }
+  /api/{panel}/bot/premium-texts:
+    parameters: [{ $ref: '#/components/parameters/Panel' }, { $ref: '#/components/parameters/Shop' }]
+    get:
+      summary: "«ایموجی پرمیوم متن‌ها»: the plain emoji the bot's texts draw premium, the switch, and whether the bot may send premium emoji."
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PremiumTextsResponse' }
+        default: { $ref: '#/components/responses/Error' }
+    put:
+      summary: "Save the switch and the map. Turning it on is refused (422 on `enabled`) until the bot was found able to send premium emoji (`can_enable`); a premium emoji new to the map must be one the bot knows (`…/custom-emojis`)."
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/PremiumTextsRequest' } } } }
+      responses:
+        '200':
+          description: Saved
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PremiumTextsResponse' }
+        default: { $ref: '#/components/responses/Error' }
+  /api/{panel}/bot/premium-texts/check:
+    parameters: [{ $ref: '#/components/parameters/Panel' }, { $ref: '#/components/parameters/Shop' }]
+    post:
+      summary: "The bot of the shop on screen sends a short message with a premium emoji and reads whether Telegram kept it — to the owner's Telegram accounts linked to the panel (the main shop) or to the agent (their bot's shop) —, records the answer in `status` and deletes the message. A 422 on `check` when the bot knows no premium emoji yet, has nowhere to send, or could not send."
+      x-no-body: true
+      parameters:
+        - { name: chat, in: query, required: false, description: "The chat to test in — honoured only for whoever works the shop from the bot's own chat, in that bot.", schema: { type: integer, format: int64 } }
+      responses:
+        '200':
+          description: Checked
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PremiumTextsResponse' }
         default: { $ref: '#/components/responses/Error' }
   /api/{panel}/bot/texts:
     parameters: [{ $ref: '#/components/parameters/Panel' }, { $ref: '#/components/parameters/Shop' }]
@@ -8712,6 +8747,56 @@ components:
           properties:
             ok: { type: boolean }
             checked_at: { type: string, format: date-time }
+
+    PremiumTextItem:
+      description: A plain emoji the bot's texts draw as a premium one.
+      type: object
+      additionalProperties: false
+      required: [emoji, emoji_id]
+      properties:
+        emoji: { type: string, description: 'One plain emoji (❤ and ❤️ are the same one).' }
+        emoji_id: { type: string, description: "The premium emoji's Telegram id: digits, as a string. Each premium emoji once." }
+
+    PremiumTextRow:
+      description: A plain emoji the bot's texts draw as a premium one, and how many texts it is in.
+      type: object
+      additionalProperties: false
+      required: [emoji, emoji_id, texts]
+      properties:
+        emoji: { type: string, description: 'One plain emoji.' }
+        emoji_id: { type: string, description: "The premium emoji's Telegram id: digits, as a string." }
+        texts: { type: integer, description: "How many of the shop's texts it is drawn premium in, as they are worded now." }
+
+    PremiumTextsRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        enabled: { type: boolean, description: 'Left out: as it is.' }
+        items: { type: array, maxItems: 100, items: { $ref: '#/components/schemas/PremiumTextItem' }, description: 'The whole map, in order; left out: as it is.' }
+
+    PremiumTextsResponse:
+      type: object
+      additionalProperties: false
+      required: [premium_texts]
+      properties:
+        premium_texts:
+          type: object
+          additionalProperties: false
+          required: [enabled, items, status, can_enable, max]
+          properties:
+            enabled: { type: boolean, description: "The texts draw the mapped emoji premium — every text's own words, the default and the reworded alike; a premium emoji a text carries itself wins." }
+            items: { type: array, items: { $ref: '#/components/schemas/PremiumTextRow' }, description: 'In the admin’s order.' }
+            status:
+              type: object
+              nullable: true
+              description: "Whether the bot can send premium emoji, as last found — by the check, /emoji or a message Telegram answered —; null before it was ever found."
+              additionalProperties: false
+              required: [ok, checked_at]
+              properties:
+                ok: { type: boolean }
+                checked_at: { type: string, format: date-time }
+            can_enable: { type: boolean, description: 'The switch may be turned on: the bot was found able to send premium emoji.' }
+            max: { type: integer, description: 'The most emoji the map holds.' }
 
     # ---------------------------------------------------------------- gift codes and the lucky wheel
 

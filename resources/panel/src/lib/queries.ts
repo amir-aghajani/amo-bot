@@ -11,6 +11,7 @@ import type {
   PlanCategoriesResponse,
   PlanOptions,
   PlansResponse,
+  PremiumTextsResponse,
   SystemResponse,
   UpdateResponse,
   UserDetailResponse,
@@ -47,6 +48,9 @@ export const keyboardsQuery = queryOptions({ queryKey: queryKeys.keyboards, quer
 
 /** Every text the bot sends: the bot texts page, and the keyboards page's preview (the greeting its menu goes with). */
 export const botTextsQuery = queryOptions({ queryKey: queryKeys.botTexts, queryFn: () => api.get<BotTextsResponse>('/bot/texts') })
+
+/** «ایموجی پرمیوم متن‌ها»: its card on the bot texts page, and the text editor's preview (the emoji it draws premium). */
+export const premiumTextsQuery = queryOptions({ queryKey: queryKeys.premiumTexts, queryFn: () => api.get<PremiumTextsResponse>('/bot/premium-texts') })
 
 export const botSettingsQuery = queryOptions({ queryKey: queryKeys.botSettings, queryFn: () => api.get<BotSettingsResponse>('/bot/settings') })
 

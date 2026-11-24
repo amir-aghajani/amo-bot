@@ -22,7 +22,7 @@ use App\Modules\Telegram\Messages;
  * where the bot may send them —, each taken off the list at a tap, asked first (texts that use it keep it), the page
  * kept; whether Telegram last stripped them from the bot's messages; and «✨ افزودن ایموجی تازه», the bot's own /emoji
  * (CustomEmojiHandler): the message with them sent here — in the bot of the shop on screen alone, as each bot keeps its
- * own.
+ * own —; and the way to the plain emoji the texts draw premium with them (PremiumTextsScreen).
  *
  * Actions: `del` (emoji id, page: asks), `deld` (emoji id, page), `add` (waits for the message), `page` (n).
  */
@@ -31,6 +31,12 @@ final class PremiumEmojisScreen extends BaseScreen
     public const ID = 'txe';
 
     public const TITLE = '✨ ایموجی‌های پرمیوم';
+
+    /** The bot's own /emoji from here: the message with new ones sent to this chat (`add`). */
+    public const ADD = '✨ افزودن ایموجی تازه';
+
+    /** Said in place of ADD in another shop's bot (here()). */
+    public const OWN_BOT = '<i>ایموجی تازه را از ربات همین فروشگاه اضافه کنید: هر ربات ایموجی‌های خودش را دارد.</i>';
 
     private const PER_PAGE = 24;
 
@@ -49,7 +55,7 @@ final class PremiumEmojisScreen extends BaseScreen
         $view = View::make(self::TITLE, ...[...BotScreens::PATH, Fmt::bare(TextsScreen::TITLE)])
             ->total(count($emojis), 'ایموجی');
         if (($status['ok'] ?? null) === false) {
-            $view->line()->line("⚠️ آخرین بار تلگرام ایموجی‌های پرمیوم را از پیام ربات برداشت. ربات فقط وقتی ایموجی پرمیوم می‌فرستد که حسابی که آن را در \u{2068}@BotFather\u{2069} ساخته تلگرام پرمیوم داشته باشد؛ تا آن موقع مشتری‌ها جایشان ایموجی معمولی می‌بینند.");
+            $view->line()->line('⚠️ آخرین بار تلگرام ایموجی‌های پرمیوم را از پیام ربات برداشت. ' . PremiumTextsScreen::WHY);
         }
         $view->line();
         if ($emojis === []) {
@@ -61,10 +67,11 @@ final class PremiumEmojisScreen extends BaseScreen
         $view->grid(4, ...array_map(static fn(array $emoji): Button => Button::to('🗑 ' . (string) ($emoji['emoji'] ?? ''), self::ID, 'del', (string) $emoji['id'], $page), $shown));
         $view->pager($page, $pages, self::ID, 'page');
         if (self::here($admin)) {
-            $view->row(Button::to('✨ افزودن ایموجی تازه', self::ID, 'add')->success());
+            $view->row(Button::to(self::ADD, self::ID, 'add')->success());
         } else {
-            $view->line()->line('<i>ایموجی تازه را از ربات همین فروشگاه اضافه کنید: هر ربات ایموجی‌های خودش را دارد.</i>');
+            $view->line()->line(self::OWN_BOT);
         }
+        $view->row(Button::to(PremiumTextsScreen::TITLE, PremiumTextsScreen::ID));
 
         return $view->help('ایموجی‌هایی که ربات می‌شناسد. در «متن‌های ربات» و «کیبوردها» ایموجی پرمیوم را همان‌طور که می‌خواهید بفرستید؛ این‌جا فهرست آن‌هاست.')->back(TextsScreen::ID);
     }
@@ -102,7 +109,7 @@ final class PremiumEmojisScreen extends BaseScreen
                 }
                 CustomEmojiHandler::await($admin->ctx, (int) $admin->ctx->update->messageId(), Nav::to(self::ID));
 
-                return View::make('✨ افزودن ایموجی تازه', ...[...BotScreens::PATH, Fmt::bare(TextsScreen::TITLE)])
+                return View::make(self::ADD, ...[...BotScreens::PATH, Fmt::bare(TextsScreen::TITLE)])
                     ->line(Messages::EMOJI_ASK)
                     ->row(Button::to(Words::CANCEL, self::ID));
             case 'page':
@@ -123,8 +130,11 @@ final class PremiumEmojisScreen extends BaseScreen
         return array_values(array_filter((array) ($answer['emojis'] ?? []), static fn(mixed $emoji): bool => is_array($emoji) && preg_match('/^\d{1,20}$/', (string) ($emoji['id'] ?? '')) === 1));
     }
 
-    /** Whether the shop on screen is the bot's this chat is in: an emoji sent here is kept for this bot alone. */
-    private static function here(Admin $admin): bool
+    /**
+     * Whether the shop on screen is the bot's this chat is in: an emoji sent here is kept for this bot alone, and the
+     * premium emoji check (PremiumTextsScreen) goes from this bot to this chat.
+     */
+    public static function here(Admin $admin): bool
     {
         return $admin->seat->shop()->id === CurrentBot::get()->id;
     }

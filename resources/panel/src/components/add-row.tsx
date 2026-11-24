@@ -14,14 +14,14 @@ export function nextKey(keys: readonly number[]): number {
 }
 
 /** Where the focus goes once the rows have changed: a row's part, by the row's key — or the add button. */
-type FocusTarget = { row: number; part: string } | 'add'
+type FocusTarget = { row: number | string; part: string } | 'add'
 
 /**
  * The focus of a list of rows, so it never falls to the document as rows come and go: a new row's part takes it, a
  * removed row hands it to the remove of the row that takes its place (or the one before), the last one gone to the add.
  * In `block`, each row is marked `data-row={key(row)}` and its parts `data-part` (its remove `remove`); AddRow adds.
  */
-export function useRowFocus<Row>(key: (row: Row) => number) {
+export function useRowFocus<Row>(key: (row: Row) => number | string) {
   const block = useRef<HTMLDivElement>(null)
   const focus = useRef<FocusTarget | null>(null)
   useLayoutEffect(() => {
@@ -42,6 +42,10 @@ export function useRowFocus<Row>(key: (row: Row) => number) {
     removed: (left: readonly Row[], index: number) => {
       const neighbour = left[index] ?? left[index - 1]
       focus.current = neighbour === undefined ? 'add' : { row: key(neighbour), part: 'remove' }
+    },
+    /** The add button comes back (a row's making given up): it takes the focus once drawn. */
+    toAdd: () => {
+      focus.current = 'add'
     },
   }
 }

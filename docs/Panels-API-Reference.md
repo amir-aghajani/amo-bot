@@ -158,6 +158,9 @@ Screens both panels have: `{panel}` is `admin` in the owner's panel and `agent` 
 | [`GET /api/{panel}/bot/custom-emojis/{id}/image`](#get-apipanelbotcustom-emojisidimage) | A premium emoji's still picture, fetched from Telegram |
 | [`GET /api/{panel}/bot/custom-emojis/{id}/animation`](#get-apipanelbotcustom-emojisidanimation) | A premium emoji's animation, fetched from Telegram |
 | [`DELETE /api/{panel}/bot/custom-emojis/{id}`](#delete-apipanelbotcustom-emojisid) | Remove a premium emoji from the picker |
+| [`GET /api/{panel}/bot/premium-texts`](#get-apipanelbotpremium-texts) | «ایموجی پرمیوم متن‌ها» |
+| [`PUT /api/{panel}/bot/premium-texts`](#put-apipanelbotpremium-texts) | Save the switch and the map |
+| [`POST /api/{panel}/bot/premium-texts/check`](#post-apipanelbotpremium-textscheck) | The bot of the shop on screen sends a short message with a premium emoji and reads whether Telegram kept it |
 | [`GET /api/{panel}/bot/texts`](#get-apipanelbottexts) | Every text the bot sends customers, by group |
 | [`PUT /api/{panel}/bot/texts/{key}`](#put-apipanelbottextskey) | Save a text's wording |
 | [`POST /api/{panel}/bot/texts/{key}/reset`](#post-apipanelbottextskeyreset) | Reset a text to its default wording |
@@ -3459,6 +3462,54 @@ Remove a premium emoji from the picker. Texts that use it keep it. A 404 for one
 | Status | What it is | Body |
 |---|---|---|
 | `204` | [NoContent](API-Schemas.md#response-nocontent) | none |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### GET /api/{panel}/bot/premium-texts
+
+«ایموجی پرمیوم متن‌ها»: the plain emoji the bot's texts draw premium, the switch, and whether the bot may send premium emoji.
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | OK | [PremiumTextsResponse](#premiumtextsresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### PUT /api/{panel}/bot/premium-texts
+
+Save the switch and the map. Turning it on is refused (422 on `enabled`) until the bot was found able to send premium emoji (`can_enable`); a premium emoji new to the map must be one the bot knows (`…/custom-emojis`).
+
+**Body**, as JSON:
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `enabled` | boolean | no | Left out: as it is. |
+| `items` | list of [PremiumTextItem](#premiumtextitem), at most 100 | no | The whole map, in order; left out: as it is. |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | Saved | [PremiumTextsResponse](#premiumtextsresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### POST /api/{panel}/bot/premium-texts/check
+
+The bot of the shop on screen sends a short message with a premium emoji and reads whether Telegram kept it — to the owner's Telegram accounts linked to the panel (the main shop) or to the agent (their bot's shop) —, records the answer in `status` and deletes the message. A 422 on `check` when the bot knows no premium emoji yet, has nowhere to send, or could not send.
+
+**Parameters**
+
+| Name | In | Type | Required | What it is |
+|---|---|---|---|---|
+| `chat` | query | integer (int64) | no | The chat to test in — honoured only for whoever works the shop from the bot's own chat, in that bot. |
+
+**Body:** none.
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | Checked | [PremiumTextsResponse](#premiumtextsresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
 ### GET /api/{panel}/bot/texts
@@ -8909,6 +8960,38 @@ A Plisio method (plisio.net), an online gateway for crypto: the customer pays a 
 | `counts.payments` | integer | yes | The number of payments made with it. A method with payments cannot be deleted. |
 | `created_at` | string (date-time) or null | yes |  |
 | `updated_at` | string (date-time) or null | yes |  |
+
+### PremiumTextItem
+
+A plain emoji the bot's texts draw as a premium one.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `emoji` | string | yes | One plain emoji (❤ and ❤️ are the same one). |
+| `emoji_id` | string | yes | The premium emoji's Telegram id: digits, as a string. Each premium emoji once. |
+
+### PremiumTextRow
+
+A plain emoji the bot's texts draw as a premium one, and how many texts it is in.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `emoji` | string | yes | One plain emoji. |
+| `emoji_id` | string | yes | The premium emoji's Telegram id: digits, as a string. |
+| `texts` | integer | yes | How many of the shop's texts it is drawn premium in, as they are worded now. |
+
+### PremiumTextsResponse
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `premium_texts` | object | yes |  |
+| `premium_texts.enabled` | boolean | yes | The texts draw the mapped emoji premium — every text's own words, the default and the reworded alike; a premium emoji a text carries itself wins. |
+| `premium_texts.items` | list of [PremiumTextRow](#premiumtextrow) | yes | In the admin’s order. |
+| `premium_texts.status` | object or null | yes | Whether the bot can send premium emoji, as last found — by the check, /emoji or a message Telegram answered —; null before it was ever found. |
+| `premium_texts.status.ok` | boolean | yes |  |
+| `premium_texts.status.checked_at` | string (date-time) | yes |  |
+| `premium_texts.can_enable` | boolean | yes | The switch may be turned on: the bot was found able to send premium emoji. |
+| `premium_texts.max` | integer | yes | The most emoji the map holds. |
 
 ### PriceTierInput
 

@@ -48,6 +48,7 @@ use App\Modules\Admin\Api\PaymentsController;
 use App\Modules\Admin\Api\PlanCategoriesController;
 use App\Modules\Admin\Api\PlansController;
 use App\Modules\Admin\Api\PreferencesController;
+use App\Modules\Admin\Api\PremiumTextsController;
 use App\Modules\Admin\Api\QueuesController;
 use App\Modules\Admin\Api\ReferralsController;
 use App\Modules\Admin\Api\ReportGroupController;
@@ -286,6 +287,9 @@ return static function (App $app): void {
         $shop->get('/bot/custom-emojis/{id:[0-9]+}/image', [CustomEmojisController::class, 'image']);
         $shop->get('/bot/custom-emojis/{id:[0-9]+}/animation', [CustomEmojisController::class, 'animation']);
         $shop->delete('/bot/custom-emojis/{id:[0-9]+}', [CustomEmojisController::class, 'destroy']);
+        $shop->get('/bot/premium-texts', [PremiumTextsController::class, 'show']);
+        $shop->put('/bot/premium-texts', [PremiumTextsController::class, 'update']);
+        $shop->post('/bot/premium-texts/check', [PremiumTextsController::class, 'check']);
 
         $shop->get('/bot/texts', [BotTextsController::class, 'index']);
         $shop->put('/bot/texts/{key:[a-z_]+}', [BotTextsController::class, 'update']);

@@ -291,10 +291,16 @@ final class BotApiTest extends TestCase
         self::assertCount(1, $this->telegram->calls());
     }
 
-    public function testOnlyARefusalOverPremiumEmojiIsTriedAgain(): void
+    /**
+     * A message refused while it carries premium emoji is tried once more plain — they may be why (the shop's map puts
+     * them in most messages) — and, still refused, the refusal is told as it is; one without them is never sent again:
+     * plain would change nothing.
+     */
+    public function testARefusedMessageWithPremiumEmojiIsTriedPlainOnceAndOneWithoutIsNot(): void
     {
         $api = $this->telegram->api();
 
+        $this->telegram->fail(400, 'Bad Request: message is too long');
         $this->telegram->fail(400, 'Bad Request: message is too long');
         try {
             $api->sendMessage(42, '<tg-emoji emoji-id="1">👍</tg-emoji> بلند');
@@ -302,6 +308,7 @@ final class BotApiTest extends TestCase
         } catch (TelegramApiException $e) {
             self::assertSame(Refusal::BadRequest, $e->refusal());
         }
+        self::assertSame('👍 بلند', $this->telegram->params(1)['text'], 'tried plain');
 
         $this->telegram->fail(400, "Bad Request: can't use custom emoji");
         try {
@@ -311,7 +318,7 @@ final class BotApiTest extends TestCase
             self::assertSame(Refusal::CustomEmoji, $e->refusal());
         }
 
-        self::assertSame(['sendMessage', 'sendMessage'], $this->telegram->calls(), 'neither was sent again: plain emoji would not change their fate');
+        self::assertSame(['sendMessage', 'sendMessage', 'sendMessage'], $this->telegram->calls(), 'the one without premium emoji was not sent again');
     }
 
     public function testNonJsonBodiesAreRejected(): void

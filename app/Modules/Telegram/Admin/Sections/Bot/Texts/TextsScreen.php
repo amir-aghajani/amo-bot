@@ -23,7 +23,9 @@ use App\Modules\Telegram\Admin\Ui\Words;
  * two a row where both fit, each its name and how many texts (✏️ where some are reworded), opening its texts paged
  * (TextGroupScreen); under them the panel's tabs «همه» and «تغییر یافته» as chips, each with what it counts —; and the
  * panel's search (title, what it is for, its wording, its key; Persian as typed: Arabic ی/ک, the half-space and the
- * direction marks ignored), whose finds are listed here, paged. The texts are the panel's one answer (GET /bot/texts).
+ * direction marks ignored), whose finds are listed here, paged; then the premium emoji: the bot's library of them
+ * (PremiumEmojisScreen) and the plain emoji every text draws premium (PremiumTextsScreen). The texts are the panel's one
+ * answer (GET /bot/texts).
  *
  * Actions: `f` (all|changed), `search` (asks), `clear`, `page` (n).
  */
@@ -79,7 +81,7 @@ final class TextsScreen extends BaseScreen
         )->row(
             $search === '' ? Button::to(Words::SEARCH, self::ID, 'search') : Button::to(Words::CLEAR_SEARCH, self::ID, 'clear'),
             Button::to(PremiumEmojisScreen::TITLE, PremiumEmojisScreen::ID),
-        );
+        )->row(Button::to(PremiumTextsScreen::TITLE, PremiumTextsScreen::ID));
 
         return $view->help("هر پیامی که ربات برای مشتری می‌فرستد، با متن خودتان. متغیرهایی مثل \u{2068}%name%\u{2069} هنگام ارسال با مقدار واقعی پر می‌شوند. ✏️ کنار یک گروه یعنی متنی از آن تغییر کرده است؛ جستجو در عنوان، کاربرد، خود متن و کلید هر متن می‌گردد.")
             ->back(BotScreens::MENU);

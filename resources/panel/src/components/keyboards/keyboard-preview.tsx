@@ -1,5 +1,7 @@
 import { CheckCheck, Menu, Mic, MoreVertical, Paperclip, Search, Smile } from 'lucide-react'
+import { leadingEmoji } from '@/components/bot-texts/button-icon'
 import { usePlainEmoji } from '@/components/bot-texts/custom-emojis'
+import { emojiKey, type EmojiLookup } from '@/components/bot-texts/emoji-map'
 import { PremiumEmoji } from '@/components/bot-texts/premium-emoji'
 import { TelegramText } from '@/components/bot-texts/telegram-html'
 import { styleOption } from '@/components/keyboards/styles'
@@ -11,6 +13,8 @@ interface KeyboardPreviewProps {
   rows: KeyboardButtonSpec[][]
   /** The bot's greeting the keyboard goes with, as Telegram HTML with samples in its variables; undefined while it loads. */
   message: string | undefined
+  /** «ایموجی پرمیوم متن‌ها» while it is on (emojiLookup()): the icon a button without its own takes for its leading emoji. */
+  icons?: EmojiLookup
 }
 
 /** The chat's title in the mock — the bot's own name is Telegram's, not the panel's. */
@@ -21,7 +25,7 @@ const BOT_NAME = 'ربات فروشگاه'
  * inline buttons under the greeting. Rows are in reading order, so an RTL flex row puts the first button on the right —
  * where Telegram shows it after the server reverses the row.
  */
-export function KeyboardPreview({ type, rows, message }: KeyboardPreviewProps) {
+export function KeyboardPreview({ type, rows, message, icons = NO_ICONS }: KeyboardPreviewProps) {
   return (
     <div role="figure" className="tg-preview flex flex-col overflow-hidden rounded-xl border border-white/10 text-footnote" style={{ minHeight: 400 }} aria-label="پیش‌نمایش در تلگرام">
       {/* header */}
@@ -64,7 +68,7 @@ export function KeyboardPreview({ type, rows, message }: KeyboardPreviewProps) {
               12:00
             </span>
           </div>
-          {type === 'inline' && <Rows rows={rows} inline />}
+          {type === 'inline' && <Rows rows={rows} icons={icons} inline />}
         </div>
       </div>
 
@@ -85,14 +89,33 @@ export function KeyboardPreview({ type, rows, message }: KeyboardPreviewProps) {
       {/* reply keyboard */}
       {type === 'reply' && (
         <div className="px-1.5 pt-1.5 pb-2" style={{ background: 'var(--tg-header)' }}>
-          <Rows rows={rows} />
+          <Rows rows={rows} icons={icons} />
         </div>
       )}
     </div>
   )
 }
 
-function Rows({ rows, inline }: { rows: KeyboardButtonSpec[][]; inline?: boolean }) {
+const NO_ICONS: EmojiLookup = new Map()
+
+/** PHP's trim() and ltrim(): ASCII spaces (not the form feed) and NUL — a no-break space stays. */
+const trimmed = (text: string): string => text.replace(/^[ \t\n\r\0\v]+|[ \t\n\r\0\v]+$/g, '')
+const leftTrimmed = (text: string): string => text.replace(/^[ \t\n\r\0\v]+/, '')
+
+/**
+ * A button as Telegram draws it: its own icon, else — on an inline menu alone (KeyboardLayout::premium()) — the one the
+ * shop's premium emoji give its label's leading emoji, that emoji out of the label then (PlainWording::icon()), unless
+ * nothing else is left of it. A reply keyboard keeps its labels: its tap sends the words without the icon.
+ */
+function drawn(button: KeyboardButtonSpec, icons: EmojiLookup, inline: boolean): { icon: string | null; label: string } {
+  const leading = inline && button.icon === null ? leadingEmoji(button.label) : null
+  const icon = leading === null ? undefined : icons.get(emojiKey(leading))
+  const rest = leading === null ? '' : button.label.slice(leading.length)
+  if (icon === undefined || trimmed(rest) === '') return { icon: button.icon, label: button.label }
+  return { icon, label: leftTrimmed(rest) }
+}
+
+function Rows({ rows, icons, inline = false }: { rows: KeyboardButtonSpec[][]; icons: EmojiLookup; inline?: boolean }) {
   const plainOf = usePlainEmoji()
 
   if (rows.length === 0) {
@@ -109,6 +132,7 @@ function Rows({ rows, inline }: { rows: KeyboardButtonSpec[][]; inline?: boolean
         <div key={r} className={cn('flex min-w-0', inline ? 'gap-1' : 'gap-1.5')}>
           {row.map((button, b) => {
             const option = styleOption(button.style)
+            const { icon, label } = drawn(button, icons, inline)
             return (
               <span
                 key={b}
@@ -119,9 +143,9 @@ function Rows({ rows, inline }: { rows: KeyboardButtonSpec[][]; inline?: boolean
                   color: button.style ? option.text : 'var(--tg-button-text)',
                 }}
               >
-                {button.icon && <PremiumEmoji id={button.icon} fallback={plainOf(button.icon)} className="shrink-0" />}
+                {icon && <PremiumEmoji id={icon} fallback={plainOf(icon)} className="shrink-0" />}
                 {/* The text is its own box: a flex container's anonymous text item never shrinks below its content. */}
-                <span className="truncate">{button.label}</span>
+                <span className="truncate">{label}</span>
               </span>
             )
           })}

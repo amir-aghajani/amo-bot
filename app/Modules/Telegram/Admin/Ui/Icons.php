@@ -46,6 +46,8 @@ final class Icons
     public const BROADCAST = '📣';
     public const MASS_GIFT = '🎁';
     public const TEXTS = '📝';
+    /** The texts' premium emoji: the plain emoji each drawn premium in every text («💎 ایموجی پرمیوم متن‌ها»). */
+    public const PREMIUM_TEXTS = '💎';
     public const KEYBOARDS = '⌨️';
     public const CHANNELS = '📢';
     public const REPORT_GROUP = '📋';

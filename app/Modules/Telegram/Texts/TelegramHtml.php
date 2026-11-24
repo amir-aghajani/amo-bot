@@ -312,6 +312,61 @@ final class TelegramHtml
         return self::isEmoji($content) ? null : self::EMOJI_CONTENT;
     }
 
+    /**
+     * `$text` with each run of its words that sits inside none of the tags `$skip` names rewritten by `$map` — the tags,
+     * their attributes and the words inside those as they are. HTML Telegram would not take (problem()) comes back as it
+     * is: nothing is rewritten in what cannot be read for sure.
+     *
+     * @param \Closure(string): string $map
+     * @param list<string> $skip
+     */
+    public static function mapWords(string $text, \Closure $map, array $skip): string
+    {
+        if (!str_contains($text, '<')) {
+            return $map($text);
+        }
+        if (self::problem($text) !== null) {
+            return $text;
+        }
+
+        /** @var list<string> $open the open tags, innermost last */
+        $open = [];
+        $out = '';
+        $run = '';
+        $length = strlen($text);
+        for ($i = 0; $i <= $length; $i++) {
+            if ($i < $length && $text[$i] !== '<') {
+                $run .= $text[$i];
+
+                continue;
+            }
+            if ($run !== '') {
+                $out .= array_intersect($open, $skip) === [] ? $map($run) : $run;
+                $run = '';
+            }
+            if ($i === $length) {
+                break;
+            }
+
+            // Read as problem() reads it — it found nothing wrong —, so each tag ends where it said.
+            $start = $i;
+            if (($text[$i + 1] ?? '') === '/') {
+                $i += 2;
+                self::word($text, $i);
+                self::skipSpaces($text, $i);
+                array_pop($open);
+            } else {
+                $i++;
+                $name = strtolower(self::word($text, $i));
+                self::attributes($text, $i, $name);
+                $open[] = $name;
+            }
+            $out .= substr($text, $start, $i - $start + 1);
+        }
+
+        return $out;
+    }
+
     /** One emoji — a pictograph with its modifiers and joiners, a flag, a keycap — rather than text. */
     public static function isEmoji(string $text): bool
     {

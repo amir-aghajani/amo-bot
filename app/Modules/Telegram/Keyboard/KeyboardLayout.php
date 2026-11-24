@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Telegram\Keyboard;
 
+use App\Modules\Telegram\Texts\PremiumText;
+
 /**
  * A keyboard as the admin laid it out: rows of buttons, each an action (MainMenu::ACTIONS) with the admin's label, an
  * optional Telegram button style and a premium emoji icon. Rendered as a reply keyboard or as inline buttons. Rows are
@@ -88,6 +90,39 @@ final class KeyboardLayout
 
         return null;
     }
+
+    /**
+     * The same layout with each inline button that has no icon of its own given the premium emoji `$iconFor` names for
+     * its label's leading emoji (EmojiMap::icon()): that emoji wrapped as a premium one, which the API client sends as the
+     * button's icon (PlainWording) — plain again, in the label, while the bot may not send premium emoji. A label of its
+     * emoji alone stays as it is: Telegram takes no button without words. A reply keyboard is left as it is: its tap
+     * sends the label without its icon, and those words alone would be taken for the button wherever a customer typed
+     * them, a step's answer too — there a button takes an icon of its own alone.
+     *
+     * @param \Closure(string): ?string $iconFor
+     */
+    public function premium(\Closure $iconFor): self
+    {
+        if (!$this->isInline()) {
+            return $this;
+        }
+
+        $rows = [];
+        foreach ($this->rows as $row) {
+            $rows[] = array_map(static function (array $button) use ($iconFor): array {
+                $leading = $button['icon'] === null ? PremiumText::leadingEmoji($button['label']) : null;
+                $id = $leading === null ? null : $iconFor($button['label']);
+                if ($leading === null || $id === null || trim(substr($button['label'], strlen($leading))) === '') {
+                    return $button;
+                }
+
+                return ['label' => PremiumText::name($button['label'], $id)->text] + $button;
+            }, $row);
+        }
+
+        return new self($this->type, $rows);
+    }
+
 
     /**
      * The `reply_markup` for a message. Inline buttons carry the action's callback (MainMenu::ACTIONS), or open the web

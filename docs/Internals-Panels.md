@@ -401,10 +401,18 @@ beside a bot-settings card for the program's switch and rules. A program that is
   typed numbers or lists passes `reads`, so «۵۰٬۰۰۰» and "50000" are no change.
 - **Bot texts**: the editor previews a wording as Telegram shows it by parsing it into React elements
   (`telegram-html.tsx`, never `innerHTML`), and `wording-problem.ts` mirrors the server's checks while typing; its test
-  runs the PHP tests' own cases so the two cannot drift. The server stays the judge.
+  runs the PHP tests' own cases so the two cannot drift. The server stays the judge. «ایموجی پرمیوم متن‌ها» is the
+  page's first card (`premium-texts-card.tsx`, the settings search's `/bot-texts` section): the switch and the list a
+  `useSettingsGroup` saved whole with `PUT /bot/premium-texts`, the check a mutation of its own whose answer replaces the
+  read (a refused one reads the card again: the server holds what it found before); a text saved reads the card again, for its counts. `emoji-map.ts` mirrors `EmojiMap::apply()` and `label()` —
+  `emojiLookup()` is empty while the map is off — so the editor's preview draws the map's emoji as the bot sends them,
+  and says so under it.
 - **Keyboards**: `useKeyboardDraft` holds the rows with local ids so a moved row keeps its element and focus; buttons
   move by dragging (`useRowDrag`) or from their dialog, the keyboard way. Rows are kept in reading order; the preview's
-  RTL row puts the first button on the right, where Telegram shows it once the server reverses the row.
+  RTL row puts the first button on the right, where Telegram shows it once the server reverses the row. The preview
+  takes the same lookup (`icons`): a button without its own icon gets the map's for its leading emoji, out of its label,
+  as `KeyboardLayout::premium()` does — on an inline menu alone, a reply keyboard keeping its labels; and the
+  greeting above it is mapped as the bot sends it.
 - **Premium emoji** (`PremiumEmoji`) are drawn as Telegram draws them: Lottie or video loaded on first sight and played
   only while on screen.
 - **Broadcasts** are composed in the bot; the panel lists the runs live and controls them. The report group card

@@ -11,6 +11,7 @@ use App\Modules\Telegram\Models\CustomEmoji;
 use App\Modules\Telegram\Session\SessionStore;
 use Illuminate\Support\Carbon;
 use Tests\BotTestCase;
+use Tests\Support\FakeTelegram;
 
 /**
  * /emoji: an admin shows the bot a message with premium emoji — composed in Telegram as a customer should see it — and
@@ -25,6 +26,9 @@ final class CustomEmojiHandlerTest extends BotTestCase
     /** Whether Telegram keeps the premium emoji of the bot's own messages (its owner has Premium). */
     private bool $premiumOwner = true;
 
+    /** Whether the bot's own copy cannot be sent at all. */
+    private bool $copyRefused = false;
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -35,7 +39,7 @@ final class CustomEmojiHandlerTest extends BotTestCase
             json_decode($params['custom_emoji_ids'], true),
         ));
         // A message the bot sends comes back with its premium emoji only while Telegram lets the bot use them.
-        $this->telegram()->on('sendMessage', fn(array $params): array => [
+        $this->telegram()->on('sendMessage', fn(array $params): mixed => $this->copyRefused && str_contains($params['text'], '<tg-emoji') ? FakeTelegram::error(403, 'Forbidden: bot was blocked by the user') : [
             'message_id' => random_int(1000, 9999),
             'chat' => ['id' => (int) $params['chat_id'], 'type' => 'private'],
             'entities' => $this->premiumOwner && str_contains($params['text'], '<tg-emoji') ? [['type' => 'custom_emoji', 'offset' => 0, 'length' => 2, 'custom_emoji_id' => '111']] : [],
@@ -93,6 +97,19 @@ final class CustomEmojiHandlerTest extends BotTestCase
         self::assertStringContainsString(Messages::EMOJI_WORKS, $this->params(2)['text']);
         self::assertTrue($this->service(PremiumEmojiStatus::class)->current()['ok'] ?? null);
         self::assertFalse($this->service(PremiumEmojiStatus::class)->refusedLately(), 'messages carry them again');
+    }
+
+    /** A copy the bot could not send says nothing: what was found before stands. */
+    public function testACopyThatCouldNotBeSentLeavesWhatWasFoundBefore(): void
+    {
+        $this->service(PremiumEmojiStatus::class)->record(true);
+        $this->copyRefused = true;
+
+        $this->send($this->message('/emoji'));
+        $this->send($this->message('🔥', ['entities' => [['type' => 'custom_emoji', 'offset' => 0, 'length' => 2, 'custom_emoji_id' => '111']]]));
+
+        self::assertTrue($this->service(PremiumEmojiStatus::class)->current()['ok'] ?? null, 'still able, as found before');
+        self::assertSame(1, CustomEmoji::query()->count(), 'the emoji kept all the same');
     }
 
     public function testAMessageWithoutPremiumEmojiIsAskedForAgain(): void
