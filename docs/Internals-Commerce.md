@@ -372,7 +372,9 @@ Telegram's 48 hours, stripped of its buttons).
 The wallet (`WalletService`) and an agent's traffic (`TrafficPool`) are append-only ledgers written through
 `Core\Database\Ledger`: the owner's row is locked, the last line read under the lock, and each line carries the balance
 after it — the last line *is* the balance (`User::balance()`, `Bot::trafficBalance()`), with no copy to drift. A debit
-may go below zero only as far as the caller allows (an agent's credit). Lists read balances with their rows
+may go below zero only as far as the caller allows: an agent's credit when they buy; support's debit by hand
+(`UserActions::adjustWallet()`) anyone's, a debt as deep as `UserActions::DEBT_MAX` (a billion Toman) — a debt, never
+a credit to spend (`Checkout::shortfall()` counts it in what a top-up must bring). Lists read balances with their rows
 (`User::balanceColumn()`), never a query per row.
 
 Support's changes by hand may come with an `Idempotency-Key` (the panels send one): a wallet's credit or debit
@@ -414,7 +416,8 @@ off by default).
   is 0 (none) or at least the least transfer (`WalletTransferSettings`): a cap below it would leave no transfer to make.
 - **The move** — `transfer()`: one transaction that locks both customers' rows in id order (as `Ledger::merge()` does,
   so two customers sending each other money at once wait in turn), sums the day's transfers with a locking read, debits
-  the sender and credits the recipient (`InsufficientBalanceException` worded as `SHORT`), each line naming the other
+  the sender and credits the recipient (`InsufficientBalanceException` worded as `SHORT`, or `IN_DEBT` for a wallet
+  below zero, as `check()` words it), each line naming the other
   (`LINE_SENT`, `LINE_RECEIVED`, `User::shownAs()`), writes the `wallet_transfers` row — the two lines' ids, what the cap
   sums and the panels show a line's other customer by (`UserDirectory::ledger()`, `WalletTransactionRow.counterpart`) —
   and `ShopReports::walletTransferred()` («شارژ کیف پول»). After the commit `CustomerNotifier::walletReceived()` tells the
@@ -542,6 +545,20 @@ suspended for at all when the month in progress reached it before the run judged
 when both last month and the month in progress fell short of it, the shop stays suspended, now for the minimum, in one
 conditional write (the agent and the group told so). An agency's end the program's term works out at approval is held
 to the database's bound (`AgencyActions::approve()`, [Database](Database.md#time-and-the-2038-bound)).
+
+A renewal request («درخواست تمدید نمایندگی») is an `agency_requests` row of `kind` renewal: `AgencyActions::requestRenewal()`
+files one under a lock on the agent's row — `mayRequestRenewal()`: an agent with a shop whose agency has an end, no
+renewal waiting —, from whichever shop asks (the agent's panel and their bot's «مدیریت» run in theirs), its report in
+the main group. `renew()` approves it with an end (null: none; never earlier than an end still ahead): the verdict and
+the end (`AgencyStanding::moveEnd()`) in one transaction that locks the agent's row first, as `revoke()` does; after the
+commit the agent is told the renewal (`CustomerNotifier::agencyRenewed()`), then `AgencyStanding::extended()` settles the
+end as one changed on the agents page settles (liftEnd(), the minimum's months), so their bot selling again is told
+after it. `judge()` writes about an end only while the row still has the end it read — the hourly task reads every shop
+first, and an end a renewal moved meanwhile is neither suspended nor warned of as it was. `termEnd()` is the program's term on from the agent's end while it lies ahead, from now once
+it passed (`AgencyStanding::renewalEnd()`), refused — no term, no end, past the bound — as a 422 on `expires_at`; the
+report group's «تایید» gives it, and so does the panel when it names no end. `approve()` refuses a renewal outright
+(its `assign()` would start the agent's terms afresh, a suspension and the minimum's months gone); `reject()` serves both
+kinds; `revoke()` closes a renewal still waiting (`RENEWAL_CLOSED`).
 
 ## Customers
 

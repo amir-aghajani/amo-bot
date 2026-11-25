@@ -64,6 +64,7 @@ minimum, and why their bot sells nothing when it does not — with:
 - **«🔐 ورود به پنل»** — a link to their panel, good once and for ten minutes; its code never reaches a server's logs. A
   new link replaces the last.
 - **«➕ افزایش موجودی»**.
+- **«🔄 درخواست تمدید نمایندگی»** — while their agency has an end ([below](#renewing-an-agency)).
 
 Their panel ([Panels](Panels.md#an-agents-account)) is their shop: plans, payment methods, orders, customers, texts,
 settings, website — and their account, with the traffic's history and their terms of selling («شرایط فروش»). They cannot
@@ -128,9 +129,9 @@ answers an order with a `503`, and a renewal's preview or a discount code's chec
 services keep running, syncing and being reminded, a receipt for an order made before is still reviewed, and what was
 paid is delivered. **They still buy traffic** in the main bot — that is how a minimum is met.
 
-- **The end** — warned of once, «هشدار پیش از توقف» days ahead, in the main bot. The moment it passes their shop stops
-  selling; within the hour they hear it, and so does your report group («نمایندگی»). A later end (or none) given on their
-  row lifts it at once — unless the month before ended below their minimum and this month has not reached it yet: then
+- **The end** — warned of once, «هشدار پیش از توقف» days ahead, in the main bot, with «🔄 درخواست تمدید نمایندگی»
+  ([below](#renewing-an-agency)). The moment it passes their shop stops selling; within the hour they hear it, and so
+  does your report group («نمایندگی»). A later end (or none) given on their row, or by a renewal, lifts it at once — unless the month before ended below their minimum and this month has not reached it yet: then
   their selling stays suspended, now for the minimum (below), and they and your group are told so.
 - **The minimum** — judged once a Jalali month on the shop's clock is over; the month in which you set or changed it is
   not judged. They are warned once when the month nears its end short of it, with «💾 خرید حجم». A month that ended below
@@ -142,6 +143,34 @@ paid is delivered. **They still buy traffic** in the main bot — that is how a 
 
 The agent hears every suspension and every lifting in the main bot, with the reason; your group hears them under
 «نمایندگی».
+
+## Renewing an agency
+
+An agent whose agency has an end — passed or not — asks for it to be moved on with **«🔄 درخواست تمدید نمایندگی»**:
+in the main bot's «🤝 نمایندگی», under the warning before the end and under the message that their bot stopped selling
+for it, and on «حساب نمایندگی» in their panel and in their own bot's «⚙️ مدیریت». One request waits at a time; while
+it does, their account says so in place of the button. An agency with no end has nothing to renew, and the program's
+switch has no say: it closes the door to new agents, not to the ones there are.
+
+The request arrives where a request to become an agent does, marked as a renewal:
+
+- **«درخواست‌ها»** — with the agent's end now. «تایید» offers the program's «مدت نمایندگی» counted on from their end
+  while it lies ahead, from now once it passed (to the hour, as an approval's end), or an end of your own — never
+  earlier than their end while it lies ahead —, or none at all; «رد» asks an optional note they read.
+  «نوع» narrows the list to «درخواست نمایندگی» or «تمدید نمایندگی», each row's badge; a renewal's shows «پایان فعلی:
+  …» (its day and the time left, or «(گذشته است)») until approved, «تمدید تا …» («تمدید: بدون پایان») after. «تایید» opens «تمدید نمایندگی …» —
+  «پایان فعلی», «زمان درخواست» —: «پایان تازه نمایندگی» starts on the program's end, or blank with no term in the
+  program, and nothing is approved until a day is written or «بدون پایان» ticked, which alone gives none; «تایید تمدید»
+  approves («تایید بدون پایان» with the box ticked). «رد درخواست تمدید نمایندگی» says their end stays as it is, its note «توضیح برای نماینده
+  (اختیاری)». The bot's «⚙️ مدیریت» decides them too, in its own words
+  ([Managing the shop from the bot](Bot-Management.md#servers-and-agents)).
+- **The report group, «نمایندگی»** — «✅ تایید» gives the program's term at once. With no term in the program
+  («مدت نمایندگی» 0), or no end left to move on (you took it away meanwhile), it says so in a popup and keeps the
+  buttons: give the end in the panel, or reject it. «❌ رد» rejects without a note.
+
+The agent is told — the new end, or that it has none —, and a bot whose selling stopped for its end sells again,
+which they hear right after; one you suspended by hand stays suspended. Only the end moves: their level, credit and
+monthly minimum are as they were. **Ending the agency** («لغو نمایندگی») closes a renewal still waiting.
 
 ## Servers and plans kept from an agent's shop
 

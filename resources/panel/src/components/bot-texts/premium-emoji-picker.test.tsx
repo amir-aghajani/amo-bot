@@ -7,7 +7,8 @@ import { json, noContent, refusal, server } from '@/test/server'
 
 /*
  * The premium emoji picker (components/bot-texts/premium-emoji-picker): a cross takes an emoji off the list — held while
- * it runs, the focus staying on it — and, as the emoji leaves, hands the focus to the emoji after it, never to the page.
+ * it runs, the focus staying on it — and, as the emoji leaves, hands the focus to the emoji after it, never to the page;
+ * the one chosen (a choice's picker) has none, being in use.
  */
 
 const emoji = (id: string, plain: string): CustomEmojiRow => ({ id, emoji: plain, format: 'static', repaint: false, updated_at: '2026-10-06T09:00:00Z' })
@@ -48,5 +49,16 @@ describe('taking an emoji off the list', () => {
     removal.answer(noContent)
     await until(() => expect(screen.queryByRole('button', { name: 'برداشتن 🔥 از لیست' })).toBeNull())
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'افزودن ایموجی پرمیوم 🎁' }))
+  })
+})
+
+describe('a choice’s picker', () => {
+  it('marks the one chosen and offers no cross on it — it is in use —, the others theirs', async () => {
+    server().on('GET', '/api/admin/bot/custom-emojis', json({ emojis: [emoji('41', '🔥'), emoji('42', '🎁')], status: null } satisfies CustomEmojisResponse))
+    render(<PremiumEmojiPicker selected="41" onPick={vi.fn()} />, { wrapper: providers().wrapper })
+
+    expect((await screen.findByRole('button', { name: 'ایموجی پرمیوم 🔥' })).getAttribute('aria-pressed')).toBe('true')
+    expect(screen.queryByRole('button', { name: 'برداشتن 🔥 از لیست' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'برداشتن 🎁 از لیست' })).toBeTruthy()
   })
 })

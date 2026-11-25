@@ -167,29 +167,49 @@ final class CustomersTest extends BotTestCase
         self::assertSame('50000.00', $ali->balance(), 'pressed twice, made once');
     }
 
-    public function testADebitPastTheBalanceIsSaidBeforeItIsSentAndRefused(): void
+    public function testADebitPastTheBalanceIsSaidAsADebtBeforeItIsSentAndMade(): void
     {
         $this->owner(UserRole::Admin);
         $ali = $this->customer(['telegram_id' => 1111, 'first_name' => 'Ali']);
         $this->wallet($ali, '20000');
 
         $this->send($this->tap(Nav::to('usw', 'sub', $ali->id), chat: self::OWNER));
-        $this->send($this->message('۵۰ هزار تومان', chat: self::OWNER));
+        $this->send($this->message('۱۵۰۰۰', chat: self::OWNER));
         $this->send($this->tap(Nav::to('usw', 'skip', $ali->id), chat: self::OWNER));
-        self::assertStringContainsString('بیشتر از موجودی فعلی کم نمی‌شود', $this->screen(), 'said before «✔️»');
-        self::assertStringNotContainsString('موجودی بعد از آن', $this->screen(), 'no balance after a debit that cannot be made');
+        self::assertStringContainsString('موجودی بعد از آن: <b>۵٬۰۰۰ تومان</b>', $this->screen());
+        self::assertStringNotContainsString('⚠️', $this->screen(), 'nothing to warn of while the balance covers it');
+
+        // A zero too many: the debt it would leave said before «✔️», the amount a tap away.
+        $this->send($this->tap(Nav::to('usw', 'amt', $ali->id), chat: self::OWNER));
+        $this->send($this->message('۵۰ هزار تومان', chat: self::OWNER));
+        self::assertStringContainsString('⚠️ موجودی از صفر کمتر می‌شود و مشتری <b>۳۰٬۰۰۰ تومان</b> بدهکار می‌شود', $this->screen(), 'said before «✔️»');
+        self::assertStringContainsString('موجودی بعد از آن: <b>۳۰٬۰۰۰ تومان بدهی</b>', $this->screen());
         self::assertContains(Nav::to('usw', 'amt', $ali->id), $this->window(), 'the amount a tap away');
 
         $this->send($this->tap(Nav::to('usw', 'do', $ali->id), chat: self::OWNER));
-        self::assertSame('20000.00', $ali->balance(), 'the panel refuses it');
-        self::assertStringContainsString('از این بیشتر نمی‌شود کم کرد', (string) $this->popup());
+        self::assertSame('-30000.00', $ali->balance(), 'made: a debt');
+        self::assertStringContainsString('موجودی جدید: ۳۰٬۰۰۰ تومان بدهی', (string) $this->popup());
+        self::assertStringContainsString('مانده ۳۰٬۰۰۰ تومان بدهی', $this->screen(), 'the ledger line with the debt it left');
+    }
 
-        $this->send($this->tap(Nav::to('usw', 'amt', $ali->id), chat: self::OWNER));
-        $this->send($this->message('۱۵۰۰۰', chat: self::OWNER));
-        self::assertStringContainsString('موجودی بعد از آن: <b>۵٬۰۰۰ تومان</b>', $this->screen());
-        self::assertStringNotContainsString('بیشتر از موجودی فعلی', $this->screen());
+    public function testADebitPastTheDeepestDebtIsSaidBeforeItIsSentAndRefused(): void
+    {
+        $this->owner(UserRole::Admin);
+        $ali = $this->customer(['telegram_id' => 1111, 'first_name' => 'Ali']);
+        $this->wallet($ali, '-999990000');
+
+        $this->send($this->tap(Nav::to('usw', 'sub', $ali->id), chat: self::OWNER));
+        $this->send($this->message('۵۰۰۰۰', chat: self::OWNER));
+        $this->send($this->tap(Nav::to('usw', 'skip', $ali->id), chat: self::OWNER));
+        self::assertStringContainsString('⚠️ بدهی کاربر از ۱٬۰۰۰٬۰۰۰٬۰۰۰ تومان بیشتر نمی‌شود؛ موجودی فعلی: ۹۹۹٬۹۹۰٬۰۰۰ تومان بدهی. مبلغ را عوض کنید.', $this->screen(), 'said before «✔️»');
+        self::assertStringNotContainsString('موجودی بعد از آن', $this->screen(), 'no balance the panel would refuse');
+        self::assertNotContains(Nav::to('usw', 'do', $ali->id), $this->window(), 'nor «✔️»');
+        self::assertContains(Nav::to('usw', 'amt', $ali->id), $this->window(), 'the amount a tap away');
+
+        // An older screen's «✔️»: the panel refuses it.
         $this->send($this->tap(Nav::to('usw', 'do', $ali->id), chat: self::OWNER));
-        self::assertSame('5000.00', $ali->balance());
+        self::assertSame('-999990000.00', $ali->balance(), 'the panel refuses it');
+        self::assertStringContainsString('بدهی کاربر از ۱٬۰۰۰٬۰۰۰٬۰۰۰ تومان بیشتر نمی‌شود', (string) $this->popup());
     }
 
     public function testAShopsAdminAdjustsAWalletOnlyWithTheGrant(): void

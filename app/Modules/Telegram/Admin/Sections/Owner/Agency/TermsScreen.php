@@ -40,9 +40,6 @@ abstract class TermsScreen extends BaseScreen
 
     public const NO_MINIMUM = 'بدون کف خرید';
 
-    /** The ends a tap sets, in days from now. */
-    private const DAYS = [30, 90, 180, 365];
-
     /** A credit or a minimum typed as no sum of Toman. */
     private const NOT_TOMAN = 'مبلغ را به تومان بنویسید، مثل ۵۰۰۰۰۰ یا «۵۰۰ هزار تومان».';
 
@@ -129,10 +126,7 @@ abstract class TermsScreen extends BaseScreen
                     ->limits('۰ یا بیشتر؛ ۰ یعنی فقط با موجودی کیف پول')
                     ->choices(Button::to(self::NO_CREDIT, $this->screen(), 'crz')));
             case 'ex':
-                return $admin->ask((new Prompt('پایان نمایندگی', $this->screen(), 'ex', [], 'روزهای مانده از امروز، یا روز پایان به تاریخ شمسی. بعد از آن فروش رباتش متوقف می‌شود.', Button::to(Words::CANCEL, $this->screen())))
-                    ->current(Fmt::plain(AgencyEnd::words(self::moment($state))), false)
-                    ->example('۳۰ یا ۱۴۰۵/۰۷/۲۰')
-                    ->choices(Button::to(AgencyEnd::NONE, $this->screen(), 'exn'), ...array_map(fn(int $days): Button => Button::to(Fmt::number($days) . ' روز دیگر', $this->screen(), 'exd', $days), self::DAYS)));
+                return $admin->ask(AgencyEnd::prompt($this->screen(), 'پایان نمایندگی', Fmt::plain(AgencyEnd::words(self::moment($state)))));
             case 'mn':
                 return $admin->ask((new Prompt('کف خرید ماهانه (تومان)', $this->screen(), 'mn', [], 'خرید حجم در هر ماه شمسی؛ کمتر از آن، فروش ربات از ماه بعد متوقف می‌شود.', Button::to(Words::CANCEL, $this->screen())))
                     ->current((int) ($state['minimum'] ?? 0) > 0 ? Fmt::digits((string) $state['minimum']) : self::NO_MINIMUM, (int) ($state['minimum'] ?? 0) > 0)
@@ -163,7 +157,7 @@ abstract class TermsScreen extends BaseScreen
         $changes = match ($action) {
             'cr' => ['credit' => (string) ($answer->amount(Unit::Toman) ?? throw new ApiRefusal(422, self::NOT_TOMAN))],
             'mn' => ['minimum' => (string) ($answer->amount(Unit::Toman) ?? throw new ApiRefusal(422, self::NOT_TOMAN))],
-            'ex' => ['expires' => AgencyEnd::typed($answer->text()) ?? throw new ApiRefusal(422, 'روزهای مانده را به عدد بنویسید (مثل ۳۰)، یا تاریخ شمسی را مثل ۱۴۰۵/۰۷/۲۰.')],
+            'ex' => ['expires' => AgencyEnd::read($answer->text())],
             default => [],
         };
         $admin->remember($this->screen(), $changes);

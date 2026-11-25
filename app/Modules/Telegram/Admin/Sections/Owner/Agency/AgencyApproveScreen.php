@@ -12,7 +12,8 @@ use App\Modules\Telegram\Admin\Ui\View;
 /**
  * Approving an agency request (the panel's approve dialog): the level the customer becomes an agent on — the first one
  * offered —, the credit they start with, when their agency ends and their monthly minimum, each starting as the
- * program's rules say (AgencySettingsScreen), then «✔️ تایید و نماینده کردن»: one POST …/approve.
+ * program's rules say (AgencySettingsScreen), then «✔️ تایید و نماینده کردن»: one POST …/approve. A renewal request is
+ * never approved here (AgencyRenewScreen).
  *
  * Actions besides the terms': `new` (request id).
  */
@@ -52,6 +53,10 @@ final class AgencyApproveScreen extends TermsScreen
         $row = $action === 'new' ? AgencyRequestScreen::row($admin, self::id($args)) : null;
         if ($row === null) {
             return $admin->open(AgencyRequestsScreen::ID);
+        }
+        if (AgencyRequestScreen::renewal($row)) {
+            // A renewal (an older window's button) is approved with an end alone: its own screen.
+            return $admin->open(AgencyRenewScreen::ID, 'new', [(int) $row['id']]);
         }
         $rules = (array) ($admin->api->get('/agency/settings')['settings'] ?? []);
         $first = $this->all($admin)[0] ?? null;

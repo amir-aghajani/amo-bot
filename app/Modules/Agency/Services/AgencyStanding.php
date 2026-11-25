@@ -90,6 +90,53 @@ final class AgencyStanding
     }
 
     /**
+     * The end a renewal approved now gives by the program's term («مدت نمایندگی»): its days on from the agent's end while
+     * it lies ahead — to the minute —, from now once it passed (or with none), to the hour on the shop's clock as defaults()
+     * keeps one; null when the program sets no term.
+     */
+    public function renewalEnd(Bot $bot): ?Carbon
+    {
+        $days = $this->settings->termDays();
+        if ($days === null) {
+            return null;
+        }
+        if ($bot->agency_expires_at !== null && $bot->agency_expires_at->isFuture()) {
+            return $bot->agency_expires_at->copy()->addDays($days)->utc();
+        }
+        $end = LocalTime::of(Carbon::now()->addDays($days));
+
+        return Carbon::instance($end->setTime((int) $end->format('G'), 0))->utc();
+    }
+
+    /**
+     * Moves the shop's end to `$end` (null: none) — warned of afresh —, in the caller's transaction: a renewal approved
+     * (AgencyActions::renew()), whose extended() follows once it is committed. Nothing when it is the end the shop has.
+     */
+    public function moveEnd(Bot $bot, ?Carbon $end): void
+    {
+        if (!(new SellingTerms($end, null))->same(new SellingTerms($bot->agency_expires_at, null))) {
+            $bot->forceFill(['agency_expires_at' => $end, 'expiry_warned_at' => null])->save();
+        }
+    }
+
+    /**
+     * After a shop's end was moved (moveEnd(), committed): a suspension for an end passed lifts when the new one lies ahead
+     * (or there is none) — but for last month's minimum, judged then (liftEnd()) —, and what the end calls for now is done
+     * at once (judge()). Nothing for a shop whose agency ended meanwhile.
+     */
+    public function extended(Bot $bot): void
+    {
+        $bot->refresh();
+        if (!($bot->agent?->isAgent() ?? false)) {
+            return;
+        }
+        if ($bot->agency_expires_at === null || $bot->agency_expires_at->isFuture()) {
+            $this->liftEnd($bot, Carbon::now());
+        }
+        $this->judge($bot->refresh(), Carbon::now());
+    }
+
+    /**
      * Gives the agent's shop new terms (the owner's agents page); false when they are the ones it has. A new end is warned
      * of afresh, and lifts a suspension for an end passed when it lies ahead (or there is none) — but for last month's
      * minimum, judged then (liftEnd()); a new or changed minimum is first judged on the next whole month, and none lifts a
@@ -166,12 +213,20 @@ final class AgencyStanding
         $month = JalaliMonth::of($now);
         $last = $month->previous();
 
+        // Stopped for an end that lies ahead now (or is gone) — an end moved whose lifting never ran: it sells again.
+        if ($bot->suspension_reason === SellingSuspension::Expired && ($bot->agency_expires_at === null || $bot->agency_expires_at->greaterThan($now))) {
+            $this->liftEnd($bot, $now);
+            $bot->refresh();
+        }
+
+        // Each write about the end lands only while the end is still the one read: the hourly task reads every shop first,
+        // and an end moved since (a renewal, the agents page) must not be suspended or warned of as it was.
         $expires = $bot->agency_expires_at;
         if ($expires !== null && $expires->lessThanOrEqualTo($now)) {
             // Over a minimum's suspension, last month is left to be judged again once the end lifts.
-            $this->suspend($bot, SellingSuspension::Expired, replacing: ['minimum_checked_month' => $last->previous()->key()]);
+            $this->suspend($bot, SellingSuspension::Expired, replacing: ['minimum_checked_month' => $last->previous()->key()], while: ['agency_expires_at' => $expires]);
         } elseif ($expires !== null && $expires->copy()->subDays($warn)->lessThanOrEqualTo($now) && $bot->expiry_warned_at === null
-            && Bot::query()->whereKey($bot->id)->whereNull('expiry_warned_at')->update(['expiry_warned_at' => $now]) === 1) {
+            && Bot::query()->whereKey($bot->id)->whereNull('expiry_warned_at')->where('agency_expires_at', $expires)->update(['expiry_warned_at' => $now]) === 1) {
             $this->notifier->agencyExpiring($agent, $expires);
         }
 
@@ -283,20 +338,21 @@ final class AgencyStanding
 
     /**
      * Suspends the shop's selling for `$reason`, over a weaker reason that stands (the owner's over an end's over a
-     * minimum's) — writing `$replacing` with it then; true when this call did. The agent is told — with the owner's
-     * note, by hand —, and the report group.
+     * minimum's) — writing `$replacing` with it then —, only while the row has `$while`'s values; true when this call
+     * did. The agent is told — with the owner's note, by hand —, and the report group.
      *
      * @param array<string, string> $replacing
+     * @param array<string, mixed> $while
      */
-    private function suspend(Bot $bot, SellingSuspension $reason, ?string $note = null, array $replacing = []): bool
+    private function suspend(Bot $bot, SellingSuspension $reason, ?string $note = null, array $replacing = [], array $while = []): bool
     {
         $over = match ($reason) {
             SellingSuspension::Manual => [SellingSuspension::Expired->value, SellingSuspension::Minimum->value],
             SellingSuspension::Expired => [SellingSuspension::Minimum->value],
             SellingSuspension::Minimum => [],
         };
-        $suspended = Bot::query()->whereKey($bot->id)->whereNull('selling_suspended_at')->update(['selling_suspended_at' => Carbon::now(), 'suspension_reason' => $reason->value]) === 1
-            || ($over !== [] && Bot::query()->whereKey($bot->id)->whereIn('suspension_reason', $over)->update(['suspension_reason' => $reason->value] + $replacing) === 1);
+        $suspended = Bot::query()->whereKey($bot->id)->where($while)->whereNull('selling_suspended_at')->update(['selling_suspended_at' => Carbon::now(), 'suspension_reason' => $reason->value]) === 1
+            || ($over !== [] && Bot::query()->whereKey($bot->id)->where($while)->whereIn('suspension_reason', $over)->update(['suspension_reason' => $reason->value] + $replacing) === 1);
         if (!$suspended) {
             return false;
         }
@@ -363,11 +419,10 @@ final class AgencyStanding
 
         $bot->refresh();
         $this->logger->info('Selling of bot {bot} resumed', ['bot' => $bot->id]);
-        if ($bot->sells()) {
-            $agent = $bot->agent;
-            if ($agent !== null) {
-                $this->notifier->agencyResumed($agent);
-            }
+        // Told only while they are an agent: an agency ended in the meantime has nothing to sell again.
+        $agent = $bot->agent;
+        if ($bot->sells() && $agent !== null && $agent->isAgent()) {
+            $this->notifier->agencyResumed($agent);
             $this->reports->agencyResumed($bot);
         }
 

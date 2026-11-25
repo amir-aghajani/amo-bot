@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Telegram\Admin\Sections\Owner\Agency;
 
 use App\Modules\Telegram\Admin\AdminSeat;
+use App\Modules\Telegram\Admin\Door\ApiRefusal;
 use App\Modules\Telegram\Admin\Sections\Owner\Words;
 use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\Answer;
@@ -21,6 +22,8 @@ use App\Modules\Telegram\Admin\Ui\Words as UiWords;
  * One agency request (from the list's kept page — the panel has no route for one): the customer, what they wrote, its
  * standing — the level given, support's reason, who decided when —, and what its status allows (the panel's `actions`):
  * «✅ تایید» on a level and terms (AgencyApproveScreen), «🚫 رد» asked first — with a note the customer reads, or none.
+ * An agent's renewal request says their end now (passed or not) and, while it waits, the end the program's term gives;
+ * once approved, the end it gave — its «✅ تایید» asks the end (AgencyRenewScreen), never a level.
  *
  * Actions: `no` (id: asks), `nw` (id: asks the note), `nn` (id: rejects without one).
  */
@@ -46,17 +49,20 @@ final class AgencyRequestScreen extends BaseScreen
         switch ($action) {
             case 'no':
                 $row = self::row($admin, $id) ?? [];
+                $renewal = self::renewal($row);
 
                 return Words::withNote(
                     $admin,
-                    'درخواست ' . Words::user($row['user'] ?? null) . ' رد شود؟',
-                    'درخواست نمایندگی ' . Fmt::e(Words::user($row['user'] ?? null)) . ' رد می‌شود و به او خبر داده می‌شود.',
+                    ($renewal ? 'درخواست تمدید ' : 'درخواست ') . Words::user($row['user'] ?? null) . ' رد شود؟',
+                    ($renewal ? 'درخواست تمدید نمایندگی ' : 'درخواست نمایندگی ') . Fmt::e(Words::user($row['user'] ?? null)) . ' رد می‌شود و به او خبر داده می‌شود.',
                     Button::to('✍️ رد با توضیح', self::ID, 'nw', $id)->danger(),
                     Button::to('⏭ رد بدون توضیح', self::ID, 'nn', $id)->danger(),
                     Button::to(UiWords::CANCEL, self::ID, 'show', $id),
                 );
             case 'nw':
-                return $admin->ask((new Prompt('توضیح رد درخواست', self::ID, 'no', [$id], Words::NOTE_HINT, Button::to(UiWords::CANCEL, self::ID, 'show', $id)))->example('فعلا ظرفیت نمایندگی تازه نداریم'));
+                $example = self::renewal(self::row($admin, $id) ?? []) ? 'اول بدهی کیف پولتان را پرداخت کنید' : 'فعلا ظرفیت نمایندگی تازه نداریم';
+
+                return $admin->ask((new Prompt('توضیح رد درخواست', self::ID, 'no', [$id], Words::NOTE_HINT, Button::to(UiWords::CANCEL, self::ID, 'show', $id)))->example($example));
             case 'nn':
                 return $this->reject($admin, $id, '');
         }
@@ -77,6 +83,41 @@ final class AgencyRequestScreen extends BaseScreen
     public static function row(Admin $admin, int $id): ?array
     {
         return ListScreen::keptRow($admin, AgencyRequestsScreen::ID, $id);
+    }
+
+    /**
+     * Request `$row` (the list's kept one) as the API has it now (GET /agency/requests/{id}), kept in its place; null when
+     * it is gone.
+     *
+     * @param array<string, mixed> $row
+     * @return array<string, mixed>|null
+     * @throws ApiRefusal
+     */
+    public static function fresh(Admin $admin, array $row): ?array
+    {
+        try {
+            $answer = $admin->api->get('/agency/requests/' . (int) ($row['id'] ?? 0));
+        } catch (ApiRefusal $refusal) {
+            if ($refusal->status === 404) {
+                return null;
+            }
+
+            throw $refusal;
+        }
+        $found = Json::part($answer, 'request');
+
+        return $found === [] ? null : self::keep($admin, $found);
+    }
+
+    /**
+     * Whether the request asks for an agent's end to be moved on, not to become an agent (a row with no `kind`: the
+     * latter).
+     *
+     * @param array<string, mixed> $row
+     */
+    public static function renewal(array $row): bool
+    {
+        return ($row['kind'] ?? null) === 'renewal';
     }
 
     /**
@@ -107,12 +148,20 @@ final class AgencyRequestScreen extends BaseScreen
     {
         $id = (int) ($row['id'] ?? 0);
         $level = is_array($row['level'] ?? null) ? $row['level'] : null;
-        $view = View::make('📥 درخواست نمایندگی ' . Fmt::id($id), ...[...AgencyScreen::path(), 'درخواست‌ها'])
+        $status = (string) ($row['status'] ?? '');
+        $renewal = self::renewal($row);
+        $gone = $renewal && ($row['agent'] ?? true) === false;
+        $end = static fn(string $key): ?string => is_string($row[$key] ?? null) ? $row[$key] : null;
+        $view = View::make(($renewal ? '🔄 درخواست تمدید نمایندگی ' : '📥 درخواست نمایندگی ') . Fmt::id($id), ...[...AgencyScreen::path(), 'درخواست‌ها'])
             ->card([
-                'مشتری' => Words::who($row['user'] ?? null) . (($row['user_status'] ?? null) === 'banned' ? ' · ⛔️ مسدود' : ''),
-                'وضعیت' => Fmt::e(AgencyRequestsScreen::STATUSES[(string) ($row['status'] ?? '')] ?? (string) ($row['status'] ?? '')),
+                ($renewal ? 'نماینده' : 'مشتری') => Words::who($row['user'] ?? null) . (($row['user_status'] ?? null) === 'banned' ? ' · ⛔️ مسدود' : '') . ($gone ? ' · دیگر نماینده نیست' : ''),
+                'وضعیت' => Fmt::e(AgencyRequestsScreen::STATUSES[$status] ?? $status),
                 'سطح' => $level === null ? null : Fmt::e((string) ($level['name'] ?? '')) . ' · هر گیگابایت ' . Fmt::money((string) ($level['price_per_gb'] ?? '0')),
-                'توضیح پشتیبانی' => ($row['status'] ?? null) === 'rejected' && is_string($row['reason'] ?? null) && $row['reason'] !== '' ? Fmt::e($row['reason']) : null,
+                // A renewal: the agent's end now while it is not approved (an agent no more has none, as the panel's), the end the program's term gives while it waits, the end it gave once approved.
+                'پایان نمایندگی' => $renewal && !$gone && $status !== 'approved' ? AgencyEnd::current($end('expires_at')) : null,
+                'تمدید با مدت نمایندگی' => $renewal && $status === 'pending' && $end('term_end') !== null ? AgencyEnd::words(AgencyEnd::of($end('term_end'))) : null,
+                'تمدید تا' => $renewal && $status === 'approved' ? AgencyEnd::words(AgencyEnd::of($end('extended_to'))) : null,
+                'توضیح پشتیبانی' => $status === 'rejected' && is_string($row['reason'] ?? null) && $row['reason'] !== '' ? Fmt::e($row['reason']) : null,
                 'تصمیم' => is_string($row['decided_at'] ?? null) ? implode(' · ', array_filter([Words::reviewer($row), Fmt::date($row['decided_at'], true)])) : null,
                 'زمان' => Fmt::date(is_string($row['created_at'] ?? null) ? $row['created_at'] : null, true),
             ]);
@@ -122,7 +171,7 @@ final class AgencyRequestScreen extends BaseScreen
         $actions = Json::part($row, 'actions');
 
         return $view->row(
-            Json::on($actions, 'approve') ? Button::to('✅ تایید', AgencyApproveScreen::ID, 'new', $id)->success() : null,
+            Json::on($actions, 'approve') ? Button::to('✅ تایید', $renewal ? AgencyRenewScreen::ID : AgencyApproveScreen::ID, 'new', $id)->success() : null,
             Json::on($actions, 'reject') ? Button::to('🚫 رد', self::ID, 'no', $id)->danger() : null,
         )->back(AgencyRequestsScreen::ID);
     }

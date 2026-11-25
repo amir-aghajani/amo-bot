@@ -27,8 +27,8 @@ interface PremiumEmojiPickerProps {
 
 /**
  * A picker of the premium emoji the bot knows, latest first (the texts editor inserts one, the keyboards editor makes one
- * an icon); the cross removes one from the list. Warns when Telegram is stripping premium emoji from the bot's messages:
- * the bot's owner needs Telegram Premium.
+ * an icon); the cross removes one from the list — any but the one chosen. Warns when Telegram is stripping premium emoji
+ * from the bot's messages: the bot's owner needs Telegram Premium.
  */
 export function PremiumEmojiPicker({ onPick, selected, except = [] }: PremiumEmojiPickerProps) {
   const queryClient = useQueryClient()
@@ -97,18 +97,20 @@ export function PremiumEmojiPicker({ onPick, selected, except = [] }: PremiumEmo
                   <PremiumEmoji id={emoji.id} fallback={emoji.emoji} className="size-6 text-lg leading-none" />
                 </button>
                 {/* A 24px target — what a finger needs — around the small cross drawn on the emoji's corner; held while a
-                    removal runs (not disabled: the focus stays on it). */}
-                <button
-                  type="button"
-                  onClick={(event) => remove(emoji, event.currentTarget.closest('li'))}
-                  aria-disabled={forget.isPending || undefined}
-                  aria-label={`برداشتن ${emoji.emoji} از لیست`}
-                  className="group/remove absolute -end-2 -top-2 hidden size-6 place-items-center rounded-full outline-none group-focus-within:grid group-hover:grid focus-visible:focus-ring"
-                >
-                  <span className="grid size-4 place-items-center rounded-full border border-border bg-background text-muted-foreground transition-colors group-hover/remove:text-danger">
-                    <X className="size-2.5" aria-hidden />
-                  </span>
-                </button>
+                    removal runs (not disabled: the focus stays on it). None on the one chosen: it is in use. */}
+                {!chosen && (
+                  <button
+                    type="button"
+                    onClick={(event) => remove(emoji, event.currentTarget.closest('li'))}
+                    aria-disabled={forget.isPending || undefined}
+                    aria-label={`برداشتن ${emoji.emoji} از لیست`}
+                    className="group/remove absolute -end-2 -top-2 hidden size-6 place-items-center rounded-full outline-none group-focus-within:grid group-hover:grid focus-visible:focus-ring"
+                  >
+                    <span className="grid size-4 place-items-center rounded-full border border-border bg-background text-muted-foreground transition-colors group-hover/remove:text-danger">
+                      <X className="size-2.5" aria-hidden />
+                    </span>
+                  </button>
+                )}
               </li>
             )
           })}

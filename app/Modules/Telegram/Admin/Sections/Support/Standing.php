@@ -51,31 +51,48 @@ final class Standing
     }
 
     /**
-     * The agent's notice of their own bot (the panel's SellingNotice); null while all is well.
+     * Whether what needs an eye is the agency's end — near, or passed and selling suspended for it —: what a renewal
+     * request moves on.
      *
      * @param array<string, mixed>|null $standing
      */
-    public static function toAgent(?array $standing): ?string
+    public static function aboutTheEnd(?array $standing): bool
+    {
+        return match (self::concern($standing)) {
+            'expiring' => true,
+            'suspended' => self::reason($standing ?? []) === 'expired',
+            default => false,
+        };
+    }
+
+    /**
+     * The agent's notice of their own bot (the panel's SellingNotice); null while all is well. Of the end, how to renew
+     * it — or, while their renewal request waits (`$renewalWaits`), that it does (the panel's account renewWords()).
+     *
+     * @param array<string, mixed>|null $standing
+     */
+    public static function toAgent(?array $standing, bool $renewalWaits = false): ?string
     {
         $concern = self::concern($standing);
         if ($standing === null || $concern === null) {
             return null;
         }
         $month = self::month($standing);
+        $renew = $renewalWaits ? 'درخواست تمدید شما در انتظار بررسی است.' : 'برای تمدید، در «💼 حساب نمایندگی» «🔄 درخواست تمدید نمایندگی» را بزنید.';
         if ($concern === 'suspended') {
             $reason = self::reason($standing);
 
             return '⛔️ <b>فروش ربات شما متوقف است: ' . Fmt::e(self::SUSPENSION[$reason] ?? $reason) . '.</b> ربات، پنل و سرویس‌های فعلی مشتری‌ها کار می‌کنند، ولی ' . self::SUSPENDED_SALES . ' تازه انجام نمی‌شود. '
                 . match ($reason) {
                     'minimum' => 'با خرید حجم در ربات اصلی تا رسیدن خرید ' . Fmt::e($month['name']) . ' به کف (' . self::monthWords($standing) . ')، فروش خودکار باز می‌شود.',
-                    'expired' => 'برای تمدید نمایندگی با پشتیبانی فروشگاه اصلی تماس بگیرید.',
+                    'expired' => $renew,
                     default => 'فقط پشتیبانی فروشگاه اصلی آن را دوباره باز می‌کند.',
                 };
         }
         if ($concern === 'expiring') {
             $expires = (string) $standing['expires_at'];
 
-            return '📅 <b>نمایندگی شما ' . Fmt::date($expires) . ' به پایان می‌رسد (' . Words::left($expires) . ').</b> از آن به بعد ربات شما فروش تازه‌ای ندارد؛ برای تمدید با پشتیبانی فروشگاه اصلی تماس بگیرید.';
+            return '📅 <b>نمایندگی شما ' . Fmt::date($expires) . ' به پایان می‌رسد (' . Words::left($expires) . ').</b> از آن به بعد ربات شما فروش تازه‌ای ندارد؛ ' . $renew;
         }
 
         return '📉 <b>تا پایان ' . Fmt::e($month['name']) . ' ' . Fmt::number(Words::daysUntil($month['ends_at'])) . ' روز مانده و خرید حجم این ماه ' . self::monthWords($standing) . ' است.</b> اگر تا پایان ماه به کف نرسد، فروش ربات شما متوقف می‌شود.';

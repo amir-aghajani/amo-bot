@@ -44,6 +44,8 @@ use App\Support\Unit;
  *   agency:tb:{gb}[:{method}] → its checkout, then pay
  *   agency:bot                → hand their bot's token over (state `agency.token`; the message is deleted at once)
  *   agency:login              → a one-time link into their shop's panel
+ *   agency:renew              → «درخواست تمدید نمایندگی»: their agency's end moved on once the owner approves it (also
+ *                               under the notices of its near end and its passing)
  */
 final class AgencyHandler implements Handler
 {
@@ -52,6 +54,9 @@ final class AgencyHandler implements Handler
 
     /** The traffic screen — the button under the agent's account and under a delivery their pool could not cover. */
     public const TRAFFIC = 'agency:traffic';
+
+    /** «درخواست تمدید نمایندگی» — under the agent's account, and under their agency's near end and its passing. */
+    public const RENEW = 'agency:renew';
 
     private const APPLY = 'agency:apply';
     private const BOT = 'agency:bot';
@@ -106,6 +111,7 @@ final class AgencyHandler implements Handler
             $data === self::TRAFFIC => $this->traffic($ctx),
             $data === self::BOT => $this->bot($ctx),
             $data === self::LOGIN => $this->login($ctx),
+            $data === self::RENEW => $this->renew($ctx),
             $checkout && count($traffic) === 2 => $this->checkout($ctx, (int) $traffic[1]),
             $checkout && count($traffic) === 3 => $this->buy($ctx, (int) $traffic[1], (int) $traffic[2]),
             default => $this->home($ctx),
@@ -151,7 +157,8 @@ final class AgencyHandler implements Handler
 
     /**
      * The agent's account: level and price per GB, traffic left, wallet and credit, their bot and what it sold — and its
-     * terms of selling (AgencyTermLines::standing()).
+     * terms of selling (AgencyTermLines::standing()), with their renewal request when one waits; «درخواست تمدید
+     * نمایندگی» under it while they may ask (Buttons::renewAgencyFor(); the notices of the agency's end always carry it).
      */
     private function account(Context $ctx, User $agent): void
     {
@@ -176,14 +183,41 @@ final class AgencyHandler implements Handler
         }
         if ($bot !== null) {
             $month = JalaliMonth::now();
-            $text = BotTexts::paragraphs($text, $this->terms->standing($bot, $month, $this->standing->purchased($bot, $month)));
+            $text = BotTexts::paragraphs($text, $this->terms->standing($bot, $month, $this->standing->purchased($bot, $month), AgencyActions::pendingRenewal($agent) !== null));
         }
 
         $keyboard = InlineKeyboard::make()
             ->row($this->buttons->buyTraffic(), InlineKeyboard::callback($this->texts->get(BotText::AgencyMyBot), self::BOT, 'primary'))
             ->row(InlineKeyboard::callback($this->texts->get(BotText::AgencyPanelLogin), self::LOGIN), $this->buttons->topUp());
+        $renew = $this->buttons->renewAgencyFor($agent);
+        if ($renew !== null) {
+            $keyboard->row($renew);
+        }
 
         $this->menu->screen($ctx, $text, $keyboard);
+    }
+
+    /**
+     * «درخواست تمدید نمایندگی» — under the account or under a notice of the agency's end, old ones too: filed for the
+     * owner to decide (AgencyActions::requestRenewal(), one of two taps), and said so. When it is not — one waits
+     * already, or the agency has no end to move on any more — why, in a popup over the account as it stands now.
+     */
+    private function renew(Context $ctx): void
+    {
+        $agent = $this->agent($ctx);
+        if ($agent === null) {
+            return;
+        }
+
+        $ctx->session->clear();
+        if ($this->agency->requestRenewal($agent) === null) {
+            // First, before the account: a tap takes one answer.
+            $ctx->answer(AgencyActions::pendingRenewal($agent) !== null ? AgencyActions::RENEWAL_WAITING : AgencyActions::RENEWAL_NOT_NEEDED, alert: true);
+            $this->account($ctx, $agent);
+
+            return;
+        }
+        $ctx->edit($this->texts->get(BotText::AgencyRenewalRequested), ['reply_markup' => $this->buttons->backOnly(MainMenu::AGENCY)]);
     }
 
     /** «درخواست نمایندگی»: a few words about themselves first. */

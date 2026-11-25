@@ -115,6 +115,12 @@ enum NoticeType: string
     /** Their bot sells again. */
     case AgencyResumed = 'agency_resumed';
 
+    /** Their request for their agency's end to be moved on was approved, with the new end. */
+    case AgencyRenewed = 'agency_renewed';
+
+    /** Their request for their agency's end to be moved on was rejected. */
+    case AgencyRenewalRejected = 'agency_renewal_rejected';
+
     /** The two-factor sign-in of their account on the website was turned off — by support, or by them. */
     case TwoFactorDisabled = 'two_factor_disabled';
 
@@ -196,6 +202,8 @@ enum NoticeType: string
             self::AgencyMinimumShort => 'خرید حجم این ماه شما هنوز به کف خرید ماهانه نرسیده است',
             self::AgencySuspended => 'فروش ربات شما متوقف شد',
             self::AgencyResumed => 'فروش ربات شما دوباره باز شد',
+            self::AgencyRenewed => 'نمایندگی شما تمدید شد',
+            self::AgencyRenewalRejected => 'درخواست تمدید نمایندگی شما تایید نشد',
             self::TwoFactorDisabled => 'ورود دو مرحله‌ای حساب شما خاموش شد',
             self::WayInAdded => 'روش ورود تازه‌ای به حساب شما اضافه شد',
             self::WayInRemoved => 'یکی از روش‌های ورود حساب شما برداشته شد',

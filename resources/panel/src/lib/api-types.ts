@@ -411,6 +411,7 @@ export interface UserRow {
   phone_exempt: boolean
   status: UserStatus
   role: UserRole
+  /** Their wallet balance in Toman. Below zero is a debt: an agent's credit in use, or a debit by hand past the balance. */
   balance: string
   /** Their personal discount («تخفیف اختصاصی»): a percent off what they buy for themselves. It is one of the automatic discounts, of which the largest applies. 0 for none. */
   discount_percent: number
@@ -595,7 +596,7 @@ export interface WalletAdjustmentResponse {
   transactions: WalletTransactionRow[]
 }
 
-/** A manual credit or debit, with the line the customer sees in their ledger. A debit cannot exceed the balance. */
+/** A manual credit or debit, with the line the customer sees in their ledger. A debit may take anyone's balance below zero: a debt, which their next top-ups pay off first, and nothing they may spend. A debt past 1,000,000,000 Toman is a 422 on `amount`. */
 export interface WalletAdjustmentRequest {
   type: WalletTransactionType
   /** Whole Toman, above zero. */
@@ -4220,6 +4221,18 @@ export interface PremiumTextRow {
   texts: number
 }
 
+/** A plain emoji the shop's texts carry where the map would draw it premium, and the premium emoji it is swapped for. */
+export interface PremiumTextUse {
+  /** One plain emoji, as first met (the form with its variation selector preferred); ❤ and ❤️ are one. */
+  emoji: string
+  /** How many of the shop's texts carry it where the map would draw it: their own words outside a premium emoji, code, a link or a date; a button's leading emoji, with words after it and no premium emoji of its own right after (a name filled in may still bring one); never a popup. Signs that are no emoji (━, ★, ✓) are left out. */
+  texts: number
+  /** How many buttons of the start menu as a customer is shown it (programs switched off left out), while it is inline buttons, start with it, have words after it and no icon of their own; 0 for a keyboard under the text field. */
+  menu: number
+  /** The premium emoji the map swaps it for (digits, as a string); null while it has none. */
+  emoji_id: string | null
+}
+
 export interface PremiumTextsRequest {
   /** Left out: as it is. */
   enabled?: boolean
@@ -4233,6 +4246,8 @@ export interface PremiumTextsResponse {
     enabled: boolean
     /** In the admin’s order. */
     items: PremiumTextRow[]
+    /** Every plain emoji the shop's texts and its inline start menu carry, the most carried first, with the premium emoji swapped in; then the map's emoji nothing carries any more, in its order. */
+    emojis: PremiumTextUse[]
     /** Whether the bot can send premium emoji, as last found — by the check, /emoji or a message Telegram answered —; null before it was ever found. */
     status: {
       ok: boolean
@@ -6069,7 +6084,7 @@ export interface AgencySummary {
   agents: number
   /** Agents' bots that are running (connected and switched on). */
   bots: number
-  /** Requests waiting for a decision. */
+  /** Requests waiting for a decision: to become an agent, and agents' renewals. */
   pending: number
 }
 
@@ -6117,9 +6132,13 @@ export interface AgencyLevelRequest {
 
 export type AgencyRequestStatus = 'pending' | 'approved' | 'rejected'
 
-/** A customer's request to become an agent. */
+/** What an agency request asks for: `join` — a customer asks to become an agent; `renewal` — an agent asks for their agency's end to be moved on («درخواست تمدید نمایندگی»). */
+export type AgencyRequestKind = 'join' | 'renewal'
+
+/** A customer's request to become an agent, or an agent's request for their agency's end to be moved on (`kind`). */
 export interface AgencyRequestRow {
   id: number
+  kind: AgencyRequestKind
   user: UserRef
   user_status: UserStatus
   /** Whether the customer is an agent now. */
@@ -6129,6 +6148,12 @@ export interface AgencyRequestRow {
   note: string | null
   /** The level given on approval. */
   level: AgencyLevelRef | null
+  /** A renewal: the agent's agency's end now; null for none, and for a request to become an agent. */
+  expires_at: string | null
+  /** An approved renewal: the end it gave; null for none at all, and for anything else. */
+  extended_to: string | null
+  /** A renewal still waiting: the end the program's term (`term_days`) gives it now — on from the agent's end while it lies ahead, from now once it passed —, what the report group's «تایید» gives and an approval naming none. Null without a term or an end to move on (an approval then names one), and for anything else. */
+  term_end: string | null
   /** Support's note on a rejection. */
   reason: string | null
   /** Who decided it: the panel login, or a bot admin (@username or tg:<id>). */
@@ -6160,6 +6185,15 @@ export interface AgencyRequestsResponse {
 
 export interface AgencyRequestResponse {
   request: AgencyRequestRow
+}
+
+/** An agency request's approval: a request to become an agent takes the agent's terms, a renewal the agent's new end. */
+export type AgencyApproveRequest = AgencyTermsRequest | AgencyRenewalRequest
+
+/** A renewal's approval: the agent's new end. */
+export interface AgencyRenewalRequest {
+  /** The new end, as a day and an hour on the shop's clock ("2026-10-12T18:00"), ahead of now and no later than the last day the shop keeps; blank or null for none at all; left out for `term_end` (a 422 on `expires_at` while that is null). */
+  expires_at?: string | null
 }
 
 /** An agent's terms, when approving a request or changing an agent: their level, how far below zero their wallet may go, and their terms of selling — each of these two left out is the program's on an approval, kept on a change. */
@@ -6244,7 +6278,7 @@ export interface AgentRow {
   level: AgencyLevelRef
   /** How far below zero their wallet may go, in Toman. */
   credit_limit: string
-  /** Their wallet balance in Toman; below zero while they use their credit. */
+  /** Their wallet balance in Toman. Below zero is a debt: their credit in use, or past it by support's debit by hand. */
   balance: string
   /** Their bot (its shop is created when they are approved). */
   bot: AgentBot | null
@@ -6305,6 +6339,21 @@ export interface AccountResponse {
     /** Their wallet balance in the main bot, in Toman. */
     balance: string
     standing: AgencyStanding
+    /** Their latest request for their agency's end to be moved on («درخواست تمدید نمایندگی»), whatever became of it; null before the first. */
+    renewal: {
+      id: number
+      status: AgencyRequestStatus
+      /** Approved: the end it gave; null for none at all, and while not approved. */
+      extended_to: string | null
+      /** Rejected: the owner's note, if they left one. */
+      reason: string | null
+      created_at: string | null
+      decided_at: string | null
+    } | null
+    actions: {
+      /** Whether they may ask for their agency to be renewed now (POST /account/renewal): their agency has an end, passed or not, and no request of theirs waits. */
+      request_renewal: boolean
+    }
   }
 }
 
@@ -7199,7 +7248,7 @@ export interface StoreCustomer {
   phone: string | null
   /** The shop's phone rule never asks them for their number (`shop.phone_required`, `shop.phone_moments`), through either key: support excused them, or they are a bot admin. */
   phone_exempt: boolean
-  /** Their wallet balance in Toman, as a decimal string ('120000.00'). Below zero is an agent's debt. */
+  /** Their wallet balance in Toman, as a decimal string ('120000.00'). Below zero is a debt: an agent's credit in use, or support's debit by hand. */
   balance: string
   /** When they became a customer of the shop. */
   created_at: string | null
@@ -8308,11 +8357,11 @@ export interface StoreRenewalPlansResponse {
 
 /** The customer's wallet. Amounts in Toman, as decimal strings. */
 export interface StoreWalletResponse {
-  /** Below zero is an agent's debt. */
+  /** Below zero is a debt: an agent's credit in use, or support's debit by hand. A top-up pays it off first. */
   balance: string
-  /** How far below zero an agent's wallet may go; '0.00' for everyone else. */
+  /** How far below zero an agent's buying may take their wallet; '0.00' for everyone else. */
   credit: string
-  /** What the wallet can pay now: the balance plus the credit. */
+  /** What the wallet can pay now: the balance plus the credit. Below zero while a debt is past the credit: nothing is paid from the wallet until top-ups cover the price. */
   spendable: string
   /** «انتقال موجودی»: what the customer may send another customer of the shop now (`POST /wallet/transfer`), as the bot's «💸 انتقال موجودی» offers it; null while the shop offers none (off by default). Only the wallet's own balance is sent, never an agent's credit. */
   transfer: {
@@ -8470,6 +8519,8 @@ export type StoreNoticeType =
   | 'agency_minimum_short'
   | 'agency_suspended'
   | 'agency_resumed'
+  | 'agency_renewed'
+  | 'agency_renewal_rejected'
   | 'two_factor_disabled'
   | 'way_in_added'
   | 'way_in_removed'
@@ -8696,6 +8747,8 @@ export type PanelWrite =
   | { method: 'POST'; path: '/auth/sessions/end'; body: undefined; answer: void }
   /** Change the panel's login. Every other session ends; this one stays signed in. Every Telegram account linked as the owner (`/settings/owner-telegram`) is let go too, with the bot admin role its link gave it, and an open link ends: they are linked again afterwards. A 422 under the field refused (a wrong current password counts as a failed sign-in), or on `file` while the server may not write config.php; a 429 while this address or the account must wait after failures. */
   | { method: 'PUT'; path: '/auth/credentials'; body: CredentialsRequest; answer: SessionResponse }
+  /** «درخواست تمدید نمایندگی»: the agent asks for their agency's end to be moved on. The owner decides — on the agents page or in the main bot's report group — and the agent is told in the main bot. Only while `account.actions.request_renewal`: a 422 on `status` when one waits already, or their agency has no end. */
+  | { method: 'POST'; path: '/account/renewal'; body: undefined; answer: AccountResponse }
   /** Report a panel error to the server log. For errors in the panel's own code, such as a page that failed to render or an unhandled error. */
   | { method: 'POST'; path: '/client-errors'; body: ClientErrorRequest; answer: void }
   /** Set the webhook of every bot. Each webhook is under APP_URL, which must be HTTPS (else a 422 and no bot is changed). Same as `bot:webhook:set`: a bot that fails does not stop the others. */
@@ -8930,9 +8983,9 @@ export type PanelWrite =
   | { method: 'PUT'; path: '/schedule'; body: ScheduleRequest; answer: ScheduleResponse }
   /** Save the agency program's settings. */
   | { method: 'PUT'; path: '/agency/settings'; body: AgencySettingsRequest; answer: AgencySettingsResponse }
-  /** Approve an agency request. Sets the level and the starting credit, and the terms of selling — `expires_at` and `monthly_minimum`, the program's (`term_days`, `monthly_minimum`) while left out; the customer is notified. */
-  | { method: 'POST'; path: `/agency/requests/${number}/approve`; body: AgencyTermsRequest; answer: AgencyRequestResponse }
-  /** Reject an agency request. The customer is notified, with the note. */
+  /** Approve an agency request; the customer is notified. A request to become an agent (`kind` join) takes `AgencyTermsRequest`: the level and the starting credit, and the terms of selling — `expires_at` and `monthly_minimum`, the program's (`term_days`, `monthly_minimum`) while left out. A renewal (`kind` renewal) takes `AgencyRenewalRequest`: the agent's new end. */
+  | { method: 'POST'; path: `/agency/requests/${number}/approve`; body: AgencyApproveRequest; answer: AgencyRequestResponse }
+  /** Reject an agency request — to become an agent, or a renewal. The customer is notified, with the note. */
   | { method: 'POST'; path: `/agency/requests/${number}/reject`; body: NoteRequest; answer: AgencyRequestResponse }
   /** Change an agent's level and credit, and their terms of selling — `expires_at` and `monthly_minimum`, each kept while left out. The id is the agent's customer id. An end that lies ahead (or none) lifts a suspension for an end passed; no minimum lifts one for the minimum; an end passed suspends at once. The agent is notified of a change, and the answer says whether the notice reached them. */
   | { method: 'PUT'; path: `/agency/agents/${number}`; body: AgencyTermsRequest; answer: AgentChangedResponse }

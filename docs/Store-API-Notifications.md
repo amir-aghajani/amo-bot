@@ -81,6 +81,7 @@ screens, a wallet purchase's or renewal's own confirmation (the website's checko
 | `referral_start_gift`, `referral_reward` | a start gift in their wallet (the referrer's for a newcomer, the newcomer's own); a service given free for their invitations — the service itself comes as a `payment_settled` | `null` |
 | `agency_approved`, `agency_rejected`, `agency_changed`, `agency_revoked` | an agent's agency: their request approved or rejected, their terms changed, their agency ended | `null` |
 | `agency_traffic_short` | an order their bot could not deliver: its traffic does not cover it | `null` |
+| `agency_renewed`, `agency_renewal_rejected` | an agent's request for their agency's end to be moved on approved, with the new end, or rejected ([renewing an agency](Agency.md#renewing-an-agency)) | `null` |
 | `agency_expiring`, `agency_minimum_short`, `agency_suspended`, `agency_resumed` | their agency's end is near; a month nears its end with their traffic bought below their monthly minimum; their bot's selling suspended, or open again ([the terms of selling](Agency.md#the-terms-of-selling-an-end-and-a-monthly-minimum)) | `null` |
 | `way_in_added`, `way_in_removed` | a Telegram account, a Google account or an email added to their account, or taken off it | `null` |
 | `password_changed` | their password set or changed (`PUT /me/password`), reset, or set by a merge ([the merge offer](Store-API-Account.md#the-merge-offer)); an email added with its password is told as `way_in_added` | `null` |

@@ -211,12 +211,28 @@ final class WalletTransfersTest extends DatabaseTestCase
         $short = 'موجودی کیف پول شما (۴۰٬۰۰۰ تومان) برای این انتقال کافی نیست.' . WalletTransfers::NOT_CREDIT;
         self::assertSame(['amount' => [$short]], $this->refusedWith(fn() => $this->transfers()->transfer($agent, $this->sara, 50_000)));
 
-        $this->wallet($agent, '-100000');
+        $this->wallet($agent, '5000');
         $little = 'برای انتقال، دست‌کم ۱۰٬۰۰۰ تومان موجودی در کیف پول لازم است.' . WalletTransfers::NOT_CREDIT;
-        self::assertSame(['amount' => [$little]], $this->refusedWith(fn() => $this->transfers()->check($agent)), 'in debt, nothing to send');
-        self::assertSame(['amount' => [$little]], $this->refusedWith(fn() => $this->transfers()->recipient($agent, (string) self::SARA)), 'nor anyone looked up for them');
-        self::assertSame(['amount' => ['موجودی کیف پول شما (۰ تومان) برای این انتقال کافی نیست.' . WalletTransfers::NOT_CREDIT]], $this->refusedWith(fn() => $this->transfers()->transfer($agent, $this->sara, 10_000)));
+        self::assertSame(['amount' => [$little]], $this->refusedWith(fn() => $this->transfers()->check($agent)), 'less than the least to send');
+
+        $this->wallet($agent, '-100000');
+        $debt = 'کیف پول شما ۱۰۰٬۰۰۰ تومان بدهی دارد؛ تا بدهی صاف نشود، چیزی منتقل نمی‌شود.' . WalletTransfers::NOT_CREDIT;
+        self::assertSame(['amount' => [$debt]], $this->refusedWith(fn() => $this->transfers()->check($agent)), 'in debt, nothing to send');
+        self::assertSame(['amount' => [$debt]], $this->refusedWith(fn() => $this->transfers()->recipient($agent, (string) self::SARA)), 'nor anyone looked up for them');
+        self::assertSame(['amount' => [$debt]], $this->refusedWith(fn() => $this->transfers()->transfer($agent, $this->sara, 10_000)));
         self::assertSame(['-100000.00', '0.00'], [$agent->balance(), $this->sara->balance()]);
+    }
+
+    public function testACustomerInDebtSendsNothingAndIsToldOfTheDebt(): void
+    {
+        $this->walletTransfersOn();
+        $this->wallet($this->ali, '-20000');
+
+        $debt = 'کیف پول شما ۲۰٬۰۰۰ تومان بدهی دارد؛ تا بدهی صاف نشود، چیزی منتقل نمی‌شود.';
+        self::assertSame('0.00', $this->transfers()->most($this->ali));
+        self::assertSame(['amount' => [$debt]], $this->refusedWith(fn() => $this->transfers()->check($this->ali)));
+        self::assertSame(['amount' => [$debt]], $this->refusedWith(fn() => $this->transfers()->transfer($this->ali, $this->sara, 10_000)));
+        self::assertSame(['-20000.00', '0.00'], [$this->ali->balance(), $this->sara->balance()]);
     }
 
     public function testTheDailyCapCountsTheShopsDayAndOpensAgainAtItsMidnight(): void

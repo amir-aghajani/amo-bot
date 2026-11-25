@@ -176,6 +176,12 @@ handler: the bot only renders.
   a test is never renewed (a service without a plan that is no test — added by its link, or built — renews on a plan
   it picks, `RenewalHandler`'s picker, or with a package built: `CustomServiceHandler`'s `custom:r:…` steps, which
   hand the checkout back to `RenewalHandler::checkout()`).
+- **An agent's renewal request**: `Buttons::renewAgencyFor()` is «🔄 درخواست تمدید نمایندگی» (`agency:renew`) while
+  `AgencyActions::mayRequestRenewal()`, under the agent's account (`AgencyHandler`); `Buttons::renewAgency()` always sits
+  under the notices of the end near and passed (`CustomerNotifier`), whose texts tell them to press it.
+  `AgencyHandler::renew()` files it (`AgencyActions::requestRenewal()`) and says `AgencyRenewalRequested`; refused, it
+  says why in a popup (`RENEWAL_WAITING`, `RENEWAL_NOT_NEEDED`) and draws the account as it stands, where
+  `AgencyTermLines::standing()` says `AgencyRenewalPending` under the end while one waits.
 
 Adding a screen: a handler with its prefix constant and builders, its line in `routes/bot.php` (with `navigation: true`
 when it should leave the flow), its texts as `BotText` cases, and a feature test on `BotTestCase`.
@@ -299,8 +305,20 @@ not be sent, nothing learned and the status as it was before put back (`PremiumE
 
 The panels' API, `Admin\Api\PremiumTextsController` in `routes/api.php`'s `$configuration` group:
 
-- `GET /bot/premium-texts` → `{premium_texts: {enabled, items: [{emoji, emoji_id, texts}], status: {ok, checked_at} | null,
-  can_enable, max}}`, `texts` from `EmojiMap::uses()` over `BotTexts::wordings()`;
+- `GET /bot/premium-texts` → `{premium_texts: {enabled, items: [{emoji, emoji_id, texts}], emojis: [{emoji, texts, menu,
+  emoji_id}], status: {ok, checked_at} | null, can_enable, max}}`, `texts` from `EmojiMap::uses()` over
+  `BotTexts::wordings()`. `emojis`, the list the admin swaps from, is `EmojiMap::inventory()`: every plain emoji the
+  wordings carry where the map would draw it (`rewrite()` with no map finds them all, drawing none) and the leading emoji
+  of the start menu's buttons — the menu as a customer is shown it (`MainMenu::shown()`: programs switched off left out,
+  the built-in menu when nothing is left), its buttons `KeyboardLayout::iconable()` lists (an inline menu's with no icon
+  of their own, the ones `premium()` gives one) —, counted by `key()`, the most carried first, each with the map's
+  premium emoji or null; then the map's emoji nothing carries any more. Signs that are emoji only by their code point
+  (━, ★, ✓) are left out unless the map has one: `drawnAsEmoji()` takes a variation selector or keycap mark, a
+  pictograph past U+1F000, or a character of Unicode's Emoji property below it (`DRAWN`, held to Unicode by the panel
+  mirror's test). A half-space (U+200C, or U+200D) a grapheme ends in is no part of the emoji (`untailed()`): split off
+  before its key and kept after its tag when drawn; a button's or a menu label's leading emoji ending in one is left, as
+  `label()` and `icon()` leave it. `save()` trims it off an item's emoji and refuses a sign new to the map with
+  `NOT_EMOJI` — one saved before stays;
 - `PUT /bot/premium-texts` `{enabled?, items?}` (the whole list) → the same;
 - `POST /bot/premium-texts/check` → the same, with the new status. It goes to `?chat=` only through the bot's door
   (`Principal::$inBot`: the chat the admin tapped in); for an agent, to their own account, from their bot; for the owner,
@@ -444,7 +462,9 @@ updates), its topics `ReportTopics` (each made under a lease, so two processes n
   services as the panel, with the admin as `Actor::groupAdmin()`. A reply is matched to what it answers by the message
   id the bot recorded, never by that message's words, which may be a customer's. An agency request's approval refused
   as it stands — the admin's own request, or an agency the program's term would end past the last day the shop keeps —
-  leaves its buttons in place for another try; only a request decided meanwhile takes them away.
+  leaves its buttons in place for another try; only a request decided meanwhile takes them away. A renewal request's
+  «تایید» picks no level: `AgencyReview::renew()` gives `AgencyActions::termEnd()` at once, its refusals — no term, no
+  end, past that day — kept as a popup over the buttons; its report and verdict are `ShopReports`' own wording.
 - **The backup** — `Topic::Backups` has no queued report: `Backups\Tasks\SendBackupsTask` sends the shop's file to
   its thread itself, at its own time, apart from the queue and its pace ([Architecture](Architecture.md#backups)).
 
@@ -459,7 +479,10 @@ row, `GroupButtons::forget()`) — and
 Telegram id, an @username or the customer's number in the shop (`#12`). The front says who they are and opens the
 sections, each a handler of its own callback prefix under `Reports\Customers` that rewrites the card in place, with
 «⬅️ بازگشت» back to the front: `CustomerServices` (a service's sync, time and traffic, switch off and on, deletion),
-`CustomerWallet` (an increase or a decrease with a note), `CustomerOrder` (a service made by hand, as the panel's
+`CustomerWallet` (an increase or a decrease with a note; a decrease into debt asked again, its «✅ تایید» acting once
+under the question's key: what it writes — the customer, the amount, the question, the note — recorded on the card
+with its nonce by `CustomerCards::replyNonce()`, never read from the button's data; «⬅️ انصراف», or a new ask on the
+card, drops it, `CustomerCards::dropNonces()`), `CustomerOrder` (a service made by hand, as the panel's
 «افزودن سفارش»: `ManualOrders`, the confirm button carrying a nonce as the order's key), `CustomerDiscount`,
 `CustomerHistory` (orders, payments, tickets, referrals — reading only), `CustomerAccount` (the website's sign-in:
 two-factor off, every device signed out) and `CustomerMessage` (a message from support, as the panel's «ارسال پیام»,
@@ -595,7 +618,11 @@ for an answer that may be a menu button's label (`Admin::INPUT_ANY`). `Admin::as
 (`Prompt::kept()`), «⚠️» and the reason over it. `Admin::confirm(question, yes, no, detail, danger)` asks before a
 change that is not undone: the yes is green, or red where it destroys — `danger: true`, or left null a yes whose label
 starts with 🗑 🚫 ⛔ 🛑 ✂️; build it with `Words::yes('حذف شود', '🗑')` so the icon says it —, a yes given its own colour
-keeps it. Both draw any cancel word their way out has as `Words::CANCEL`.
+keeps it. Both draw any cancel word their way out has as `Words::CANCEL`. A question two screens share has one home:
+an agency's end is `Owner\Agency\AgencyEnd::prompt()` (typed days or a Jalali day, «بدون پایان», `DAYS` from now, a
+screen's own picks first) and `read()`, asked by an agent's terms (`TermsScreen`) and by a renewal approved
+(`AgencyRenewScreen`, `agrn`: a renewal's «✅ تایید» on `agrv` opens it, and `AgencyApproveScreen` hands it an older
+window's renewal), which sends the program's end as no `expires_at` for the API to reckon.
 
 **Settings cards** — `Settings\SettingsScreen` is a card of the panel's as `FieldDef`s over a `SettingsSource`
 (`BotGroupSource` for a «تنظیمات ربات» group, `PatchSource`, `PutSource`), saved a field at a time as the panel saves
@@ -701,7 +728,7 @@ group has `groupTap()`, `groupReply()` and `botMembership()`. `BotQueryBudgetTes
 budget of queries and Telegram calls — a budget raised says what the new query buys (the menu's mini app row, for one).
 `miniApp()` switches the shop's mini app on for a test of its button (`BotMenuTest`). Unit tests of the API, texts and
 keyboards are in `tests/Unit/Telegram`. The shop's premium emoji: `PremiumTextsTest` (the map in texts, parts, popups,
-buttons, the menu and its taps), `AdminPremiumTextsApiTest` (the switch, the list's refusals, where the check goes) and
+buttons, the menu and its taps), `AdminPremiumTextsApiTest` (the switch, the emoji the texts carry, the list's refusals, where the check goes) and
 `PremiumEmojiTest` (what `BotApi` learns, the plain resend, the cap). The management's are in `tests/Feature/BotAdmin`: `BotAdminDoorTest` (the door's
 guards), `BotAdminFlowTest` (an owner linked by `OwnerLinks::link()` and `redeem()`, `/admin`, taps by `Nav::to()`,
 typed answers), `BotAdminFoundationTest` (the `Ui` layer as every screen uses it: colours, copy buttons, rows drawn

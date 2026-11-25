@@ -213,7 +213,8 @@ final class AutoRenewal
         if (!PaymentMethods::within($wallet, $price)) {
             return;
         }
-        $pays = Money::compare($subscription->user->refresh()->spendable(), $price) >= 0;
+        // Nothing to pay (a free plan, a whole discount) is always payable, whatever the wallet holds — a debt included.
+        $pays = !Money::isPositive($price) || Money::compare($subscription->user->refresh()->spendable(), $price) >= 0;
         $method = $this->settings->defaultMethod();
         // Not its method's time yet (ResetTime's last run): its panel is not asked — but a short wallet is told from now.
         if ($pays && !$this->renewsNow($subscription->expires_at, $method)) {

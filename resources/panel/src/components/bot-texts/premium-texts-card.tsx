@@ -1,11 +1,11 @@
-import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
+import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowRight, CircleCheck, CircleHelp, Info, Plus, RefreshCw, Sparkles, TriangleAlert, X, type LucideIcon } from 'lucide-react'
+import { ArrowRight, ChevronDown, CircleCheck, CircleHelp, Info, Plus, RefreshCw, Sparkles, TriangleAlert, X, type LucideIcon } from 'lucide-react'
 import { toast } from 'sonner'
-import { AddRow, useRowFocus } from '@/components/add-row'
+import { useRowFocus } from '@/components/add-row'
 import { leadingEmoji } from '@/components/bot-texts/button-icon'
 import { useCustomEmojis } from '@/components/bot-texts/custom-emojis'
-import { emojiKey } from '@/components/bot-texts/emoji-map'
+import { drawnAsEmoji, emojiKey, untailed } from '@/components/bot-texts/emoji-map'
 import { PremiumEmoji } from '@/components/bot-texts/premium-emoji'
 import { PremiumEmojiPicker } from '@/components/bot-texts/premium-emoji-picker'
 import { Callout } from '@/components/callout'
@@ -15,7 +15,9 @@ import { FieldGroup } from '@/components/field'
 import { FormError } from '@/components/form-footer'
 import { IconButton } from '@/components/icon-button'
 import { useReadFailure } from '@/components/page'
+import { PageTabs, type PageTab } from '@/components/page-tabs'
 import { SectionCard } from '@/components/section-card'
+import { CountBadge } from '@/components/status-badge'
 import { SwitchRow } from '@/components/switch-row'
 import { TimeAgo } from '@/components/time-ago'
 import { Button } from '@/components/ui/button'
@@ -23,7 +25,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { api, type FieldErrors } from '@/lib/api'
-import type { CustomEmojiRow, PremiumTextItem, PremiumTextsResponse } from '@/lib/api-types'
+import type { CustomEmojiRow, PremiumTextItem, PremiumTextsResponse, PremiumTextUse } from '@/lib/api-types'
 import { messageOf } from '@/lib/failure'
 import { formatNumber } from '@/lib/format'
 import { premiumTextsQuery } from '@/lib/queries'
@@ -43,19 +45,46 @@ function draftOf(premium: PremiumTexts): Draft {
   return { enabled: premium.enabled, items: premium.items.map(({ emoji, emoji_id }) => ({ emoji, emoji_id })) }
 }
 
-/** A row's refusals, as the server words them (`items.N.emoji`, `items.N.emoji_id`). */
+/** A row's refusals, as the server words them (`items.N.emoji`, `items.N.emoji_id`); N is its item's place in the map. */
 const rowField = /^items\.(\d+)\.(.+)$/
 
-/** The refusals with the row at `removed` gone: its own dropped, those of the rows after it moved up one — so each stays with its row. */
-function withoutRow(errors: FieldErrors, removed: number): FieldErrors {
+/** What became of the map's items: one taken out (`removed`), put in (`inserted`), or given another premium emoji (`changed`). */
+interface ItemsEdit {
+  removed?: number
+  inserted?: number
+  changed?: number
+}
+
+/**
+ * The refusals once the map was edited, so each stays with its row: the list's own gone (set() drops it too); the item
+ * taken out takes its own, those after it moving up one; those from where one was put in moving down one; the item given
+ * another premium emoji loses its own.
+ */
+function refusalsAfter(errors: FieldErrors, { removed, inserted, changed }: ItemsEdit): FieldErrors {
   const kept: FieldErrors = {}
   for (const [field, messages] of Object.entries(errors)) {
     const row = rowField.exec(field)
     const index = Number(row?.[1])
-    if (row === null) kept[field] = messages
-    else if (index !== removed) kept[`items.${index > removed ? index - 1 : index}.${row[2]}`] = messages
+    if (row === null) {
+      if (field !== 'items') kept[field] = messages
+    } else if (index !== removed && index !== changed) {
+      const now = removed !== undefined && index > removed ? index - 1 : inserted !== undefined && index >= inserted ? index + 1 : index
+      kept[`items.${now}.${row[2]}`] = messages
+    }
   }
   return kept
+}
+
+/**
+ * Where an item for the emoji keyed `key` goes in the draft: back in its saved place when the saved map has it — before
+ * the first item saved after it, or new —, so a swap taken off and put back leaves the map as saved; last otherwise.
+ */
+function placeOf(items: PremiumTextItem[], saved: PremiumTextItem[], key: string): number {
+  const savedAt = new Map(saved.map((item, at) => [emojiKey(item.emoji), at]))
+  const at = savedAt.get(key)
+  if (at === undefined) return items.length
+  const after = items.findIndex((item) => (savedAt.get(emojiKey(item.emoji)) ?? Infinity) > at)
+  return after === -1 ? items.length : after
 }
 
 /**
@@ -99,34 +128,36 @@ function PremiumTextsForm({ premium }: { premium: PremiumTexts }) {
     return saved
   }
 
-  /** The map as now laid out; `removed`, the row taken out — each refusal stays with its row (one added goes last). */
-  const setItems = (items: PremiumTextItem[], removed?: number) => {
+  /** The map as now laid out — an item added goes last, one swapped again keeps its place —; each refusal stays with its row. */
+  const setItems = (items: PremiumTextItem[], edit: ItemsEdit = {}) => {
     set('items', items)
-    if (removed !== undefined && Object.keys(errors).some((field) => rowField.test(field))) setErrors(withoutRow(errors, removed))
+    if (Object.keys(errors).some((field) => rowField.test(field))) setErrors(refusalsAfter(errors, edit))
   }
 
   return (
     <SectionCard
       form={{ ...group, save }}
       title="ایموجی پرمیوم متن‌ها"
-      description="هر ایموجی معمولی فهرست زیر، در همه متن‌های ربات، پیش‌فرض و تغییر یافته، به شکل ایموجی پرمیومی که برایش انتخاب کرده‌اید فرستاده می‌شود؛ مثلا هر ❤️ همان قلب پرمیوم."
+      description="هر ایموجی معمولی که در فهرست زیر با یک ایموجی پرمیوم عوض کنید، در همه متن‌های ربات، پیش‌فرض و تغییر یافته، به شکل همان ایموجی پرمیوم فرستاده می‌شود؛ مثلا هر ❤️ همان قلب پرمیوم."
     >
       <BotAbility premium={premium} />
       <SwitchRow
         label="ایموجی پرمیوم متن‌ها روشن باشد"
-        hint="روشن که باشد، ربات ایموجی‌های فهرست را در متن‌ها پرمیوم می‌فرستد؛ خاموش، همه همان ایموجی معمولی می‌مانند و فهرست سر جایش می‌ماند."
+        hint="روشن که باشد، ربات ایموجی‌های عوض‌شده را در متن‌ها پرمیوم می‌فرستد؛ خاموش، همه همان ایموجی معمولی می‌مانند و انتخاب‌های فهرست نگه داشته می‌شوند."
         checked={values.enabled}
         onCheckedChange={(checked) => set('enabled', checked)}
         // Only turning it on asks that the bot was found able, as the server does: one on may still be turned off.
         held={!premium.can_enable && !premium.enabled && !values.enabled}
         error={error('enabled')}
       />
-      <EmojiRows premium={premium} items={values.items} errors={errors} error={error('items')} onChange={setItems} />
+      <EmojiList premium={premium} items={values.items} errors={errors} error={error('items')} busy={group.busy} onChange={setItems} />
       <Callout tone="info" icon={Info}>
         <ul className="grid list-disc gap-1.5 ps-4">
           <li>ایموجی پرمیومی که خود متن دارد همان می‌ماند.</li>
           <li>اعلان‌ها ایموجی معمولی نشان می‌دهند؛ تلگرام در اعلان ایموجی پرمیوم ندارد.</li>
-          <li>دکمه‌ای که با یکی از این ایموجی‌ها شروع شود، ایموجی پرمیوم آن را آیکون می‌گیرد — در منوی ربات وقتی منو «دکمه‌های شیشه‌ای» است؛ دکمه‌ای که آیکون خودش را دارد همان را نگه می‌دارد.</li>
+          <li>
+            دکمه‌ای که با یکی از ایموجی‌های عوض‌شده شروع شود، ایموجی پرمیوم آن را آیکون می‌گیرد — در منوی ربات وقتی منو «دکمه‌های شیشه‌ای» است؛ دکمه‌ای که آیکون خودش را دارد همان را نگه می‌دارد.
+          </li>
           <li>فقط متن خود فروشگاه: مقدارهایی که ربات جای متغیرها می‌گذارد، مثل نام پلن یا پیام مشتری، همان‌طور که هست می‌ماند.</li>
         </ul>
       </Callout>
@@ -208,35 +239,190 @@ function BotAbility({ premium }: { premium: PremiumTexts }) {
   )
 }
 
-interface EmojiRowsProps {
+/** Which rows the list shows: all, those swapped for a premium emoji in the draft, those not. */
+type Shown = 'all' | 'swapped' | 'plain'
+
+/** The rows shown before «نمایش همه»: the most carried, a phone's screenful or two. */
+const FOLD = 12
+
+/** A row of the list: a plain emoji the texts carry — or one only the draft swaps —, and its swap in the draft and as saved. */
+interface Row {
+  /** emojiKey() of the emoji: the row's identity, ❤ and ❤️ one row. */
+  key: string
+  /** As the server sent it; the draft's own for one only the draft has. */
+  emoji: string
+  /** Where the texts carry it; null for one only the draft has (from «ایموجی دیگر», not saved yet). */
+  use: PremiumTextUse | null
+  /** Its item's place in the draft's map, where its refusals are (`items.N.…`); -1 for none. */
+  index: number
+  /** The premium emoji it is swapped for in the draft, and as saved; null for none. */
+  id: string | null
+  saved: string | null
+}
+
+/** The list's rows: the emoji the texts carry in the server's order, then those only the draft swaps, in its order. */
+function rowsOf(premium: PremiumTexts, items: PremiumTextItem[]): Row[] {
+  const draft = new Map(items.map((item, index) => [emojiKey(item.emoji), index]))
+  const saved = new Map(premium.items.map((item) => [emojiKey(item.emoji), item.emoji_id]))
+  const row = (emoji: string, use: PremiumTextUse | null): Row => {
+    const key = emojiKey(emoji)
+    const index = draft.get(key) ?? -1
+    return { key, emoji, use, index, id: items[index]?.emoji_id ?? null, saved: saved.get(key) ?? null }
+  }
+  const listed = new Set(premium.emojis.map((use) => emojiKey(use.emoji)))
+
+  return [...premium.emojis.map((use) => row(use.emoji, use)), ...items.filter((item) => !listed.has(emojiKey(item.emoji))).map((item) => row(item.emoji, null))]
+}
+
+/** Where the texts carry an emoji — «در ۲ متن و ۱ دکمه منو» —, or that they no longer do (one the map has). */
+function whereOf(use: PremiumTextUse): string {
+  const places = [use.texts > 0 ? `${formatNumber(use.texts)} متن` : null, use.menu > 0 ? `${formatNumber(use.menu)} دکمه منو` : null].filter((place) => place !== null)
+  return places.length === 0 ? 'فعلا در هیچ متنی نیست' : `در ${places.join(' و ')}`
+}
+
+interface EmojiListProps {
   premium: PremiumTexts
   items: PremiumTextItem[]
   /** The save's refusals: each row's under `items.N.…`. */
   errors: FieldErrors
-  /** The refusal of the list as a whole (too long). */
+  /** The refusal of the map as a whole (too long). */
   error?: string
-  onChange: (items: PremiumTextItem[], removed?: number) => void
+  /** The card is being saved: the map holds still meanwhile, the refusals to come being about the map sent. */
+  busy: boolean
+  onChange: (items: PremiumTextItem[], edit?: ItemsEdit) => void
 }
 
 /**
- * The map: each plain emoji with the premium one drawn in its place and how many texts it is in, taken off by its cross;
- * then one added from the bot's premium emoji. Each row's refusal under it.
+ * The map, built from the emoji the texts carry: each row a plain emoji, the premium one swapped in or an empty slot,
+ * where it is, and its swap chosen from the bot's premium emoji under it, changed or taken off. Filtered by swapped or
+ * not and folded after the most carried; a row being edited or refused shows whatever the filter and the fold. One the
+ * texts do not carry yet is swapped by «ایموجی دیگر».
  */
-function EmojiRows({ premium, items, errors, error, onChange }: EmojiRowsProps) {
+function EmojiList({ premium, items, errors, error, busy, onChange }: EmojiListProps) {
   const library = useCustomEmojis()
+  const [shown, setShown] = useState<Shown>('all')
+  const [unfolded, setUnfolded] = useState(false)
+  // The rows edited since the filter or the fold last changed: kept in sight while the admin is at them, back as saved
+  // or not.
+  const [edited, setEdited] = useState<ReadonlySet<string>>(() => new Set())
+  // The row whose picker is open (its key); one at a time, and not while «ایموجی دیگر» is.
+  const [picking, setPicking] = useState<string | null>(null)
   const [adding, setAdding] = useState(false)
-  const { block, added, removed, toAdd } = useRowFocus((item: PremiumTextItem) => item.emoji_id)
-  const saved = new Map(premium.items.map((row) => [row.emoji_id, row]))
+  const { block, added, toAdd } = useRowFocus(emojiKey)
+  const listId = useId()
+  const fullId = useId()
   const none = library.data?.emojis.length === 0
+  const full = items.length >= premium.max
 
-  const remove = (index: number) => {
-    const left = items.filter((_, i) => i !== index)
-    removed(left, index)
-    onChange(left, index)
+  // The bot's last premium emoji taken off in an open picker: the picker goes with it, the focus to why there is none.
+  const [hadNone, setHadNone] = useState(none)
+  if (none !== hadNone) {
+    setHadNone(none)
+    if (none && (picking !== null || adding)) {
+      setPicking(null)
+      setAdding(false)
+      toAdd()
+    }
+  }
+
+  const rows = rowsOf(premium, items)
+  const refusalsOf = (row: Row) => (row.index === -1 ? [] : [errors[`items.${row.index}.emoji`]?.[0], errors[`items.${row.index}.emoji_id`]?.[0]].filter((message) => message !== undefined))
+  // Shown whatever the filter and the fold: a row being edited (its swap not saved, edited since they changed, its
+  // picker open), or refused — a refused save moves the focus to it.
+  const pinned = (row: Row) => row.id !== row.saved || edited.has(row.key) || row.key === picking || refusalsOf(row).length > 0
+  const listed = rows.filter((row) => shown === 'all' || (shown === 'swapped') === (row.id !== null))
+  const first = new Set((unfolded ? listed : listed.slice(0, FOLD)).map((row) => row.key))
+  const visible = rows.filter((row) => first.has(row.key) || pinned(row))
+  const swapped = rows.filter((row) => row.id !== null).length
+
+  const tabs: PageTab<Shown>[] = [
+    {
+      value: 'all',
+      label: (
+        <>
+          همه
+          <CountBadge count={rows.length} />
+        </>
+      ),
+    },
+    {
+      value: 'swapped',
+      label: (
+        <>
+          عوض‌شده
+          <CountBadge count={swapped} tone={swapped > 0 ? 'info' : 'neutral'} />
+        </>
+      ),
+    },
+    {
+      value: 'plain',
+      label: (
+        <>
+          عوض‌نشده
+          <CountBadge count={rows.length - swapped} />
+        </>
+      ),
+    },
+  ]
+
+  // What is shown changed: the rows edited before it need not stay in sight.
+  const show = (next: Shown) => {
+    setShown(next)
+    setEdited(new Set())
+  }
+  const fold = () => {
+    setUnfolded(!unfolded)
+    setEdited(new Set())
+  }
+  const touch = (key: string) => setEdited((keys) => new Set(keys).add(key))
+
+  /** A swap put in for an emoji the draft has none for, in its saved place (placeOf()) as it was saved, or last as given. */
+  const insert = (item: PremiumTextItem) => {
+    const key = emojiKey(item.emoji)
+    const at = placeOf(items, premium.items, key)
+    const emoji = premium.items.find((kept) => emojiKey(kept.emoji) === key)?.emoji ?? item.emoji
+    touch(key)
+    onChange([...items.slice(0, at), { emoji, emoji_id: item.emoji_id }, ...items.slice(at)], { inserted: at })
+  }
+
+  const toggle = (row: Row) => {
+    if (busy) return
+    setAdding(false)
+    setPicking(picking === row.key ? null : row.key)
+  }
+  // The picker closes once one is picked or given up, the focus back on the row's swap.
+  const close = (row: Row) => {
+    added(row.emoji, 'swap')
+    setPicking(null)
+  }
+  const pick = (row: Row, emoji: CustomEmojiRow) => {
+    if (busy) return
+    close(row)
+    if (emoji.id === row.id) return
+    if (row.index === -1) return insert({ emoji: row.emoji, emoji_id: emoji.id })
+    touch(row.key)
+    onChange(
+      items.map((item, index) => (index === row.index ? { ...item, emoji_id: emoji.id } : item)),
+      { changed: row.index },
+    )
+  }
+  // A row the texts carry stays, the focus on its swap; one only the draft had goes, the focus to «ایموجی دیگر» (or, the
+  // bot having no premium emoji, to why not).
+  const remove = (row: Row) => {
+    if (busy) return
+    if (row.use !== null && !none) added(row.emoji, 'swap')
+    else toAdd()
+    if (picking === row.key) setPicking(null)
+    touch(row.key)
+    onChange(
+      items.filter((_, index) => index !== row.index),
+      { removed: row.index },
+    )
   }
   const add = (item: PremiumTextItem) => {
-    added(item, 'remove')
-    onChange([...items, item])
+    if (busy) return
+    added(item.emoji, 'remove')
+    insert(item)
     setAdding(false)
   }
   const cancel = () => {
@@ -246,83 +432,220 @@ function EmojiRows({ premium, items, errors, error, onChange }: EmojiRowsProps) 
 
   return (
     <div ref={block}>
-      <FieldGroup label="ایموجی‌ها" description="هر ایموجی معمولی و ایموجی پرمیومی که در متن‌ها جای آن فرستاده می‌شود." error={error} className="gap-2">
-        {items.length > 0 && (
-          <ul className="grid divide-y divide-border rounded-lg border border-border">
-            {items.map((item, index) => {
-              const row = saved.get(item.emoji_id)
-              const refused = [errors[`items.${index}.emoji`]?.[0], errors[`items.${index}.emoji_id`]?.[0]].filter((message) => message !== undefined)
-              return (
-                <EmojiRow
-                  key={item.emoji_id}
-                  item={item}
-                  texts={row !== undefined && emojiKey(row.emoji) === emojiKey(item.emoji) ? row.texts : null}
-                  refused={refused}
-                  onRemove={() => remove(index)}
-                />
-              )
-            })}
-          </ul>
+      <FieldGroup
+        label="ایموجی‌های متن‌ها"
+        description="ایموجی‌های معمولی که متن‌ها و دکمه‌های ربات دارند، پرکاربردترها اول؛ برای هر کدام که بخواهید یک ایموجی پرمیوم انتخاب کنید."
+        error={error}
+        className="gap-3"
+      >
+        {none && (
+          // In «ایموجی دیگر»'s place: a swap taken off with nothing to pick from hands it the focus.
+          <div data-add tabIndex={-1} className="rounded-xl outline-none">
+            <EmptyState
+              compact
+              framed
+              icon={Sparkles}
+              title="هنوز ایموجی پرمیومی در فهرست ربات نیست"
+              description={
+                <>
+                  اول در ربات <bdi dir="ltr">/emoji</bdi> را بفرستید و بعد پیامی با ایموجی‌های پرمیومی که می‌خواهید؛ همین‌جا برای انتخاب می‌آیند.
+                </>
+              }
+            />
+          </div>
         )}
 
-        {none ? (
-          <EmptyState
-            compact
-            framed
-            icon={Sparkles}
-            title="هنوز ایموجی پرمیومی در فهرست ربات نیست"
-            description={
-              <>
-                اول در ربات <bdi dir="ltr">/emoji</bdi> را بفرستید و بعد پیامی با ایموجی‌های پرمیومی که می‌خواهید؛ همین‌جا برای انتخاب می‌آیند.
-              </>
-            }
-          />
-        ) : adding ? (
-          <AddEmoji items={items} onAdd={add} onCancel={cancel} />
+        {rows.length === 0 ? (
+          <p className="text-footnote text-muted-foreground">متن‌های ربات فعلا ایموجی معمولی ندارند.</p>
         ) : (
-          <AddRow noun="ایموجی" count={items.length} most={premium.max} onAdd={() => setAdding(true)} empty="فهرست خالی است؛ ربات همه ایموجی‌ها را معمولی می‌فرستد." />
+          <>
+            <PageTabs as="choice" size="sm" className="w-fit" aria-label="ایموجی‌های نمایش‌داده‌شده" value={shown} tabs={tabs} onChange={show} />
+            {/* Why the swaps of the rows not swapped and «ایموجی دیگر» are held: each points at it. */}
+            {full && !none && <p id={fullId} className="text-footnote text-muted-foreground">{`حداکثر ${formatNumber(premium.max)} ایموجی؛ برای ایموجی تازه یکی را بردارید.`}</p>}
+            {visible.length === 0 ? (
+              <EmptyState
+                compact
+                framed
+                title={shown === 'swapped' ? 'هنوز ایموجی‌ای عوض نشده است' : 'همه ایموجی‌ها عوض شده‌اند'}
+                description={shown === 'swapped' ? 'در «همه» برای هر ایموجی که بخواهید یک ایموجی پرمیوم انتخاب کنید.' : undefined}
+              />
+            ) : (
+              <ul id={listId} aria-label="ایموجی‌های متن‌ها" className="grid divide-y divide-border rounded-lg border border-border">
+                {visible.map((row) => (
+                  <EmojiRow
+                    key={row.key}
+                    row={row}
+                    refused={refusalsOf(row)}
+                    none={none}
+                    full={row.id === null && full ? fullId : null}
+                    busy={busy}
+                    // The bot's last premium emoji taken off in the picker leaves nothing to pick, nor a swap to close it by.
+                    picking={row.key === picking && !none}
+                    except={items.filter((_, index) => index !== row.index).map((item) => item.emoji_id)}
+                    onToggle={() => toggle(row)}
+                    onPick={(emoji) => pick(row, emoji)}
+                    onClose={() => close(row)}
+                    onRemove={() => remove(row)}
+                  />
+                ))}
+              </ul>
+            )}
+            {listed.length > FOLD && (
+              <Button
+                variant="ghost"
+                size="sm"
+                icon={ChevronDown}
+                aria-expanded={unfolded}
+                aria-controls={listId}
+                onClick={fold}
+                className="w-fit text-muted-foreground aria-expanded:[&_svg]:rotate-180"
+              >
+                {unfolded ? 'نمایش کمتر' : `نمایش همه ${formatNumber(listed.length)} ایموجی`}
+              </Button>
+            )}
+          </>
         )}
+
+        {!none &&
+          (adding ? (
+            <AddEmoji items={items} saved={premium.items} busy={busy} onAdd={add} onCancel={cancel} />
+          ) : (
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <Button
+                data-add
+                variant="secondary"
+                size="sm"
+                icon={Plus}
+                aria-disabled={full || busy}
+                aria-describedby={full ? fullId : undefined}
+                onClick={
+                  full || busy
+                    ? undefined
+                    : () => {
+                        setPicking(null)
+                        setAdding(true)
+                      }
+                }
+              >
+                ایموجی دیگر
+              </Button>
+              <span className="text-footnote text-muted-foreground">برای ایموجی‌ای که هنوز در متن‌ها نیست، مثلا برای متنی که بعدا می‌نویسید.</span>
+            </div>
+          ))}
       </FieldGroup>
     </div>
   )
 }
 
 interface EmojiRowProps {
-  item: PremiumTextItem
-  /** How many texts it is drawn premium in, as saved; null for a row not saved yet. */
-  texts: number | null
+  row: Row
   refused: string[]
+  /** The bot has no premium emoji: nothing to swap it for, so no swap. */
+  none: boolean
+  /** The map is full and the row not swapped: its swap held, pointing at the note that says so (its id); null otherwise. */
+  full: string | null
+  /** The card is being saved: every control of the row held. */
+  busy: boolean
+  /** Its picker is open, and the premium emoji other rows have (not offered). */
+  picking: boolean
+  except: string[]
+  onToggle: () => void
+  onPick: (emoji: CustomEmojiRow) => void
+  onClose: () => void
   onRemove: () => void
 }
 
-/** One row of the map: the plain emoji, the premium one in its place, in how many texts; its refusals under it. */
-function EmojiRow({ item, texts, refused, onRemove }: EmojiRowProps) {
-  const errorId = `premium_text_${item.emoji_id}_error`
+/**
+ * One row: the plain emoji, the premium one swapped in (or an empty slot), where the texts carry it — and whether the
+ * draft's swap waits for the save —, «انتخاب ایموجی پرمیوم» or «تغییر» opening the picker under it, and the swap's
+ * cross; each control named with the emoji. Its refusals under it.
+ */
+function EmojiRow({ row, refused, none, full, busy, picking, except, onToggle, onPick, onClose, onRemove }: EmojiRowProps) {
+  const id = useId()
+  const errorId = `${id}-error`
+  const plainId = `${id}-plain`
+  const pickerId = `${id}-picker`
   const invalid = refused.length > 0
+  const held = full !== null || busy
+  const where = row.use === null ? 'با ذخیره به کار می‌رود' : whereOf(row.use)
+  const waits = row.use === null || row.id === row.saved ? null : row.id === null ? 'با ذخیره برداشته می‌شود' : 'با ذخیره به کار می‌رود'
+
+  // Escape anywhere in the row — its swap just pressed, or the picker — gives the picker up, the focus back on its swap.
+  const onKeyDown = (event: KeyboardEvent<HTMLLIElement>) => {
+    if (event.key !== 'Escape' || !picking) return
+    event.preventDefault()
+    onClose()
+  }
 
   return (
     // Refused, the row is what a refused save moves the focus to (SaveFooter looks for `[data-invalid]`).
     <li
-      data-row={item.emoji_id}
+      data-row={row.key}
       data-invalid={invalid ? '' : undefined}
       tabIndex={invalid ? -1 : undefined}
       aria-describedby={invalid ? errorId : undefined}
-      className="grid gap-1 px-3 py-2 outline-none first:rounded-t-lg last:rounded-b-lg focus-visible:focus-ring"
+      onKeyDown={onKeyDown}
+      className="grid gap-2 px-3 py-2 outline-none first:rounded-t-lg last:rounded-b-lg focus-visible:focus-ring"
     >
       <div className="flex items-center gap-3">
-        <span className="grid size-9 shrink-0 place-items-center rounded-lg border border-border text-lg leading-none">{item.emoji}</span>
-        <ArrowRight className="size-4 shrink-0 text-muted-foreground rtl:rotate-180" aria-hidden />
-        <span className="grid size-9 shrink-0 place-items-center rounded-lg border border-border bg-fill">
-          <span className="sr-only">ایموجی پرمیوم</span>
-          <PremiumEmoji id={item.emoji_id} fallback={item.emoji} className="size-6 text-lg leading-none" />
+        <span className="flex shrink-0 items-center gap-1.5">
+          <span id={plainId} className="grid size-9 place-items-center rounded-lg border border-border text-lg leading-none">
+            {row.emoji}
+          </span>
+          <ArrowRight className="size-3.5 text-muted-foreground rtl:rotate-180" aria-hidden />
+          <span className={cn('grid size-9 place-items-center rounded-lg border', row.id === null ? 'border-dashed border-border-strong' : 'border-border bg-fill')}>
+            {row.id === null ? (
+              <span className="sr-only">بدون ایموجی پرمیوم</span>
+            ) : (
+              <>
+                <span className="sr-only">ایموجی پرمیوم</span>
+                <PremiumEmoji id={row.id} fallback={row.emoji} className="size-6 text-lg leading-none" />
+              </>
+            )}
+          </span>
         </span>
-        <span className="min-w-0 flex-1 text-footnote text-muted-foreground">
-          {texts === null ? 'با ذخیره به کار می‌رود' : texts === 0 ? 'فعلا در هیچ متنی نیست' : `در ${formatNumber(texts)} متن`}
+        <span className="grid min-w-0 flex-1 gap-0.5 text-footnote">
+          <span className="text-muted-foreground">{where}</span>
+          {waits !== null && <span className="text-info">{waits}</span>}
         </span>
-        <IconButton data-part="remove" aria-label={`برداشتن ${item.emoji} از فهرست`} onClick={onRemove}>
-          <X className="size-4" aria-hidden />
-        </IconButton>
+        <span className="flex shrink-0 items-center gap-1">
+          {row.id !== null && (
+            <IconButton data-part="remove" aria-label={`برداشتن ایموجی پرمیوم ${row.emoji}`} aria-disabled={busy} onClick={busy ? undefined : onRemove}>
+              <X className="size-4" aria-hidden />
+            </IconButton>
+          )}
+          {/* One button whichever it says, so the focus it is given back stays on it as its words change; its name
+              starts with the words it shows. */}
+          {!none && (
+            <Button
+              data-part="swap"
+              variant={picking ? 'default' : 'secondary'}
+              size="sm"
+              aria-label={row.id === null ? `انتخاب ایموجی پرمیوم ${row.emoji}` : `تغییر ایموجی پرمیوم ${row.emoji}`}
+              aria-expanded={picking}
+              aria-controls={picking ? pickerId : undefined}
+              aria-describedby={full ?? undefined}
+              aria-disabled={held}
+              onClick={held ? undefined : onToggle}
+            >
+              {row.id === null ? (
+                <>
+                  انتخاب
+                  {/* The whole of it on a wider screen; a phone's row has room for the first word. */}
+                  <span className="max-sm:sr-only">{' ایموجی پرمیوم'}</span>
+                </>
+              ) : (
+                'تغییر'
+              )}
+            </Button>
+          )}
+        </span>
       </div>
+      {picking && (
+        <div id={pickerId}>
+          <PremiumEmojiPicker selected={row.id} except={except} onPick={onPick} />
+        </div>
+      )}
       {invalid && (
         <div id={errorId} className="grid gap-0.5 text-footnote text-danger">
           {refused.map((message) => (
@@ -340,15 +663,20 @@ const NOT_EMOJI = 'یک ایموجی معمولی بنویسید؛ همان که
 interface AddEmojiProps {
   /** The map as laid out: its premium emoji are not offered again, its plain ones not taken twice. */
   items: PremiumTextItem[]
+  /** The map as saved: an emoji it has may stay a sign drawn as text (★), one new to it may not (EmojiMap::save()). */
+  saved: PremiumTextItem[]
+  /** The card is being saved: nothing is added meanwhile. */
+  busy: boolean
   onAdd: (item: PremiumTextItem) => void
   onCancel: () => void
 }
 
 /**
- * A row in the making: a premium emoji picked from the bot's (those in the map left out), its own plain emoji written
- * beside it — what it stands for, which may be another — and added to the map, kept with the card's save.
+ * «ایموجی دیگر», a swap the list has no row for (an emoji a later text will carry): a premium emoji picked from the
+ * bot's (those in the map left out), its own plain emoji written beside it — what it stands for, which may be another —
+ * and added to the map, kept with the card's save. One the texts carry already is swapped in its row.
  */
-function AddEmoji({ items, onAdd, onCancel }: AddEmojiProps) {
+function AddEmoji({ items, saved, busy, onAdd, onCancel }: AddEmojiProps) {
   const [picked, setPicked] = useState<CustomEmojiRow | null>(null)
   const [plain, setPlain] = useState('')
   const [problem, setProblem] = useState<string | null>(null)
@@ -364,11 +692,16 @@ function AddEmoji({ items, onAdd, onCancel }: AddEmojiProps) {
     setPicked(emoji)
     write(emoji.emoji)
   }
+  // As the server reads it (EmojiMap::save()): a half-space typed after it no part of it; one new to the map drawn as an
+  // emoji, not a sign (drawnAsEmoji()).
   const add = () => {
+    if (busy) return
     if (picked === null) return setProblem('یک ایموجی پرمیوم از بالا انتخاب کنید.')
-    const emoji = plain.trim()
+    const [emoji] = untailed(plain.trim())
+    const key = emojiKey(emoji)
     if (emoji === '' || leadingEmoji(emoji) !== emoji) return setProblem(NOT_EMOJI)
-    if (items.some((item) => emojiKey(item.emoji) === emojiKey(emoji))) return setProblem('این ایموجی در فهرست هست؛ برای هر ایموجی معمولی یک ایموجی پرمیوم کافی است.')
+    if (!drawnAsEmoji(emoji) && !saved.some((item) => emojiKey(item.emoji) === key)) return setProblem(NOT_EMOJI)
+    if (items.some((item) => emojiKey(item.emoji) === key)) return setProblem('این ایموجی در فهرست بالا عوض شده است؛ برای هر ایموجی معمولی یک ایموجی پرمیوم کافی است.')
     onAdd({ emoji, emoji_id: picked.id })
   }
   // Enter adds the row; the card's form is saved by its own button.
@@ -382,7 +715,7 @@ function AddEmoji({ items, onAdd, onCancel }: AddEmojiProps) {
     // In the add button's place while open: the last row taken off hands it the focus (useRowFocus).
     <div ref={panel} data-add role="group" aria-labelledby="premium_text_adding" tabIndex={-1} className="grid gap-3 rounded-lg border border-border p-3 outline-none focus-visible:focus-ring">
       <p id="premium_text_adding" className="text-body font-medium">
-        افزودن ایموجی
+        ایموجی دیگر
       </p>
       <PremiumEmojiPicker selected={picked?.id ?? null} except={items.map((item) => item.emoji_id)} onPick={pick} />
       {/* Wired by hand, not a Field: a step of adding a row, not a setting the settings search should lead to. */}
@@ -403,7 +736,7 @@ function AddEmoji({ items, onAdd, onCancel }: AddEmojiProps) {
         </p>
       </div>
       <div className="flex flex-wrap gap-2">
-        <Button size="sm" icon={Plus} onClick={add}>
+        <Button size="sm" icon={Plus} aria-disabled={busy} onClick={add}>
           افزودن
         </Button>
         <Button variant="ghost" size="sm" onClick={onCancel}>

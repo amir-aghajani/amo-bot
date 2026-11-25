@@ -11,8 +11,9 @@ use App\Modules\Users\Models\WalletTransaction;
 final class WalletPresenter
 {
     /**
-     * The balance (below zero: an agent's debt), an agent's credit, and what the two can pay now. Read the balance with
-     * the customer (User::balanceColumn()), or it is read twice.
+     * The balance (below zero: a debt — an agent's credit in use, or support's debit by hand), an agent's credit, and
+     * what the two can pay now (below zero too while a debt is past the credit). Read the balance with the customer
+     * (User::balanceColumn()), or it is read twice.
      *
      * @return array{balance: string, credit: string, spendable: string}
      */

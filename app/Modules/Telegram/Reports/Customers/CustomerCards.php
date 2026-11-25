@@ -41,7 +41,8 @@ use Psr\Container\ContainerInterface;
  *   reply: it stays taken) or retry() (a word, the question given back for another reply). Anyone but a bot admin
  *   replying is told who may; a reply that is no text is asked again;
  * - a button that must act once — a «✔️ بله» that gives —: nonce() draws its nonce as its card is drawn, recorded on
- *   the card's message; once() lets one press act on it, however often and by whomever it is pressed.
+ *   the card's message (replyNonce() for a card a reply rewrites, with what the button acts with: recorded()); once()
+ *   lets one press act on it, however often and by whomever it is pressed.
  *
  * Every change goes through the service the panels use, under the admin's name (Actor::groupAdmin()), by its rules.
  * What dies midway (a crash, not a refusal) keeps its question or button taken: the admin asks again from the card.
@@ -147,10 +148,39 @@ final class CustomerCards
      */
     public function nonce(CardPress $press, string $prefix, string $text): string
     {
-        $nonce = str_pad(base_convert((string) random_int(0, 36 ** 6 - 1), 10, 36), 6, '0', STR_PAD_LEFT);
-        ReportMessage::posted(Topic::Users, $text, self::onceRef($prefix, $nonce), (int) $press->update->chatId(), (int) $press->update->messageId());
+        return self::draw((int) $press->update->chatId(), (int) $press->update->messageId(), $prefix, $text);
+    }
 
-        return $nonce;
+    /**
+     * nonce() for the card a reply rewrites (done()): recorded on that card with `$text` — what its button acts with (a
+     * note typed with the reply, too long for the button's data), read back on the press by recorded().
+     */
+    public function replyNonce(CardReply $reply, string $prefix, string $text): string
+    {
+        return self::draw($reply->chatId, $reply->cardId, $prefix, $text);
+    }
+
+    /**
+     * Every button of `$prefix` the card `$messageId` drew a nonce for and nobody pressed yet, gone (a press of one is
+     * then an old button): an ask redrawn or cancelled leaves no earlier «✅ تایید» to press — from a stale keyboard,
+     * another admin's client.
+     */
+    public function dropNonces(int $chatId, int $messageId, string $prefix): void
+    {
+        ReportMessage::query()->where('chat_id', $chatId)->where('message_id', $messageId)
+            ->where('ref', 'like', self::onceRef($prefix, '') . '%')->whereNull(Lease::TOKEN)->delete();
+    }
+
+    /** What the press's card recorded with the button's nonce (nonce(), replyNonce()); null when it drew no such nonce. */
+    public function recorded(CardPress $press, string $prefix, string $nonce): ?string
+    {
+        $text = ReportMessage::query()
+            ->where('chat_id', (int) $press->update->chatId())
+            ->where('message_id', (int) $press->update->messageId())
+            ->where('ref', self::onceRef($prefix, $nonce))
+            ->value('text');
+
+        return is_string($text) ? $text : null;
     }
 
     /**
@@ -379,5 +409,14 @@ final class CustomerCards
     private static function onceRef(string $prefix, string $nonce): string
     {
         return self::ONCE_REF . rtrim($prefix, ':') . ':' . $nonce;
+    }
+
+    /** A nonce of six base-36 characters, recorded on the card `$messageId` with `$text` (nonce()). */
+    private static function draw(int $chatId, int $messageId, string $prefix, string $text): string
+    {
+        $nonce = str_pad(base_convert((string) random_int(0, 36 ** 6 - 1), 10, 36), 6, '0', STR_PAD_LEFT);
+        ReportMessage::posted(Topic::Users, $text, self::onceRef($prefix, $nonce), $chatId, $messageId);
+
+        return $nonce;
     }
 }

@@ -296,7 +296,8 @@ customers: «🕒 در انتظار پرداخت» (orders not paid yet) and «�
 owner sees **«🛰 وضعیت سیستم»** only when something there needs fixing — the bots receiving nothing, the scheduler never
 run, a newer version, an unsafe PHP —, each with the button that fixes it («🛰 ثبت Webhook», «🔧 راه‌اندازی Cron»); an
 agent sees where their agency stands when it needs an eye (selling suspended, its end or the month's minimum near,
-traffic short), with a way to their account. **«📈 نمودار روزانه»** draws a figure day by day (week by week over 90
+traffic short), with a way to their account — an end passed or near sends them to its «🔄 درخواست تمدید نمایندگی».
+**«📈 نمودار روزانه»** draws a figure day by day (week by week over 90
 days) — its total, daily average and best day in a card, a bar under them, the days listed folded away —, chips for the
 figure («درآمد», «سفارش‌ها», «کاربران جدید») and the range. «🛒 آخرین سفارش‌ها» and «👥 کاربران جدید» are the latest
 eight, each a button, with the whole list a tap away.
@@ -305,9 +306,16 @@ eight, each a button, with the whole list a tap away.
 
 «💼 حساب نمایندگی», an agent's alone, as their panel's account page: a card of the traffic left, their level and its price
 per GB, their wallet with the shop and their credit; «🤖 ربات شما» (the bot, how it stands, why it sells nothing when it
-does not); «📋 شرایط فروش» (the agency's end, this month's traffic bought against the minimum, selling open or not); and
-«📒 گردش حجم», the traffic's ledger. Traffic is bought in the main bot: «➕ خرید حجم در ربات اصلی» opens it
-([Agency](Agency.md#their-traffic)).
+does not); «📋 شرایط فروش» (the agency's end and, under it, their latest renewal request — «درخواست تمدید»: «🟡 در
+انتظار بررسی · از …», «✅ تایید شد · …» with its «پایان تازه», or «🔴 رد شد · …» with «دلیل رد» when support gave one
+—, this month's traffic bought against the minimum, selling open or not); and «📒 گردش حجم», the traffic's ledger.
+Traffic is bought in the main bot: «➕ خرید حجم در ربات اصلی» opens it ([Agency](Agency.md#their-traffic)).
+
+While their agency has an end and no renewal waits, **«🔄 درخواست تمدید نمایندگی»** (blue) sends one at a tap — «✅
+درخواست تمدید ثبت شد؛ نتیجه در ربات اصلی به شما اعلام می‌شود» — and the account shows it waiting, the button gone until
+it is decided. One refused — a request sent meanwhile from the main bot, or no end any more — says why in a popup over
+the account as it stands. The warning said first, for an end passed or near, points at the button
+([Agency](Agency.md#renewing-an-agency)).
 
 ### Support and reviews
 
@@ -355,8 +363,9 @@ does not); «📋 شرایط فروش» (the agency's end, this month's traffic 
   phone number as a switch, «💬 گفتگو در تلگرام»; the admin's last — «🛡 مدیر ربات کردن», «✅ رفع مسدودی», and in red
   «🛡 برداشتن مدیریت ربات» and «⛔️ مسدود کردن». **The wallet** lists its ledger, each line with the balance after it;
   «➕ افزایش موجودی» (green) or «➖ کاهش موجودی» asks the amount, then shows it with a note for the customer and the
-  balance before and after, «✔️ افزایش موجودی» in green or «✔️ کاهش موجودی» in red doing it
-  ([Customers](Customers.md)).
+  balance before and after — a decrease past the balance with a ⚠️ line of the debt it leaves; one past the deepest
+  debt only that refusal, with no balance after it and no «✔️» —, «✔️ افزایش موجودی» in green or «✔️ کاهش موجودی» in
+  red doing it ([Customers](Customers.md#the-wallet)).
 - **«➕ افزودن سفارش»** — in four steps: the kind («📦 یکی از پلن‌ها» or «🛠 سرویس دلخواه»); the plan, or the numbers
   of your own; the server, picked for you where there is one; the payment — «🎁 رایگان», «👛 از کیف پول مشتری» (with
   their balance) or «💵 پرداخت خارج از فروشگاه» — and its amount («💰 قیمت پلن: …» at a tap). Then one card: the
@@ -462,19 +471,26 @@ A start or an end is typed as a Jalali day, an hour after it if you like, in the
   the panel's card of the same name ([Bot texts and keyboards](Bot-Texts-And-Keyboards.md#premium-emoji-in-every-text)),
   each change saved at once; «🔎 جستجوی تنظیمات» finds it as «ایموجی پرمیوم» or «premium emoji». Its card says whether the
   bot can send premium emoji («✅ می‌تواند ایموجی پرمیوم بفرستد», «⚠️ نمی‌تواند ایموجی پرمیوم بفرستد» with why, «❔
-  نامشخص، هنوز بررسی نشده») and «آخرین بررسی», the switch's state and how full the list is («۳ ایموجی از ۱۰۰»):
+  نامشخص، هنوز بررسی نشده») and «آخرین بررسی», the switch's state, how many emoji the texts carry and how many have a
+  premium one («ایموجی‌های متن‌ها: ۸۵», «پرمیوم شده: ۳ از ۱۰۰»):
   - **«🔍 بررسی دوباره»**, in the shop's own bot only: the bot sends its short test message to this chat, reads it and
     deletes it, then says what it found. In another shop's bot — the owner on an agent's shop — it is not offered: that
     bot has no chat with you, and the agent checks from their own bot or panel.
   - **The switch** says the state a tap sets («▶️ روشن کردن «ایموجی پرمیوم متن‌ها»», «⏸ خاموش کردن …»). Until the bot is
     found able it reads «🔒 روشن کردن، بعد از بررسی موفق», and a tap is answered with why; one already on goes off at a tap.
-  - **The list**, 20 a page: each plain emoji with its premium one in its place and how many texts it is in («در ۴ متن»),
-    a «🗑» button each. A tap asks first — «این ایموجی از فهرست حذف شود؟», the texts back to the plain emoji, the premium
-    one kept in «✨ ایموجی‌های پرمیوم» — before «🗑 بله، حذف شود».
-  - **«➕ افزودن ایموجی»** (gone once the list holds 100): the bot's premium emoji not in the list yet, numbered, 24 a page;
-    picked, it asks which plain emoji it stands for — «✔️ همین … بماند» keeps its own, or send another. What is not one
-    emoji, or one the list has already, is refused with the panel's words, the question kept. While the bot knows none,
-    it says how to show it some with `/emoji` («✨ افزودن ایموجی تازه» in the shop's own bot).
+  - **The emoji of the texts**, 40 a page: a button for every emoji the bot's texts carry — the start menu's too while it
+    is «دکمه‌های شیشه‌ای» —, the most used first, «💎» beside one that has a premium emoji. A tap opens its page (one no
+    text carries any more since the list was shown says «این ایموجی دیگر در فهرست نیست» and shows the list): «استفاده»
+    («در ۲۹ متن», «در ۲ متن و ۱ دکمه منو», «فعلا در هیچ متنی نیست») and its «ایموجی پرمیوم» («ندارد» while none), with:
+    - «💎 انتخاب ایموجی پرمیوم», or «🔁 تغییر ایموجی پرمیوم»: the bot's premium emoji that stand for no other emoji yet,
+      numbered, 24 a page; the one picked is saved at once. Not offered while 100 emoji have one and this one has none.
+    - «🗑 برداشتن» asks first — «ایموجی پرمیوم این ایموجی برداشته شود؟», the texts back to the plain emoji, the premium
+      one kept in «✨ ایموجی‌های پرمیوم».
+  - **«➕ ایموجی دیگر»** (gone once 100 emoji have one), for an emoji no text carries yet: the bot's premium emoji that
+    stand for no other, numbered, 24 a page; picked, it asks which plain emoji it stands for — «✔️ همین … بماند» keeps
+    its own, or send another. What is not one emoji is refused with the panel's words, the question kept; one that has a
+    premium emoji already opens its page, to change it there. While the bot knows none, it says how to show it some with `/emoji` («✨ افزودن ایموجی
+    تازه» in the shop's own bot).
 - **«⌨️ کیبوردها»** — the keyboards, the start menu one tap in. A keyboard: a card of its type, layout and size, its
   buttons drawn as customers see them, each a tap to its own card (its action, words, icon, colour and place): «✏️ متن
   دکمه», «🎨 رنگ دکمه» (each colour shown as itself), «✨ آیکون دکمه», «🔁 کار دیگر», moved («➡️ به راست», «⬅️ به چپ»,
@@ -495,12 +511,23 @@ A start or an end is typed as a Jalali day, an hour after it if you like, in the
   «✏️ تنظیمات اتصال» (its connector's own form), «🧪 اکانت تست», «🎁 افزودن زمان و حجم» to its services, «🔀 انتقال
   سرویس‌ها» to another server, «📋 کپی آدرس پنل», and «🗑 حذف سرور» in red. **«➕ افزودن سرور»**: the connector, its form
   a field at a time — a secret typed is never shown back —, «🧪 تست اتصال», «✔️ افزودن سرور» ([Servers](Servers.md)).
-- **«🤝 نمایندگان»** (the owner's) — a card of the program; «📥 درخواست‌ها» (by state, «↕️ تازه‌ترین اول» or «قدیمی‌ترین
-  اول»; approved with a level, credit, end and monthly minimum — «✔️ تایید و نماینده کردن» —, or rejected), «🤝 نماینده‌ها»
-  (by level, «↕️» — joined, balance, the bot's traffic or sales, each both ways), «🏷 سطح‌ها» and «⚙️ تنظیمات نمایندگی».
-  An agent: a card and «📋 شرایط فروش»; «✏️ سطح، اعتبار و شرایط فروش» (blue), «📦 حجم ربات» (traffic added or taken),
-  «🙈 پنهان از فروشگاهش» (servers and plans), «🏪 باز کردن فروشگاه», «▶️ ادامه فروش», and in red «⏸ توقف فروش» and
-  «🚫 لغو نمایندگی» ([Agency](Agency.md)).
+- **«🤝 نمایندگان»** (the owner's) — a card of the program, its «درخواست‌های در انتظار» saying how many are renewals
+  («۳ (۱ تمدید)»); «📥 درخواست‌ها» (by state, by kind — «هر دو نوع», «🤝 نمایندگی», «🔄 تمدید» —, «↕️ تازه‌ترین اول»
+  or «قدیمی‌ترین اول»; a request to become an agent approved with a level, credit, end and monthly minimum — «✔️ تایید
+  و نماینده کردن» —, or rejected), «🤝 نماینده‌ها» (by level, «↕️» — joined, balance, the bot's traffic or sales, each
+  both ways), «🏷 سطح‌ها» and «⚙️ تنظیمات نمایندگی». An agent: a card and «📋 شرایط فروش»; «✏️ سطح، اعتبار و شرایط
+  فروش» (blue), «📦 حجم ربات» (traffic added or taken), «🙈 پنهان از فروشگاهش» (servers and plans), «🏪 باز کردن
+  فروشگاه», «▶️ ادامه فروش», and in red «⏸ توقف فروش» and «🚫 لغو نمایندگی» ([Agency](Agency.md)).
+  - **A renewal request** — «🔄» on its row before the name. Its screen, «🔄 درخواست تمدید نمایندگی #…»:
+    «نماینده» («دیگر نماینده نیست» once their agency ended), «پایان نمایندگی» — their end now, «(۵ روز مانده)» or
+    «(تمام شده)» —, while it waits «تمدید با مدت نمایندگی» (the end the program's term gives), once approved «تمدید تا».
+    «✅ تایید» opens «🔄 تمدید نمایندگی …»: «پایان فعلی» and «پایان تازه», at first the program's end («· با مدت
+    نمایندگی»). «✏️ پایان تازه» asks another as an agent's end is asked — «🔁 …» back to the program's, «بدون پایان»,
+    «۳۰ روز دیگر», «۹۰ روز دیگر», «۱۸۰ روز دیگر», «۳۶۵ روز دیگر», or days or a Jalali day typed —, and «✔️ تایید و
+    تمدید» (green) approves; «🗑 کنار گذاشتن» leaves a changed end, asked first. With no term in the program («مدت
+    نمایندگی» 0) the card says to pick the end yourself, «⚠️ انتخاب نشده» — no approve until you do —; an agent left
+    with no end is said to have none, to reject or give one. «🚫 رد» asks «درخواست تمدید … رد شود؟»: «✍️ رد با توضیح»
+    (a note the agent reads) or «⏭ رد بدون توضیح» ([Agency](Agency.md#renewing-an-agency)).
 
 ### Settings
 

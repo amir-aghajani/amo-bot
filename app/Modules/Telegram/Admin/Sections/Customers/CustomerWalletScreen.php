@@ -19,6 +19,7 @@ use App\Modules\Telegram\Admin\Ui\Prompt;
 use App\Modules\Telegram\Admin\Ui\View;
 use App\Modules\Telegram\Admin\Ui\Words;
 use App\Modules\Telegram\Messages;
+use App\Modules\Users\Services\UserActions;
 use App\Support\Money;
 use App\Support\Persian;
 use App\Support\Unit;
@@ -27,8 +28,8 @@ use App\Support\Unit;
  * A customer's wallet (the panel's «کیف پول» card and dialog): the balance as a card, then the ledger — a page of lines,
  * each with what it was, its date, the balance after, a transfer's other customer and the admin who wrote it by hand —
  * and, for a seat the `wallet` grant opens, a credit or a debit by hand: the amount, a note the customer sees (or none),
- * then the change said once more with the balance it leaves, sent once under its Idempotency-Key (the same change
- * pressed twice is made once).
+ * then the change said once more with the balance it leaves — a debt in words when a debit goes below zero —, sent once
+ * under its Idempotency-Key (the same change pressed twice is made once).
  *
  * Opened with the customer's id and a ledger page. Actions: `add` / `sub` (id: a credit / a debit asked), `amt` (id:
  * the amount asked again), `note` (id: the note asked again), `skip` (id: no note), `do` (id: sent).
@@ -177,14 +178,18 @@ final class CustomerWalletScreen extends BaseScreen
         $note = is_string($draft['note'] ?? null) && $draft['note'] !== '' ? $draft['note'] : null;
         $balance = Customer::balance(Customer::read($admin, $id));
         $after = $credit ? Money::add($balance, $draft['amount']) : Money::subtract($balance, $draft['amount']);
-        // The panel takes a debit no further than the balance (UserActions::adjustWallet()): said before it is sent.
-        $short = !$credit && Money::compare($after, 0) < 0;
         $do = Button::to($credit ? '✔️ افزایش موجودی' : '✔️ کاهش موجودی', self::ID, 'do', $id);
 
         $view = View::make($credit ? '➕ افزایش موجودی' : '➖ کاهش موجودی', ...Customer::under(Customer::known($admin, $id), Fmt::bare(self::TITLE)))
             ->transient();
-        if ($short) {
-            $view->line('⚠️ بیشتر از موجودی فعلی کم نمی‌شود؛ مبلغ را عوض کنید.');
+        // A debit may leave a debt (UserActions::adjustWallet(), as deep as DEBT_MAX): said before it is sent, so a zero
+        // too many shows — and one past the deepest, which the panel refuses: only that said, no balance it would leave
+        // and no «✔️».
+        $refused = !$credit && Money::compare($after, Money::subtract(0, UserActions::DEBT_MAX)) < 0;
+        if ($refused) {
+            $view->line('⚠️ ' . Fmt::e(sprintf(UserActions::DEBT_PAST_MAX, Money::format(UserActions::DEBT_MAX), Messages::balance($balance))) . ' مبلغ را عوض کنید.');
+        } elseif (!$credit && Money::compare($after, 0) < 0) {
+            $view->line('⚠️ موجودی از صفر کمتر می‌شود و مشتری <b>' . Fmt::e(Money::format(Money::subtract(0, $after))) . '</b> بدهکار می‌شود؛ شارژهای بعدی‌اش اول این بدهی را صاف می‌کنند.');
         }
 
         return $view
@@ -192,10 +197,10 @@ final class CustomerWalletScreen extends BaseScreen
                 'مبلغ' => Fmt::money($draft['amount']),
                 'توضیح' => $note === null ? '' : Fmt::e($note),
                 'موجودی فعلی' => Fmt::e(Messages::balance($balance)),
-                'موجودی بعد از آن' => $short ? null : Fmt::e(Messages::balance($after)),
+                'موجودی بعد از آن' => $refused ? null : Fmt::e(Messages::balance($after)),
             ])
             ->note('مشتری توضیح را در تاریخچه کیف پولش می‌بیند.')
-            ->row($credit ? $do->success() : $do->danger())
+            ->row($refused ? null : ($credit ? $do->success() : $do->danger()))
             ->row(Button::to(Words::edit('مبلغ'), self::ID, 'amt', $id), Button::to(Words::edit('توضیح'), self::ID, 'note', $id))
             ->row(Button::to(Words::CANCEL, self::ID, Nav::SHOW, $id));
     }

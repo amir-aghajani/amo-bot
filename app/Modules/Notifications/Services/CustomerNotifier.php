@@ -65,6 +65,9 @@ final class CustomerNotifier
     /** A margin kept under Telegram's message limit (Limits counts as Telegram does: an emoji is two units). */
     private const MESSAGE_ROOM = 96;
 
+    /** A renewal's end when it gave none at all. */
+    private const NO_END = 'بدون پایان';
+
     public function __construct(
         private readonly BotApi $api,
         private readonly ServiceCard $card,
@@ -316,8 +319,9 @@ final class CustomerNotifier
     }
 
     /**
-     * «تمدید خودکار» found the wallet short: the price, the balance and the deadline, with a top-up button; the next run
-     * renews once it can pay.
+     * «تمدید خودکار» found the wallet short: the price, the balance, what a top-up must bring (a debt included, an agent's
+     * credit counting — as Payments\Services\Checkout::shortfall() says it) and the deadline, with a top-up button; the
+     * next run renews once it can pay.
      */
     public function autoRenewShort(Subscription $subscription, string $price): void
     {
@@ -325,6 +329,7 @@ final class CustomerNotifier
             'client' => $subscription->shownAs(),
             'amount' => Money::format($price),
             'balance' => Messages::balance($subscription->user->balance()),
+            'missing' => Money::format(Money::atLeastZero(Money::subtract($price, $subscription->user->spendable()))),
             'expires' => Messages::expiry($subscription->expires_at, $subscription->duration_hours),
         ]), ['reply_markup' => InlineKeyboard::make()->row($this->buttons->topUp())->build()]));
     }
@@ -393,12 +398,29 @@ final class CustomerNotifier
         $this->tell($user, NoticeType::AgencyRevoked, fn(): array => $this->message($this->texts->render(BotText::AgencyRevoked, ['note' => $this->adminNote($note)])));
     }
 
-    /** An agent's agency ends soon (Agency\Services\AgencyStanding): when, and that their bot's selling stops then. */
+    /**
+     * An agent's agency ends soon (Agency\Services\AgencyStanding): when, and that their bot's selling stops then — with
+     * «🔄 درخواست تمدید نمایندگی» (renewalKeyboard()).
+     */
     public function agencyExpiring(User $agent, \DateTimeInterface $expiresAt): void
     {
         $this->tell($agent, NoticeType::AgencyExpiring, fn(): array => $this->message($this->texts->render(BotText::AgencyExpiring, [
             'date' => Persian::date($expiresAt, withTime: true),
+        ]), $this->renewalKeyboard()));
+    }
+
+    /** Support approved the agent's request for their agency's end to be moved on: the new end, or none at all. */
+    public function agencyRenewed(User $agent, ?\DateTimeInterface $expiresAt): void
+    {
+        $this->tell($agent, NoticeType::AgencyRenewed, fn(): array => $this->message($this->texts->render(BotText::AgencyRenewed, [
+            'date' => $expiresAt === null ? self::NO_END : Persian::date($expiresAt, withTime: true),
         ])));
+    }
+
+    /** Support rejected the agent's request for their agency's end to be moved on, with their note if they left one. */
+    public function agencyRenewalRejected(User $agent, ?string $reason): void
+    {
+        $this->tell($agent, NoticeType::AgencyRenewalRejected, fn(): array => $this->message($this->texts->render(BotText::AgencyRenewalRejected, ['note' => $this->adminNote($reason)])));
     }
 
     /** A Jalali month nears its end with the agent's traffic bought below their monthly minimum, with «💾 خرید حجم». */
@@ -414,13 +436,17 @@ final class CustomerNotifier
 
     /**
      * The agent's bot sells nothing new now: why, the owner's note when they suspended it by hand — and «💾 خرید حجم» when
-     * buying is the way back.
+     * buying is the way back, «🔄 درخواست تمدید نمایندگی» when their agency's end passed (renewalKeyboard()).
      */
     public function agencySuspended(User $agent, SellingSuspension $reason, ?string $note): void
     {
         $this->tell($agent, NoticeType::AgencySuspended, fn(): array => $this->message(
             $this->texts->render(BotText::AgencySuspended, ['reason' => $reason->words(), 'note' => $this->adminNote($note)]),
-            $reason === SellingSuspension::Minimum ? $this->buyTrafficKeyboard() : [],
+            match ($reason) {
+                SellingSuspension::Minimum => $this->buyTrafficKeyboard(),
+                SellingSuspension::Expired => $this->renewalKeyboard(),
+                SellingSuspension::Manual => [],
+            },
         ));
     }
 
@@ -674,6 +700,16 @@ final class CustomerNotifier
     private function buyTrafficKeyboard(): array
     {
         return ['reply_markup' => InlineKeyboard::make()->row($this->buttons->buyTraffic())->build()];
+    }
+
+    /**
+     * @return array<string, mixed> An agent's notice of their agency's end with «🔄 درخواست تمدید نمایندگی» under it,
+     *                              always: the text tells them to press it, and a press while one waits shows their
+     *                              account with it waiting (AgencyHandler)
+     */
+    private function renewalKeyboard(): array
+    {
+        return ['reply_markup' => InlineKeyboard::make()->row($this->buttons->renewAgency())->build()];
     }
 
     /**

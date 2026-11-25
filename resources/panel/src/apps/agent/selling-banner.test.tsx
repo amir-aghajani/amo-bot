@@ -27,6 +27,8 @@ function account(standing: AgencyStanding): AccountResponse {
       credit_limit: '0.00',
       balance: '0.00',
       standing,
+      renewal: null,
+      actions: { request_renewal: false },
     },
   }
 }

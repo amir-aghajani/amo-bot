@@ -13,6 +13,7 @@ use App\Modules\Telegram\Admin\Ui\Icons;
 use App\Modules\Telegram\Admin\Ui\ListScreen;
 use App\Modules\Telegram\Admin\Ui\View;
 use App\Modules\Telegram\Admin\Ui\Words as UiWords;
+use App\Modules\Telegram\Messages;
 
 /**
  * «🤝 نماینده‌ها» (the panel's agents section): the agents, the newest first or in the order the panel's columns sort them
@@ -124,7 +125,7 @@ final class AgentsScreen extends ListScreen
             default => '🟢',
         };
         $figure = match ($sort) {
-            'balance' => Fmt::plain(Fmt::money((string) ($row['balance'] ?? '0'))),
+            'balance' => Messages::balance((string) ($row['balance'] ?? '0')),
             'sold' => Fmt::plain(Fmt::number((int) ($row['counts']['sold'] ?? 0))) . ' فروش',
             default => $bot !== null ? Fmt::plain(Fmt::bytes((int) ($bot['traffic_balance'] ?? 0))) : 'بدون ربات',
         };

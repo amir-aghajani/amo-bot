@@ -14,6 +14,7 @@ use App\Modules\Payments\Enums\PaymentStatus;
 use App\Modules\Users\Enums\UserRole;
 use App\Modules\Users\Enums\UserStatus;
 use App\Modules\Users\Models\User;
+use Illuminate\Support\Carbon;
 use Tests\BotTestCase;
 
 /**
@@ -61,6 +62,24 @@ final class GroupButtonsAcrossShopsTest extends BotTestCase
         self::assertSame([AgencyRequestStatus::Pending, null, null], [$request->status, $request->level_id, $request->reviewer], 'still the main bot\'s to decide');
         self::assertFalse($this->friend->refresh()->isAgent(), 'no agency, no credit');
         self::assertSame(1, AgencyRequest::query()->count());
+    }
+
+    /** Their own renewal least of all: the main bot's admins move an agent's end on, never the agent from their bot. */
+    public function testAnAgentCannotApproveTheirOwnRenewalFromTheirBotsGroup(): void
+    {
+        $end = Carbon::now()->addDays(2)->startOfHour();
+        $this->sellingTerms($this->bot, $end);
+        $request = $this->renewalRequest($this->bot->agent ?? self::fail('no agent'));
+
+        foreach (["ag:ok:{$request->id}", "ag:no:{$request->id}"] as $forged) {
+            $this->sendTo($this->bot, $this->groupTap($forged, self::POST, self::THREAD, self::AGENT_TELEGRAM_ID));
+
+            self::assertSame(['answerCallbackQuery'], $this->calls(), "{$forged}: only acknowledged");
+            self::assertArrayNotHasKey('text', $this->params(0), "{$forged}: nothing said about the request");
+        }
+
+        self::assertSame([AgencyRequestStatus::Pending, null], [$request->refresh()->status, $request->reviewer]);
+        self::assertSame($end->toDateTimeString(), $this->bot->refresh()->agency_expires_at?->toDateTimeString(), 'its end as it was');
     }
 
     public function testAnAgentCannotDecideAnotherShopsReceiptOrRetryItsOrder(): void

@@ -17,6 +17,7 @@ use App\Modules\Telegram\Texts\BotText;
 use App\Modules\Telegram\Update\Update;
 use App\Modules\Users\Models\User;
 use App\Support\Money;
+use App\Support\Persian;
 use Illuminate\Support\Carbon;
 use Tests\BotTestCase;
 
@@ -24,7 +25,8 @@ use Tests\BotTestCase;
  * A request to become an agent in the report group: its report with «تایید» / «رد» for the bot's admins only, «تایید»
  * asking which level — a button each, named with its price per GB (the program's default credit comes with it) —, the
  * customer told as from the agents page, and the verdict reported under the request, whose buttons go — here at once,
- * or when it was decided elsewhere. (Presses in an agent's group: Security\GroupButtonsAcrossShopsTest.)
+ * or when it was decided elsewhere. An agent's renewal request is approved at once, by the program's term. (Presses in
+ * an agent's group: Security\GroupButtonsAcrossShopsTest.)
  */
 final class AgencyReviewTest extends BotTestCase
 {
@@ -176,6 +178,55 @@ final class AgencyReviewTest extends BotTestCase
         self::assertSame(['answerCallbackQuery'], $this->calls(), 'the buttons stay');
         self::assertStringContainsString('هنوز سطح نمایندگی تعریف نشده است', (string) $this->popup());
         self::assertSame(AgencyRequestStatus::Pending, $request->refresh()->status);
+    }
+
+    public function testARenewalsApprovalMovesTheAgentsEndOnByTheProgramsTermAtOnce(): void
+    {
+        $this->term(30);
+        $agent = $this->agent($this->level, overrides: ['telegram_id' => self::AGENT_TELEGRAM_ID]);
+        $bot = $this->sellingTerms($agent->ownBot ?? self::fail('no shop'), Carbon::now()->addDays(2)->startOfHour());
+        $end = $bot->agency_expires_at?->copy()->addDays(30) ?? self::fail('no end');
+        $request = $this->renewalRequest($agent);
+
+        // A level is no renewal's: the press decides nothing.
+        $this->send($this->press("ag:lv:{$request->id}:{$this->level->id}"));
+        self::assertSame(['answerCallbackQuery'], $this->calls());
+        self::assertSame(AgencyRequestStatus::Pending, $request->refresh()->status);
+
+        $this->send($this->press("ag:ok:{$request->id}"));
+        $request->refresh();
+        self::assertSame([AgencyRequestStatus::Approved, '@boss', $end->toDateTimeString()], [$request->status, $request->reviewer, $request->extended_to?->toDateTimeString()], 'no level to pick: approved at once');
+        self::assertSame($end->toDateTimeString(), $bot->refresh()->agency_expires_at?->toDateTimeString());
+        self::assertSame(['inline_keyboard' => []], $this->markup(1), 'nothing left to press');
+        self::assertSame('✅ نمایندگی تمدید شد تا ' . Persian::date($end, withTime: true) . '.', $this->popup());
+        self::assertSame([self::text(BotText::AgencyRenewed, ['date' => Persian::date($end, withTime: true)])], $this->telegram()->sentTo(self::AGENT_TELEGRAM_ID));
+        self::assertStringContainsString("✅ درخواست تمدید نمایندگی \u{200E}#{$request->id} تایید شد", (string) ReportMessage::query()->where('reply_ref', "agency:{$request->id}")->sole()->text);
+    }
+
+    public function testARenewalTheProgramGivesNoTermForKeepsItsButtonsForThePanel(): void
+    {
+        $this->term(0);
+        $agent = $this->agent($this->level, overrides: ['telegram_id' => self::AGENT_TELEGRAM_ID]);
+        $this->sellingTerms($agent->ownBot ?? self::fail('no shop'), Carbon::now()->addDays(2));
+        $request = $this->renewalRequest($agent);
+
+        $this->send($this->press("ag:ok:{$request->id}"));
+
+        self::assertSame(['answerCallbackQuery'], $this->calls(), 'its buttons stay');
+        self::assertSame(AgencyActions::RENEWAL_NO_TERM, $this->popup());
+        self::assertSame('true', $this->params(0)['show_alert']);
+        self::assertSame(AgencyRequestStatus::Pending, $request->refresh()->status);
+
+        $this->send($this->press("ag:no:{$request->id}"));
+        self::assertSame(AgencyRequestStatus::Rejected, $request->refresh()->status, '«رد» still goes');
+        self::assertSame([self::text(BotText::AgencyRenewalRejected, ['note' => ''])], $this->telegram()->sentTo(self::AGENT_TELEGRAM_ID));
+    }
+
+    /** The program's «مدت نمایندگی», in days; 0 for none. */
+    private function term(int $days): void
+    {
+        $settings = $this->service(AgencySettings::class);
+        $settings->save(['term_days' => $days] + $settings->present());
     }
 
     /** A press on a button under the request's report in the agency topic — by a bot admin unless told otherwise. */

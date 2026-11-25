@@ -10,7 +10,7 @@ import { json, server } from '@/test/server'
 /*
  * The owner's overview (apps/admin/pages/dashboard): an agent's shop opened in the owner's panel says the agent's terms
  * of selling of the agent — the agents list's words, leading there —, never as the agent's own panel says them to the
- * agent («… شما», «… با پشتیبانی فروشگاه اصلی تماس بگیرید»).
+ * agent («… شما», «… «درخواست تمدید نمایندگی» را بزنید»).
  */
 
 // The chart draws to its column's measured width, which a page without a layout lacks; the system card has its own test.

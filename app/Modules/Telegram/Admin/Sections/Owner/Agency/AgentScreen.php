@@ -20,6 +20,7 @@ use App\Modules\Telegram\Admin\Ui\ListScreen;
 use App\Modules\Telegram\Admin\Ui\Prompt;
 use App\Modules\Telegram\Admin\Ui\View;
 use App\Modules\Telegram\Admin\Ui\Words as UiWords;
+use App\Modules\Telegram\Messages;
 use Illuminate\Support\Carbon;
 
 /**
@@ -242,7 +243,7 @@ final class AgentScreen extends BaseScreen
             'حجم باقی‌مانده' => $bot === null ? null : Fmt::bytes((int) ($bot['traffic_balance'] ?? 0)),
             'پنهان' => (int) ($hidden['servers'] ?? 0) > 0 || (int) ($hidden['plans'] ?? 0) > 0 ? Fmt::number((int) ($hidden['servers'] ?? 0)) . ' سرور، ' . Fmt::number((int) ($hidden['plans'] ?? 0)) . ' پلن' : null,
             'سطح' => Fmt::e((string) ($agent['level']['name'] ?? '')) . ' · هر گیگابایت ' . Fmt::money((string) ($agent['level']['price_per_gb'] ?? '0')),
-            'موجودی کیف پول' => (str_starts_with($balance, '-') ? '🔻 ' : '') . Fmt::money($balance),
+            'موجودی کیف پول' => Fmt::e(Messages::balance($balance)),
             'اعتبار' => (float) ($agent['credit_limit'] ?? 0) > 0 ? Fmt::money((string) $agent['credit_limit']) : 'ندارد',
             'مشتری‌های ربات' => Fmt::number((int) ($counts['customers'] ?? 0)),
             'سرویس‌های فروخته‌شده' => Fmt::number((int) ($counts['sold'] ?? 0)) . ' · ' . Fmt::number((int) ($counts['active'] ?? 0)) . ' فعال',

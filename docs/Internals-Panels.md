@@ -404,7 +404,7 @@ beside a bot-settings card for the program's switch and rules. A program that is
   runs the PHP tests' own cases so the two cannot drift. The server stays the judge. «ایموجی پرمیوم متن‌ها» is the
   page's first card (`premium-texts-card.tsx`, the settings search's `/bot-texts` section): the switch and the list a
   `useSettingsGroup` saved whole with `PUT /bot/premium-texts`, the check a mutation of its own whose answer replaces the
-  read (a refused one reads the card again: the server holds what it found before); a text saved reads the card again, for its counts. `emoji-map.ts` mirrors `EmojiMap::apply()` and `label()` —
+  read (a refused one reads the card again: the server holds what it found before); its list is the answer's `emojis`, each row's swap an item of the draft (`refusalsAfter()` keeps each refusal with its row); a text saved, or the start menu (`pages/keyboards.tsx`), reads the card again, for its counts. `emoji-map.ts` mirrors `EmojiMap::apply()` and `label()` — the half-space after an emoji split off as `untailed()` does, and `drawnAsEmoji()` for «ایموجی دیگر»'s own check —
   `emojiLookup()` is empty while the map is off — so the editor's preview draws the map's emoji as the bot sends them,
   and says so under it.
 - **Keyboards**: `useKeyboardDraft` holds the rows with local ids so a moved row keeps its element and focus; buttons
@@ -437,8 +437,15 @@ no longer works the job, when a request is refused (a 4xx: the job gone, the ses
 code fails — that one with a toast and a report, the scheduler carrying on.
 
 The owner's agency page (`/agents`) has requests, agents, levels and rules; «باز کردن فروشگاه» is a real link
-(`useOpenShop().link()`), so it opens the agent's shop in a new tab like any link. An agent's own account page
-(`apps/agent/pages/account.tsx`) reads `accountQuery`. The agent's services screen reads it too (`useBotTraffic()` in
+(`useOpenShop().link()`), so it opens the agent's shop in a new tab like any link. Its requests
+(`apps/admin/agency/requests-list.tsx`) narrow by `kind` too (`usePagedList`'s `params`, kept in the address);
+`ApproveModal` (`components/agency/approve-modal`) is a level and terms for a request to become an agent and
+`RenewalForm` for a renewal — the new end a `WindowField` starting on the row's `term_end`, «بدون پایان» a box, sent as
+`expires_at` (null for none) —, and `RejectModal` words a renewal's refusal for the agent. An agent's own account page
+(`apps/agent/pages/account.tsx`) reads `accountQuery`; its «درخواست تمدید نمایندگی» is `POST /account/renewal`, whose
+answer, the account, replaces the read (a refusal reads it again). `StandingFacts` takes the request under the end
+(`renewal`), and `SellingNotice`'s `renew` is what it says of renewing in place of pointing at that button — the
+account's own word; the dashboard keeps the default. The agent's services screen reads it too (`useBotTraffic()` in
 `apps/agent/app.tsx`), so «افزایش زمان و حجم» on a service knows how much traffic the agent's bot has left to give. A
 bot whose traffic covers no plan shows `TrafficShortageNotice` on the dashboard and the account.
 

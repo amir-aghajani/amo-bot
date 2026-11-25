@@ -259,7 +259,8 @@ final class StaffApiTest extends HttpTestCase
         $paid = $this->paidByCard($this->topUpOrder($this->sara, '20000.00'), $card);
         $this->assertRefused(ActorRefusedException::OWN_PAYMENT, $this->postJson($this->staffApi("/payments/{$paid->id}/refund"), []));
         $this->assertRefused(ActorRefusedException::OWN_WALLET, $this->postJson($this->staffApi("/users/{$this->sara->id}/wallet"), ['type' => 'credit', 'amount' => 1000]));
-        self::assertSame('20000.00', $this->sara->balance(), 'her wallet as it was');
+        $this->assertRefused(ActorRefusedException::OWN_WALLET, $this->postJson($this->staffApi("/users/{$this->sara->id}/wallet"), ['type' => 'debit', 'amount' => 50000]));
+        self::assertSame('20000.00', $this->sara->balance(), 'her wallet as it was, a debt past it refused too');
 
         $service = $this->mirrored($this->subscription($this->sara, $plan, $server, 'sara_1'));
         $this->assertRefused(ActorRefusedException::OWN_SERVICE, $this->postJson($this->staffApi("/subscriptions/{$service->id}/extend"), ['days' => 3, 'traffic_gb' => 0]));

@@ -8,6 +8,7 @@ use App\Modules\Telegram\Admin\Sections\Owner\Agency\AgencyApproveScreen;
 use App\Modules\Telegram\Admin\Sections\Owner\Agency\AgencyLevelFormScreen;
 use App\Modules\Telegram\Admin\Sections\Owner\Agency\AgencyLevelScreen;
 use App\Modules\Telegram\Admin\Sections\Owner\Agency\AgencyLevelsScreen;
+use App\Modules\Telegram\Admin\Sections\Owner\Agency\AgencyRenewScreen;
 use App\Modules\Telegram\Admin\Sections\Owner\Agency\AgencyRequestScreen;
 use App\Modules\Telegram\Admin\Sections\Owner\Agency\AgencyRequestsScreen;
 use App\Modules\Telegram\Admin\Sections\Owner\Agency\AgencyScreen;
@@ -57,6 +58,7 @@ final class OwnerScreens
         AgencyRequestsScreen::ID => AgencyRequestsScreen::class,
         AgencyRequestScreen::ID => AgencyRequestScreen::class,
         AgencyApproveScreen::ID => AgencyApproveScreen::class,
+        AgencyRenewScreen::ID => AgencyRenewScreen::class,
         AgentsScreen::ID => AgentsScreen::class,
         AgentScreen::ID => AgentScreen::class,
         AgentTermsScreen::ID => AgentTermsScreen::class,

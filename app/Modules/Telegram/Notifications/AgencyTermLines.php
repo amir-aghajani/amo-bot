@@ -14,8 +14,9 @@ use App\Support\Persian;
 
 /**
  * An agent's terms of selling as the bot words them (Agency\Services\AgencyStanding), a line each — the agency group's
- * «پایان نمایندگی», «کف خرید ماهانه» or «خرید این ماه», and «فروش متوقف»: under a notice of their terms
- * (CustomerNotifier) and under their account (AgencyHandler). In the main shop, whose texts they are.
+ * «پایان نمایندگی», «کف خرید ماهانه» or «خرید این ماه», and «فروش متوقف» — and, under their account, «درخواست تمدید در
+ * حال بررسی»: under a notice of their terms (CustomerNotifier) and under their account (AgencyHandler). In the main shop,
+ * whose texts they are.
  */
 final class AgencyTermLines
 {
@@ -32,15 +33,17 @@ final class AgencyTermLines
     }
 
     /**
-     * Under the agent's account: their agency's end, `$month`'s traffic bought (`$purchased`) against their minimum, and
-     * why their bot sells nothing now; '' while there is none of these.
+     * Under the agent's account: their agency's end — and, `$renewalPending`, that their request for it to be moved on
+     * waits —, `$month`'s traffic bought (`$purchased`) against their minimum, and why their bot sells nothing now; ''
+     * while there is none of these.
      */
-    public function standing(Bot $bot, JalaliMonth $month, string $purchased): Html|string
+    public function standing(Bot $bot, JalaliMonth $month, string $purchased, bool $renewalPending = false): Html|string
     {
         $suspension = $bot->sellingSuspension();
 
         return $this->lines(
             $bot,
+            $renewalPending ? $this->texts->part(BotText::AgencyRenewalPending) : null,
             $bot->monthly_minimum === null ? null : $this->texts->part(BotText::AgencyMonthLine, ['month' => $month->name(), 'purchased' => Money::format($purchased), 'minimum' => Money::format($bot->monthly_minimum)]),
             $suspension === null ? null : $this->texts->part(BotText::AgencySellingLine, ['reason' => $suspension->words()]),
         );

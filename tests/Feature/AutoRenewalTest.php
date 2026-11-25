@@ -28,6 +28,7 @@ use App\Modules\Telegram\Handlers\SubscriptionHandler;
 use App\Modules\Telegram\Handlers\TopUpHandler;
 use App\Modules\Telegram\Messages;
 use App\Modules\Telegram\Texts\BotText;
+use App\Modules\Telegram\Texts\BotTexts;
 use App\Modules\Users\Enums\UserStatus;
 use App\Modules\Users\Models\User;
 use App\Modules\Users\Services\WalletService;
@@ -322,6 +323,72 @@ final class AutoRenewalTest extends BotTestCase
 
         self::assertSame([$this->short($subscription->refresh(), '50000')], $this->said(), 'told once more, for this window');
         self::assertSame(0, Order::query()->count());
+    }
+
+    public function testAWalletInDebtIsToldTheTopUpThatPaysTheDebtAndThePrice(): void
+    {
+        $subscription = $this->due('ali_1');
+        $this->wallet($this->ali, '-30000');
+
+        $this->renewNow();
+
+        self::assertSame(0, Order::query()->count());
+        self::assertSame([$this->short($subscription, '-30000')], $this->said());
+        self::assertStringContainsString('💳 موجودی کیف پول: ۳۰٬۰۰۰ تومان بدهی', $this->said()[0]);
+        self::assertStringContainsString('کیف پول را دست‌کم ۱۵۰٬۰۰۰ تومان شارژ کنید', $this->said()[0], 'the debt and the price: what a top-up must bring');
+    }
+
+    public function testAnAgentIsToldTheTopUpTheirCreditLeavesToBring(): void
+    {
+        $agent = $this->agent(credit: '100000', overrides: ['telegram_id' => 7007]);
+        $subscription = $this->due('agent_1', owner: $agent);
+        $this->wallet($agent, '-90000');
+
+        $this->renewNow();
+
+        self::assertSame(0, Order::query()->count());
+        self::assertStringContainsString('کیف پول را دست‌کم ۱۱۰٬۰۰۰ تومان شارژ کنید', $this->said()[0], '120,000 to pay, 10,000 of their credit left');
+        self::assertSame(['sendMessage'], $this->calls(), (string) $subscription->id);
+    }
+
+    public function testAnOwnersWordingWithoutWhatIsMissingStillReads(): void
+    {
+        $subscription = $this->due('ali_1');
+        $this->wallet($this->ali, '50000');
+        $this->service(BotTexts::class)->save(BotText::AutoRenewShort, 'کیف پول %client% کم است: %balance%');
+
+        $this->renewNow();
+
+        self::assertSame(['کیف پول ' . $subscription->remote_name . ' کم است: ۵۰٬۰۰۰ تومان'], $this->said());
+    }
+
+    /** @param \Closure(self): Plan $plan */
+    #[DataProvider('nothingToPay')]
+    public function testNothingToPayIsRenewedWhateverTheWalletOwes(\Closure $plan): void
+    {
+        $this->plan = $plan($this);
+        $subscription = $this->due('ali_1');
+        $this->wallet($this->ali, '-5000');
+
+        $this->renewNow();
+
+        $order = Order::query()->sole();
+        self::assertSame([OrderType::Renewal, OrderStatus::Fulfilled, '0.00', $subscription->id], [$order->type, $order->status, $order->amount, $order->subscription_id], 'renewed, never told the wallet is short');
+        self::assertSame('-5000.00', $this->ali->balance(), 'nothing charged: the debt as it was');
+        self::assertSame('2026-10-21 12:00:00', $subscription->refresh()->expires_at?->format('Y-m-d H:i:s'));
+        self::assertCount(1, $this->said());
+        self::assertStringStartsWith('♻️ سرویس', $this->said()[0]);
+    }
+
+    /** @return iterable<string, array{\Closure(self): Plan}> */
+    public static function nothingToPay(): iterable
+    {
+        yield 'a free plan' => [static fn(self $test): Plan => $test->plan(['name' => 'رایگان', 'price' => '0.00'])];
+        yield 'a whole discount' => [static function (self $test): Plan {
+            $test->ali->forceFill(['discount_percent' => 100])->save();
+
+            return $test->plan;
+        }];
     }
 
     public function testAPanelOutOfReachWaitsForTheNextRunWithNothingCharged(): void
@@ -645,13 +712,17 @@ final class AutoRenewalTest extends BotTestCase
         ]);
     }
 
-    /** What the customer reads when the wallet cannot pay the renewal: the price, `$balance`, the deadline. */
+    /**
+     * What the customer reads when the wallet cannot pay the renewal: the price, `$balance`, what a top-up must bring (no
+     * credit: the price less the balance, a debt included), the deadline.
+     */
     private function short(Subscription $subscription, string $balance): string
     {
         return self::text(BotText::AutoRenewShort, [
             'client' => $subscription->remote_name,
             'amount' => Money::format($this->plan->price),
             'balance' => Messages::balance($balance),
+            'missing' => Money::format(Money::subtract($this->plan->price, $balance)),
             'expires' => Messages::expiry($subscription->expires_at, $subscription->duration_hours),
         ]);
     }

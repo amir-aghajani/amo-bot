@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Telegram\Keyboard;
 
+use App\Modules\Agency\Services\AgencyActions;
 use App\Modules\Catalog\Models\Plan;
 use App\Modules\Providers\Models\Server;
 use App\Modules\Telegram\Api\Limits;
@@ -15,6 +16,7 @@ use App\Modules\Telegram\Messages;
 use App\Modules\Telegram\Texts\BotText;
 use App\Modules\Telegram\Texts\BotTexts;
 use App\Modules\Telegram\Texts\PremiumText;
+use App\Modules\Users\Models\User;
 use App\Support\Money;
 use App\Support\Persian;
 
@@ -208,5 +210,26 @@ final class Buttons
     public function buyTraffic(): array
     {
         return InlineKeyboard::callback($this->texts->get(BotText::AgencyBuyTraffic), AgencyHandler::TRAFFIC, 'success');
+    }
+
+    /**
+     * «🔄 درخواست تمدید نمایندگی»: an agent's request for their agency's end to be moved on.
+     *
+     * @return array<string, mixed>
+     */
+    public function renewAgency(): array
+    {
+        return InlineKeyboard::callback($this->texts->get(BotText::AgencyRenewalButton), AgencyHandler::RENEW, 'primary');
+    }
+
+    /**
+     * renewAgency() while the agent may ask for a renewal (AgencyActions::mayRequestRenewal()); null otherwise — one
+     * waits, their agency has no end, or they are no agent.
+     *
+     * @return array<string, mixed>|null
+     */
+    public function renewAgencyFor(User $agent): ?array
+    {
+        return AgencyActions::mayRequestRenewal($agent) ? $this->renewAgency() : null;
     }
 }

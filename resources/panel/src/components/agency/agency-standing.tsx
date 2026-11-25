@@ -3,7 +3,7 @@ import { Ban, CalendarClock, TrendingDown, type LucideIcon } from 'lucide-react'
 import { Callout } from '@/components/callout'
 import { Fact } from '@/components/fact-list'
 import { InfoBadge } from '@/components/info-tip'
-import type { AgencyStanding } from '@/lib/api-types'
+import type { AccountResponse, AgencyStanding } from '@/lib/api-types'
 import { formatDate, formatMoney, formatNumber, timeLeft } from '@/lib/format'
 import { SELLING_SUSPENSION } from '@/lib/statuses'
 
@@ -49,11 +49,31 @@ export function monthWords(standing: AgencyStanding): string {
   return `${formatMoney(standing.month.purchased)} از ${formatMoney(standing.monthly_minimum)}`
 }
 
+/** An agency's end now as a renewal is read by it: «بدون پایان», its day and the time left, or its day and that it passed. */
+export function agencyEndWords(expiresAt: string | null): string {
+  if (expiresAt === null) return 'بدون پایان'
+  return `${formatDate(expiresAt)} (${new Date(expiresAt).getTime() <= Date.now() ? 'گذشته است' : timeLeft(expiresAt)})`
+}
+
+/** What SellingNotice says of renewing when nothing else is said: where the agent asks for it. */
+const RENEW_IN_ACCOUNT = 'برای تمدید، در «حساب نمایندگی» «درخواست تمدید نمایندگی» را بزنید.'
+
+/**
+ * What the agent's notice says of renewing an end passed or near (SellingNotice's `renew`), by their account: that their
+ * request waits — wherever it is said, as no button shows then —, or, on the account page itself (`here`), that the
+ * button is in its «شرایط فروش»; undefined for the notice's own word, which sends them to «حساب نمایندگی».
+ */
+export function renewWords(account: Pick<AccountResponse['account'], 'renewal' | 'actions'>, here = false): string | undefined {
+  if (account.renewal?.status === 'pending') return 'درخواست تمدید شما در انتظار بررسی است.'
+  return here && account.actions.request_renewal ? 'برای تمدید، «درخواست تمدید نمایندگی» را در بخش «شرایط فروش» همین صفحه بزنید.' : undefined
+}
+
 /**
  * The agent's notice (their dashboard's attention card, and their account, where the shell's strip leads): why their bot
- * sells nothing now and what lifts it, or what is near — nothing while all is well.
+ * sells nothing now and what lifts it, or what is near — nothing while all is well. `renew` is what it says of renewing
+ * an end passed or near, in place of sending them to their account's «درخواست تمدید نمایندگی» (renewWords).
  */
-export function SellingNotice({ standing }: { standing: AgencyStanding | null | undefined }) {
+export function SellingNotice({ standing, renew }: { standing: AgencyStanding | null | undefined; renew?: string }) {
   const concern = standingConcern(standing)
   if (!standing || concern === null) return null
 
@@ -65,7 +85,7 @@ export function SellingNotice({ standing }: { standing: AgencyStanding | null | 
         {reason === 'minimum'
           ? `با خرید حجم در ربات اصلی تا رسیدن خرید ${standing.month.name} به کف (${monthWords(standing)})، فروش خودکار باز می‌شود.`
           : reason === 'expired'
-            ? 'برای تمدید نمایندگی با پشتیبانی فروشگاه اصلی تماس بگیرید.'
+            ? (renew ?? RENEW_IN_ACCOUNT)
             : 'فقط پشتیبانی فروشگاه اصلی آن را دوباره باز می‌کند.'}
       </Callout>
     )
@@ -76,7 +96,7 @@ export function SellingNotice({ standing }: { standing: AgencyStanding | null | 
         <span className="font-medium">
           نمایندگی شما {formatDate(standing.expires_at)} به پایان می‌رسد ({timeLeft(standing.expires_at)}).
         </span>{' '}
-        از آن به بعد ربات شما فروش تازه‌ای ندارد؛ برای تمدید با پشتیبانی فروشگاه اصلی تماس بگیرید.
+        از آن به بعد ربات شما فروش تازه‌ای ندارد؛ {renew ?? RENEW_IN_ACCOUNT}
       </Callout>
     )
   }
@@ -154,11 +174,25 @@ export function OwnerSellingNotice({ standing, help }: { standing: AgencyStandin
   )
 }
 
-/** The terms as facts (inside a FactList): the end, this month's purchases against the minimum, and the selling. */
-export function StandingFacts({ standing }: { standing: AgencyStanding }) {
+/**
+ * The terms as facts (inside a FactList): the end, this month's purchases against the minimum, and the selling.
+ * `renewal` goes under the end: the agent's own word on renewing it (their account).
+ */
+export function StandingFacts({ standing, renewal }: { standing: AgencyStanding; renewal?: ReactNode }) {
+  const end = standing.expires_at === null ? 'بدون پایان' : `${formatDate(standing.expires_at)} (${timeLeft(standing.expires_at)})`
+
   return (
     <>
-      <Fact label="پایان نمایندگی">{standing.expires_at === null ? 'بدون پایان' : `${formatDate(standing.expires_at)} (${timeLeft(standing.expires_at)})`}</Fact>
+      <Fact label="پایان نمایندگی">
+        {renewal ? (
+          <div className="grid justify-items-start gap-2">
+            <span>{end}</span>
+            {renewal}
+          </div>
+        ) : (
+          end
+        )}
+      </Fact>
       <Fact label={`خرید حجم ${standing.month.name}`}>
         {standing.monthly_minimum === null ? `${formatMoney(standing.month.purchased)} · بدون کف ماهانه` : `${monthWords(standing)}${standing.month.judged ? '' : ' (این ماه سنجیده نمی‌شود)'}`}
       </Fact>

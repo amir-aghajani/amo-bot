@@ -110,19 +110,48 @@ final class KeyboardLayout
         $rows = [];
         foreach ($this->rows as $row) {
             $rows[] = array_map(static function (array $button) use ($iconFor): array {
-                $leading = $button['icon'] === null ? PremiumText::leadingEmoji($button['label']) : null;
-                $id = $leading === null ? null : $iconFor($button['label']);
-                if ($leading === null || $id === null || trim(substr($button['label'], strlen($leading))) === '') {
-                    return $button;
-                }
+                $id = self::iconableEmoji($button) === null ? null : $iconFor($button['label']);
 
-                return ['label' => PremiumText::name($button['label'], $id)->text] + $button;
+                return $id === null ? $button : ['label' => PremiumText::name($button['label'], $id)->text] + $button;
             }, $row);
         }
 
         return new self($this->type, $rows);
     }
 
+    /**
+     * The leading emoji of each button premium() may give an icon, in reading order — none for a reply keyboard.
+     *
+     * @return list<string>
+     */
+    public function iconable(): array
+    {
+        if (!$this->isInline()) {
+            return [];
+        }
+        $emojis = [];
+        foreach ($this->buttons() as $button) {
+            $leading = self::iconableEmoji($button);
+            if ($leading !== null) {
+                $emojis[] = $leading;
+            }
+        }
+
+        return $emojis;
+    }
+
+    /**
+     * The emoji a button's label starts with, when premium() may make it the button's icon: the button has none of its
+     * own, and words follow (Telegram takes no button without them).
+     *
+     * @param array{label: string, icon: ?string} $button
+     */
+    private static function iconableEmoji(array $button): ?string
+    {
+        $leading = $button['icon'] === null ? PremiumText::leadingEmoji($button['label']) : null;
+
+        return $leading === null || trim(substr($button['label'], strlen($leading))) === '' ? null : $leading;
+    }
 
     /**
      * The `reply_markup` for a message. Inline buttons carry the action's callback (MainMenu::ACTIONS), or open the web

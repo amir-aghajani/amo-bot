@@ -74,6 +74,20 @@ final class StoreWalletTest extends HttpTestCase
         self::assertSame(['-20000.00', '50000.00', '30000.00'], [$wallet['balance'], $wallet['credit'], $wallet['spendable']]);
     }
 
+    /** Support's debit by hand may leave anyone a debt: below zero, no credit, nothing to spend — the ledger line says it. */
+    public function testAnOrdinaryCustomersDebtIsBelowZeroWithNothingToSpend(): void
+    {
+        $customer = $this->wallet($this->customer(), '10000');
+        $this->service(WalletService::class)->debit($customer, 30000, WalletService::LINE_DEBIT_BY_SUPPORT, 1_000_000_000, 'root');
+        $this->bearer($this->customerSession($customer));
+
+        $wallet = $this->decode($this->get($this->storeApi($this->website, '/wallet')));
+        self::assertSame(['-20000.00', '0.00', '-20000.00'], [$wallet['balance'], $wallet['credit'], $wallet['spendable']]);
+
+        $line = $this->decode($this->get($this->storeApi($this->website, '/wallet/transactions')))['transactions'][0];
+        self::assertSame(['debit', '30000.00', '-20000.00'], [$line['type'], $line['amount'], $line['balance_after']]);
+    }
+
     public function testTheLedgerNewestLineFirstAPageAtATime(): void
     {
         $customer = $this->customer();

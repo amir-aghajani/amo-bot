@@ -10,6 +10,7 @@ use App\Modules\Accounts\Enums\SignInMethod;
 use App\Modules\Accounts\Services\CustomerSessions;
 use App\Modules\Accounts\Services\TwoFactor;
 use App\Modules\Agency\DTO\SellingTerms;
+use App\Modules\Agency\Enums\AgencyRequestKind;
 use App\Modules\Agency\Models\AgencyLevel;
 use App\Modules\Agency\Models\AgencyRequest;
 use App\Modules\Agency\Services\AgencySettings;
@@ -796,6 +797,12 @@ trait Fixtures
     protected function agencyRequest(User $user): AgencyRequest
     {
         return AgencyRequest::query()->create(['user_id' => $user->id, 'note' => 'کانال فروش دارم']);
+    }
+
+    /** An agent's request for their agency's end to be moved on («درخواست تمدید نمایندگی»), waiting for support. */
+    protected function renewalRequest(User $agent): AgencyRequest
+    {
+        return AgencyRequest::query()->create(['user_id' => $agent->id, 'kind' => AgencyRequestKind::Renewal->value]);
     }
 
     /**

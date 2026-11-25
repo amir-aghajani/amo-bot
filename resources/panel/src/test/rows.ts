@@ -1,3 +1,4 @@
+import { emojiKey } from '@/components/bot-texts/emoji-map'
 import type {
   AgencyLevelRow,
   AgencyRequestRow,
@@ -26,7 +27,9 @@ import type {
   PaymentRow,
   PlanCategoryRow,
   PlanRow,
+  PremiumTextRow,
   PremiumTextsResponse,
+  PremiumTextUse,
   QrBackgroundInfo,
   ReviewRow,
   RialitMethodRow,
@@ -200,18 +203,39 @@ export function botSettingsResponse(settings: BotSettingsData = botSettingsRow()
   return { settings, qr_background: qrBackgroundRow(), name_variables: [], ...more }
 }
 
+/** The plain emoji the shop's texts carry, most carried first: ✅ in 29 texts, ❤️ in 3, 📅 in 2 and a start menu button, 🛒 on a menu button alone. */
+const CARRIED: Omit<PremiumTextUse, 'emoji_id'>[] = [
+  { emoji: '✅', texts: 29, menu: 0 },
+  { emoji: '❤️', texts: 3, menu: 0 },
+  { emoji: '📅', texts: 2, menu: 1 },
+  { emoji: '🛒', texts: 0, menu: 1 },
+]
+
+/** The emoji list as the server makes it of `items`: those carried with what they are swapped for, then the map's own that nothing carries. */
+function emojisOf(items: PremiumTextRow[]): PremiumTextUse[] {
+  const swaps = new Map(items.map((item) => [emojiKey(item.emoji), item.emoji_id]))
+  const carried = new Set(CARRIED.map((use) => emojiKey(use.emoji)))
+  return [
+    ...CARRIED.map((use) => ({ ...use, emoji_id: swaps.get(emojiKey(use.emoji)) ?? null })),
+    ...items.filter((item) => !carried.has(emojiKey(item.emoji))).map((item) => ({ emoji: item.emoji, texts: 0, menu: 0, emoji_id: item.emoji_id })),
+  ]
+}
+
 /**
  * «ایموجی پرمیوم متن‌ها» as the bot texts page reads it (GET /bot/premium-texts): on, ❤️ drawn as premium emoji 41 in
- * three texts and 🔥 as 42 in none; the bot found able to send premium emoji on 2026-10-06, so the switch may go on.
+ * three texts and 🔥 as 42 in none; the emoji the texts carry (CARRIED) listed with them, 🔥 last, unless `emojis` is
+ * given; the bot found able to send premium emoji on 2026-10-06, so the switch may go on.
  */
 export function premiumTextsResponse(overrides: Partial<PremiumTextsResponse['premium_texts']> = {}): PremiumTextsResponse {
+  const items = overrides.items ?? [
+    { emoji: '❤️', emoji_id: '41', texts: 3 },
+    { emoji: '🔥', emoji_id: '42', texts: 0 },
+  ]
   return {
     premium_texts: {
       enabled: true,
-      items: [
-        { emoji: '❤️', emoji_id: '41', texts: 3 },
-        { emoji: '🔥', emoji_id: '42', texts: 0 },
-      ],
+      items,
+      emojis: emojisOf(items),
       status: { ok: true, checked_at: '2026-10-06T08:55:00Z' },
       can_enable: true,
       max: 100,
@@ -661,16 +685,20 @@ export function levelRow(overrides: Partial<AgencyLevelRow> = {}): AgencyLevelRo
   return { id: 1, name: 'طلایی', price_per_gb: '3000.00', sort: 1, counts: { agents: 0 }, created_at: '2026-09-01T10:00:00Z', updated_at: '2026-10-06T09:00:00Z', ...overrides }
 }
 
-/** Agency request 4, رضا's, waiting: nothing written with it, to approve or reject. */
+/** Agency request 4, رضا's to become an agent, waiting: nothing written with it, to approve or reject. */
 export function agencyRequestRow(overrides: Partial<AgencyRequestRow> = {}): AgencyRequestRow {
   return {
     id: 4,
+    kind: 'join',
     user: { id: 21, name: 'رضا', username: 'reza', telegram_id: 555_000, email: null },
     user_status: 'active',
     agent: false,
     status: 'pending',
     note: null,
     level: null,
+    expires_at: null,
+    extended_to: null,
+    term_end: null,
     reason: null,
     reviewer: null,
     reviewer_name: null,

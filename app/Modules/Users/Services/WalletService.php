@@ -19,9 +19,9 @@ use Illuminate\Database\Eloquent\Collection;
 /**
  * The one writer of the wallet ledger (through Core\Database\Ledger, under the customer's row lock, so two debits at once
  * cannot spend the same balance). Each line carries the balance after it. A debit may go below zero only as far as the
- * credit the caller allows (an agent's). Lines written by hand keep their reviewer, and the request's Idempotency-Key
- * when it sent one: the same line asked again under that key is answered by the line it wrote, never a second.
- * Most lines' wording lives here too.
+ * caller allows: an agent's credit when they buy, support's debit by hand a debt down to UserActions::DEBT_MAX, else
+ * not at all. Lines written by hand keep their reviewer, and the request's Idempotency-Key when it sent one: the same
+ * line asked again under that key is answered by the line it wrote, never a second. Most lines' wording lives here too.
  */
 final class WalletService
 {
@@ -51,7 +51,7 @@ final class WalletService
     }
 
     /**
-     * @param string|int $credit How far below zero the balance may go (an agent's credit; 0 for anyone else)
+     * @param string|int $credit How far below zero the balance may go (an agent's credit; support's bound by hand; else 0)
      * @param string|null $reviewer Who writes it by hand (support's adjustment); null for lines the shop writes itself
      * @param string|null $key Support's request's Idempotency-Key (see apply())
      * @throws InsufficientBalanceException

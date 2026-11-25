@@ -211,20 +211,36 @@ final class MainMenu
     public function markup(User $user): array
     {
         $app = $this->miniApp->url();
+        // An inline button the shop's premium emoji give an icon (EmojiMap) — its own icon, set on the keyboard, comes first.
+        $markup = $this->shownWith($user, $app)->premium($this->emojis->icon(...))->markup($app === null ? [] : ['app' => $app]);
+
+        return $this->seats->of($user) === null ? $markup : self::withManagement($markup);
+    }
+
+    /**
+     * The menu as markup() shows it to `$user` — to a customer of no standing when null (no agent, the customers' perks
+     * kept): what the panels count the shop's premium emoji in.
+     */
+    public function shown(?User $user = null): KeyboardLayout
+    {
+        return $this->shownWith($user, $this->miniApp->url());
+    }
+
+    /** The menu without the buttons of programs switched off, or the built-in one in its form when none is left (markup()). */
+    private function shownWith(?User $user, ?string $app): KeyboardLayout
+    {
         $off = array_keys(array_filter([
             'affiliates' => !$this->referrals->enabled(),
-            'agency' => !$this->agency->enabled() && !$user->isAgent(),
+            'agency' => !$this->agency->enabled() && $user?->isAgent() !== true,
             'gift' => !$this->giftCodes->enabled(),
-            'wheel' => !$this->wheel->enabled() || $this->perks->withheld($user),
+            'wheel' => !$this->wheel->enabled() || ($user !== null && $this->perks->withheld($user)),
             'test' => !$this->tests->enabled(),
             'app' => $app === null,
         ]));
         $layout = $this->layout();
         $shown = $layout->without(...$off);
-        // An inline button the shop's premium emoji give an icon (EmojiMap) — its own icon, set on the keyboard, comes first.
-        $markup = ($shown->rows === [] ? self::builtIn($layout)->without(...$off) : $shown)->premium($this->emojis->icon(...))->markup($app === null ? [] : ['app' => $app]);
 
-        return $this->seats->of($user) === null ? $markup : self::withManagement($markup);
+        return $shown->rows === [] ? self::builtIn($layout)->without(...$off) : $shown;
     }
 
     /**

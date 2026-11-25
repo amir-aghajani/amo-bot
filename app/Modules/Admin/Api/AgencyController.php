@@ -8,6 +8,7 @@ use App\Core\Exceptions\ValidationException;
 use App\Core\Http\ApiController;
 use App\Modules\Agency\DTO\AgencyTerms;
 use App\Modules\Agency\DTO\SellingTerms;
+use App\Modules\Agency\Enums\AgencyRequestStatus;
 use App\Modules\Agency\Models\AgencyRequest;
 use App\Modules\Agency\Services\AgencyActions;
 use App\Modules\Agency\Services\AgencyDirectory;
@@ -18,12 +19,14 @@ use App\Modules\Catalog\Services\AgentRestrictions;
 use App\Modules\Store\Http\IdempotencyKey;
 use App\Modules\Users\Models\User;
 use App\Support\Input;
+use Illuminate\Support\Carbon;
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 
 /**
  * «نمایندگان» (the owner's panel, in the main bot's shop, whose customers the agents are): the program's numbers, the
- * requests to become an agent (approved on a level, or rejected), and the agents — terms changed (an end and a monthly
+ * requests to become an agent (approved on a level, or rejected) and agents' renewal requests (approved with an end), and
+ * the agents — terms changed (an end and a monthly
  * minimum among them), traffic set right, selling suspended or resumed, servers and plans kept from their shop, agency
  * ended. Each decision is AgencyActions' or AgencyStanding's, which tell the customer; a request decided meanwhile (in
  * the report group) is a 422 on `status`.
@@ -50,17 +53,39 @@ final class AgencyController extends ApiController
     }
 
     /**
-     * POST /agency/requests/{id}/approve — {level_id, credit_limit, expires_at?, monthly_minimum?}: the end and the
-     * minimum left out are the program's.
+     * GET /agency/requests/{id} — one request as the list shows it, as it stands now (the bot's card reads it before a
+     * decision).
+     *
+     * @param array<string, string> $args
+     */
+    public function show(Request $request, Response $response, array $args): Response
+    {
+        return $this->request($response, $this->load(AgencyRequest::class, $args));
+    }
+
+    /**
+     * POST /agency/requests/{id}/approve — to become an agent {level_id, credit_limit, expires_at?, monthly_minimum?}: the
+     * end and the minimum left out are the program's; a renewal {expires_at?}: the agent's new end — blank or null for none
+     * at all, left out for the program's term on from their end (AgencyActions::termEnd()).
      *
      * @param array<string, string> $args
      */
     public function approve(Request $request, Response $response, array $args): Response
     {
-        $agencyRequest = $this->load(AgencyRequest::class, $args, ['user', 'level']);
-        $terms = AgencyTerms::fromInput($this->input($request), $this->standing->defaults());
+        $agencyRequest = $this->load(AgencyRequest::class, $args, ['user.ownBot', 'level']);
+        $input = $this->input($request);
+        $actor = Principal::of($request)->actor();
+        if ($agencyRequest->isRenewal()) {
+            // Decided meanwhile is said as such, before the term's end is worked out for it.
+            if ($agencyRequest->status !== AgencyRequestStatus::Pending) {
+                throw ValidationException::on('status', AgencyActions::decided($agencyRequest));
+            }
 
-        return $this->request($response, $this->actions->approve($agencyRequest, Principal::of($request)->actor(), $terms->level, $terms->credit, $terms->selling));
+            return $this->request($response, $this->actions->renew($agencyRequest, $actor, array_key_exists('expires_at', $input) ? self::end($input) : $this->actions->termEnd($agencyRequest)));
+        }
+        $terms = AgencyTerms::fromInput($input, $this->standing->defaults());
+
+        return $this->request($response, $this->actions->approve($agencyRequest, $actor, $terms->level, $terms->credit, $terms->selling));
     }
 
     /**
@@ -189,7 +214,25 @@ final class AgencyController extends ApiController
     /** The request as it stands after the decision. */
     private function request(Response $response, AgencyRequest $agencyRequest): Response
     {
-        return $this->json($response, ['request' => $this->directory->presentRequest($agencyRequest->load(['user', 'level']))]);
+        return $this->json($response, ['request' => $this->directory->presentRequest($agencyRequest->load(['user.ownBot', 'level']))]);
+    }
+
+    /**
+     * A renewal's end as the panel sends it (`expires_at`, read as the agents page's: SellingTerms::fromInput()): null
+     * for none at all.
+     *
+     * @param array<string, mixed> $input
+     * @throws ValidationException 422 on `expires_at`
+     */
+    private static function end(array $input): ?Carbon
+    {
+        $errors = [];
+        $terms = SellingTerms::fromInput(['expires_at' => $input['expires_at']], new SellingTerms(null, null), $errors);
+        if ($errors !== []) {
+            throw new ValidationException($errors);
+        }
+
+        return $terms?->expiresAt;
     }
 
     /** The agent as the list shows them after a decision. */

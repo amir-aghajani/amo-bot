@@ -147,6 +147,22 @@ final class StoreCheckoutTest extends HttpTestCase
         self::assertSame('50000.00', $this->customer->balance());
     }
 
+    /** A wallet in debt pays nothing: what is missing counts the debt, which a top-up pays off first — a card still pays. */
+    public function testAWalletInDebtOrdersNothingAndWhatIsMissingCountsTheDebt(): void
+    {
+        $this->wallet($this->customer, '-20000');
+
+        $response = $this->placeOrder($this->website, $this->plan, $this->server, $this->walletMethod());
+
+        self::assertSame(422, $response->getStatusCode());
+        self::assertSame(sprintf(CheckoutRefusedException::SHORT, Money::format(140000)), $this->decode($response)['errors']['method_id'][0] ?? null);
+        self::assertSame([0, '-20000.00'], [Order::query()->count(), $this->customer->balance()], 'nothing ordered, nothing charged');
+
+        $byCard = $this->placeOrder($this->website, $this->plan, $this->server, $this->card, key: 'by-card');
+        self::assertSame('pending', $this->decode($byCard)['checkout']['order']['status'] ?? null, (string) $byCard->getBody());
+        self::assertSame('-20000.00', $this->customer->balance(), 'the wallet untouched');
+    }
+
     public function testAnAgentsCreditPaysAsItDoesInTheBot(): void
     {
         $agent = $this->wallet($this->agent(credit: '100000', overrides: ['telegram_id' => 7171]), '30000');

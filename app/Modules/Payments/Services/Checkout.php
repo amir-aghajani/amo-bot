@@ -51,7 +51,10 @@ final class Checkout
         private readonly OnlinePayments $online,
     ) {}
 
-    /** What the wallet lacks to pay `$price` (an agent's credit counting); null when it can, and for any other method. */
+    /**
+     * What the wallet lacks to pay `$price` (an agent's credit counting) — what a top-up must bring, a debt included: a
+     * top-up pays it off first —; null when it can, and for any other method.
+     */
     public function shortfall(User $user, PaymentMethod $method, string $price): ?Shortfall
     {
         // Nothing is missing to pay nothing (a free order), whatever the wallet holds.
@@ -64,7 +67,7 @@ final class Checkout
             return null;
         }
 
-        return new Shortfall($balance, Money::normalize($price), Money::subtract($price, Money::isPositive($spendable) ? $spendable : 0));
+        return new Shortfall($balance, Money::normalize($price), Money::subtract($price, $spendable));
     }
 
     /**

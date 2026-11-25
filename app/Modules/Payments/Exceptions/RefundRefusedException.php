@@ -8,7 +8,6 @@ use App\Core\Exceptions\DomainRuleException;
 use App\Modules\Orders\Enums\OrderStatus;
 use App\Modules\Orders\Models\Order;
 use App\Modules\Telegram\Messages;
-use App\Support\Money;
 
 /**
  * A refund that must take back what the order added — a top-up's credit and its referrer's commission, an agent's
@@ -53,15 +52,27 @@ final class RefundRefusedException extends DomainRuleException
             : 'وقتی پنل جواب داد، دوباره بازپرداخت کنید.'));
     }
 
+    /**
+     * The wallet holds less than the top-up, which its refund would take back no further than the customer's floor: spent
+     * — or, a wallet in debt (support's debit by hand may leave one, an agent's credit too), held no more. No way round it
+     * is offered: a debit by hand with the payment left paid would let a later refund take the money back twice.
+     */
     public static function topUpSpent(string $balance): self
     {
-        return new self(sprintf('این شارژ خرج شده است: موجودی کیف پول مشتری %s است و مبلغ شارژ از آن کم نمی‌شود.', Money::format($balance)));
+        return new self(Messages::isDebt($balance)
+            ? sprintf('موجودی کیف پول مشتری %s است، کمتر از مبلغ این شارژ؛ برای همین مبلغ شارژ از آن پس گرفته نمی‌شود و چیزی بازپرداخت نشد.', Messages::balance($balance))
+            : sprintf('این شارژ خرج شده است: موجودی کیف پول مشتری %s است و مبلغ شارژ از آن کم نمی‌شود.', Messages::balance($balance)));
     }
 
-    /** The commission the top-up earned the customer's referrer is spent: its refund takes it back, by the same rule. */
+    /**
+     * The commission the top-up earned the customer's referrer is no longer in their wallet: its refund takes it back, by
+     * the same rule — worded as topUpSpent() words it.
+     */
     public static function commissionSpent(string $balance): self
     {
-        return new self(sprintf('پورسانتی که این شارژ برای معرف مشتری آورد خرج شده است: موجودی کیف پول معرف %s است و پورسانت از آن کم نمی‌شود.', Money::format($balance)));
+        return new self(Messages::isDebt($balance)
+            ? sprintf('موجودی کیف پول معرف مشتری %s است، کمتر از پورسانتی که این شارژ برایش آورد؛ برای همین پورسانت از آن پس گرفته نمی‌شود و چیزی بازپرداخت نشد.', Messages::balance($balance))
+            : sprintf('پورسانتی که این شارژ برای معرف مشتری آورد خرج شده است: موجودی کیف پول معرف %s است و پورسانت از آن کم نمی‌شود.', Messages::balance($balance)));
     }
 
     public static function trafficSold(int $left): self

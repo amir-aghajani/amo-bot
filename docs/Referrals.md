@@ -67,7 +67,7 @@ paying customer is told of their payment, and the report group's report of the p
 - A **refunded top-up** takes its commission back. Its money goes back to the customer outside the shop, so the
   commission comes out of the referrer's wallet too, as the line «برگشت پورسانت زیرمجموعه (پرداخت #N)», and the
   referrer is told. It leaves the page's «پورسانت‌ها» and the referrer's earnings. A referrer who has spent it stops the
-  refund: support is told the referrer's balance. (An agent's wallet may go below zero as far as their credit, as for
+  refund: support is told the referrer's balance, or their debt. (An agent's wallet may go below zero as far as their credit, as for
   their own payments.)
 - **Every other refund** — a purchase, a renewal, an extra — leaves the commission standing: its money stays in the shop,
   as the customer's wallet credit.

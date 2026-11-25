@@ -19,10 +19,12 @@ use App\Modules\Telegram\Update\GroupHandler;
 use App\Modules\Telegram\Update\Update;
 use App\Modules\Users\Models\User;
 use App\Support\Money;
+use App\Support\Persian;
 use Psr\Log\LoggerInterface;
 
 /**
- * «✅ تایید» (then a level) and «❌ رد» under an agency request in the main bot's report group, for its bot admins only.
+ * «✅ تایید» (then a level) and «❌ رد» under an agency request in the main bot's report group, for its bot admins only —
+ * under a renewal request, «✅ تایید» moves the agent's end on by the program's term at once.
  * A press reaching an agent's bot decides nothing: callback data is the client's to write, and an agent is their own
  * bot's admin. Decisions go through AgencyActions, as the agents page's do; an admin's own request is another admin's.
  */
@@ -41,6 +43,7 @@ final class AgencyReview implements GroupHandler
     private const LEVEL_GONE = 'این سطح دیگر وجود ندارد؛ دوباره «تایید» را بزنید.';
     private const APPROVED = '✅ نماینده شد، با سطح «%s».';
     private const REJECTED = '❌ درخواست رد شد.';
+    private const RENEWED = '✅ نمایندگی تمدید شد تا %s.';
 
     public function __construct(
         private readonly GroupButtons $groupButtons,
@@ -85,10 +88,12 @@ final class AgencyReview implements GroupHandler
             return;
         }
 
-        match ($action) {
-            self::LEVEL => $this->approve($update, $request, (int) $args[2], $admin),
-            self::REJECT => $this->reject($update, $request, $admin),
-            self::APPROVE => $this->pickLevel($update, $request),
+        match (true) {
+            $action === self::REJECT => $this->reject($update, $request, $admin),
+            // A renewal is approved at once, by the program's term; it has no level to pick.
+            $request->isRenewal() => $action === self::APPROVE ? $this->renew($update, $request, $admin) : $this->groupButtons->answer($update),
+            $action === self::LEVEL => $this->approve($update, $request, (int) $args[2], $admin),
+            $action === self::APPROVE => $this->pickLevel($update, $request),
             default => $this->showButtons($update, self::buttons($request->id)),
         };
     }
@@ -155,6 +160,35 @@ final class AgencyReview implements GroupHandler
         $this->groupButtons->buttons($update, null);
         $this->groupButtons->answer($update, sprintf(self::APPROVED, $level->name));
         $this->logger->info('Agency request {id} approved from the report group by {reviewer}', ['id' => $request->id, 'reviewer' => $request->reviewer]);
+    }
+
+    /**
+     * A renewal's «تایید»: the agent's end moved on by the program's term (AgencyActions::termEnd()). Refused as it stands
+     * — no term in the program, no end to move on, past the last day the shop keeps —, it keeps waiting with its buttons,
+     * for the panel's «نمایندگان» to give an end of its own.
+     */
+    private function renew(Update $update, AgencyRequest $request, User $admin): void
+    {
+        try {
+            $this->agency->renew($request, Actor::groupAdmin($admin), $this->agency->termEnd($request));
+        } catch (ActorRefusedException $e) {
+            $this->groupButtons->answer($update, $e->getMessage(), alert: true);
+
+            return;
+        } catch (ValidationException $e) {
+            if (array_key_exists('status', $e->errors())) {
+                $this->groupButtons->dismiss($update, $e->getMessage());
+
+                return;
+            }
+            $this->groupButtons->answer($update, $e->getMessage(), alert: true);
+
+            return;
+        }
+
+        $this->groupButtons->buttons($update, null);
+        $this->groupButtons->answer($update, sprintf(self::RENEWED, $request->extended_to === null ? '—' : Persian::date($request->extended_to, withTime: true)));
+        $this->logger->info('Agency renewal {id} approved from the report group by {reviewer}', ['id' => $request->id, 'reviewer' => $request->reviewer]);
     }
 
     private function reject(Update $update, AgencyRequest $request, User $admin): void

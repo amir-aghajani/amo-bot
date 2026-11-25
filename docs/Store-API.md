@@ -207,7 +207,7 @@ the visitor's address to `X-Forwarded-For` and pass their `User-Agent` on.
   one file is `422` on `file` (`فایل بزرگ‌تر از حد مجاز سرور است.`), and a form past what it takes for a whole request
   is `413` — never read as a form that sent nothing.
 - **Money** is Toman as a decimal string with two places: `"120000.00"`. Never do arithmetic on floats; format for
-  display, e.g. `Math.trunc(Number(amount)).toLocaleString('fa-IR')`. A negative balance is an agent's debt. An amount
+  display, e.g. `Math.trunc(Number(amount)).toLocaleString('fa-IR')`. A negative balance is a debt (an agent's credit in use, or support's debit by hand). An amount
   the API wrote is taken back as written (a top-up preset, [a wallet top-up](Store-API-Buying.md#a-wallet-top-up)).
 - **Traffic** is bytes, as integers; a gigabyte is 1024³ bytes (`traffic_gb: 50` is 53 687 091 200 bytes). A traffic
   of `0` is unlimited, a term of `0` hours never ends, `0` devices is no limit.

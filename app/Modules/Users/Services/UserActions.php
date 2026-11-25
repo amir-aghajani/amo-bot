@@ -17,6 +17,7 @@ use App\Modules\Notifications\Enums\Delivery;
 use App\Modules\Notifications\Services\CustomerNotifier;
 use App\Modules\Telegram\Admin\OwnerLinks;
 use App\Modules\Telegram\Api\Limits;
+use App\Modules\Telegram\Messages;
 use App\Modules\Users\Enums\UserRole;
 use App\Modules\Users\Enums\UserStatus;
 use App\Modules\Users\Enums\WalletTransactionType;
@@ -44,6 +45,15 @@ final class UserActions
      * heading and some room besides.
      */
     public const MESSAGE_MAX = 3500;
+
+    /**
+     * How deep support's debit by hand may take a wallet below zero — anyone's, a debt their next top-ups pay off first:
+     * a billion Toman (Money::AMOUNT_MAX), a typo's bound rather than a credit; the customer spends nothing of it.
+     */
+    public const DEBT_MAX = Money::AMOUNT_MAX;
+
+    /** A debit by hand past DEBT_MAX: the most, then the balance now («۲۰٬۰۰۰ تومان بدهی» below zero). */
+    public const DEBT_PAST_MAX = 'بدهی کاربر از %s بیشتر نمی‌شود؛ موجودی فعلی: %s.';
 
     public function __construct(
         private readonly WalletService $wallet,
@@ -159,13 +169,14 @@ final class UserActions
     }
 
     /**
-     * Credits or debits the wallet by hand (a debit no further than the balance), with a note the customer sees, under the
-     * actor's name — and under the request's Idempotency-Key `$key` when it sent one: the same change asked again is
-     * answered by the line it wrote (`wasRecentlyCreated` false), never made twice.
+     * Credits or debits the wallet by hand, with a note the customer sees, under the actor's name — a debit past the
+     * balance too, anyone's (an agent's past their credit), down to a debt of DEBT_MAX: a debt, nothing they may spend —,
+     * and under the request's Idempotency-Key `$key` when it sent one: the same change asked again is answered by the line
+     * it wrote (`wasRecentlyCreated` false), never made twice.
      *
      * @param array<string, mixed> $input {type: credit|debit, amount, description?}
      * @throws ActorRefusedException 403 one of the shop's admins' own wallet; from the report group, an agent's
-     * @throws ValidationException
+     * @throws ValidationException 422 under the field refused — on `amount`, a debit past DEBT_MAX (DEBT_PAST_MAX)
      * @throws KeyReusedException 422 on `idempotency_key`: the key wrote another line
      */
     public function adjustWallet(User $user, Actor $actor, array $input, ?string $key = null): WalletTransaction
@@ -203,9 +214,9 @@ final class UserActions
             return $this->wallet->credit($user, $amount, $note ?? WalletService::LINE_CREDIT_BY_SUPPORT, $actor->reviewer, $key);
         }
         try {
-            return $this->wallet->debit($user, $amount, $note ?? WalletService::LINE_DEBIT_BY_SUPPORT, reviewer: $actor->reviewer, key: $key);
+            return $this->wallet->debit($user, $amount, $note ?? WalletService::LINE_DEBIT_BY_SUPPORT, self::DEBT_MAX, $actor->reviewer, $key);
         } catch (InsufficientBalanceException $e) {
-            throw ValidationException::on('amount', 'موجودی کاربر ' . Money::format($e->balance) . ' است و از این بیشتر نمی‌شود کم کرد.');
+            throw ValidationException::on('amount', sprintf(self::DEBT_PAST_MAX, Money::format(self::DEBT_MAX), Messages::balance($e->balance)));
         }
     }
 

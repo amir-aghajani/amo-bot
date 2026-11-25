@@ -44,7 +44,7 @@ without the right to manage topics.
 | «رسیدها» | A copy of each card receipt with what it pays for and the card it was shown («🏦 کارت: …», or «🏦 کارت در پیوی پشتیبانی داده شد» for one taken in support's private chat), «✅ تایید» and «❌ رد»; then its verdict as a reply to it; receipts support dismissed at once («🗑»): how many, and support's note; and the bank deposits (an SMS ForApp forwarded, or one Rikhtam reported) that approved nothing while «تایید خودکار واریز» is on — «💰 واریز بدون پرداخت», «⚠️ واریز با چند پرداخت هم‌مبلغ» ([Payment methods](Payment-Methods.md#confirmed-by-the-banks-sms)) |
 | «کاربران جدید» | A newcomer, and who brought them; a referrer whose referrals look made up ([Referrals](Referrals.md)) |
 | «خطاها» | A paid order whose delivery failed, with why and «🔁 تلاش دوباره برای تحویل»; an online payment held for support, once («⚠️ پرداخت آنلاین برای بررسی پشتیبانی نگه داشته شد»): the customer, what it pays for, the amount and the method, its id at the gateway, why and what the gateway said, and — when support's «استعلام از درگاه» is what found it — who asked; and, for one still waiting, that its order takes no other payment and is never cancelled by itself until you look at it ([Payment methods](Payment-Methods.md#a-payment-held-for-you)); in the main bot's group also a server's panel that stopped answering («🔴») and answers again («🟢»), and a move of a server's services to another starting («🚚») and ending — done («✅»), stopped because the target could take no more («⛔️»), or cancelled («⏹») — with its numbers ([Servers](Servers.md#moving-its-services)) |
-| «نمایندگی» | The main bot's group alone: a request to become an agent with its buttons, then the verdict; a purchase of traffic; an agent's selling suspended («⛔️», with why and what opens it again) and opened again («✅») ([Agency](Agency.md)) |
+| «نمایندگی» | The main bot's group alone: a request to become an agent — or an agent's to renew their agency («🔄», with their bot and its end) — with its buttons, then the verdict; a purchase of traffic; an agent's selling suspended («⛔️», with why and what opens it again) and opened again («✅») ([Agency](Agency.md)) |
 | «تیکت‌ها» | A ticket opened, then every later message, its closing, opening again and rating — [Support tickets](Support-Tickets.md#from-the-report-group) |
 | «نظرات» | A review written on the website: its number, name, stars, where they use the service from, who wrote it, the words — no buttons: it is decided on the panel's «نظرات» ([Reviews](Reviews.md)) |
 | «پشتیبان‌گیری» | The shop's backup, as a file, once a day by default: in the main bot's group the whole installation's — every shop, the servers, the agents —, in an agent's group its own shop's; with what it is of, the date, its size and rows, and where it is restored. One larger than Telegram takes from a bot (50 MB) is said in a line instead, to download from the panel. It is sent at its time, apart from the queue below ([Backups](Backups.md#in-the-report-group)) |
@@ -75,7 +75,10 @@ first standing; a decision made elsewhere takes the buttons off. The group's but
 - **An agency request** (the main bot's group) — «✅ تایید» offers a button per level and approves with the program's
   credit; «❌ رد» rejects it, without a note. An admin never approves their own request. An approval the shop refuses
   as the request stands — the agency would end after 17 January 2038 («۲۸ دی ۱۴۱۶»), say — says why in a popup and
-  keeps the request's buttons, for another try once the program's terms are put right.
+  keeps the request's buttons, for another try once the program's terms are put right. Under a renewal request («🔄
+  درخواست تمدید نمایندگی»), «✅ تایید» asks no level: it moves the agent's end on by the program's «مدت نمایندگی» at
+  once («✅ نمایندگی تمدید شد تا …»); with no term in the program, or no end left to move on, the popup says so and the
+  buttons stay, for the panel's «نمایندگان» to give an end ([Agency](Agency.md#renewing-an-agency)).
 - **A ticket** — your reply to any of a ticket's reports, in words or a photo with a caption, is the answer; «🔒 بستن
   تیکت» closes it ([Support tickets](Support-Tickets.md#from-the-report-group)).
 - **A customer** — see below.
@@ -105,7 +108,9 @@ back to the front:
   client goes off its panel too. While an order of the service is open, the service says which one holds its delete.
 - **«👛 کیف پول»** — the balance, an agent's credit, the ledger's latest five lines and who wrote them. «➕ افزایش
   موجودی» / «➖ کاهش موجودی» ask for the amount — any digits, «۵۰ هزار تومان» too — and, on a second line, a note the
-  customer reads in their wallet's history ([The wallet](Customers.md#the-wallet)).
+  customer reads in their wallet's history ([The wallet](Customers.md#the-wallet)); a decrease that would leave the
+  balance below zero is asked first — the debt it leaves («موجودی بعد از آن: … تومان بدهی»), «✅ تایید» / «⬅️ انصراف» —
+  and written once, however often «تایید» is pressed.
 - **«➕ سرویس دستی»** — a service made for them, as the panel's «افزودن سفارش» makes one: a plan (those that can be
   delivered now), a server, how it is paid — «🎁 رایگان», «👛 از کیف پول» or «💵 پرداخت بیرون از فروشگاه» at the plan's
   price, or «✍️ مبلغ دیگر» —, then the summary and «✔️ بله، ساخته شود». It is delivered at once and the customer told; a

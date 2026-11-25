@@ -833,11 +833,11 @@ Credit or debit a customer's wallet.
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
 | `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
-| `Idempotency-Key` | header | string matching `^[A-Za-z0-9_-]{1,64}$` | no | A key the caller makes for each credit or debit (a UUID; the panels send one with every change, and a new one once it went through or the form was edited): 1 to 64 Latin letters, digits, `-` and `_`. Without one, every request is a change of its own. Repeating the request with the same key (a network retry, its answer lost) answers with the line the key wrote (a 200) and the wallet as it is now: never a second credit or debit, even when two arrive at the same moment, and never refused for what changed since (a debit the balance no longer covers). The same key with another `type`, `amount` or `description` is a 422 on `idempotency_key`; so is a malformed key. A key is the customer's for good: the next change takes a new key. |
+| `Idempotency-Key` | header | string matching `^[A-Za-z0-9_-]{1,64}$` | no | A key the caller makes for each credit or debit (a UUID; the panels send one with every change, and a new one once it went through or the form was edited): 1 to 64 Latin letters, digits, `-` and `_`. Without one, every request is a change of its own. Repeating the request with the same key (a network retry, its answer lost) answers with the line the key wrote (a 200) and the wallet as it is now: never a second credit or debit, even when two arrive at the same moment, and never refused for what changed since (a debit that would now leave too deep a debt). The same key with another `type`, `amount` or `description` is a 422 on `idempotency_key`; so is a malformed key. A key is the customer's for good: the next change takes a new key. |
 
 **Body**, as JSON:
 
-A manual credit or debit, with the line the customer sees in their ledger. A debit cannot exceed the balance.
+A manual credit or debit, with the line the customer sees in their ledger. A debit may take anyone's balance below zero: a debt, which their next top-ups pay off first, and nothing they may spend. A debt past 1,000,000,000 Toman is a 422 on `amount`.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|

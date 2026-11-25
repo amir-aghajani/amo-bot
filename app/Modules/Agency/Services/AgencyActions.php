@@ -10,6 +10,7 @@ use App\Core\Exceptions\KeyReusedException;
 use App\Core\Exceptions\ValidationException;
 use App\Modules\Agency\DTO\AgencyTerms;
 use App\Modules\Agency\DTO\SellingTerms;
+use App\Modules\Agency\Enums\AgencyRequestKind;
 use App\Modules\Agency\Enums\AgencyRequestStatus;
 use App\Modules\Agency\Models\AgencyLevel;
 use App\Modules\Agency\Models\AgencyRequest;
@@ -28,6 +29,7 @@ use App\Support\Money;
 use App\Support\Traffic;
 use App\Support\Validation;
 use Illuminate\Database\ConnectionInterface;
+use Illuminate\Support\Carbon;
 
 /**
  * Decisions about the agency («نمایندگی»), wherever they are made: a customer's request, support's verdict (the agents
@@ -44,6 +46,19 @@ final class AgencyActions
     /** Refusals of terms for a customer who never was an agent, or whose agency ended (often a moment ago, elsewhere). */
     public const NOT_AGENT = 'این کاربر نماینده نیست.';
     public const AGENCY_ENDED = 'نمایندگی این کاربر پایان یافته است.';
+
+    /** Refusals of a renewal's end: the program's term to give, an agency with no end to move on, an end not ahead. */
+    public const RENEWAL_NO_TERM = 'در تنظیمات نمایندگی مدتی برای نمایندگی تعیین نشده است؛ پایان تازه را خودتان بدهید: در «نمایندگان» پنل یا «⚙️ مدیریت» ربات.';
+    public const RENEWAL_NO_END = 'نمایندگی این نماینده دیگر تاریخ پایان ندارد؛ درخواست را رد کنید، یا پایان تازه را خودتان بدهید: در «نمایندگان» پنل یا «⚙️ مدیریت» ربات.';
+    public const END_PASSED = 'تاریخ پایان تازه باید بعد از همین حالا باشد.';
+    public const END_EARLIER = 'پایان تازه نمی‌تواند زودتر از پایان فعلی نمایندگی باشد؛ برای کوتاه کردن نمایندگی، شرایط فروش نماینده را عوض کنید.';
+
+    /** Why an agent's renewal request is not filed: one waits already, or their agency has no end to move on. */
+    public const RENEWAL_WAITING = 'درخواست تمدید نمایندگی شما در انتظار بررسی است؛ نتیجه به شما اعلام می‌شود.';
+    public const RENEWAL_NOT_NEEDED = 'نمایندگی شما تاریخ پایان ندارد و تمدید لازم ندارد.';
+
+    /** A renewal request still waiting when the agency ended: closed with it. */
+    public const RENEWAL_CLOSED = 'با لغو نمایندگی بسته شد.';
 
     /** The most traffic the shop sets right at once, in GB. */
     private const ADJUST_MAX_GB = 100_000;
@@ -65,10 +80,125 @@ final class AgencyActions
         return CurrentBot::isMain() && $this->settings->enabled() && !$user->isAgent() && $this->pendingRequest($user) === null;
     }
 
-    /** The customer's request still waiting for support, if they have one. */
+    /** The customer's request to become an agent still waiting for support, if they have one. */
     public function pendingRequest(User $user): ?AgencyRequest
     {
-        return AgencyRequest::query()->where('user_id', $user->id)->where('status', AgencyRequestStatus::Pending->value)->latest('id')->first();
+        return self::pending($user, AgencyRequestKind::Join);
+    }
+
+    /**
+     * Whether the agent may ask for their agency's end to be moved on («درخواست تمدید نمایندگی»): an agent with a shop
+     * whose agency has an end, passed or not, and no such request waiting. The program's switch has no say: it closes
+     * the door to new agents, not to the ones there are.
+     */
+    public static function mayRequestRenewal(User $agent): bool
+    {
+        $bot = $agent->ownBot;
+
+        return $agent->isAgent() && $bot !== null && $bot->agency_expires_at !== null && self::pendingRenewal($agent) === null;
+    }
+
+    /** The agent's request for their agency's end to be moved on still waiting for support, if they have one. */
+    public static function pendingRenewal(User $agent): ?AgencyRequest
+    {
+        return self::pending($agent, AgencyRequestKind::Renewal);
+    }
+
+    /**
+     * Files the agent's request for their agency's end to be moved on — from the main bot, their panel or their own
+     * bot's «مدیریت», whichever shop the code runs in —; null when they may not (mayRequestRenewal()). Under a lock on
+     * their row, so two taps make one. Its report goes to the main bot's group, with «تایید» / «رد» (AgencyReview).
+     */
+    public function requestRenewal(User $agent): ?AgencyRequest
+    {
+        return $this->db->transaction(function () use ($agent): ?AgencyRequest {
+            $row = User::query()->withoutGlobalScope(CurrentBot::SCOPE)->whereKey($agent->id)->lockForUpdate()->first();
+            if ($row === null || !self::mayRequestRenewal($row)) {
+                return null;
+            }
+
+            $request = AgencyRequest::query()->create(['user_id' => $row->id, 'kind' => AgencyRequestKind::Renewal->value]);
+            $this->reports->agencyRequested($request);
+
+            return $request;
+        });
+    }
+
+    /**
+     * The end the program's term gives a renewal request's agent now (AgencyStanding::renewalEnd()) — what the report
+     * group's «تایید» gives, and the panel's when it names none.
+     *
+     * @throws ValidationException 422 on `expires_at`: the program sets no term, the agent's agency has no end any more,
+     *                             or the term ends past the last day the shop keeps (LocalTime::LAST_DAY)
+     */
+    public function termEnd(AgencyRequest $request): Carbon
+    {
+        $bot = $request->user->ownBot;
+        if ($bot === null || $bot->agency_expires_at === null) {
+            throw ValidationException::on('expires_at', self::RENEWAL_NO_END);
+        }
+        $end = $this->standing->renewalEnd($bot) ?? throw ValidationException::on('expires_at', self::RENEWAL_NO_TERM);
+        if (LocalTime::tooLate($end)) {
+            throw ValidationException::on('expires_at', LocalTime::tooLateFor('تاریخ پایان نمایندگی') . '؛ مدت نمایندگی را در تنظیمات نمایندگی کوتاه‌تر کنید یا تاریخ پایان را خودتان بنویسید.');
+        }
+
+        return $end;
+    }
+
+    /**
+     * Approves an agent's renewal request: their agency's end becomes `$end` (null: none at all) — never earlier than an
+     * end still ahead —, written with the request's verdict in one transaction that takes the agent's row first, as
+     * revoke() does. Once committed they are told the renewal, and the end settles as a changed end does
+     * (AgencyStanding::extended()): a suspension for an end passed lifts when the new one lies ahead — their bot selling
+     * again told after the renewal. Nobody approves their own request.
+     *
+     * @throws ActorRefusedException 403 their own request
+     * @throws ValidationException 422 on `status`: decided meanwhile (decided()), or the agency ended; on `expires_at`:
+     *                             an end not ahead, earlier than the end still ahead, or past the last day the shop keeps
+     */
+    public function renew(AgencyRequest $request, Actor $actor, ?Carbon $end): AgencyRequest
+    {
+        if (!$request->isRenewal()) {
+            throw new \LogicException("Agency request #{$request->id} asks to become an agent, not for a renewal.");
+        }
+        if ($request->status !== AgencyRequestStatus::Pending) {
+            throw ValidationException::on('status', self::decided($request));
+        }
+        if ($actor->is($request->user_id)) {
+            throw ActorRefusedException::ownRequest();
+        }
+        if ($end !== null && !$end->isFuture()) {
+            throw ValidationException::on('expires_at', self::END_PASSED);
+        }
+        if ($end !== null && LocalTime::tooLate($end)) {
+            throw ValidationException::on('expires_at', LocalTime::tooLateFor('تاریخ پایان نمایندگی') . '؛ برای بدون پایان، خالی بگذارید.');
+        }
+
+        [$agent, $bot] = $this->db->transaction(function () use ($request, $actor, $end): array {
+            $agent = User::query()->withoutGlobalScope(CurrentBot::SCOPE)->whereKey($request->user_id)->lockForUpdate()->first();
+            $bot = $agent?->ownBot;
+            if ($agent === null || !$agent->isAgent() || $bot === null) {
+                // An agency ended closes its renewal (revoke()): one still waiting is told as decided, else as ended.
+                throw ValidationException::on('status', $request->refresh()->status !== AgencyRequestStatus::Pending ? self::decided($request) : ($agent === null ? self::NOT_AGENT : self::notAgent($agent)));
+            }
+            $kept = $bot->agency_expires_at;
+            // To the minute, as an end is kept and compared (SellingTerms::same()).
+            if ($end !== null && $kept !== null && $kept->isFuture() && intdiv($end->getTimestamp(), 60) < intdiv($kept->getTimestamp(), 60)) {
+                throw ValidationException::on('expires_at', self::END_EARLIER);
+            }
+            if (!Transitions::move($request, 'status', [AgencyRequestStatus::Pending], AgencyRequestStatus::Approved, ['extended_to' => $end, 'reviewer' => $actor->name(), 'decided_at' => now()])) {
+                throw ValidationException::on('status', self::decided($request));
+            }
+            $this->standing->moveEnd($bot, $end);
+            $this->reports->agencyDecided($request);
+
+            return [$agent, $bot];
+        });
+
+        $this->notifier->agencyRenewed($agent, $end);
+        $this->standing->extended($bot);
+
+        return $request;
     }
 
     /**
@@ -106,6 +236,10 @@ final class AgencyActions
      */
     public function approve(AgencyRequest $request, Actor $actor, AgencyLevel $level, ?string $credit, ?SellingTerms $selling = null): AgencyRequest
     {
+        if ($request->isRenewal()) {
+            // Its approval would open the agent's shop afresh (begin()): their minimum's months and a suspension gone.
+            throw new \LogicException("Agency request #{$request->id} asks for a renewal: renew() approves it.");
+        }
         if ($actor->is($request->user_id)) {
             throw ActorRefusedException::ownRequest();
         }
@@ -134,7 +268,7 @@ final class AgencyActions
     }
 
     /**
-     * Rejects a request with the reason the customer reads (or none).
+     * Rejects a request — to become an agent, or a renewal — with the reason the customer reads (or none).
      *
      * @throws ValidationException 422 on `status`: decided meanwhile (decided())
      */
@@ -146,7 +280,11 @@ final class AgencyActions
             }
             $this->reports->agencyDecided($request);
         });
-        $this->notifier->agencyRejected($request->user, $reason);
+        if ($request->isRenewal()) {
+            $this->notifier->agencyRenewalRejected($request->user, $reason);
+        } else {
+            $this->notifier->agencyRejected($request->user, $reason);
+        }
 
         return $request;
     }
@@ -174,7 +312,8 @@ final class AgencyActions
 
     /**
      * Ends the agency: the level and credit go (a debt stays owed), their bot stops (Bot::status()) and its webhook is
-     * taken down, their panel sessions and login link end. Their shop is kept for a return. Of two at once, one does it.
+     * taken down, their panel sessions and login link end, and a renewal request of theirs still waiting is closed
+     * (RENEWAL_CLOSED; the agency's end tells them). Their shop is kept for a return. Of two at once, one does it.
      *
      * @throws ValidationException 422 on `status`: not an agent
      */
@@ -184,6 +323,8 @@ final class AgencyActions
             if (!self::whileAgent($agent, ['agency_level_id' => null, 'credit_limit' => '0'])) {
                 throw ValidationException::on('status', self::notAgent($agent));
             }
+            AgencyRequest::query()->where('user_id', $agent->id)->where('kind', AgencyRequestKind::Renewal->value)->where('status', AgencyRequestStatus::Pending->value)
+                ->update(['status' => AgencyRequestStatus::Rejected->value, 'reason' => self::RENEWAL_CLOSED, 'decided_at' => now()]);
             $bot = $agent->refresh()->ownBot;
             if ($bot !== null) {
                 Bot::query()->whereKey($bot->id)->increment('panel_epoch', 1, ['login_code' => null, 'login_code_expires_at' => null]);
@@ -258,6 +399,12 @@ final class AgencyActions
             AgencyRequestStatus::Rejected => 'این درخواست رد شده است.',
             AgencyRequestStatus::Pending => 'این درخواست هنوز در انتظار بررسی است.',
         };
+    }
+
+    /** The customer's request of `$kind` still waiting for support, if they have one. */
+    private static function pending(User $user, AgencyRequestKind $kind): ?AgencyRequest
+    {
+        return AgencyRequest::query()->where('user_id', $user->id)->where('kind', $kind->value)->where('status', AgencyRequestStatus::Pending->value)->latest('id')->first();
     }
 
     /** Why terms are refused: never an agent, or no longer one (their shop is kept when the agency ends). */

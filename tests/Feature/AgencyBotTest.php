@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Modules\Agency\Enums\AgencyRequestKind;
 use App\Modules\Agency\Enums\AgencyRequestStatus;
 use App\Modules\Agency\Enums\TrafficTransactionType;
 use App\Modules\Agency\Models\AgencyRequest;
@@ -24,10 +25,13 @@ use App\Modules\Telegram\Handlers\AgencyHandler;
 use App\Modules\Telegram\Handlers\PurchaseHandler;
 use App\Modules\Telegram\Keyboard\MainMenu;
 use App\Modules\Telegram\Messages;
+use App\Modules\Telegram\Models\ReportMessage;
 use App\Modules\Telegram\Texts\BotText;
 use App\Modules\Telegram\Update\CallbackData;
 use App\Modules\Users\Models\User;
+use App\Support\Persian;
 use App\Support\Traffic;
+use Illuminate\Support\Carbon;
 use Tests\BotTestCase;
 use Tests\Support\FakeTelegram;
 
@@ -37,8 +41,9 @@ use Tests\Support\FakeTelegram;
  * sell, wallet and credit, their bot, what it sold and what keeps it from running —, the traffic they buy (a preset or a
  * typed amount within the program's bounds, through the usual checkout as it stands when they pay; the wallet pays from
  * their credit too), their bot's token handed over (the message carrying it taken off the chat first, whatever comes of
- * it; the same bot only, never one another agent has), and the one-time link to their panel. With the program off,
- * customers are told so and lose the menu's button; agents keep their account.
+ * it; the same bot only, never one another agent has), the one-time link to their panel, and «درخواست تمدید نمایندگی»
+ * while their agency has an end (one request at a time, the main group told; the account says it waits). With the
+ * program off, customers are told so and lose the menu's button; agents keep their account.
  */
 final class AgencyBotTest extends BotTestCase
 {
@@ -389,19 +394,76 @@ final class AgencyBotTest extends BotTestCase
         self::assertSame(0, Bot::agents()->count());
     }
 
+    public function testAnAgentWhoseAgencyHasAnEndAsksForItToBeMovedOnOnce(): void
+    {
+        $this->reportGroup();
+        $agent = $this->agent();
+        $end = Carbon::now()->addDays(10);
+        $this->sellingTerms($this->agentBot($agent), $end);
+
+        $this->send($this->tap(MainMenu::AGENCY));
+        self::assertSame([AgencyHandler::TRAFFIC, 'agency:bot', 'agency:login', 'topup:start', AgencyHandler::RENEW], $this->callbacks(0), 'a row of its own, under the others');
+        self::assertStringNotContainsString(self::text(BotText::AgencyRenewalPending), $this->said()[0]);
+
+        $this->send($this->tap(AgencyHandler::RENEW));
+        $request = AgencyRequest::query()->sole();
+        self::assertSame([AgencyRequestKind::Renewal, $agent->id, AgencyRequestStatus::Pending], [$request->kind, $request->user_id, $request->status]);
+        self::assertSame([self::text(BotText::AgencyRenewalRequested)], $this->said());
+        self::assertSame([MainMenu::AGENCY], $this->callbacks(0), 'back to their account');
+        self::assertSame("agency:{$request->id}", ReportMessage::query()->where('topic', 'agency')->sole()->ref, "the main group's report, with «تایید» / «رد»");
+
+        // The second of two taps — or a button under an older notice —: nothing more filed, the account says it waits.
+        $this->send($this->tap(AgencyHandler::RENEW));
+        self::assertSame([1, 1], [AgencyRequest::query()->count(), ReportMessage::query()->where('topic', 'agency')->count()], 'one request, one report');
+        self::assertSame(AgencyActions::RENEWAL_WAITING, $this->popup(), 'why, in a popup');
+        self::assertCount(1, $this->said(), 'answered once');
+        self::assertStringContainsString(self::text(BotText::AgencyExpiryLine, ['date' => Persian::date($end, withTime: true)]) . "\n" . self::text(BotText::AgencyRenewalPending), $this->said()[0], 'under the end it would move on');
+        self::assertSame([AgencyHandler::TRAFFIC, 'agency:bot', 'agency:login', 'topup:start'], $this->offered(), 'nothing to ask while it waits');
+
+        $this->send($this->tap(MainMenu::AGENCY));
+        self::assertStringContainsString(self::text(BotText::AgencyRenewalPending), $this->said()[0]);
+        self::assertNotContains(AgencyHandler::RENEW, $this->callbacks(0));
+    }
+
+    public function testAnAgencyWithoutAnEndHasNoRenewalToAskFor(): void
+    {
+        $agent = $this->agent();
+        $bot = $this->agentBot($agent);
+
+        $this->send($this->tap(MainMenu::AGENCY));
+        self::assertNotContains(AgencyHandler::RENEW, $this->callbacks(0));
+
+        // A button under an older notice, the end taken away since: the account as it stands, nothing filed.
+        $this->send($this->tap(AgencyHandler::RENEW));
+        self::assertSame(0, AgencyRequest::query()->count());
+        self::assertSame(AgencyActions::RENEWAL_NOT_NEEDED, $this->popup(), 'why, in a popup');
+        self::assertSame([AgencyHandler::TRAFFIC, 'agency:bot', 'agency:login', 'topup:start'], $this->offered(), 'their account');
+
+        // A request filed before the owner took the end away still waits, and is still said.
+        $this->sellingTerms($bot, Carbon::now()->addDays(10));
+        self::assertNotNull($this->service(AgencyActions::class)->requestRenewal($agent));
+        $this->sellingTerms($bot, null);
+        $this->send($this->tap(MainMenu::AGENCY));
+        self::assertStringContainsString(self::text(BotText::AgencyRenewalPending), $this->said()[0]);
+        self::assertNotContains(AgencyHandler::RENEW, $this->callbacks(0));
+        $this->send($this->tap(AgencyHandler::RENEW));
+        self::assertSame([1, AgencyActions::RENEWAL_WAITING], [AgencyRequest::query()->count(), $this->popup()], 'the one waiting said first');
+    }
+
     public function testACustomerWhoIsNoAgentGetsNoneOfIt(): void
     {
         $this->agencyProgram();
         $this->customer();
         $terms = self::text(BotText::AgencyTerms, ['levels' => self::text(BotText::AgencyNoLevels)]);
 
-        foreach ([AgencyHandler::TRAFFIC, AgencyHandler::checkoutCallback(50), $this->payFor(50, $this->wallet), 'agency:bot', 'agency:login'] as $data) {
+        foreach ([AgencyHandler::TRAFFIC, AgencyHandler::checkoutCallback(50), $this->payFor(50, $this->wallet), 'agency:bot', 'agency:login', AgencyHandler::RENEW] as $data) {
             $this->send($this->tap($data));
             self::assertSame([$terms], $this->said(), "{$data}: the terms instead");
         }
         self::assertSame(0, Order::query()->count());
         self::assertSame(0, Bot::agents()->count());
         self::assertSame(0, User::query()->whereNotNull('agency_level_id')->count());
+        self::assertSame(0, AgencyRequest::query()->count());
     }
 
     /** The button that pays for `$gb` GB of traffic that way. */

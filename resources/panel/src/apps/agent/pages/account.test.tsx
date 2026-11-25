@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { toast } from 'sonner'
 import { describe, expect, it, vi } from 'vitest'
 import { AccountPage } from '@/apps/agent/pages/account'
@@ -14,16 +14,22 @@ vi.hoisted(() => window.history.replaceState(null, '', '/agent/'))
  * The agent's «حساب نمایندگی» (apps/agent/pages/account): an account that could not be read says so, its figures and
  * its bot «—» — nothing pulsing for ever; the bot's date is when its token was first handed over, and a bot whose token
  * is gone since is asked for it again — a warning: it stopped —, one never connected for its first; where traffic is
- * bought is said once, by the notice while the bot's traffic sells nothing; and every other browser signed in to the
- * agent's panel is signed out from here, after a second look, this one staying.
+ * bought is said once, by the notice while the bot's traffic sells nothing; the agency's renewal is asked for beside
+ * its end while the agent may, after a second look, and its latest request said — waiting, or what was decided —; and
+ * every other browser signed in to the agent's panel is signed out from here, after a second look, this one staying.
  */
 
 const GB = 1024 ** 3
 
 const BOT: AgentBot = { id: 2, username: 'agent_shop_bot', title: 'فروشگاه نماینده', status: 'active', connected: true, problem: null, traffic_balance: 50 * GB, connected_at: '2026-10-03T09:00:00Z' }
 
-/** The account as the server answers it, its bot as `bot` says. */
-function account(bot: Partial<AgentBot> = {}, shortage: AccountResponse['traffic_shortage'] = null, standing: AgencyStanding = agencyStanding()): AccountResponse {
+/** The account as the server answers it, its bot as `bot` says; no renewal asked for, none to ask unless `more` says so. */
+function account(
+  bot: Partial<AgentBot> = {},
+  shortage: AccountResponse['traffic_shortage'] = null,
+  standing: AgencyStanding = agencyStanding(),
+  more: Partial<AccountResponse['account']> = {},
+): AccountResponse {
   return {
     traffic_shortage: shortage,
     account: {
@@ -33,6 +39,9 @@ function account(bot: Partial<AgentBot> = {}, shortage: AccountResponse['traffic
       credit_limit: '0.00',
       balance: '25000.00',
       standing,
+      renewal: null,
+      actions: { request_renewal: false },
+      ...more,
     },
   }
 }
@@ -156,6 +165,28 @@ describe('the terms of selling', () => {
   })
 })
 
+describe('the wallet’s credit', () => {
+  it.each([
+    ['in use, some left to spend', '-20000.00', 'اعتبار خرید: ۱۰۰٬۰۰۰ تومان (در حال استفاده)'],
+    ['used up, the debt as much as the credit', '-100000.00', 'اعتبار خرید: ۱۰۰٬۰۰۰ تومان (تمام شده)'],
+    ['past, a debt beyond it by hand — never «in use»', '-280000.00', 'اعتبار خرید: ۱۰۰٬۰۰۰ تومان (تمام شده؛ بدهی از اعتبار گذشته است)'],
+    ['untouched without a debt', '25000.00', 'اعتبار خرید: ۱۰۰٬۰۰۰ تومان'],
+  ])('says whether any is left (%s)', async (_, balance, words) => {
+    server().on('GET', '/api/agent/account', json(account({}, null, agencyStanding(), { credit_limit: '100000.00', balance })))
+    open()
+
+    expect(await screen.findByText(words)).toBeTruthy()
+  })
+
+  it('under half a Toman below zero is no debt', async () => {
+    server().on('GET', '/api/agent/account', json(account({}, null, agencyStanding(), { credit_limit: '100000.00', balance: '-0.40' })))
+    open()
+
+    expect(await screen.findByText('اعتبار خرید: ۱۰۰٬۰۰۰ تومان')).toBeTruthy()
+    expect(screen.queryByText(/بدهی/)).toBeNull()
+  })
+})
+
 describe('the other browsers signed in to the panel', () => {
   it('are signed out after confirmation while this one stays, and a refusal is shown in the dialog', async () => {
     vi.spyOn(toast, 'success')
@@ -179,5 +210,93 @@ describe('the other browsers signed in to the panel', () => {
         .sent('POST', '/api/agent/auth/sessions/end')
         .map((request) => request.body),
     ).toEqual([undefined, undefined])
+  })
+})
+
+describe('renewing the agency', () => {
+  const END = agencyStanding({ expires_at: '2027-01-10T20:00:00Z' })
+  const PASSED = agencyStanding({ expires_at: '2026-09-23T10:00:00Z', suspension: { reason: 'expired', since: '2026-09-23T10:00:00Z' } })
+  const renewal = (changes: Partial<NonNullable<AccountResponse['account']['renewal']>>): AccountResponse['account']['renewal'] => ({
+    id: 3,
+    status: 'pending',
+    extended_to: null,
+    reason: null,
+    created_at: '2026-10-05T09:00:00Z',
+    decided_at: null,
+    ...changes,
+  })
+
+  it('is asked for beside the end, after a confirmation — the answer is the account, the request waiting and nothing more to ask', async () => {
+    vi.spyOn(toast, 'success')
+    server()
+      .on('GET', '/api/agent/account', json(account({}, null, END, { actions: { request_renewal: true } })))
+      .on('POST', '/api/agent/account/renewal', json(account({}, null, END, { renewal: renewal({}), actions: { request_renewal: false } }), 201))
+    open()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'درخواست تمدید نمایندگی' }))
+    const dialog = await screen.findByRole('dialog', { name: 'درخواست تمدید نمایندگی' })
+    expect(server().sent('POST', '/api/agent/account/renewal')).toEqual([])
+    fireEvent.click(within(dialog).getByRole('button', { name: 'فرستادن درخواست' }))
+
+    await until(() => expect(toast.success).toHaveBeenCalledWith('درخواست تمدید نمایندگی فرستاده شد'))
+    expect(
+      server()
+        .sent('POST', '/api/agent/account/renewal')
+        .map((request) => request.body),
+    ).toEqual([undefined])
+    expect(await screen.findByText(/^درخواست تمدید شما در انتظار بررسی است؛ .+ فرستاده شد\.$/)).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'درخواست تمدید نمایندگی' })).toBeNull()
+  })
+
+  it('is not offered while the agent may not ask — no end, or one waiting', async () => {
+    server().on('GET', '/api/agent/account', json(account()))
+    open()
+
+    expect(await screen.findByText('پایان نمایندگی')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'درخواست تمدید نمایندگی' })).toBeNull()
+  })
+
+  it('refused (one sent meanwhile from the main bot), says so in the dialog and reads the account again', async () => {
+    const waiting = 'درخواست تمدید نمایندگی شما در انتظار بررسی است؛ نتیجه به شما اعلام می‌شود.'
+    server()
+      .on('GET', '/api/agent/account', json(account({}, null, END, { actions: { request_renewal: true } })))
+      .on('POST', '/api/agent/account/renewal', refusal(422, waiting, { status: [waiting] }))
+    open()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'درخواست تمدید نمایندگی' }))
+    const dialog = await screen.findByRole('dialog', { name: 'درخواست تمدید نمایندگی' })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'فرستادن درخواست' }))
+
+    expect(await within(dialog).findByText(waiting)).toBeTruthy()
+    await until(() => expect(server().sent('GET', '/api/agent/account')).toHaveLength(2))
+  })
+
+  // Said of the decision, in the past — what it made the end then —, never as the end now: support may have moved it since
+  // (END is not the end that approval gave).
+  it.each([
+    ['approved with an end', renewal({ status: 'approved', extended_to: '2026-12-01T20:00:00Z', decided_at: '2026-10-06T09:00:00Z' }), /^درخواست تمدید شما .+ تایید شد و پایان نمایندگی .+ شد\.$/],
+    ['approved with none', renewal({ status: 'approved', decided_at: '2026-10-06T09:00:00Z' }), /^درخواست تمدید شما .+ تایید شد و نمایندگی بدون پایان شد\.$/],
+    ['rejected', renewal({ status: 'rejected', reason: 'خرید ماهانه کم بود', decided_at: '2026-10-06T09:00:00Z' }), /^درخواست تمدید شما .+ رد شد\. توضیح پشتیبانی: خرید ماهانه کم بود$/],
+  ])('says the last decision (%s), beside the way to ask again', async (_, last, words) => {
+    server().on('GET', '/api/agent/account', json(account({}, null, END, { renewal: last, actions: { request_renewal: true } })))
+    open()
+
+    expect(await screen.findByText(words)).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'درخواست تمدید نمایندگی' })).toBeTruthy()
+  })
+
+  it('is where the selling notice of an end passed leads — or it says the request waits', async () => {
+    server().on('GET', '/api/agent/account', json(account({}, null, PASSED, { actions: { request_renewal: true } })))
+    open()
+
+    expect((await screen.findByRole('alert')).textContent).toContain('برای تمدید، «درخواست تمدید نمایندگی» را در بخش «شرایط فروش» همین صفحه بزنید.')
+    cleanup()
+
+    server().on('GET', '/api/agent/account', json(account({}, null, PASSED, { renewal: renewal({}) })))
+    open()
+
+    const notice = await screen.findByRole('alert')
+    expect(notice.textContent).toContain('درخواست تمدید شما در انتظار بررسی است.')
+    expect(notice.textContent).not.toContain('پشتیبانی فروشگاه اصلی تماس')
   })
 })

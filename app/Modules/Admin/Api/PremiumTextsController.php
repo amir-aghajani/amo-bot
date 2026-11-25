@@ -12,6 +12,7 @@ use App\Modules\Telegram\Admin\OwnerLinks;
 use App\Modules\Telegram\Emoji\EmojiMap;
 use App\Modules\Telegram\Emoji\PremiumCheck;
 use App\Modules\Telegram\Emoji\PremiumEmojiStatus;
+use App\Modules\Telegram\Keyboard\MainMenu;
 use App\Modules\Telegram\Texts\BotTexts;
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
@@ -34,6 +35,7 @@ final class PremiumTextsController extends ApiController
         private readonly PremiumEmojiStatus $status,
         private readonly PremiumCheck $check,
         private readonly OwnerLinks $links,
+        private readonly MainMenu $menu,
     ) {}
 
     /** GET /bot/premium-texts */
@@ -93,14 +95,21 @@ final class PremiumTextsController extends ApiController
         return $this->links->ids() ?: throw ValidationException::on('check', self::NOWHERE);
     }
 
+    /**
+     * The switch and the map; `emojis`, every plain emoji the shop's texts and its inline start menu (as a customer is
+     * shown it: MainMenu::shown()) carry where the map would draw it premium, with the premium emoji swapped in
+     * (EmojiMap::inventory()); and the bot's ability as found.
+     */
     private function present(Response $response): Response
     {
         $stored = $this->map->stored();
-        $uses = EmojiMap::uses(array_column($stored['items'], 'emoji'), $this->texts->wordings());
+        $wordings = $this->texts->wordings();
+        $uses = EmojiMap::uses(array_column($stored['items'], 'emoji'), $wordings);
 
         return $this->json($response, ['premium_texts' => [
             'enabled' => $stored['enabled'],
             'items' => array_map(static fn(array $item): array => $item + ['texts' => $uses[EmojiMap::key($item['emoji'])] ?? 0], $stored['items']),
+            'emojis' => EmojiMap::inventory($wordings, $this->menu->shown()->iconable(), $stored['items']),
             'status' => $this->status->current(),
             'can_enable' => $this->map->canEnable(),
             'max' => EmojiMap::MAX,

@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { useId, type ReactNode } from 'react'
 import type { QueryKey } from '@tanstack/react-query'
 import { ArrowDownLeft, ArrowUpRight, Check } from 'lucide-react'
 import { Field } from '@/components/field'
@@ -38,6 +38,12 @@ interface BalanceAdjustProps<A extends string, N extends string, R> {
   whole?: boolean
   /** Under the amount as it is typed: «= ۵۰٬۰۰۰ تومان». */
   amountHint?: (amount: string) => string | undefined
+  /**
+   * A warning under the fields while an amount is typed — what the change would leave where it matters, so a zero too
+   * many shows before it goes: a wallet's debit below zero, «موجودی پس از کاهش: ۲۰٬۰۰۰ تومان بدهی». None unless passed
+   * (an agent's traffic never goes below zero: the server refuses it).
+   */
+  preview?: (direction: Direction, amount: string) => string | undefined
   noteHint: string
   notePlaceholders: Record<Direction, string>
   submitLabels: Record<Direction, string>
@@ -64,7 +70,7 @@ interface BalanceAdjustProps<A extends string, N extends string, R> {
  * the same key, so the server makes it once. After a change the form is ready for the next one in the same direction.
  */
 export function BalanceAdjust<A extends string, N extends string, R>(props: BalanceAdjustProps<A, N, R>) {
-  const { balanceLabel, balance, fields, amountLabel, amountPlaceholder, whole = false, amountHint, noteHint, notePlaceholders, submitLabels, send, invalidates, onDone, onCancel } = props
+  const { balanceLabel, balance, fields, amountLabel, amountPlaceholder, whole = false, amountHint, preview, noteHint, notePlaceholders, submitLabels, send, invalidates, onDone, onCancel } = props
   const blank = (direction: Direction) => ({ direction, [fields.amount]: '', [fields.note]: '' }) as Values<A, N>
   // What would be lost is what was typed: a direction picked and nothing more changes no balance.
   const { values, set, reset, error, setErrors, formError, busy, dirty, submit, handleSubmit } = useForm<Values<A, N>>(() => blank('add'), {
@@ -73,6 +79,8 @@ export function BalanceAdjust<A extends string, N extends string, R>(props: Bala
   const requestKey = useRequestKey()
   const typed = values[fields.amount]
   const amount = whole ? wholeOf(typed) : decimalOf(typed)
+  const warning = amount !== null ? preview?.(values.direction, amount) : undefined
+  const warned = useId()
 
   const save = handleSubmit(async () => {
     if (amount === null) {
@@ -99,19 +107,30 @@ export function BalanceAdjust<A extends string, N extends string, R>(props: Bala
         <PageTabs as="choice" value={values.direction} onChange={(direction) => set('direction', direction)} tabs={DIRECTIONS} aria-label="نوع تغییر" size="sm" className="w-fit" />
         <div className="grid gap-4 @md:grid-cols-[1fr_1.4fr]">
           <Field id="adjust_amount" label={amountLabel} error={error(fields.amount)} hint={amount !== null ? amountHint?.(amount) : undefined}>
-            <Input
-              dir="ltr"
-              inputMode={whole ? 'numeric' : 'decimal'}
-              autoComplete="off"
-              placeholder={amountPlaceholder}
-              value={typed}
-              onChange={(e) => set(fields.amount, e.target.value as Values<A, N>[A])}
-            />
+            {(control) => (
+              <Input
+                {...control}
+                // The warning, while it shows, describes the amount too.
+                aria-describedby={[control['aria-describedby'], warning !== undefined ? warned : undefined].filter(Boolean).join(' ') || undefined}
+                dir="ltr"
+                inputMode={whole ? 'numeric' : 'decimal'}
+                autoComplete="off"
+                placeholder={amountPlaceholder}
+                value={typed}
+                onChange={(e) => set(fields.amount, e.target.value as Values<A, N>[A])}
+              />
+            )}
           </Field>
           <Field id="adjust_note" label="توضیح" optional error={error(fields.note)} hint={noteHint}>
             <NoteLine max={LEDGER_NOTE_MAX} value={values[fields.note]} onChange={(e) => set(fields.note, e.target.value as Values<A, N>[N])} placeholder={notePlaceholders[values.direction]} />
           </Field>
         </div>
+        {/* Always there where a warning can come (a live region announces what changes in it), its words swapped. */}
+        {preview && (
+          <p id={warned} role="status" className="text-footnote font-medium text-danger empty:sr-only">
+            {warning ?? ''}
+          </p>
+        )}
         {/* Held while no amount is typed — not disabled: after a change the amount is emptied under the submit just
             pressed, which keeps the focus. */}
         <FormActions error={formError} onCancel={onCancel} submitLabel={submitLabels[values.direction]} busy={busy} held={typed.trim() === ''} icon={Check} dirty={dirty} />

@@ -9,6 +9,7 @@ import { PageHeader } from '@/components/page-header'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { BotTextRow, BotTextsResponse, KeyboardLayoutData } from '@/lib/api-types'
 import { botTextsQuery, keyboardsQuery, premiumTextsQuery } from '@/lib/queries'
+import { queryKeys } from '@/lib/query-keys'
 
 /** The bot text the start menu goes out with (BotText::Welcome). */
 const WELCOME = 'welcome'
@@ -32,8 +33,11 @@ export function KeyboardsPage() {
     [text, icons],
   )
 
-  const replace = (keyboard: KeyboardLayoutData) =>
+  const replace = (keyboard: KeyboardLayoutData) => {
     queryClient.setQueryData(keyboardsQuery.queryKey, (current) => current && { ...current, keyboards: current.keyboards.map((k) => (k.name === keyboard.name ? keyboard : k)) })
+    // The start menu's buttons count in «ایموجی پرمیوم متن‌ها» (where each emoji is) while it is inline buttons.
+    void queryClient.invalidateQueries({ queryKey: queryKeys.premiumTexts })
+  }
 
   return (
     <Page width="default">

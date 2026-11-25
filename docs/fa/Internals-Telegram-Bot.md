@@ -189,6 +189,13 @@ Subscriptions، Support…)، هرگز در خود هندلر: ربات فقط �
   بی‌پلنی که اکانت تست نیست — افزوده‌شده با لینکش، یا ساخته‌شده — روی پلنی که انتخاب می‌کند تمدید می‌شود، با
   انتخاب‌گر `RenewalHandler`، یا با بسته‌ای که ساخته می‌شود: قدم‌های <code dir="ltr">custom:r:…</code> در
   `CustomServiceHandler`، که پیش‌فاکتور را به <code dir="ltr">RenewalHandler::checkout()</code> برمی‌گردانند).
+- **درخواست تمدید نمایندگی**: <code dir="ltr">Buttons::renewAgencyFor()</code> همان «🔄 درخواست تمدید نمایندگی»
+  (<code dir="ltr">agency:renew</code>) است تا وقتی <code dir="ltr">AgencyActions::mayRequestRenewal()</code> اجازه بدهد، زیر
+  حساب نماینده (`AgencyHandler`)؛ <code dir="ltr">Buttons::renewAgency()</code> همیشه زیر پیام‌های نزدیک شدن و گذشتن پایان
+  نمایندگی (`CustomerNotifier`) هست، که متنشان می‌گوید آن را بزند. <code dir="ltr">AgencyHandler::renew()</code> آن را ثبت
+  می‌کند (<code dir="ltr">AgencyActions::requestRenewal()</code>) و `AgencyRenewalRequested` را می‌گوید؛ اگر پذیرفته نشود،
+  دلیلش را در یک پیام کوتاه می‌گوید (`RENEWAL_WAITING`، `RENEWAL_NOT_NEEDED`) و حساب را همان‌طور که هست می‌کشد، که <code dir="ltr">AgencyTermLines::standing()</code> در آن تا وقتی درخواستی در انتظار است
+  `AgencyRenewalPending` را زیر پایان نمایندگی می‌گوید.
 
 برای افزودن یک صفحه: یک هندلر با ثابت پیشوند و سازنده‌هایش، خطش در `routes/bot.php` (با `navigation: true` وقتی باید از روند
 بیرون برود)، متن‌هایش به شکل caseهای `BotText`، و یک تست feature روی `BotTestCase`.
@@ -332,8 +339,23 @@ Subscriptions، Support…)، هرگز در خود هندلر: ربات فقط �
 رابط API پنل‌ها، `Admin\Api\PremiumTextsController` در گروه <code dir="ltr">$configuration</code> فایل `routes/api.php`:
 
 - مسیر <code dir="ltr">GET /bot/premium-texts</code> پاسخ
-  <code dir="ltr">{premium_texts: {enabled, items: [{emoji, emoji_id, texts}], status: {ok, checked_at} | null, can_enable, max}}</code>
-  را می‌دهد، که `texts` آن از <code dir="ltr">EmojiMap::uses()</code> روی <code dir="ltr">BotTexts::wordings()</code> می‌آید؛
+  <code dir="ltr">{premium_texts: {enabled, items: [{emoji, emoji_id, texts}], emojis: [{emoji, texts, menu, emoji_id}], status: {ok, checked_at} | null, can_enable, max}}</code>
+  را می‌دهد، که `texts` آن از <code dir="ltr">EmojiMap::uses()</code> روی <code dir="ltr">BotTexts::wordings()</code> می‌آید.
+  `emojis`، فهرستی که مدیر از آن عوض می‌کند، <code dir="ltr">EmojiMap::inventory()</code> است: هر ایموجی معمولی که متن‌ها
+  جایی دارند که فهرست آن را پرمیوم می‌کشید (<code dir="ltr">rewrite()</code> بدون فهرست همه را پیدا می‌کند و هیچ‌کدام را
+  عوض نمی‌کند) و ایموجی اول دکمه‌های منوی شروع، همان‌طور که به یک کاربر نشان داده می‌شود
+  (<code dir="ltr">MainMenu::shown()</code>: بدون دکمه برنامه‌های خاموش، و منوی پیش‌فرض وقتی چیزی نماند)، از دکمه‌هایی که
+  <code dir="ltr">KeyboardLayout::iconable()</code> می‌دهد (دکمه‌های منوی شیشه‌ای که آیکون خودشان را ندارند، همان‌هایی که
+  <code dir="ltr">premium()</code> به آن‌ها آیکون می‌دهد)، با <code dir="ltr">key()</code> شمرده، از پرکاربردترین، هر کدام
+  با ایموجی پرمیوم فهرست یا null؛ و بعد ایموجی‌هایی از فهرست که دیگر جایی نیستند. نشانه‌هایی که فقط با کد خود ایموجی
+  شمرده می‌شوند (━، ★، ✓) در آن نمی‌آیند مگر فهرست یکی از آن‌ها را داشته باشد:
+  <code dir="ltr">drawnAsEmoji()</code> نشانه انتخاب نوع (variation selector) یا علامت keycap، تصویری بعد از U+1F000، یا
+  حرفی از ویژگی Emoji یونیکد پیش از آن را می‌پذیرد (`DRAWN`، که آزمون نسخه پنل آن را با خود یونیکد می‌سنجد). نیم‌فاصله‌ای
+  (U+200C، یا U+200D) که یک grapheme به آن ختم می‌شود جزو ایموجی نیست (<code dir="ltr">untailed()</code>): پیش از کلیدش جدا
+  می‌شود و وقتی پرمیوم کشیده شود بعد از تگش می‌ماند؛ ایموجی اول یک دکمه یا برچسب منو که به آن ختم شود دست نمی‌خورد، همان‌طور
+  که <code dir="ltr">label()</code> و <code dir="ltr">icon()</code> آن را رها می‌کنند. <code dir="ltr">save()</code> آن را
+  از ایموجی هر مورد برمی‌دارد و نشانه‌ای را که تازه به فهرست اضافه شود با `NOT_EMOJI` رد می‌کند؛ نشانه‌ای که پیش‌تر ذخیره
+  شده می‌ماند؛
 - مسیر <code dir="ltr">PUT /bot/premium-texts</code> با <code dir="ltr">{enabled?, items?}</code> (کل فهرست) همان را پاسخ
   می‌دهد؛
 - مسیر <code dir="ltr">POST /bot/premium-texts/check</code> همان را با وضعیت تازه پاسخ می‌دهد. به
@@ -466,7 +488,10 @@ Subscriptions، Support…)، هرگز در خود هندلر: ربات فقط �
   پیامی که ربات ثبت کرده با چیزی که به آن جواب می‌دهد جور می‌شود، هرگز از روی کلمه‌های آن پیام، که ممکن است مال یک کاربر
   باشد. تایید درخواست نمایندگی‌ای که به همان شکل رد شود — درخواست خود همان مدیر، یا نمایندگی‌ای که مدت برنامه پایانش را از
   آخرین روزی که فروشگاه نگه می‌دارد می‌گذراند — دکمه‌هایش را برای تلاشی دیگر سر جایشان می‌گذارد؛ فقط درخواستی که در این
-  فاصله درباره‌اش تصمیم گرفته شده آن‌ها را برمی‌دارد.
+  فاصله درباره‌اش تصمیم گرفته شده آن‌ها را برمی‌دارد. «تایید» درخواست تمدید سطحی انتخاب نمی‌کند:
+  <code dir="ltr">AgencyReview::renew()</code> همان <code dir="ltr">AgencyActions::termEnd()</code> را یک‌جا می‌دهد، و اگر
+  پذیرفته نشود (مدتی نیست، پایانی نیست، از آن روز می‌گذرد) پاپ‌آپی روی دکمه‌ها می‌ماند؛ گزارش و نتیجه‌اش متن‌های خود
+  `ShopReports` است.
 - **پشتیبان** — تاپیک <code dir="ltr">Topic::Backups</code> گزارش صف‌شده ندارد: `Backups\Tasks\SendBackupsTask`
   فایل فروشگاه را خودش، سر وقت خودش، جدا از صف و سرعت آن به رشته این تاپیک می‌فرستد
   ([معماری](Architecture.md#پشتیبان‌گیری)).
@@ -481,7 +506,10 @@ Subscriptions، Support…)، هرگز در خود هندلر: ربات فقط �
 می‌دهد، که <code dir="ltr">&lt;who&gt;</code> شناسه تلگرام، یک @username یا شماره کاربر در فروشگاه (<code dir="ltr">#12</code>) است. روی کارت
 می‌گوید او کیست و بخش‌ها را باز می‌کند، هر کدام هندلری با پیشوند callback خودش زیر `Reports\Customers` که کارت را همان‌جا
 بازنویسی می‌کند، با «⬅️ بازگشت» به روی کارت: `CustomerServices` (همگام‌سازی، زمان و حجم، غیرفعال و فعال کردن و حذف یک
-سرویس)، `CustomerWallet` (افزایش یا کاهش با توضیح)، `CustomerOrder` (سرویسی که دستی ساخته می‌شود، مثل «افزودن سفارش»
+سرویس)، `CustomerWallet` (افزایش یا کاهش با توضیح؛ کاهشی که بدهی بگذارد دوباره پرسیده می‌شود و «✅ تایید» آن یک بار، با کلید
+همان پرسش، انجام می‌شود: آنچه می‌نویسد — کاربر، مبلغ، پرسش و توضیح — با nonce آن به دست
+<code dir="ltr">CustomerCards::replyNonce()</code> روی کارت ثبت می‌شود و هرگز از داده دکمه خوانده نمی‌شود؛ «⬅️ انصراف»، یا
+پرسشی تازه روی همان کارت، آن را با <code dir="ltr">CustomerCards::dropNonces()</code> کنار می‌گذارد)، `CustomerOrder` (سرویسی که دستی ساخته می‌شود، مثل «افزودن سفارش»
 پنل: `ManualOrders`، و دکمه تایید یک nonce به‌عنوان کلید سفارش دارد)، `CustomerDiscount`، `CustomerHistory` (سفارش‌ها،
 پرداخت‌ها، تیکت‌ها، زیرمجموعه‌ها — فقط خواندنی)، `CustomerAccount` (ورود به وب‌سایت: خاموش کردن ورود دومرحله‌ای، خروج از
 همه دستگاه‌ها) و `CustomerMessage` (پیامی از طرف پشتیبانی، مثل «ارسال پیام» پنل، روی کارت هر کسی جز خود مدیر)؛ گروه‌ها،
@@ -625,7 +653,12 @@ principal آن اجرا می‌شود، و هر تغییر (نه GET) با جا�
 <code dir="ltr">Admin::confirm(question, yes, no, detail, danger)</code> پیش از تغییری که برنمی‌گردد می‌پرسد: «بله» سبز است، یا
 قرمز جایی که چیزی را از بین می‌برد (<code dir="ltr">danger: true</code>، یا وقتی null بماند، «بله»ای که برچسبش با 🗑 🚫 ⛔ 🛑 ✂️
 شروع شود؛ آن را با <code dir="ltr">Words::yes('حذف شود', '🗑')</code> بسازید تا آیکونش همین را بگوید)، و «بله»ای که رنگ خودش را
-دارد همان را نگه می‌دارد. هر دو هر کلمه انصرافی را که راه بیرون رفتنشان دارد به شکل `Words::CANCEL` می‌کشند.
+دارد همان را نگه می‌دارد. هر دو هر کلمه انصرافی را که راه بیرون رفتنشان دارد به شکل `Words::CANCEL` می‌کشند. سوالی
+که دو صفحه دارند یک خانه دارد: پایان نمایندگی <code dir="ltr">Owner\Agency\AgencyEnd::prompt()</code> است (تعداد روز یا یک
+روز شمسی نوشته‌شده، «بدون پایان»، `DAYS` از امروز، و اول انتخاب‌های خود صفحه) با <code dir="ltr">read()</code>، که هم
+شرایط یک نماینده (`TermsScreen`) آن را می‌پرسد و هم تایید یک تمدید (`AgencyRenewScreen`، `agrn`: «✅ تایید» درخواست
+تمدید در `agrv` آن را باز می‌کند، و `AgencyApproveScreen` تمدیدی را که از پنجره‌ای قدیمی‌تر برسد به آن می‌سپارد)، که
+پایان مدت نمایندگی را بدون `expires_at` می‌فرستد تا API خودش حسابش کند.
 
 **کارت‌های تنظیمات**: `Settings\SettingsScreen` یک کارت پنل است به شکل `FieldDef`هایی روی یک `SettingsSource`
 (`BotGroupSource` برای یک گروه «تنظیمات ربات»، `PatchSource`، `PutSource`)، که فیلد به فیلد ذخیره می‌شود، همان‌طور که پنل کارت
@@ -752,7 +785,7 @@ pollی که هنوز با توکن قدیمی باز است رها می‌شود
 سهمیه ثابتی از کوئری‌ها و فراخوانی‌های تلگرام پایبند نگه می‌دارد — سهمیه‌ای که بالا برود می‌گوید کوئری تازه چه چیزی می‌خرد
 (مثلا ردیف مینی‌اپ در منو). <code dir="ltr">miniApp()</code> مینی‌اپ فروشگاه را برای تست دکمه‌اش روشن می‌کند (`BotMenuTest`).
 unit testهای API، متن‌ها و کیبوردها در `tests/Unit/Telegram` هستند. ایموجی پرمیوم فروشگاه: `PremiumTextsTest` (فهرست
-در متن‌ها، بخش‌های پیام، popupها، دکمه‌ها، منو و لمس‌هایش)، `AdminPremiumTextsApiTest` (کلید، ردهای فهرست، جایی که
+در متن‌ها، بخش‌های پیام، popupها، دکمه‌ها، منو و لمس‌هایش)، `AdminPremiumTextsApiTest` (کلید، ایموجی‌هایی که متن‌ها دارند، ردهای فهرست، جایی که
 بررسی می‌رود) و `PremiumEmojiTest` (آنچه `BotApi` یاد می‌گیرد، فرستادن دوباره به شکل ساده، سقف). تست‌های مدیریت در `tests/Feature/BotAdmin` هستند:
 `BotAdminDoorTest` (نگهبان‌های ورودی)، `BotAdminFlowTest` (مالکی که با <code dir="ltr">OwnerLinks::link()</code> و
 <code dir="ltr">redeem()</code> وصل شده، <code dir="ltr">/admin</code>، ضربه‌ها با <code dir="ltr">Nav::to()</code>، پاسخ‌های

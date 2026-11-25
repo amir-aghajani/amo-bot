@@ -10,6 +10,7 @@ use App\Modules\Telegram\Admin\Ui\Fmt;
 use App\Modules\Telegram\Admin\Ui\Json;
 use App\Modules\Telegram\Admin\Ui\View;
 use App\Modules\Telegram\Admin\Ui\Words as UiWords;
+use App\Modules\Telegram\Messages;
 
 /**
  * «✏️ سطح، اعتبار و شرایط فروش» of an agent (the panel's AgentModal): their level, credit, end and monthly minimum — the
@@ -54,7 +55,7 @@ final class AgentTermsScreen extends TermsScreen
         $view->line('<i>' . implode(' · ', array_filter([
             '🤖 ' . ($bot === null ? 'هنوز ربات ندارد' : (is_string($bot['username'] ?? null) ? Fmt::ltr('@' . $bot['username']) : 'بدون توکن')),
             $bot === null ? null : 'حجم ' . Fmt::bytes((int) ($bot['traffic_balance'] ?? 0)),
-            'موجودی ' . Fmt::money((string) ($row['balance'] ?? '0')),
+            'موجودی ' . Fmt::e(Messages::balance((string) ($row['balance'] ?? '0'))),
         ])) . '</i>');
     }
 

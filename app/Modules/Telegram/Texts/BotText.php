@@ -372,6 +372,12 @@ enum BotText: string
     case AgencyMinimumShort = 'agency_minimum_short';
     case AgencySuspended = 'agency_suspended';
     case AgencyResumed = 'agency_resumed';
+    // «درخواست تمدید نمایندگی»: the agent asks for their agency's end to be moved on, support decides
+    case AgencyRenewalButton = 'agency_renewal_button';
+    case AgencyRenewalRequested = 'agency_renewal_requested';
+    case AgencyRenewalPending = 'agency_renewal_pending';
+    case AgencyRenewed = 'agency_renewed';
+    case AgencyRenewalRejected = 'agency_renewal_rejected';
     case ReceiptOutcomeTraffic = 'receipt_outcome_traffic';
     case AgencyNoBot = 'agency_no_bot';
     case AgencyBotNone = 'agency_bot_none';

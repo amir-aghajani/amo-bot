@@ -12,7 +12,7 @@ import { json, refusal, server } from '@/test/server'
 vi.mock('@/apps/app/config', () => import('@/apps/app/test/config'))
 
 /*
- * «کیف پول» (screens/wallet/wallet): the balance on its card — an agent's debt worded as the bot words it —, the actions
+ * «کیف پول» (screens/wallet/wallet): the balance on its card — a debt worded as the bot words it —, the actions
  * the shop's programs allow, the ledger's latest lines, and a gift code redeemed in its sheet.
  */
 
@@ -51,6 +51,37 @@ describe('the wallet', () => {
     const card = screen.getByRole('region', { name: 'موجودی کیف پول' })
     expect(card.textContent).toContain('۲۰٬۰۰۰')
     expect(card.textContent).toContain('قابل خرج: ۸۰٬۰۰۰ تومان')
+  })
+
+  it('says an agent past their credit (a debit by hand) has nothing to spend, never a minus', async () => {
+    open({ wallet: walletRow({ balance: '-280000.00', credit: '100000.00', spendable: '-180000.00' }) })
+
+    await until(() => expect(screen.getByRole('region', { name: 'موجودی کیف پول' }).textContent).toContain('۲۸۰٬۰۰۰'))
+    const card = screen.getByRole('region', { name: 'موجودی کیف پول' })
+    expect(card.textContent).toContain('تومان بدهی')
+    expect(card.textContent).toContain('قابل خرج: ۰ تومان')
+  })
+
+  it('words an ordinary customer’s debt as the bot does, with no credit to speak of, and the ledger’s line with the debt it left', async () => {
+    open({
+      wallet: walletRow({ balance: '-20000.00', credit: '0.00', spendable: '-20000.00' }),
+      lines: [ledgerRow({ id: 9, type: 'debit', amount: '30000.00', balance_after: '-20000.00', description: 'کاهش موجودی توسط پشتیبانی' })],
+    })
+
+    await until(() => expect(screen.getByRole('region', { name: 'موجودی کیف پول' }).textContent).toContain('۲۰٬۰۰۰'))
+    const card = screen.getByRole('region', { name: 'موجودی کیف پول' })
+    expect(card.textContent).toContain('تومان بدهی')
+    expect(card.textContent).not.toContain('قابل خرج')
+    expect(await screen.findByText('کاهش موجودی توسط پشتیبانی')).toBeTruthy()
+    expect(screen.getByText('بدهی ۲۰٬۰۰۰')).toBeTruthy()
+  })
+
+  it('words a ledger line left under half a Toman below zero as no debt, never «بدهی ۰»', async () => {
+    open({ lines: [ledgerRow({ id: 9, type: 'debit', amount: '25000.00', balance_after: '-0.40', description: 'کاهش موجودی توسط پشتیبانی' })] })
+
+    expect(await screen.findByText('کاهش موجودی توسط پشتیبانی')).toBeTruthy()
+    expect(screen.getByText('موجودی ۰')).toBeTruthy()
+    expect(screen.queryByText('بدهی ۰')).toBeNull()
   })
 
   it('offers no transfer nor gift code while the shop runs neither, and says when the ledger is empty', async () => {

@@ -48,7 +48,7 @@ token ([tokens and sessions](Store-API-Sign-In.md#tokens-and-sessions)).
 | `two_factor` | the password sign-in asks a second step ([two-factor sign-in](#two-factor-sign-in)) |
 | `phone` | their verified mobile in E.164 — as they shared it with the bot, or proved by a texted code on the website; while the website signs in by SMS it is a way in ([ways in](#ways-in-adding-and-removing)); `null` without one |
 | `phone_exempt` | the shop's phone rule never asks them for their number (`GET /`'s `shop.phone_required`, `shop.phone_moments`), through either key: support excused them, or they are the bot's admin — ask them nothing, whatever the shop asks |
-| `balance` | the wallet in Toman; below zero an agent's debt |
+| `balance` | the wallet in Toman; below zero a debt (an agent's credit in use, or support's debit by hand) |
 | `created_at` | since when they are the shop's customer |
 | `unread_notifications` | the count for the site's bell ([notifications](Store-API-Notifications.md)) |
 | `staff` | what the shop's admin API lets them do — their grants, whether this session is signed in strongly enough, until when it works the admin API and until when it counts as recent —; `null` for a customer who is no admin of the shop, while the website lets no admin in, through the mini app, which has no admin API, and for a session the mini app signed in, which the admin API refuses on the website too ([the shop's admins](Store-API-Admins.md#signing-in)) |

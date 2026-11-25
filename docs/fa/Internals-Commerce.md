@@ -428,8 +428,10 @@ database/schema.php، <code dir="ltr">createBuiltins()</code>، ارتقای 0.5
 کیف پول (`WalletService`) و حجم نماینده (`TrafficPool`) دفترهای تراکنش فقط‌افزودنی‌اند که از راه `Core\Database\Ledger`
 نوشته می‌شوند: ردیف صاحب دفتر قفل می‌شود، آخرین خط زیر قفل خوانده می‌شود، و هر خط موجودی بعد از خودش را دارد — آخرین
 خط *خود* موجودی است (<code dir="ltr">User::balance()</code>، <code dir="ltr">Bot::trafficBalance()</code>)، بی‌آنکه نسخه
-دیگری باشد که از آن فاصله بگیرد. برداشت فقط تا جایی می‌تواند زیر صفر برود که فراخواننده اجازه دهد (اعتبار یک نماینده).
-فهرست‌ها موجودی‌ها را همراه ردیف‌هایشان می‌خوانند (<code dir="ltr">User::balanceColumn()</code>)، هرگز با یک کوئری برای هر
+دیگری باشد که از آن فاصله بگیرد. برداشت فقط تا جایی می‌تواند زیر صفر برود که فراخواننده اجازه دهد: اعتبار یک نماینده
+وقتی خرید می‌کند؛ کاهش دستی پشتیبانی (<code dir="ltr">UserActions::adjustWallet()</code>) برای هر کسی، بدهی‌ای تا
+<code dir="ltr">UserActions::DEBT_MAX</code> (یک میلیارد تومان) — بدهی، هرگز اعتباری برای خرج کردن
+(<code dir="ltr">Checkout::shortfall()</code> آن را در مبلغی که شارژ باید بیاورد حساب می‌کند). فهرست‌ها موجودی‌ها را همراه ردیف‌هایشان می‌خوانند (<code dir="ltr">User::balanceColumn()</code>)، هرگز با یک کوئری برای هر
 ردیف.
 
 تغییرهای دستی پشتیبانی ممکن است با یک `Idempotency-Key` بیایند (پنل‌ها آن را می‌فرستند): افزایش یا کاهش کیف پول
@@ -477,7 +479,7 @@ database/schema.php، <code dir="ltr">createBuiltins()</code>، ارتقای 0.5
 - **جابه‌جایی** — <code dir="ltr">transfer()</code>: یک تراکنش که ردیف هر دو کاربر را به ترتیب شناسه قفل می‌کند (همان‌طور
   که <code dir="ltr">Ledger::merge()</code>، تا دو کاربری که هم‌زمان به هم پول می‌فرستند به نوبت منتظر بمانند)، انتقال‌های
   روز را با یک خواندن قفل‌دار جمع می‌زند، از فرستنده برمی‌دارد و به گیرنده واریز می‌کند (`InsufficientBalanceException` با
-  عبارت `SHORT`)، و هر خط نام طرف دیگر را می‌برد (`LINE_SENT`، `LINE_RECEIVED`، <code dir="ltr">User::shownAs()</code>)،
+  عبارت `SHORT`، یا برای کیف پول زیر صفر `IN_DEBT`، همان‌طور که <code dir="ltr">check()</code> می‌گوید)، و هر خط نام طرف دیگر را می‌برد (`LINE_SENT`، `LINE_RECEIVED`، <code dir="ltr">User::shownAs()</code>)،
   ردیف `wallet_transfers` را می‌نویسد — شناسه دو خط، چیزی که سقف جمع می‌زند و پنل‌ها کاربر طرف دیگر یک خط را از روی آن
   نشان می‌دهند (<code dir="ltr">UserDirectory::ledger()</code>، `WalletTransactionRow.counterpart`) — و
   <code dir="ltr">ShopReports::walletTransferred()</code> («شارژ کیف پول») را. بعد از commit،
@@ -625,6 +627,25 @@ database/schema.php، <code dir="ltr">createBuiltins()</code>، ارتقای 0.5
 آن کمتر بوده باشند، فروشگاه با یک نوشتن شرطی متوقف می‌ماند، این بار به خاطر کف خرید (و به نماینده و گروه همین گفته
 می‌شود). پایان نمایندگی‌ای که مدت برنامه هنگام تایید حساب می‌کند به مرز دیتابیس محدود است
 (<code dir="ltr">AgencyActions::approve()</code>، [دیتابیس](Database.md#زمان-و-مرز-۲۰۳۸)).
+
+درخواست تمدید («درخواست تمدید نمایندگی») یک ردیف <code dir="ltr">agency_requests</code> با <code dir="ltr">kind</code>
+برابر renewal است: <code dir="ltr">AgencyActions::requestRenewal()</code> آن را با قفل روی ردیف نماینده ثبت می‌کند —
+<code dir="ltr">mayRequestRenewal()</code>: نماینده‌ای با فروشگاه که نمایندگی‌اش پایان دارد و تمدیدی در انتظار ندارد —،
+از هر فروشگاهی که درخواست بیاید (پنل نماینده و «مدیریت» رباتش در فروشگاه خود او اجرا می‌شوند)، و گزارشش در گروه اصلی.
+<code dir="ltr">renew()</code> آن را با یک پایان (null: بدون پایان؛ هرگز زودتر از پایانی که هنوز نرسیده) تایید
+می‌کند: تصمیم و پایان (<code dir="ltr">AgencyStanding::moveEnd()</code>) در یک تراکنش که اول ردیف نماینده را قفل می‌کند،
+مثل <code dir="ltr">revoke()</code>؛ بعد از commit تمدید به نماینده گفته می‌شود
+(<code dir="ltr">CustomerNotifier::agencyRenewed()</code>) و بعد <code dir="ltr">AgencyStanding::extended()</code> پایان
+را مثل پایانی که در صفحه نمایندگان عوض شده جا می‌اندازد (liftEnd() و ماه‌های کف خرید)، تا دوباره فروختن رباتش بعد از آن
+گفته شود. <code dir="ltr">judge()</code> درباره پایان فقط وقتی می‌نویسد که ردیف هنوز همان پایانی را دارد که خوانده — وظیفه
+ساعتی اول همه فروشگاه‌ها را می‌خواند، و پایانی که در این فاصله با تمدید جابه‌جا شده نه متوقف می‌شود و نه درباره‌اش هشدار
+می‌رود.
+<code dir="ltr">termEnd()</code> مدت برنامه است از پایان نماینده اگر هنوز نرسیده و از همین حالا اگر گذشته
+(<code dir="ltr">AgencyStanding::renewalEnd()</code>)، و نبودنش — بدون مدت، بدون پایان، بعد از مرز — یک 422 روی
+<code dir="ltr">expires_at</code> است؛ «تایید» گروه گزارش‌ها همین را می‌دهد، و پنل هم وقتی پایانی نمی‌فرستد.
+<code dir="ltr">approve()</code> تمدید را یک‌سره رد می‌کند (<code dir="ltr">assign()</code> آن شرایط نماینده را از نو
+شروع می‌کرد و توقف و ماه‌های کف خرید از دست می‌رفت)؛ <code dir="ltr">reject()</code> برای هر دو نوع است؛
+<code dir="ltr">revoke()</code> تمدیدی را که هنوز در انتظار است می‌بندد (<code dir="ltr">RENEWAL_CLOSED</code>).
 
 ## کاربران
 

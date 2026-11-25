@@ -14,11 +14,12 @@ use App\Modules\Telegram\Admin\Ui\View;
 use App\Modules\Telegram\Admin\Ui\Words as UiWords;
 
 /**
- * «📥 درخواست‌های نمایندگی» (the panel's requests section): what customers send from the bot's «نمایندگی» page — those
- * waiting first (the status chips), the newest first or the oldest (the panel's date column both ways: «↕️», the list's
- * state `dir`) —, each a button, the row: its status as a chip, the customer and the start of what they wrote, opening its
- * own screen (AgencyRequestScreen) to approve on a level or reject. The panel lists them alone: the page's rows are kept
- * for it.
+ * «📥 درخواست‌های نمایندگی» (the panel's requests section): what customers send from the bot's «نمایندگی» page to
+ * become agents, and agents' renewal requests («درخواست تمدید نمایندگی») — those waiting first (the status chips), both
+ * kinds or one (the kind chips), the newest first or the oldest (the panel's date column both ways: «↕️», the list's
+ * state `dir`) —, each a button, the row: its status as a chip, its kind's icon (KINDS: a renewal's «🔄»), the customer
+ * and the start of what they wrote, opening its own screen (AgencyRequestScreen) to approve — on a level, or a
+ * renewal with an end — or reject. The panel lists them alone: the page's rows are kept for it.
  *
  * Actions besides the list's: `dir` (asc|desc: the order).
  */
@@ -28,6 +29,9 @@ final class AgencyRequestsScreen extends ListScreen
 
     /** A request's status as a chip, the list's tabs in its order. */
     public const STATUSES = ['pending' => UiWords::PENDING, 'approved' => '✅ تاییدشده', 'rejected' => UiWords::REJECTED];
+
+    /** A request's kind (the API's `kind`) as a chip: to become an agent, or an agent's end moved on. */
+    public const KINDS = ['join' => '🤝 نمایندگی', 'renewal' => '🔄 تمدید'];
 
     public function allows(AdminSeat $seat): bool
     {
@@ -61,7 +65,7 @@ final class AgencyRequestsScreen extends ListScreen
 
     protected function filters(): array
     {
-        return ['status' => self::STATUSES + [self::ANY => 'همه']];
+        return ['status' => self::STATUSES + [self::ANY => 'همه'], 'kind' => [self::ANY => 'هر دو نوع'] + self::KINDS];
     }
 
     protected function fixed(): array
@@ -81,7 +85,7 @@ final class AgencyRequestsScreen extends ListScreen
 
     protected function empty(): string
     {
-        return 'درخواستی نیست. درخواست‌هایی که مشتری‌ها از صفحه «نمایندگی» ربات می‌فرستند این‌جا می‌آید؛ در گروه گزارش‌ها هم با دکمه‌های تایید و رد.';
+        return 'درخواستی نیست. درخواست‌هایی که مشتری‌ها از صفحه «نمایندگی» ربات می‌فرستند، و درخواست تمدید نماینده‌ها، این‌جا می‌آید؛ در گروه گزارش‌ها هم با دکمه‌های تایید و رد.';
     }
 
     protected function keepsRows(): bool
@@ -97,9 +101,11 @@ final class AgencyRequestsScreen extends ListScreen
     protected function item(array $row): Button
     {
         $status = explode(' ', self::STATUSES[(string) ($row['status'] ?? '')] ?? '•')[0];
+        $renewal = AgencyRequestScreen::renewal($row);
+        $kind = explode(' ', self::KINDS[$renewal ? 'renewal' : 'join'])[0];
         $note = is_string($row['note'] ?? null) && $row['note'] !== '' ? ' · ' . Fmt::cut($row['note'], 24) : '';
 
-        return Button::to($status . ' ' . Words::user($row['user'] ?? null) . $note, AgencyRequestScreen::ID, 'show', (int) ($row['id'] ?? 0));
+        return Button::to($status . ' ' . $kind . ' ' . Words::user($row['user'] ?? null) . $note, AgencyRequestScreen::ID, 'show', (int) ($row['id'] ?? 0));
     }
 
     protected function tools(Admin $admin): array

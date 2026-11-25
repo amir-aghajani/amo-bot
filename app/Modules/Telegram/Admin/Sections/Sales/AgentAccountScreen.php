@@ -18,15 +18,19 @@ use App\Modules\Telegram\Admin\Ui\Json;
 use App\Modules\Telegram\Admin\Ui\Screens;
 use App\Modules\Telegram\Admin\Ui\View;
 use App\Modules\Telegram\Admin\Ui\Words;
+use App\Modules\Telegram\Messages;
+use App\Support\Money;
 
 /**
  * «💼 حساب نمایندگی», the agent's own page (the agent panel's account page, GET /account): why their bot sells nothing
  * when it does not (its token, its traffic, the terms of selling) said first; then one card of what they have with the
  * shop — the traffic left, the level and its price per GB, their wallet and credit —, their bot and how it stands, the
- * terms of selling, and how it all works folded away. Read only, as the panel's page: traffic is bought — and a token
- * handed over — in the main bot, a button away; the traffic ledger (GET /account/traffic) a page at a time.
+ * terms of selling with their latest renewal request (waiting, or how the owner decided it), and how it all works folded
+ * away. Read only but for «🔄 درخواست تمدید نمایندگی» (POST /account/renewal, while `actions.request_renewal`), as the
+ * panel's page: traffic is bought — and a token handed over — in the main bot, a button away; the traffic ledger (GET
+ * /account/traffic) a page at a time.
  *
- * Shown as the account; action `l` (page: 1 the newest) the ledger.
+ * Shown as the account; action `l` (page: 1 the newest) the ledger, `rn` the renewal asked for.
  */
 final class AgentAccountScreen extends BaseScreen
 {
@@ -37,6 +41,10 @@ final class AgentAccountScreen extends BaseScreen
 
     /** The ledger's title. */
     private const LEDGER = '📒 گردش حجم';
+
+    /** «درخواست تمدید نمایندگی»: its button, and its action. */
+    private const RENEW_LABEL = '🔄 درخواست تمدید نمایندگی';
+    private const RENEW = 'rn';
 
     /** Ledger lines a page, cut from the panel's pages. */
     private const LINES = 10;
@@ -59,14 +67,31 @@ final class AgentAccountScreen extends BaseScreen
 
     public function show(Admin $admin, array $args): View
     {
-        $answer = $admin->api->get('/account');
+        return $this->view($admin->api->get('/account'));
+    }
+
+    public function act(Admin $admin, string $action, array $args): View
+    {
+        return match ($action) {
+            'l' => $this->ledger($admin, self::page($args)),
+            self::RENEW => $this->renew($admin),
+            default => $this->show($admin, $args),
+        };
+    }
+
+    /**
+     * The account as GET /account answers it (POST /account/renewal answers the same).
+     *
+     * @param array<string, mixed> $answer
+     */
+    private function view(array $answer): View
+    {
         $account = Json::part($answer, 'account');
         $bot = Json::part($account, 'bot');
         $standing = Json::part($account, 'standing');
         $shortage = Json::part($answer, 'traffic_shortage');
         $level = Json::part($account, 'level');
         $balance = Json::text($account, 'balance') ?? '0';
-        $debt = str_starts_with($balance, '-');
         $credit = Json::text($account, 'credit_limit') ?? '0';
 
         $view = View::make(self::TITLE, Words::ROOT);
@@ -74,7 +99,7 @@ final class AgentAccountScreen extends BaseScreen
         foreach (array_filter([
             Json::text($bot, 'problem') !== null ? '⚠️ ' . Fmt::e(Json::text($bot, 'problem')) : null,
             $shortage !== [] ? Standing::shortage($shortage, Fmt::e(Standing::BUY_TRAFFIC)) : null,
-            Standing::toAgent($standing === [] ? null : $standing),
+            Standing::toAgent($standing === [] ? null : $standing, (Json::part($account, 'renewal')['status'] ?? null) === 'pending'),
         ]) as $warning) {
             $view->line($warning)->line();
         }
@@ -83,8 +108,14 @@ final class AgentAccountScreen extends BaseScreen
             'حجم باقی‌مانده' => $bot === [] ? Fmt::NONE : Fmt::bytes((int) ($bot['traffic_balance'] ?? 0)),
             'سطح نمایندگی' => $level === [] ? 'نمایندگی فعال نیست' : Fmt::e(Json::text($level, 'name')),
             'قیمت هر گیگابایت' => $level === [] ? null : Fmt::money(Json::text($level, 'price_per_gb')),
-            'کیف پول شما در فروشگاه' => Fmt::money(ltrim($balance, '-')) . ($debt ? ' بدهی' : ''),
-            'اعتبار خرید' => (float) $credit > 0 ? Fmt::money($credit) . ($debt ? ' (در حال استفاده)' : '') : 'بدون اعتبار خرید',
+            'کیف پول شما در فروشگاه' => Messages::balance($balance),
+            // In debt: within the credit, at its end (nothing left to spend), or past it (support's debit by hand).
+            'اعتبار خرید' => (float) $credit > 0 ? Fmt::money($credit) . match (Messages::isDebt($balance) ? Money::compare(Money::add($balance, $credit), 0) : null) {
+                null => '',
+                -1 => ' (تمام شده؛ بدهی از اعتبار گذشته است)',
+                0 => ' (تمام شده)',
+                default => ' (در حال استفاده)',
+            } : 'بدون اعتبار خرید',
         ]);
 
         $view->section(Icons::BOT . ' ربات شما');
@@ -98,8 +129,11 @@ final class AgentAccountScreen extends BaseScreen
                 'اولین اتصال' => Json::text($bot, 'connected_at') !== null ? Fmt::date(Json::text($bot, 'connected_at')) : Fmt::NONE,
             ]);
         }
-        if ($standing !== []) {
-            $view->section('📋 شرایط فروش')->card(Standing::facts($standing));
+        // Their latest renewal request right under the end it would move on.
+        $facts = $standing !== [] ? Standing::facts($standing) : [];
+        $terms = array_slice($facts, 0, 1, true) + self::renewal(Json::part($account, 'renewal')) + $facts;
+        if ($terms !== []) {
+            $view->section('📋 شرایط فروش')->card($terms);
         }
 
         $main = $this->bots->username(CurrentBot::main());
@@ -107,6 +141,9 @@ final class AgentAccountScreen extends BaseScreen
             $main !== '' ? Button::url('➕ خرید حجم در ربات اصلی', 'https://t.me/' . rawurlencode($main)) : null,
             Button::to(self::LEDGER, self::ID, 'l', 1),
         );
+        if (Json::on(Json::part($account, 'actions'), 'request_renewal')) {
+            $view->row(Button::to(self::RENEW_LABEL, self::ID, self::RENEW)->primary());
+        }
 
         return $view->help(implode("\n\n", array_filter([
             Fmt::e(self::INTRO),
@@ -114,12 +151,53 @@ final class AgentAccountScreen extends BaseScreen
             $shortage === [] ? Fmt::e(Standing::BUY_TRAFFIC) . '.' : null,
             'برای عوض کردن توکن، توکن تازه را از ربات اصلی بفرستید.',
             'پایان نمایندگی و کف خرید حجم ماهانه را پشتیبانی فروشگاه اصلی تعیین می‌کند. بعد از پایان نمایندگی، یا ماهی که خرید حجمش به کف نرسد، در ربات شما ' . Standing::SUSPENDED_SALES . ' تازه انجام نمی‌شود؛ سرویس‌های فعلی مشتری‌ها کار می‌کنند.',
+            'وقتی نمایندگی تاریخ پایان دارد، با «' . self::RENEW_LABEL . '» تمدید آن را از فروشگاه اصلی بخواهید؛ بعد از بررسی، نتیجه در ربات اصلی به شما اعلام می‌شود و اگر تایید شود، پایان تازه همین‌جا دیده می‌شود.',
         ])))->back(Screens::HOME)->refresh(self::ID);
     }
 
-    public function act(Admin $admin, string $action, array $args): View
+    /**
+     * «🔄 درخواست تمدید نمایندگی»: filed for the main shop's owner to decide, then the account with it waiting. Refused
+     * (422: one waits already — two taps, a window from before —, or the agency has no end now), why — over the account
+     * as it stands, never the window left with the button.
+     *
+     * @throws ApiRefusal
+     */
+    private function renew(Admin $admin): View
     {
-        return $action === 'l' ? $this->ledger($admin, self::page($args)) : $this->show($admin, $args);
+        try {
+            $answer = $admin->api->post('/account/renewal');
+        } catch (ApiRefusal $refusal) {
+            if ($refusal->status !== 422) {
+                throw $refusal;
+            }
+            $admin->alert($refusal->lines());
+
+            return $this->show($admin, []);
+        }
+        $admin->notice('✅ درخواست تمدید ثبت شد؛ نتیجه در ربات اصلی به شما اعلام می‌شود');
+
+        return $this->view($answer);
+    }
+
+    /**
+     * Their latest renewal request as facts of the terms: waiting since when, or how the owner decided it — approved with
+     * the end it gave (none at all, «بدون پایان»), or rejected with why when they said.
+     *
+     * @param array<string, mixed> $renewal
+     * @return array<string, string|null>
+     */
+    private static function renewal(array $renewal): array
+    {
+        $decided = Fmt::date(Json::text($renewal, 'decided_at'));
+        $end = Json::text($renewal, 'extended_to');
+        $reason = Json::text($renewal, 'reason');
+
+        return match ($renewal['status'] ?? null) {
+            'pending' => ['درخواست تمدید' => '🟡 در انتظار بررسی · از ' . Fmt::date(Json::text($renewal, 'created_at'))],
+            'approved' => ['درخواست تمدید' => '✅ تایید شد · ' . $decided, 'پایان تازه' => $end === null ? 'بدون پایان' : Fmt::date($end)],
+            'rejected' => ['درخواست تمدید' => '🔴 رد شد · ' . $decided, 'دلیل رد' => $reason === null ? null : Fmt::e($reason)],
+            default => [],
+        };
     }
 
     /**

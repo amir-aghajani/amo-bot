@@ -57,7 +57,9 @@ final class WalletTransfers
     public const ABOVE = 'بیشترین مبلغ هر انتقال %s است.';
     public const TOO_LITTLE = 'برای انتقال، دست‌کم %s موجودی در کیف پول لازم است.';
     public const SHORT = 'موجودی کیف پول شما (%s) برای این انتقال کافی نیست.';
-    /** After TOO_LITTLE or SHORT for an agent: their credit pays for what they buy, and is never sent. */
+    /** In place of TOO_LITTLE or SHORT for a wallet below zero: its debt, which a transfer never deepens. */
+    public const IN_DEBT = 'کیف پول شما %s بدهی دارد؛ تا بدهی صاف نشود، چیزی منتقل نمی‌شود.';
+    /** After TOO_LITTLE, SHORT or IN_DEBT for an agent: their credit pays for what they buy, and is never sent. */
     public const NOT_CREDIT = ' اعتبار نمایندگی منتقل نمی‌شود.';
     public const DAILY = 'سقف انتقال روزانه %s است و امروز تا %s دیگر می‌توانید منتقل کنید.';
     public const DAILY_SPENT = 'سقف انتقال روزانه شما (%s) امروز پر شده است؛ فردا دوباره امتحان کنید.';
@@ -153,8 +155,9 @@ final class WalletTransfers
         if ($left !== null && Money::compare($left, $min) < 0) {
             throw ValidationException::on('amount', sprintf(self::DAILY_SPENT, Money::format((string) $this->dailyCap())));
         }
-        if (Money::compare($from->balance(), $min) < 0) {
-            throw ValidationException::on('amount', sprintf(self::TOO_LITTLE, Money::format($min)) . self::notCredit($from));
+        $balance = $from->balance();
+        if (Money::compare($balance, $min) < 0) {
+            throw ValidationException::on('amount', self::short($balance, sprintf(self::TOO_LITTLE, Money::format($min))) . self::notCredit($from));
         }
     }
 
@@ -230,7 +233,7 @@ final class WalletTransfers
             try {
                 $debit = $this->wallet->debit($sender, $amount, self::line(self::LINE_SENT, $recipient));
             } catch (InsufficientBalanceException $e) {
-                throw ValidationException::on('amount', sprintf(self::SHORT, Money::format(Money::atLeastZero($e->balance))) . self::notCredit($sender));
+                throw ValidationException::on('amount', self::short($e->balance, sprintf(self::SHORT, Money::format($e->balance))) . self::notCredit($sender));
             }
             $credit = $this->wallet->credit($recipient, $amount, self::line(self::LINE_RECEIVED, $sender));
 
@@ -371,6 +374,12 @@ final class WalletTransfers
     private static function line(string $line, User $other): string
     {
         return sprintf($line, Text::fit($other->shownAs(), self::PARTY_MAX));
+    }
+
+    /** A wallet of `$balance` that cannot send: `$words` (TOO_LITTLE, SHORT) — IN_DEBT with its debt below zero. */
+    private static function short(string $balance, string $words): string
+    {
+        return Money::compare($balance, 0) < 0 ? sprintf(self::IN_DEBT, Money::format(Money::subtract(0, $balance))) : $words;
     }
 
     /** NOT_CREDIT for an agent with credit, whose refusal would otherwise read as if the credit were short. */

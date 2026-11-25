@@ -112,7 +112,9 @@ return [
          * own invite code; `referred_by` whoever brought them, set once at registration. An agent has an
          * `agency_level_id`, and `credit_limit` is how far below zero their wallet may go.
          *
-         * `agency_requests` — a customer asking to become an agent, approved (with a level) or rejected (with a `reason`).
+         * `agency_requests` — a customer asking to become an agent (`kind` join), approved (with a level) or rejected (with
+         * a `reason`) — or an agent asking for their agency's end to be moved on (`kind` renewal), approved with the end it
+         * gave (`extended_to`; null: none at all).
          *
          * `wallet_transfers` — «انتقال موجودی»: money a customer sent another of the shop from their wallet, with the two
          * ledger lines it wrote (`debit_id`, `credit_id`) and the website request's Idempotency-Key (`request_key`).
@@ -171,9 +173,11 @@ return [
         'agency_requests' => static function (Blueprint $table): void {
             $table->bigIncrements('id');
             $table->foreignId('user_id')->constrained('users')->cascadeOnDelete();
+            $table->string('kind', 16)->default('join');
             $table->string('status', 16)->default('pending');
             $table->string('note', 500)->nullable();
             $table->foreignId('level_id')->nullable()->constrained('agency_levels')->nullOnDelete();
+            $table->timestamp('extended_to')->nullable();
             $table->string('reason', 500)->nullable();
             $table->string('reviewer', 64)->nullable();
             $table->timestamp('decided_at')->nullable();

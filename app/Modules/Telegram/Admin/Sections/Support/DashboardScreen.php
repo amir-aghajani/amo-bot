@@ -258,7 +258,7 @@ final class DashboardScreen extends BaseScreen
         $seat = $admin->seat;
         $standing = is_array($data['agency_standing'] ?? null) ? $data['agency_standing'] : null;
         $selling = match (true) {
-            $seat->isAgent() => Standing::toAgent($standing),
+            $seat->isAgent() => Standing::toAgent($standing, Standing::aboutTheEnd($standing) && self::renewalWaits($admin)),
             $seat->isOwner() => Standing::toOwner($standing),
             default => null,
         };
@@ -287,6 +287,21 @@ final class DashboardScreen extends BaseScreen
             Links::to($admin, Icons::AGENT_ACCOUNT . ' حساب نمایندگی', AgentAccountScreen::ID)?->primary(),
             $main !== '' ? Button::url('🛒 خرید حجم در ربات اصلی', 'https://t.me/' . rawurlencode($main)) : null,
         ]));
+    }
+
+    /**
+     * Whether the agent's renewal request waits (their account, GET /account): read only when the end needs an eye,
+     * so the notice says it waits instead of a button the account no longer shows.
+     */
+    private static function renewalWaits(Admin $admin): bool
+    {
+        try {
+            $account = Json::part($admin->api->get('/account'), 'account');
+        } catch (ApiRefusal) {
+            return false;
+        }
+
+        return (Json::part($account, 'renewal')['status'] ?? null) === 'pending';
     }
 
     /**

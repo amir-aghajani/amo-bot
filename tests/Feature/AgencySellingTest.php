@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Core\Exceptions\ValidationException;
+use App\Modules\Agency\Models\AgencyRequest;
+use App\Modules\Agency\Services\AgencyActions;
 use App\Modules\Agency\Services\AgencyStanding;
 use App\Modules\Agency\Tasks\AgencyStandingTask;
 use App\Modules\Auth\PrincipalKind;
@@ -36,6 +38,7 @@ use App\Modules\Subscriptions\Services\CustomerRenewal;
 use App\Modules\Subscriptions\Services\ServiceReminders;
 use App\Modules\Subscriptions\Services\SubscriptionActions;
 use App\Modules\Subscriptions\Services\TestAccounts;
+use App\Modules\Telegram\Handlers\AgencyHandler;
 use App\Modules\Telegram\Handlers\ExtrasHandler;
 use App\Modules\Telegram\Handlers\MenuHandler;
 use App\Modules\Telegram\Handlers\PurchaseHandler;
@@ -138,6 +141,49 @@ final class AgencySellingTest extends BotTestCase
         $this->judge();
         $this->judge();
         self::assertSame([self::text(BotText::AgencyExpiring, ['date' => Persian::date($later, withTime: true)])], $this->toAgent(), 'the new end is warned of once too');
+    }
+
+    public function testTheEndsNoticesCarryTheRenewalButton(): void
+    {
+        $end = Carbon::parse('2026-10-11 12:00:00');
+        $this->sellingTerms($this->bot, $end);
+
+        Carbon::setTestNow('2026-10-08 13:00:00');
+        $this->telegram()->reset();
+        $this->judge();
+        self::assertSame([self::text(BotText::AgencyExpiring, ['date' => Persian::date($end, withTime: true)])], $this->toAgent());
+        self::assertSame([AgencyHandler::RENEW], $this->callbacksTo(self::AGENT_TELEGRAM_ID), 'with «🔄 درخواست تمدید نمایندگی»');
+
+        Carbon::setTestNow($end);
+        $this->telegram()->reset();
+        $this->judge();
+        self::assertSame([self::text(BotText::AgencySuspended, ['reason' => SellingSuspension::Expired->words(), 'note' => ''])], $this->toAgent());
+        self::assertSame([AgencyHandler::RENEW], $this->callbacksTo(self::AGENT_TELEGRAM_ID), 'an end passed is renewed too');
+    }
+
+    public function testWhileARenewalWaitsTheEndsNoticesStillCarryTheButtonWhichFilesNothingNew(): void
+    {
+        $end = Carbon::parse('2026-10-11 12:00:00');
+        $this->sellingTerms($this->bot, $end);
+        self::assertNotNull($this->service(AgencyActions::class)->requestRenewal($this->agent));
+
+        Carbon::setTestNow('2026-10-08 13:00:00');
+        $this->telegram()->reset();
+        $this->judge();
+        self::assertSame([self::text(BotText::AgencyExpiring, ['date' => Persian::date($end, withTime: true)])], $this->toAgent());
+        self::assertSame([AgencyHandler::RENEW], $this->callbacksTo(self::AGENT_TELEGRAM_ID), 'the text tells them to press it');
+
+        // Pressed while one waits: nothing filed, why in a popup, over their account.
+        $this->send($this->tap(AgencyHandler::RENEW, chat: self::AGENT_TELEGRAM_ID));
+        self::assertSame(1, AgencyRequest::query()->count());
+        self::assertSame(AgencyActions::RENEWAL_WAITING, $this->popup());
+        self::assertStringContainsString(self::text(BotText::AgencyRenewalPending), $this->said()[0]);
+
+        Carbon::setTestNow($end);
+        $this->telegram()->reset();
+        $this->judge();
+        self::assertSame([self::text(BotText::AgencySuspended, ['reason' => SellingSuspension::Expired->words(), 'note' => ''])], $this->toAgent());
+        self::assertSame([AgencyHandler::RENEW], $this->callbacksTo(self::AGENT_TELEGRAM_ID));
     }
 
     public function testAJalaliMonthBelowTheMinimumStopsTheSellingOnceItIsOverAndBuyingItLiftsIt(): void

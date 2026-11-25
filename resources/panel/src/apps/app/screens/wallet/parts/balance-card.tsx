@@ -4,8 +4,9 @@ import { formatBalance, formatMoney } from '@/lib/format'
 
 /*
  * The wallet's card: the balance large on a gradient of the shop's colour, lit from its top corner as a bank card is,
- * with the shop's name over it and the customer's under it, their loyalty tier beside it. Below zero it is an agent's
- * debt, worded as the bot words it; an agent's credit and what the wallet can spend now are said under it. Its marks are
+ * with the shop's name over it and the customer's under it, their loyalty tier beside it. Below zero it is a debt (an
+ * agent's credit in use, or support's debit by hand), worded as the bot words it; an agent's credit and what the wallet
+ * can spend now are said under it. Its marks are
  * washes of the card's own ink, so they hold on a light shop colour as on a dark one.
  */
 
@@ -57,7 +58,8 @@ export function BalanceCard({ shop, holder, balance, credit, spendable, tier = n
         </p>
         {owes && spendable !== undefined && credit !== undefined && (
           <p className="text-caption opacity-85">
-            قابل خرج: {formatMoney(spendable)} · اعتبار نمایندگی: {formatMoney(credit)}
+            {/* A debt past the credit (support's debit by hand) leaves nothing to spend, never a minus. */}
+            قابل خرج: {formatMoney(Math.max(0, Number(spendable)))} · اعتبار نمایندگی: {formatMoney(credit)}
           </p>
         )}
       </div>

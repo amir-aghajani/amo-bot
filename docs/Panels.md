@@ -146,8 +146,9 @@ What the shop did over a range and what waits on someone, read again every minut
     [held for you](Orders-And-Payments.md#a-payment-held-for-support)), «سفارش‌های نیازمند رسیدگی», «تیکت‌های در
     انتظار پاسخ», «نظرات در انتظار بررسی» and «سرورهای دارای خطا» (the main shop's dashboard alone);
   - first, an agent's selling suspended — or its end, or a month short of its minimum, near — and their bot's traffic
-    no longer covering its smallest plan: to the agent, with what to do; to the owner in an agent's shop, of the agent,
-    with a link to «نمایندگان»;
+    no longer covering its smallest plan: to the agent, with what to do — for an end passed or near, «درخواست تمدید
+    نمایندگی» on their account ([below](#an-agents-account)) —; to the owner in an agent's shop, of the agent, with a
+    link to «نمایندگان»;
   - under them, apart and not counted, «در انتظار مشتری» — what waits on customers: «اشتراک‌های رو به انقضا (۳ روز)»
     (free tests aside) and «سفارش‌های در انتظار پرداخت».
 - **«آخرین سفارش‌ها»** and **«مشتریان جدید»** — the latest eight of each; a number opens the order, a name the customer's
@@ -178,6 +179,15 @@ or its end, or a month short of its minimum, is near — the page and their dash
 what lifts it, and a strip over every other page of their panel leads here ([Agency](Agency.md#the-terms-of-selling-an-end-and-a-monthly-minimum)).
 A plan the main shop keeps from sale is marked «پنهان‌شده توسط پشتیبانی» on «پلن‌ها». A server it keeps from their shop
 is not among their plan form's choices, and a plan already on it says the server is hidden.
+
+Under the agency's end, their latest renewal request in a line — «درخواست تمدید شما در انتظار بررسی است؛ … فرستاده
+شد.», approved — said of the decision, with the end it gave then («… تایید شد و پایان نمایندگی … شد.», or «… تایید شد و
+نمایندگی بدون پایان شد.»), or
+rejected with support's note — and, while their agency has an end and none waits, **«درخواست تمدید نمایندگی»**. It asks
+first («فرستادن درخواست»: the request goes to the main shop's support, the answer comes in the main bot, and the end
+stays as it is meanwhile), then says «درخواست تمدید نمایندگی فرستاده شد» and shows it waiting. One refused — sent
+meanwhile from the main bot — is said in the dialog, the account read again. For an end passed or near, the page's notice
+points at the button, or says the request waits ([Agency](Agency.md#renewing-an-agency)).
 
 ## Lists
 

@@ -370,7 +370,8 @@ by hand first — delete it, or hand it back to the buyer — and refund again, 
 buyer's wallet. Two accounts merged into one stay the same customer: their orders go with their services.
 
 **A top-up of the wallet.** Give the money back yourself, outside the shop: the refund takes the same amount out of their
-wallet, and is refused once they spent it (an agent's credit counting). A top-up never delivered moves nothing in the
+wallet, and is refused once they spent it (an agent's credit counting) — or, a wallet in debt (your «کاهش موجودی» may
+leave one), once it holds less than the top-up: the refusal says the debt. A top-up never delivered moves nothing in the
 wallet, and the customer is told their balance did not change. The commission the top-up earned the customer's referrer
 comes back out of the referrer's wallet too («برگشت پورسانت زیرمجموعه (پرداخت #12)»), and the referrer is told; a
 referrer who spent it stops the refund, which says their balance ([Referrals](Referrals.md#what-earns-a-commission)).

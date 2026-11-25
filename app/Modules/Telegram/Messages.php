@@ -38,7 +38,8 @@ final class Messages
     private const AUTO_RENEWS_DAYS_BEFORE = '%days% روز پیش از پایان سرویس';
     private const AUTO_RENEWS_AT_THE_END = 'کمی پیش از پایان سرویس';
 
-    // A wallet below zero (an agent's credit in use), and an agent without credit (balance(), credit()).
+    // A wallet below zero (a debt: an agent's credit in use, or support's debit by hand), and an agent without credit
+    // (balance(), credit()).
     private const DEBT = '%amount% بدهی';
     private const NO_CREDIT = 'ندارد';
 
@@ -230,10 +231,19 @@ final class Messages
         return $count > 0 ? ExtraKind::Devices->words($count) : self::UNLIMITED;
     }
 
-    /** A wallet's balance: "۸۰٬۰۰۰ تومان", or "۲۰٬۰۰۰ تومان بدهی" below zero (an agent's credit in use). */
+    /**
+     * A wallet's balance: "۸۰٬۰۰۰ تومان", or "۲۰٬۰۰۰ تومان بدهی" below zero — anyone's debt, never a bare minus; a debt
+     * under half a Toman reads "۰ تومان", never "۰ تومان بدهی" (isDebt()).
+     */
     public static function balance(string $balance): string
     {
-        return Money::compare($balance, 0) < 0 ? self::fill(self::DEBT, ['amount' => Money::format(Money::subtract(0, $balance))]) : Money::format($balance);
+        return self::isDebt($balance) ? self::fill(self::DEBT, ['amount' => Money::format(Money::subtract(0, $balance))]) : Money::format(Money::atLeastZero($balance));
+    }
+
+    /** Whether a balance reads as a debt: below zero by at least the whole Toman Money::format() shows. */
+    public static function isDebt(string $balance): bool
+    {
+        return Money::compare(Money::digits($balance), 0) < 0;
     }
 
     /** An agent's credit: "۵۰۰٬۰۰۰ تومان", "ندارد" for none. */

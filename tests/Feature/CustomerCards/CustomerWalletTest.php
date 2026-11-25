@@ -132,24 +132,142 @@ final class CustomerWalletTest extends BotTestCase
         self::assertSame('✅ ۱۲٬۰۰۰ تومان به کیف پول اضافه شد؛ موجودی: ۱۲٬۰۰۰ تومان.', $this->params(2)['text']);
     }
 
-    public function testADebitPastTheBalanceIsRefusedAndTheQuestionKept(): void
+    public function testADebitPastTheBalanceIsAskedAgainWithTheDebtItLeavesAndMadeOnceConfirmed(): void
     {
         $this->wallet($this->ali, '5000');
         $this->send($this->press("uw:d:{$this->ali->id}"));
         self::assertStringStartsWith('➖ چه مبلغی از کیف پول کم شود؟ موجودی: ۵٬۰۰۰ تومان. مبلغ را به تومان در خط اول بنویسید.', $this->params(0)['text']);
         $prompt = $this->prompt();
 
+        // A zero too many: nothing written yet — the card asks again, with the debt it would leave.
+        $this->send($this->reply($prompt, "۱۰۰۰۰\nاصلاح <اشتباه>"));
+        self::assertSame(['editMessageText', 'deleteMessage', 'sendMessage'], $this->calls());
+        self::assertSame(['5000.00', 1], [$this->ali->balance(), WalletTransaction::query()->where('user_id', $this->ali->id)->count()], 'nothing written');
+        self::assertSame((string) self::CARD, $this->params(0)['message_id'], 'the card asks');
+        self::assertStringContainsString("\n👛 موجودی: ۵٬۰۰۰ تومان\n", $this->params(0)['text']);
+        self::assertStringEndsWith(implode("\n", [
+            '',
+            '➖ <b>کاهش موجودی: ۱۰٬۰۰۰ تومان</b>',
+            '📝 توضیح: اصلاح &lt;اشتباه&gt;',
+            'موجودی بعد از آن: <b>۵٬۰۰۰ تومان بدهی</b>',
+            '⚠️ موجودی از صفر کمتر می‌شود و مشتری بدهکار می‌شود؛ ثبت شود؟',
+        ]), $this->params(0)['text']);
+        self::assertSame([['⬅️ انصراف', '✅ تایید']], $this->labels(0));
+        [$cancel, $confirm] = $this->callbacks(0);
+        self::assertMatchesRegularExpression("/^uw:y:{$this->ali->id}:[0-9a-z]{6}$/", $confirm, 'the customer and a nonce: what it writes is the card\'s, never the data\'s');
+        self::assertSame('uw:n:' . substr($confirm, 5), $cancel, 'cancelling drops the same nonce');
+        self::assertSame((string) $prompt, $this->params(1)['message_id'], 'the question deleted: the card asks now');
+        self::assertSame('⚠️ بعد از این کاهش، موجودی کمتر از صفر است؛ برای ثبت آن «✅ تایید» را روی کارت بزنید.', $this->params(2)['text']);
+
+        $this->send($this->press($confirm));
+        self::assertSame(['editMessageText', 'answerCallbackQuery'], $this->calls());
+        self::assertSame('-5000.00', $this->ali->balance());
+        $line = WalletTransaction::query()->where('user_id', $this->ali->id)->latest('id')->firstOrFail();
+        self::assertSame([WalletTransactionType::Debit, '10000.00', 'اصلاح <اشتباه>', '@boss'], [$line->type, $line->amount, $line->description, $line->reviewer], 'the note the reply typed');
+        self::assertSame('report-group:' . self::REPORT_GROUP . ":{$prompt}", $line->request_key, 'keyed by the question, as a reply\'s');
+        self::assertStringContainsString("\n👛 موجودی: ۵٬۰۰۰ تومان بدهی\n", $this->params(0)['text'], 'the card with the debt');
+        self::assertSame(["uw:d:{$this->ali->id}", "uw:c:{$this->ali->id}", "um:o:{$this->ali->id}"], $this->callbacks(0));
+        self::assertSame('✅ ۱۰٬۰۰۰ تومان از کیف پول کم شد؛ موجودی: ۵٬۰۰۰ تومان بدهی.', $this->popup());
+
+        // Pressed again (twice, or two admins at once): written once.
+        $this->send($this->press($confirm));
+        self::assertSame(CustomerCards::DONE_ALREADY, $this->popup());
+        self::assertSame(['-5000.00', 2], [$this->ali->balance(), WalletTransaction::query()->where('user_id', $this->ali->id)->count()]);
+    }
+
+    public function testADebitDownToZeroIsMadeAtOnceAndOneCancelledWritesNothing(): void
+    {
+        $this->wallet($this->ali, '5000');
+        $this->send($this->press("uw:d:{$this->ali->id}"));
+        $this->send($this->reply($this->prompt(), '5000'));
+        self::assertSame('0.00', $this->ali->balance(), 'no debt: nothing to ask');
+        self::assertSame('✅ ۵٬۰۰۰ تومان از کیف پول کم شد؛ موجودی: ۰ تومان.', $this->params(2)['text']);
+
+        $this->send($this->press("uw:d:{$this->ali->id}"));
+        $this->send($this->reply($this->prompt(), '1000'));
+        self::assertStringEndsWith('⚠️ موجودی از صفر کمتر می‌شود و مشتری بدهکار می‌شود؛ ثبت شود؟', $this->params(0)['text']);
+        [$cancel, $confirm] = $this->callbacks(0);
+        $this->send($this->press($cancel));
+        self::assertSame(['editMessageText', 'answerCallbackQuery'], $this->calls());
+        self::assertStringNotContainsString('ثبت شود؟', $this->params(0)['text'], 'the wallet as it stands');
+        self::assertSame(['0.00', 2], [$this->ali->balance(), WalletTransaction::query()->where('user_id', $this->ali->id)->count()], 'nothing written');
+
+        // Its «✅ تایید» pressed afterwards — a stale keyboard, another admin's client: an old button.
+        $this->send($this->press($confirm));
+        self::assertSame(CustomerCards::BUTTON_OLD, $this->popup());
+        self::assertSame(2, WalletTransaction::query()->where('user_id', $this->ali->id)->count(), 'still nothing written');
+
+        // Asked twice on one card: only the last ask's «✅ تایید» writes.
+        $this->send($this->press("uw:d:{$this->ali->id}"));
+        $this->send($this->reply($this->prompt(), '1000'));
+        [, $first] = $this->callbacks(0);
+        $this->send($this->press("uw:d:{$this->ali->id}"));
+        $this->send($this->reply($this->prompt(), '2000'));
+        [, $last] = $this->callbacks(0);
+        $this->send($this->press($first));
+        self::assertSame(CustomerCards::BUTTON_OLD, $this->popup());
+        $this->send($this->press($last));
+        self::assertSame(['-2000.00', 3], [$this->ali->balance(), WalletTransaction::query()->where('user_id', $this->ali->id)->count()]);
+    }
+
+    public function testAConfirmIsRefusedForAnAccountLockedMeanwhileOrAButtonOfNoCard(): void
+    {
+        $this->send($this->press("uw:d:{$this->ali->id}"));
+        $prompt = $this->prompt();
+        $this->send($this->reply($prompt, '1000'));
+        [, $confirm] = $this->callbacks(0);
+
+        // Made an agent meanwhile: the panel's account now.
+        $this->ali->forceFill(['agency_level_id' => $this->agencyLevel()->id])->save();
+        $this->send($this->press($confirm));
+        self::assertSame(['editMessageText', 'answerCallbackQuery'], $this->calls());
+        self::assertSame(ActorRefusedException::AGENT_ACCOUNT, $this->popup());
+        self::assertStringEndsWith("\n\n🔒 حساب نماینده است؛ فقط از پنل تغییر می‌کند.", $this->params(0)['text'], 'the wallet as it now stands');
+        self::assertSame(0, WalletTransaction::query()->where('user_id', $this->ali->id)->count());
+
+        // A nonce this card never drew (forged, or pruned since).
+        $this->ali->forceFill(['agency_level_id' => null])->save();
+        $this->send($this->press("uw:y:{$this->ali->id}:zzzzzz"));
+        self::assertSame(CustomerCards::BUTTON_OLD, $this->popup());
+        self::assertSame(0, WalletTransaction::query()->where('user_id', $this->ali->id)->count());
+
+        // The card's nonce sent for another customer: an old button — it writes only what it was drawn for.
+        $reza = $this->customer(['telegram_id' => 900_777, 'username' => 'reza']);
+        $this->send($this->press("uw:y:{$reza->id}:" . substr($confirm, -6)));
+        self::assertSame(CustomerCards::BUTTON_OLD, $this->popup());
+        self::assertSame([0, 0], [WalletTransaction::query()->where('user_id', $this->ali->id)->count(), WalletTransaction::query()->where('user_id', $reza->id)->count()]);
+
+        // Malformed: nothing done.
+        $this->send($this->press("uw:y:{$this->ali->id}:1000:{$prompt}"));
+        self::assertSame(['answerCallbackQuery'], $this->calls());
+        self::assertNull($this->popup());
+    }
+
+    public function testADebitPastTheDeepestDebtIsRefusedAndTheQuestionKept(): void
+    {
+        $this->wallet($this->ali, '-999995000');
+        $this->send($this->press("uw:d:{$this->ali->id}"));
+        self::assertStringStartsWith('➖ چه مبلغی از کیف پول کم شود؟ موجودی: ۹۹۹٬۹۹۵٬۰۰۰ تومان بدهی.', $this->params(0)['text']);
+        $prompt = $this->prompt();
+
         $this->send($this->reply($prompt, '10000'));
-        self::assertSame(['sendMessage'], $this->calls(), 'no card rewritten, no question deleted');
-        self::assertSame('موجودی کاربر ۵٬۰۰۰ تومان است و از این بیشتر نمی‌شود کم کرد.', $this->params(0)['text']);
-        self::assertSame('5000.00', $this->ali->balance());
+        self::assertSame(['sendMessage'], $this->calls(), 'no card rewritten, no question deleted: never asked again past the deepest');
+        self::assertSame('بدهی کاربر از ۱٬۰۰۰٬۰۰۰٬۰۰۰ تومان بیشتر نمی‌شود؛ موجودی فعلی: ۹۹۹٬۹۹۵٬۰۰۰ تومان بدهی.', $this->params(0)['text']);
+        self::assertSame('-999995000.00', $this->ali->balance());
+
+        // What the wallet refuses anyway is said at once too, not asked again.
+        $this->send($this->reply($prompt, '0'));
+        self::assertSame(['مبلغ باید عددی مثبت به تومان و بدون اعشار باشد.'], $this->said());
+        $this->send($this->reply($prompt, "۳۰۰۰\n" . str_repeat('ی', 191)));
+        self::assertSame(['توضیح حداکثر 190 کاراکتر است.'], $this->said());
 
         $this->send($this->reply($prompt, '۳۰۰۰'));
         self::assertSame(['editMessageText', 'deleteMessage', 'sendMessage'], $this->calls(), 'the same question answered again');
-        self::assertSame('2000.00', $this->ali->balance());
-        $line = WalletTransaction::query()->where('user_id', $this->ali->id)->latest('id')->firstOrFail();
-        self::assertSame(WalletService::LINE_DEBIT_BY_SUPPORT, $line->description, 'no note: the usual words');
-        self::assertSame('✅ ۳٬۰۰۰ تومان از کیف پول کم شد؛ موجودی: ۲٬۰۰۰ تومان.', $this->params(2)['text']);
+        self::assertStringEndsWith("موجودی بعد از آن: <b>۹۹۹٬۹۹۸٬۰۰۰ تومان بدهی</b>\n⚠️ بدهی مشتری بیشتر می‌شود؛ ثبت شود؟", $this->params(0)['text']);
+        [, $confirm] = $this->callbacks(0);
+        $this->send($this->press($confirm));
+        self::assertSame('-999998000.00', $this->ali->balance());
+        self::assertSame('✅ ۳٬۰۰۰ تومان از کیف پول کم شد؛ موجودی: ۹۹۹٬۹۹۸٬۰۰۰ تومان بدهی.', $this->popup());
     }
 
     public function testAQuestionAnsweredTwiceWritesOneLine(): void

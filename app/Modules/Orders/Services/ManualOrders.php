@@ -28,6 +28,7 @@ use App\Modules\Payments\Services\PaymentMethods;
 use App\Modules\Payments\Services\PaymentService;
 use App\Modules\Providers\Models\Server;
 use App\Modules\Subscriptions\Services\ClientNaming;
+use App\Modules\Telegram\Messages;
 use App\Modules\Users\Models\User;
 use App\Support\Input;
 use App\Support\Money;
@@ -282,7 +283,7 @@ final class ManualOrders
         }
         $short = $this->checkout->shortfall($customer, $method, Money::normalize($manual->amount));
         if ($short !== null) {
-            throw ValidationException::on('amount', sprintf(self::WALLET_SHORT, Money::format($short->balance), Money::format($short->missing)));
+            throw ValidationException::on('amount', sprintf(self::WALLET_SHORT, Messages::balance($short->balance), Money::format($short->missing)));
         }
     }
 }

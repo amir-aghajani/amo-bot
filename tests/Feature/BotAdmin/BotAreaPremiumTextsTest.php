@@ -16,10 +16,14 @@ use App\Modules\Telegram\Admin\Ui\Words;
 use App\Modules\Telegram\Emoji\EmojiMap;
 use App\Modules\Telegram\Emoji\PremiumCheck;
 use App\Modules\Telegram\Emoji\PremiumEmojiStatus;
+use App\Modules\Telegram\Keyboard\KeyboardLayouts;
 use App\Modules\Telegram\Models\CustomEmoji;
 use App\Modules\Telegram\Session\SessionStore;
+use App\Modules\Telegram\Texts\BotText;
 use App\Modules\Telegram\Texts\BotTexts;
+use App\Modules\Telegram\Update\ReceivedUpdates;
 use App\Modules\Users\Enums\UserRole;
+use Illuminate\Support\Carbon;
 use Tests\BotTestCase;
 use Tests\Support\FakeTelegram;
 
@@ -27,9 +31,11 @@ use Tests\Support\FakeTelegram;
  * «💎 ایموجی پرمیوم متن‌ها» from the bot (Sections\Bot\Texts\PremiumTextsScreen): whether the bot may send premium emoji
  * — able, unable, never checked —; the check, sent by this chat's bot to this very chat and offered in the shop's own
  * bot alone, its refusals said; the switch, refused in the API's words until the bot was found able, carrying the state
- * it sets; a premium emoji added from the library — a later page of it —, its own plain emoji kept or another typed, a
- * refused one asking again; one removed, asked first, an older window's tap acting on that item or saying it is gone; an
- * agent's own shop from their own bot; and a seat that does not set the shop up kept out.
+ * it sets; the plain emoji the texts carry, in the API's order and paged, the swapped ones marked; an emoji's page —
+ * where it is, its premium emoji picked from the library, changed, taken off (asked first) —, an older window's tap
+ * acting on that emoji or saying it is gone, and 0.10.2's buttons showing the list; «➕ ایموجی دیگر», a premium emoji
+ * picked first — a later page of the library —, its own plain emoji kept or another typed, a refused one asking again;
+ * an agent's own shop from their own bot; and a seat that does not set the shop up kept out.
  */
 final class BotAreaPremiumTextsTest extends BotTestCase
 {
@@ -40,6 +46,9 @@ final class BotAreaPremiumTextsTest extends BotTestCase
 
     /** Words of the check's test message alone (PremiumCheck), which tell it from the bot's other messages. */
     private const PROBE = 'این پیام آزمایشی است';
+
+    /** The emoji a page of the list. */
+    private const PER_PAGE = 40;
 
     protected function setUp(): void
     {
@@ -67,13 +76,9 @@ final class BotAreaPremiumTextsTest extends BotTestCase
         self::assertStringNotContainsString('آخرین بررسی', $screen);
         self::assertStringContainsString('«' . PremiumTextsScreen::CHECK . '» را بزنید', $screen);
         self::assertStringContainsString(self::NAME . ': <b>' . Words::OFF . '</b>', $screen);
-        self::assertStringContainsString('فهرست: <b>۱ ایموجی از ۱۰۰</b>', $screen);
-        $uses = EmojiMap::uses(['✅'], $this->service(BotTexts::class)->wordings())['✅'];
-        self::assertGreaterThan(0, $uses);
-        self::assertStringContainsString('✅ ← <tg-emoji emoji-id="111">✅</tg-emoji> · در ' . Fmt::number($uses) . ' متن', $screen, 'each item drawn premium beside its plain emoji, with the texts it is in');
+        self::assertStringContainsString('پرمیوم شده: <b>۱ از ۱۰۰</b>', $screen);
         self::assertStringContainsString('خاموش است: تا روشن نشود', $screen);
         self::assertSame(PremiumTextsScreen::LOCKED, $this->button(Nav::to('txp', 'on', 1))['text'] ?? null, 'the switch says what it waits for');
-        self::assertSame('🗑 ✅', $this->button(Nav::to('txp', 'rm', '111'))['text'] ?? null);
         self::assertNotNull($this->button(Nav::to('txp', 'chk')));
 
         $this->service(PremiumEmojiStatus::class)->record(false);
@@ -91,6 +96,204 @@ final class BotAreaPremiumTextsTest extends BotTestCase
         self::assertStringContainsString('آخرین بررسی: <b>', $screen);
         self::assertStringNotContainsString('⚠️ ' . PremiumTextsScreen::WHY, $screen, 'no warning');
         self::assertSame(Words::turn(true, self::NAME), $this->button(Nav::to('txp', 'on', 1))['text'] ?? null);
+    }
+
+    public function testTheListHasTheEmojiTheTextsCarryInTheApisOrderPagedWithWhereEachIs(): void
+    {
+        $this->service(BotTexts::class)->save(BotText::PhoneVerified, 'ثبت شد 🦄 ❤ 🦀');
+        $this->service(KeyboardLayouts::class)->save(KeyboardLayouts::START, ['type' => 'inline', 'rows' => [[
+            ['action' => 'support', 'label' => '🦀 پشتیبانی', 'style' => null],
+            ['action' => 'wallet', 'label' => '🦞 کیف پول', 'style' => null],
+        ]]]);
+        // The map's heart without its variation selector, the texts' maybe with it: one heart. 🦉 no text carries.
+        CustomEmoji::query()->create(['emoji_id' => '333', 'emoji' => '🦉']);
+        $this->service(EmojiMap::class)->save(['enabled' => false, 'items' => [['emoji' => '❤', 'emoji_id' => '222'], ['emoji' => '🦉', 'emoji_id' => '333']]]);
+        $rows = $this->inventory();
+        $pages = (int) ceil(count($rows) / self::PER_PAGE);
+        self::assertGreaterThan(1, $pages, 'the default texts alone carry more than a page');
+        self::assertSame(['🦉', 0, 0, '333'], array_values($rows[array_key_last($rows)]), 'one no text carries: last');
+
+        $this->tapAs(Nav::to('txp'));
+        $carried = count(array_filter($rows, static fn(array $row): bool => $row['texts'] + $row['menu'] > 0));
+        self::assertStringContainsString('ایموجی‌های متن‌ها: <b>' . Fmt::number($carried) . '</b>', $this->lastSaid());
+        self::assertStringContainsString('پرمیوم شده: <b>۲ از ۱۰۰</b>', $this->lastSaid());
+        self::assertContains(Nav::to(Screens::PAGE, 'show', 1, $pages), $this->offered());
+        $this->assertFits();
+
+        $seen = [];
+        for ($page = 1; $page <= $pages; $page++) {
+            $this->tapAs(Nav::to('txp', 'page', $page));
+            $this->assertFits();
+            foreach ($this->emojiButtons() as [$label, $token, $at]) {
+                self::assertSame((string) $page, $at, 'each button carries the page it is on');
+                $seen[] = [$label, $token];
+            }
+        }
+        $expected = array_map(static fn(array $row): array => [$row['emoji'] . ($row['emoji_id'] !== null ? ' ' . PremiumTextsScreen::SWAPPED : ''), PremiumTextsScreen::token($row['emoji'])], $rows);
+        self::assertSame($expected, $seen, 'every emoji in the API\'s order, a swapped one marked, forty a page');
+        self::assertContains([$this->row('❤')['emoji'] . ' ' . PremiumTextsScreen::SWAPPED, PremiumTextsScreen::token('❤️')], $seen, 'the heart swapped, with or without its variation selector');
+
+        // Where each is.
+        $where = [
+            '🦄' => 'در ۱ متن',
+            '🦀' => 'در ۱ متن و ۱ دکمه منو',
+            '🦞' => 'در ۱ دکمه منو',
+            '✅' => 'در ' . Fmt::number($this->row('✅')['texts']) . ' متن',
+            '🦉' => 'فعلا در هیچ متنی نیست',
+        ];
+        foreach ($where as $emoji => $said) {
+            $this->tapAs(Nav::to('txp', 'e', PremiumTextsScreen::token($emoji)));
+            self::assertStringContainsString('<b>ایموجی ' . $this->row($emoji)['emoji'] . '</b>', $this->lastSaid());
+            self::assertStringContainsString('استفاده: <b>' . $said . '</b>', $this->lastSaid(), $emoji);
+        }
+        self::assertStringContainsString('ایموجی پرمیوم: <b><tg-emoji emoji-id="333">🦉</tg-emoji></b>', $this->lastSaid());
+    }
+
+    public function testAnEmojiIsSwappedChangedAndTakenOffFromItsPageItsItemKeptInPlace(): void
+    {
+        $this->service(BotTexts::class)->save(BotText::PhoneVerified, 'ثبت شد 🦄');
+        CustomEmoji::query()->create(['emoji_id' => '333', 'emoji' => '🦉']);
+        $unicorn = PremiumTextsScreen::token('🦄');
+        $page = $this->listPage('🦄');
+
+        $this->tapAs(Nav::to('txp', 'page', $page));
+        self::assertSame('🦄', $this->button(Nav::to('txp', 'e', $unicorn, $page))['text'] ?? null, 'nothing swapped in: the emoji alone');
+
+        $this->tapAs(Nav::to('txp', 'e', $unicorn, $page));
+        $screen = $this->lastSaid();
+        self::assertStringContainsString('<b>ایموجی 🦄</b>', $screen);
+        self::assertStringContainsString('استفاده: <b>در ۱ متن</b>', $screen);
+        self::assertStringContainsString('ایموجی پرمیوم: <b>ندارد</b>', $screen);
+        self::assertSame(PremiumTextsScreen::PICK, $this->button(Nav::to('txp', 'ch', $unicorn))['text'] ?? null);
+        self::assertNull($this->button(Nav::to('txp', 'un', $unicorn)), 'nothing to take off');
+        self::assertContains(Nav::to('txp', 'page', $page), $this->offered(), 'back to the page it was opened from');
+
+        // Picked from the library.
+        $this->tapAs(Nav::to('txp', 'ch', $unicorn));
+        self::assertStringContainsString('<b>' . PremiumTextsScreen::PICK . '</b>', $this->lastSaid());
+        self::assertStringContainsString('<tg-emoji emoji-id="111">✅</tg-emoji>', $this->lastSaid());
+        self::assertContains(Nav::to('txp', 'to', $unicorn, '222'), $this->offered());
+        self::assertContains(Nav::to('txp', 'e', $unicorn), $this->offered(), 'back to its page');
+        $this->tapAs(Nav::to('txp', 'to', $unicorn, '111'));
+        self::assertSame(['enabled' => false, 'items' => [['emoji' => '🦄', 'emoji_id' => '111']]], $this->stored());
+        self::assertSame('✅ ایموجی پرمیوم 🦄 ذخیره شد', $this->popup());
+        self::assertStringContainsString('ایموجی پرمیوم: <b><tg-emoji emoji-id="111">🦄</tg-emoji></b>', $this->lastSaid());
+        self::assertSame(PremiumTextsScreen::CHANGE, $this->button(Nav::to('txp', 'ch', $unicorn))['text'] ?? null);
+        $remove = $this->button(Nav::to('txp', 'un', $unicorn));
+        self::assertSame([PremiumTextsScreen::UNSWAP, 'danger'], [$remove['text'] ?? null, $remove['style'] ?? null]);
+
+        $this->tapAs(Nav::to('txp', 'page', $page));
+        self::assertSame('🦄 ' . PremiumTextsScreen::SWAPPED, $this->button(Nav::to('txp', 'e', $unicorn, $page))['text'] ?? null, 'marked on the list');
+
+        // Changed: a premium emoji standing for another plain emoji is not offered; its item keeps its place.
+        $this->service(EmojiMap::class)->save(['items' => [['emoji' => '🦄', 'emoji_id' => '111'], ['emoji' => '🦉', 'emoji_id' => '333']]]);
+        $this->tapAs(Nav::to('txp', 'ch', $unicorn));
+        self::assertStringContainsString('<b>' . PremiumTextsScreen::CHANGE . '</b>', $this->lastSaid());
+        self::assertStringContainsString('ایموجی پرمیوم فعلی: <b><tg-emoji emoji-id="111">🦄</tg-emoji></b>', $this->lastSaid());
+        self::assertSame([Nav::to('txp', 'to', $unicorn, '222')], array_values(array_filter($this->offered(), static fn(string $data): bool => str_starts_with($data, 'a:txp:to:'))));
+        $this->tapAs(Nav::to('txp', 'to', $unicorn, '222'));
+        self::assertSame([['emoji' => '🦄', 'emoji_id' => '222'], ['emoji' => '🦉', 'emoji_id' => '333']], $this->stored()['items']);
+        self::assertStringContainsString('ایموجی پرمیوم: <b><tg-emoji emoji-id="222">🦄</tg-emoji></b>', $this->lastSaid());
+
+        // An older picker's taps: one standing for another emoji, the same again, one gone from the library.
+        $this->tapAs(Nav::to('txp', 'to', $unicorn, '333'));
+        self::assertSame(PremiumTextsScreen::ALREADY, $this->popup());
+        self::assertStringContainsString('<b>' . PremiumTextsScreen::CHANGE . '</b>', $this->lastSaid(), 'the picker again');
+        $this->tapAs(Nav::to('txp', 'to', $unicorn, '222'));
+        self::assertSame(PremiumTextsScreen::ALREADY, $this->popup());
+        self::assertStringContainsString('<b>ایموجی 🦄</b>', $this->lastSaid(), 'its page');
+        $this->tapAs(Nav::to('txp', 'to', $unicorn, '999'));
+        self::assertSame(PremiumTextsScreen::NOT_KNOWN, $this->popup());
+        self::assertSame([['emoji' => '🦄', 'emoji_id' => '222'], ['emoji' => '🦉', 'emoji_id' => '333']], $this->stored()['items'], 'nothing changed');
+
+        // Taken off, asked first; the panel reordered the map meanwhile.
+        $this->tapAs(Nav::to('txp', 'un', $unicorn));
+        self::assertStringContainsString('❓ ایموجی پرمیوم این ایموجی برداشته شود؟', $this->lastSaid());
+        self::assertStringContainsString('🦄 ← <tg-emoji emoji-id="222">🦄</tg-emoji>', $this->lastSaid());
+        $yes = $this->button(Nav::to('txp', 'und', $unicorn));
+        self::assertSame([Words::yes('برداشته شود', '🗑'), 'danger'], [$yes['text'] ?? null, $yes['style'] ?? null]);
+        self::assertContains(Nav::to('txp', 'e', $unicorn), $this->offered(), '«✖️ انصراف»: its page');
+        self::assertCount(2, $this->stored()['items']);
+        $this->service(EmojiMap::class)->save(['items' => [['emoji' => '🦉', 'emoji_id' => '333'], ['emoji' => '🦄', 'emoji_id' => '222']]]);
+        $this->tapAs(Nav::to('txp', 'und', $unicorn));
+        self::assertSame(['enabled' => false, 'items' => [['emoji' => '🦉', 'emoji_id' => '333']]], $this->stored());
+        self::assertSame('🗑 ایموجی پرمیوم 🦄 برداشته شد', $this->popup());
+        self::assertStringContainsString('ایموجی پرمیوم: <b>ندارد</b>', $this->lastSaid(), 'still carried: its page');
+
+        // None any more: said, nothing asked or changed.
+        $this->tapAs(Nav::to('txp', 'und', $unicorn));
+        self::assertSame(PremiumTextsScreen::NOT_SWAPPED, $this->popup());
+        $this->tapAs(Nav::to('txp', 'un', $unicorn));
+        self::assertSame(PremiumTextsScreen::NOT_SWAPPED, $this->popup());
+        self::assertStringNotContainsString('❓', $this->lastSaid());
+        self::assertCount(1, $this->stored()['items']);
+
+        // One no text carries, taken off: the list, which has it no more.
+        $this->tapAs(Nav::to('txp', 'und', PremiumTextsScreen::token('🦉')));
+        self::assertSame(['enabled' => false, 'items' => []], $this->stored());
+        self::assertSame('🗑 ایموجی پرمیوم 🦉 برداشته شد', $this->popup());
+        self::assertStringContainsString('<b>' . PremiumTextsScreen::TITLE . '</b>', $this->lastSaid());
+        self::assertNotContains(PremiumTextsScreen::token('🦉'), array_column($this->emojiButtons(), 1));
+    }
+
+    public function testEveryEmojiAFreshShopsTextsCarryIsNamedApartAndSwapped(): void
+    {
+        $rows = $this->inventory();
+        $tokens = array_map(static fn(array $row): string => PremiumTextsScreen::token($row['emoji']), $rows);
+        self::assertCount(count($rows), array_unique($tokens), 'no two emoji share a token');
+
+        foreach ($rows as $row) {
+            // Each tap past the chat's pace of taps (ReceivedUpdates::FLOOD_UPDATES), as an owner trying them would be.
+            Carbon::setTestNow(now()->addSeconds(ReceivedUpdates::FLOOD_SECONDS + 1));
+            $this->service(EmojiMap::class)->save(['items' => []]);
+            $this->tapAs(Nav::to('txp', 'to', PremiumTextsScreen::token($row['emoji']), '111'));
+            self::assertSame('✅ ایموجی پرمیوم ' . $row['emoji'] . ' ذخیره شد', $this->popup(), $row['emoji']);
+            self::assertSame('111', $this->row($row['emoji'])['emoji_id'], $row['emoji']);
+        }
+    }
+
+    public function testAHeartIsChangedInTheFormTheMapKeepsIt(): void
+    {
+        $this->service(BotTexts::class)->save(BotText::PhoneVerified, 'ثبت شد ❤️');
+        $this->service(EmojiMap::class)->save(['enabled' => false, 'items' => [['emoji' => '✅', 'emoji_id' => '111'], ['emoji' => '❤', 'emoji_id' => '222']]]);
+        CustomEmoji::query()->create(['emoji_id' => '333', 'emoji' => '🦉']);
+
+        $this->tapAs(Nav::to('txp', 'e', PremiumTextsScreen::token('❤')));
+        self::assertStringContainsString('<b>ایموجی ❤️</b>', $this->lastSaid(), 'shown with its variation selector');
+        self::assertStringContainsString('<tg-emoji emoji-id="222">❤️</tg-emoji>', $this->lastSaid());
+
+        $this->tapAs(Nav::to('txp', 'to', PremiumTextsScreen::token('❤️'), '333'));
+        self::assertSame([['emoji' => '✅', 'emoji_id' => '111'], ['emoji' => '❤', 'emoji_id' => '333']], $this->stored()['items'], 'its item, in its place and form');
+    }
+
+    public function testAStaleTokenOrA0102ButtonShowsTheListAndChangesNothing(): void
+    {
+        $this->service(BotTexts::class)->save(BotText::PhoneVerified, 'ثبت شد 🦄');
+        $this->service(EmojiMap::class)->save(['enabled' => false, 'items' => [['emoji' => '✅', 'emoji_id' => '111']]]);
+        $before = $this->stored();
+        $unicorn = PremiumTextsScreen::token('🦄');
+
+        $this->tapAs(Nav::to('txp', 'e', 'deadbeef'));
+        self::assertSame(PremiumTextsScreen::GONE, $this->popup());
+        self::assertStringContainsString('<b>' . PremiumTextsScreen::TITLE . '</b>', $this->lastSaid());
+
+        // The text edited meanwhile: no text carries it, nothing swapped in.
+        $this->tapAs(Nav::to('txp', 'e', $unicorn));
+        self::assertStringContainsString('<b>ایموجی 🦄</b>', $this->lastSaid());
+        $this->service(BotTexts::class)->save(BotText::PhoneVerified, 'ثبت شد');
+        foreach ([Nav::to('txp', 'e', $unicorn), Nav::to('txp', 'ch', $unicorn), Nav::to('txp', 'to', $unicorn, '222'), Nav::to('txp', 'un', $unicorn), Nav::to('txp', 'und', $unicorn)] as $tap) {
+            $this->tapAs($tap);
+            self::assertSame(PremiumTextsScreen::GONE, $this->popup(), $tap);
+            self::assertStringContainsString('<b>' . PremiumTextsScreen::TITLE . '</b>', $this->lastSaid(), $tap);
+        }
+
+        // 0.10.2's buttons, a premium emoji's id where a token goes: the list.
+        foreach ([Nav::to('txp', 'rm', '111'), Nav::to('txp', 'rmd', '111'), Nav::to('txp', 'e', '111'), Nav::to('txp', 'ch', '111'), Nav::to('txp', 'un', '111')] as $tap) {
+            $this->tapAs($tap);
+            self::assertStringContainsString('<b>' . PremiumTextsScreen::TITLE . '</b>', $this->lastSaid(), $tap);
+            self::assertStringNotContainsString('❓', $this->lastSaid(), $tap);
+        }
+        self::assertSame($before, $this->stored());
     }
 
     public function testTheCheckGoesFromThisBotToTheChatItWasTappedInAndSaysWhyItCouldNot(): void
@@ -188,8 +391,9 @@ final class BotAreaPremiumTextsTest extends BotTestCase
         self::assertSame('⏸ ' . self::NAME . ' خاموش شد', $this->popup());
     }
 
-    public function testAMapLeftOnStaysOnAsItsEmojiAreAddedAndRemovedThoughFoundUnableSince(): void
+    public function testAMapLeftOnStaysOnAsItsEmojiAreSwappedAndTakenOffThoughFoundUnableSince(): void
     {
+        $this->service(BotTexts::class)->save(BotText::PhoneVerified, 'ثبت شد 🦄');
         CustomEmoji::query()->create(['emoji_id' => '333', 'emoji' => '⭐']);
         $this->service(PremiumEmojiStatus::class)->record(true);
         $this->service(EmojiMap::class)->save(['enabled' => true, 'items' => [['emoji' => '✅', 'emoji_id' => '111'], ['emoji' => '❤️', 'emoji_id' => '222']]]);
@@ -200,51 +404,56 @@ final class BotAreaPremiumTextsTest extends BotTestCase
         self::assertStringContainsString('⚠️ ' . PremiumTextsScreen::WHY, $this->lastSaid(), 'customers see plain emoji meanwhile');
         self::assertSame(Words::turn(false, self::NAME), $this->button(Nav::to('txp', 'on', 0))['text'] ?? null, 'and it may be turned off');
 
-        $this->tapAs(Nav::to('txp', 'pk', '333'));
-        $this->tapAs(Nav::to('txp', 'keep', '333'));
-        self::assertSame(['enabled' => true, 'items' => [['emoji' => '✅', 'emoji_id' => '111'], ['emoji' => '❤️', 'emoji_id' => '222'], ['emoji' => '⭐', 'emoji_id' => '333']]], $this->stored(), 'the list alone sent: still on');
+        $this->tapAs(Nav::to('txp', 'to', PremiumTextsScreen::token('🦄'), '333'));
+        self::assertSame(['enabled' => true, 'items' => [['emoji' => '✅', 'emoji_id' => '111'], ['emoji' => '❤️', 'emoji_id' => '222'], ['emoji' => '🦄', 'emoji_id' => '333']]], $this->stored(), 'the list alone sent: still on');
 
-        $this->tapAs(Nav::to('txp', 'rmd', '111'));
-        self::assertSame(['enabled' => true, 'items' => [['emoji' => '❤️', 'emoji_id' => '222'], ['emoji' => '⭐', 'emoji_id' => '333']]], $this->stored());
+        $this->tapAs(Nav::to('txp', 'und', PremiumTextsScreen::token('✅')));
+        self::assertSame(['enabled' => true, 'items' => [['emoji' => '❤️', 'emoji_id' => '222'], ['emoji' => '🦄', 'emoji_id' => '333']]], $this->stored());
     }
 
-    public function testTheMapIsPagedItsLinesWithItsButtonsAndAnAddedEmojiShowsOnItsPage(): void
+    public function testAFullMapStillChangesAnEmojisPremiumOneButSwapsNoMore(): void
     {
         $emojis = [...array_map(mb_chr(...), range(0x1F600, 0x1F64F)), ...array_map(mb_chr(...), range(0x1F680, 0x1F693))];
         self::assertCount(100, $emojis);
         // Ids as long as Telegram's: nineteen digits.
         $id = static fn(int $n): string => (string) (1_000_000_000_000_000_000 + $n);
-        foreach ($emojis as $n => $emoji) {
+        foreach ([...$emojis, '🛸'] as $n => $emoji) {
             CustomEmoji::query()->create(['emoji_id' => $id($n + 1), 'emoji' => $emoji]);
         }
-        $this->service(EmojiMap::class)->save(['enabled' => false, 'items' => array_map(static fn(int $n): array => ['emoji' => $emojis[$n], 'emoji_id' => $id($n + 1)], range(0, 98))]);
+        $this->service(EmojiMap::class)->save(['enabled' => false, 'items' => array_map(static fn(int $n): array => ['emoji' => $emojis[$n], 'emoji_id' => $id($n + 1)], range(0, 99))]);
+        $pages = (int) ceil(count($this->inventory()) / self::PER_PAGE);
 
         $this->tapAs(Nav::to('txp'));
-        self::assertContains(Nav::to(Screens::PAGE, 'show', 1, 5), $this->offered());
-        self::assertContains(Nav::to('txp', 'page', 2), $this->offered());
-        self::assertContains(Nav::to('txp', 'rm', $id(20)), $this->offered());
-        self::assertNotContains(Nav::to('txp', 'rm', $id(21)), $this->offered(), 'twenty a page');
-        self::assertStringNotContainsString('emoji-id="' . $id(21) . '"', $this->lastSaid(), 'its lines paged with its buttons');
-        $this->assertFits();
-
-        $this->tapAs(Nav::to('txp', 'page', 2));
-        self::assertContains(Nav::to('txp', 'rm', $id(21)), $this->offered());
-        self::assertStringContainsString($emojis[20] . ' ← <tg-emoji emoji-id="' . $id(21) . '">' . $emojis[20] . '</tg-emoji>', $this->lastSaid());
-        $this->assertFits();
-
-        $this->tapAs(Nav::to('txp', 'page', 1));
-        $this->tapAs(Nav::to('txp', 'pk', $id(100)));
-        $this->tapAs(Nav::to('txp', 'keep', $id(100)));
-        self::assertCount(100, $this->stored()['items']);
-        self::assertSame(['emoji' => $emojis[99], 'emoji_id' => $id(100)], $this->stored()['items'][99]);
-        self::assertContains(Nav::to('txp', 'rm', $id(100)), $this->offered(), 'shown on its page: the last');
-        self::assertContains(Nav::to(Screens::PAGE, 'show', 5, 5), $this->offered());
-        self::assertNotContains(Nav::to('txp', 'add'), $this->offered(), 'full: no more to add');
         self::assertStringContainsString('فهرست پر است: حداکثر ۱۰۰ ایموجی.', $this->lastSaid());
+        self::assertNotContains(Nav::to('txp', 'add'), $this->offered(), 'no «ایموجی دیگر» either');
         $this->assertFits();
+        $this->tapAs(Nav::to('txp', 'page', $pages));
+        self::assertSame([$emojis[99] . ' ' . PremiumTextsScreen::SWAPPED, PremiumTextsScreen::token($emojis[99]), (string) $pages], $this->emojiButtons()[array_key_last($this->emojiButtons())], 'the map\'s last, carried by no text: last');
+        $this->assertFits();
+
+        // One with none: nothing to pick, said; an older window's taps refused.
+        $check = PremiumTextsScreen::token('✅');
+        $this->tapAs(Nav::to('txp', 'e', $check));
+        self::assertNotContains(Nav::to('txp', 'ch', $check), $this->offered());
+        self::assertStringContainsString('فهرست پر است: حداکثر ۱۰۰ ایموجی.', $this->lastSaid());
+        self::assertContains(Nav::to('txp', 'page', $pages), $this->offered(), 'back to the page last shown');
+        $this->tapAs(Nav::to('txp', 'ch', $check));
+        self::assertSame('فهرست پر است: حداکثر ۱۰۰ ایموجی', $this->popup());
+        $this->tapAs(Nav::to('txp', 'to', $check, $id(101)));
+        self::assertSame('فهرست پر است: حداکثر ۱۰۰ ایموجی', $this->popup());
+        self::assertCount(100, $this->stored()['items']);
+
+        // One with a premium emoji still changes it.
+        $first = PremiumTextsScreen::token($emojis[0]);
+        $this->tapAs(Nav::to('txp', 'ch', $first));
+        self::assertContains(Nav::to('txp', 'to', $first, $id(101)), $this->offered(), 'the one premium emoji standing for none');
+        $this->assertFits();
+        $this->tapAs(Nav::to('txp', 'to', $first, $id(101)));
+        self::assertCount(100, $this->stored()['items']);
+        self::assertSame(['emoji' => $emojis[0], 'emoji_id' => $id(101)], $this->stored()['items'][0]);
     }
 
-    public function testAPremiumEmojiIsPickedFromALaterPageItsOwnEmojiKeptOrAnotherTyped(): void
+    public function testAnotherEmojiIsPickedFromALaterPageItsOwnEmojiKeptOrAnotherTyped(): void
     {
         $this->service(EmojiMap::class)->save(['enabled' => false, 'items' => [['emoji' => '✅', 'emoji_id' => '111']]]);
         CustomEmoji::query()->where('emoji_id', '222')->delete();
@@ -252,7 +461,11 @@ final class BotAreaPremiumTextsTest extends BotTestCase
             CustomEmoji::query()->create(['emoji_id' => (string) (1000 + $n), 'emoji' => $n === 1 ? '🔥' : '🎁']);
         }
 
+        $this->tapAs(Nav::to('txp'));
+        self::assertSame(PremiumTextsScreen::OTHER, $this->button(Nav::to('txp', 'add'))['text'] ?? null);
+
         $this->tapAs(Nav::to('txp', 'add'));
+        self::assertStringContainsString('<b>' . PremiumTextsScreen::OTHER . '</b>', $this->lastSaid());
         self::assertStringContainsString('۳۰ ایموجی پرمیوم', $this->lastSaid(), 'the ones not in the map yet');
         self::assertContains(Nav::to('txp', 'pk', '1030'), $this->offered(), 'latest first');
         self::assertNotContains(Nav::to('txp', 'pk', '111'), $this->offered(), 'one in the map already is not offered');
@@ -272,18 +485,20 @@ final class BotAreaPremiumTextsTest extends BotTestCase
         self::assertSame('✔️ همین 🔥 بماند', $this->button(Nav::to('txp', 'keep', '1001'))['text'] ?? null);
         self::assertSame(Admin::INPUT, $this->service(SessionStore::class)->load(self::OWNER)->state(), 'waiting for the plain emoji');
 
-        // Its own kept, at a tap.
+        // Its own kept, at a tap: its page.
         $this->tapAs(Nav::to('txp', 'keep', '1001'));
         self::assertSame(['enabled' => false, 'items' => [['emoji' => '✅', 'emoji_id' => '111'], ['emoji' => '🔥', 'emoji_id' => '1001']]], $this->stored(), 'the whole list and it');
-        self::assertSame('✅ 🔥 به فهرست اضافه شد', $this->popup());
-        self::assertStringContainsString('🔥 ← <tg-emoji emoji-id="1001">🔥</tg-emoji>', $this->lastSaid());
+        self::assertSame('✅ ایموجی پرمیوم 🔥 ذخیره شد', $this->popup());
+        self::assertStringContainsString('<b>ایموجی 🔥</b>', $this->lastSaid());
+        self::assertStringContainsString('ایموجی پرمیوم: <b><tg-emoji emoji-id="1001">🔥</tg-emoji></b>', $this->lastSaid());
 
         // Another typed.
         $this->tapAs(Nav::to('txp', 'pk', '1002'));
-        $this->sayAs('❤️');
-        self::assertSame([['emoji' => '✅', 'emoji_id' => '111'], ['emoji' => '🔥', 'emoji_id' => '1001'], ['emoji' => '❤️', 'emoji_id' => '1002']], $this->stored()['items']);
-        self::assertStringContainsString('<b>✅ ❤️ به فهرست اضافه شد</b>', $this->lastSaid());
-        self::assertStringContainsString('❤️ ← <tg-emoji emoji-id="1002">❤️</tg-emoji>', $this->lastSaid());
+        $this->sayAs('🦄');
+        self::assertSame([['emoji' => '✅', 'emoji_id' => '111'], ['emoji' => '🔥', 'emoji_id' => '1001'], ['emoji' => '🦄', 'emoji_id' => '1002']], $this->stored()['items']);
+        self::assertStringContainsString('<b>✅ ایموجی پرمیوم 🦄 ذخیره شد</b>', $this->lastSaid());
+        self::assertStringContainsString('ایموجی پرمیوم: <b><tg-emoji emoji-id="1002">🦄</tg-emoji></b>', $this->lastSaid());
+        self::assertStringContainsString('استفاده: <b>فعلا در هیچ متنی نیست</b>', $this->lastSaid());
 
         // Picked again from an older window: said, nothing asked.
         $this->tapAs(Nav::to('txp', 'pk', '1002'));
@@ -297,25 +512,27 @@ final class BotAreaPremiumTextsTest extends BotTestCase
         CustomEmoji::query()->create(['emoji_id' => '333', 'emoji' => '🎁']);
         $before = $this->stored();
 
-        // Typed: not one emoji, then one the map has — the API's words over the question, which still waits.
+        // Typed: not one emoji — the API's words over the question, which still waits.
         $this->tapAs(Nav::to('txp', 'pk', '333'));
         $this->sayAs('قلب');
         self::assertStringContainsString('⚠️ ' . EmojiMap::NOT_EMOJI, $this->lastSaid());
         self::assertStringContainsString('✍️ ایموجی معمولی', $this->lastSaid());
         self::assertSame(Admin::INPUT, $this->service(SessionStore::class)->load(self::OWNER)->state());
+
+        // One that has a premium emoji already: its page, to change it there; nothing saved.
         $this->sayAs('🎁');
-        self::assertStringContainsString('⚠️ ' . EmojiMap::TWICE_EMOJI, $this->lastSaid());
-        self::assertSame(Admin::INPUT, $this->service(SessionStore::class)->load(self::OWNER)->state());
+        self::assertStringContainsString(PremiumTextsScreen::HAS_ONE, $this->lastSaid());
+        self::assertStringContainsString('ایموجی 🎁', $this->lastSaid());
+        self::assertNotSame(Admin::INPUT, $this->service(SessionStore::class)->load(self::OWNER)->state());
         self::assertSame($before, $this->stored());
 
-        // Kept at a tap, refused (its own plain emoji has a premium one already): said, and asked again.
+        // Kept at a tap (its own plain emoji has a premium one already): the same.
+        $this->tapAs(Nav::to('txp', 'pk', '333'));
         $this->tapAs(Nav::to('txp', 'keep', '333'));
-        self::assertSame(EmojiMap::TWICE_EMOJI, $this->popup());
-        self::assertTrue($this->alerted());
-        self::assertStringContainsString('✍️ ایموجی معمولی', $this->lastSaid());
-        self::assertSame(Admin::INPUT, $this->service(SessionStore::class)->load(self::OWNER)->state(), 'the question waits again');
+        self::assertStringContainsString('ایموجی 🎁', $this->lastSaid());
         self::assertSame($before, $this->stored());
 
+        $this->tapAs(Nav::to('txp', 'pk', '333'));
         $this->sayAs('⭐');
         self::assertSame([['emoji' => '🎁', 'emoji_id' => '111'], ['emoji' => '⭐', 'emoji_id' => '333']], $this->stored()['items']);
     }
@@ -327,6 +544,12 @@ final class BotAreaPremiumTextsTest extends BotTestCase
         $this->tapAs(Nav::to('txp', 'add'));
         self::assertStringContainsString('همه ایموجی‌های پرمیومی که ربات می‌شناسد در فهرست هستند', $this->lastSaid());
         self::assertContains(Nav::to('txe', 'add'), $this->offered(), '/emoji\'s own flow');
+
+        // From an emoji's page too, back to it.
+        $this->service(BotTexts::class)->save(BotText::PhoneVerified, 'ثبت شد 🦄');
+        $this->tapAs(Nav::to('txp', 'ch', PremiumTextsScreen::token('🦄')));
+        self::assertStringContainsString('همه ایموجی‌های پرمیومی که ربات می‌شناسد در فهرست هستند', $this->lastSaid());
+        self::assertContains(Nav::to('txp', 'e', PremiumTextsScreen::token('🦄')), $this->offered());
 
         CustomEmoji::query()->delete();
         $this->service(EmojiMap::class)->save(['items' => []]);
@@ -341,42 +564,11 @@ final class BotAreaPremiumTextsTest extends BotTestCase
         self::assertNotSame(Admin::INPUT, $this->service(SessionStore::class)->load(self::OWNER)->state());
     }
 
-    public function testARemovalIsAskedFirstAndAnOlderWindowsTapActsOnItsItemOrSaysItIsGone(): void
-    {
-        CustomEmoji::query()->create(['emoji_id' => '333', 'emoji' => '⭐']);
-        $this->service(EmojiMap::class)->save(['enabled' => false, 'items' => [['emoji' => '✅', 'emoji_id' => '111'], ['emoji' => '❤️', 'emoji_id' => '222']]]);
-
-        $this->tapAs(Nav::to('txp'));
-        self::assertSame('🗑 ❤️', $this->button(Nav::to('txp', 'rm', '222'))['text'] ?? null);
-
-        $this->tapAs(Nav::to('txp', 'rm', '222'));
-        self::assertCount(2, $this->stored()['items'], 'asked first');
-        self::assertStringContainsString('❓ این ایموجی از فهرست حذف شود؟', $this->lastSaid());
-        self::assertStringContainsString('❤️ ← <tg-emoji emoji-id="222">❤️</tg-emoji>', $this->lastSaid());
-        $yes = $this->button(Nav::to('txp', 'rmd', '222'));
-        self::assertSame([Words::yes('حذف شود', '🗑'), 'danger'], [$yes['text'] ?? null, $yes['style'] ?? null]);
-        self::assertContains(Nav::to('txp'), $this->offered(), '«✖️ انصراف»');
-
-        // The panel changed the map meanwhile: the tap still takes off that item, the list as the panel has it now.
-        $this->service(EmojiMap::class)->save(['items' => [['emoji' => '❤️', 'emoji_id' => '222'], ['emoji' => '⭐', 'emoji_id' => '333'], ['emoji' => '✅', 'emoji_id' => '111']]]);
-        $this->tapAs(Nav::to('txp', 'rmd', '222'));
-        self::assertSame(['enabled' => false, 'items' => [['emoji' => '⭐', 'emoji_id' => '333'], ['emoji' => '✅', 'emoji_id' => '111']]], $this->stored());
-        self::assertSame('🗑 ❤️ از فهرست حذف شد', $this->popup());
-        self::assertStringNotContainsString('emoji-id="222"', $this->lastSaid());
-
-        // Gone already: said, nothing asked or changed.
-        $this->tapAs(Nav::to('txp', 'rmd', '222'));
-        self::assertSame(PremiumTextsScreen::GONE, $this->popup());
-        self::assertCount(2, $this->stored()['items']);
-        $this->tapAs(Nav::to('txp', 'rm', '222'));
-        self::assertSame(PremiumTextsScreen::GONE, $this->popup());
-        self::assertStringNotContainsString('❓', $this->lastSaid());
-    }
-
     public function testAnAgentSetsUpTheirOwnShopAndChecksFromTheirOwnBot(): void
     {
         $bot = $this->agentBot();
         CurrentBot::run($bot, static fn() => CustomEmoji::query()->create(['emoji_id' => '444', 'emoji' => '🎁']));
+        CurrentBot::run($bot, static fn() => CustomEmoji::query()->create(['emoji_id' => '555', 'emoji' => '⭐']));
         $this->telegramKeepsPremiumEmoji(true);
 
         $this->sendTo($bot, $this->tap(Nav::to('txp'), chat: self::AGENT_TELEGRAM_ID));
@@ -386,14 +578,15 @@ final class BotAreaPremiumTextsTest extends BotTestCase
         $probe = $this->probe();
         self::assertNotNull($probe);
         self::assertSame([(string) self::AGENT_TELEGRAM_ID, FakeTelegram::AGENT_TOKEN], [$this->params($probe)['chat_id'], $this->telegram()->tokenOf($probe)]);
-        self::assertStringContainsString('<tg-emoji emoji-id="444">🎁</tg-emoji>', $this->params($probe)['text'], 'their shop\'s own library');
+        self::assertStringContainsString('<tg-emoji emoji-id="555">⭐</tg-emoji>', $this->params($probe)['text'], 'their shop\'s own library');
         self::assertTrue(CurrentBot::run($bot, fn(): ?bool => $this->service(PremiumEmojiStatus::class)->current()['ok'] ?? null));
         self::assertNull($this->service(PremiumEmojiStatus::class)->current(), 'the main shop\'s untouched');
 
         $this->sendTo($bot, $this->tap(Nav::to('txp', 'pk', '444'), chat: self::AGENT_TELEGRAM_ID));
         $this->sendTo($bot, $this->tap(Nav::to('txp', 'keep', '444'), chat: self::AGENT_TELEGRAM_ID));
+        $this->sendTo($bot, $this->tap(Nav::to('txp', 'to', PremiumTextsScreen::token('✅'), '555'), chat: self::AGENT_TELEGRAM_ID));
         $this->sendTo($bot, $this->tap(Nav::to('txp', 'on', 1), chat: self::AGENT_TELEGRAM_ID));
-        self::assertSame(['enabled' => true, 'items' => [['emoji' => '🎁', 'emoji_id' => '444']]], $this->stored($bot));
+        self::assertSame(['enabled' => true, 'items' => [['emoji' => '🎁', 'emoji_id' => '444'], ['emoji' => '✅', 'emoji_id' => '555']]], $this->stored($bot));
         self::assertSame(['enabled' => false, 'items' => []], $this->stored(), 'the main shop\'s map untouched');
     }
 
@@ -411,6 +604,7 @@ final class BotAreaPremiumTextsTest extends BotTestCase
 
         $this->send($this->tap(Nav::to('txp', 'on', 1), chat: 7100));
         $this->send($this->tap(Nav::to('txp', 'chk'), chat: 7100));
+        $this->send($this->tap(Nav::to('txp', 'to', PremiumTextsScreen::token('✅'), '111'), chat: 7100));
         self::assertSame(['enabled' => false, 'items' => []], $this->stored(), 'a forged tap changes nothing');
         self::assertNull($this->probe());
     }
@@ -452,6 +646,61 @@ final class BotAreaPremiumTextsTest extends BotTestCase
         }
 
         return null;
+    }
+
+    /**
+     * The list's emoji buttons as the window shows them, in reading order (each row is drawn reversed): label, token
+     * and the page it carries.
+     *
+     * @return list<array{string, string, string}>
+     */
+    private function emojiButtons(): array
+    {
+        $buttons = [];
+        foreach ($this->inlineKeyboard($this->windowCall()) as $row) {
+            foreach (array_reverse($row) as $button) {
+                $parts = explode(':', (string) ($button['callback_data'] ?? ''));
+                if (($parts[1] ?? null) === 'txp' && ($parts[2] ?? null) === 'e') {
+                    $buttons[] = [(string) ($button['text'] ?? ''), $parts[3] ?? '', $parts[4] ?? ''];
+                }
+            }
+        }
+
+        return $buttons;
+    }
+
+    /**
+     * The emoji the shop's texts carry, as the API lists them (PremiumTextsController's `emojis`).
+     *
+     * @return list<array{emoji: string, texts: int, menu: int, emoji_id: ?string}>
+     */
+    private function inventory(): array
+    {
+        return EmojiMap::inventory($this->service(BotTexts::class)->wordings(), $this->service(KeyboardLayouts::class)->get(KeyboardLayouts::START)->iconable(), $this->stored()['items']);
+    }
+
+    /**
+     * The list's row of `$emoji` (❤ and ❤️ one).
+     *
+     * @return array{emoji: string, texts: int, menu: int, emoji_id: ?string}
+     */
+    private function row(string $emoji): array
+    {
+        foreach ($this->inventory() as $row) {
+            if (EmojiMap::key($row['emoji']) === EmojiMap::key($emoji)) {
+                return $row;
+            }
+        }
+
+        self::fail("{$emoji} is not in the list.");
+    }
+
+    /** The page of the list `$emoji` is on. */
+    private function listPage(string $emoji): int
+    {
+        $tokens = array_map(static fn(array $row): string => PremiumTextsScreen::token($row['emoji']), $this->inventory());
+
+        return intdiv((int) array_search(PremiumTextsScreen::token($emoji), $tokens, true), self::PER_PAGE) + 1;
     }
 
     /** The window as Telegram takes it: at most 100 buttons, each one's data within 64 bytes, its text within 4096. */

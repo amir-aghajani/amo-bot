@@ -39,7 +39,7 @@ keeps on.
 | «👥 زیرمجموعه‌گیری» | The invite link (a tap copies it), the terms (the start gift and the plan reward while they are on), what it brought, «📤 ارسال لینک برای دوستان» — while the program runs ([Referrals](Referrals.md)) |
 | «📚 آموزش» | A short guide to connecting — the shop's, which you may reword |
 | «☎️ پشتیبانی» | Your contact, and the tickets ([support](#support)) |
-| «🤝 نمایندگی» | The main bot only, while the program runs: the agency's terms and «📝 درخواست نمایندگی»; an agent's account — with their agency's end, this month's traffic bought against their monthly minimum, and why their bot sells nothing when it does not ([Agency](Agency.md)) |
+| «🤝 نمایندگی» | The main bot only, while the program runs: the agency's terms and «📝 درخواست نمایندگی»; an agent's account — with their agency's end, this month's traffic bought against their monthly minimum, and why their bot sells nothing when it does not —, and «🔄 درخواست تمدید نمایندگی» while their agency has an end (one waiting says «⏳ درخواست تمدید نمایندگی شما در حال بررسی است.» in its place; a press that files nothing says why in a popup) ([Agency](Agency.md#renewing-an-agency)) |
 | «🎁 کد هدیه» | While gift codes are on: a code typed is redeemed — Toman into the wallet, or a plan's service ([Gift codes](Gift-Codes-And-Lucky-Wheel.md#how-a-customer-uses-a-code)) |
 | «🎡 گردونه شانس» | While the wheel is on: its prizes, what a spin costs, and «🎡 بچرخان» — or when the next spin is ([The lucky wheel](Gift-Codes-And-Lucky-Wheel.md#a-spin)) |
 
@@ -90,7 +90,7 @@ step says what it takes, and waits for another.
      card of its subscription link, or the link as text. A checkout whose price changed since it was drawn (a sale
      over, a first purchase paid elsewhere) is drawn again at its new price first, and nothing is taken until the
      customer taps again; so is a «🎁 دریافت رایگان» whose plan has a price now, whatever way to pay its button sends. A wallet
-     short of the price says how much is missing, with «➕ افزایش موجودی».
+     short of the price says how much is missing — a debt counted, which a top-up pays off first —, with «➕ افزایش موجودی».
    - **A card** — see [paying by card](#paying-by-card).
    - **In support's private chat**, while the shop takes card payments there, a card shows no card: the order's number
      and amount, «به پیوی پشتیبانی پیام بدهید: …» with «💬 پیام به پشتیبانی» (when the contact is a handle or a link),
@@ -483,7 +483,7 @@ transfers an hour.
 | A newcomer their link brought, a commission earned — or taken back, the wallet top-up that earned it refunded | A word |
 | A paid order never delivered: no longer their first purchase (made at a first-purchase price or with a first-purchase-only code, another purchase paid first), or a renewal or extra of a service support [handed to another customer](#handing-a-service-to-another-customer) meanwhile | «⚠️ پرداخت سفارش #… ثبت شد، ولی …»: support settles its money with them |
 | Support's answer to a ticket, its closing | The answer; the closing with «⭐ امتیاز» |
-| An agent's request decided, their terms changed, their agency ended, their traffic short for a delivery; their agency's end or a month short of their minimum near, their bot's selling suspended or resumed | A word in the main bot — a short month and a suspension for the minimum with «💾 خرید حجم» |
+| An agent's request decided — a renewal's too, with the new end —, their terms changed, their agency ended, their traffic short for a delivery; their agency's end or a month short of their minimum near, their bot's selling suspended or resumed | A word in the main bot — a short month and a suspension for the minimum with «💾 خرید حجم», the end near and a suspension for it with «🔄 درخواست تمدید نمایندگی» (pressed while one waits, it shows their account) |
 | A change of how their website account is signed in to, or wrong codes tried on it | A word — in Telegram **and** by email |
 
 Every notice is kept for the customer's website too, and one Telegram cannot bring — no Telegram account, or the bot

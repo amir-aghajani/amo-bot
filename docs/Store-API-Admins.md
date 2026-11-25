@@ -124,7 +124,7 @@ the website lets no admin in, and for a session the mini app signed in ([below](
 | Grant | What it opens |
 |---|---|
 | `catalog` | The plans and their categories: add, change, reorder, switch on or off, duplicate, delete — and several plans' prices changed at once (`POST /admin/plans/prices`, previewed with `POST /admin/plans/prices/preview`; send the preview's `changes` back as `previewed` — each plan's `id` and `before` — and the change is the one previewed or none: a plan whose prices moved since is a `422` on `plan_ids`). The customer groups too: add, change, reorder, delete — and a customer added to a «همکار» group (`PUT /admin/users/{id}/groups`), whose members pay the agents' prices; the plain groups, and a «همکار» one the customer is in already, ask none |
-| `wallet` | A customer's wallet credited or debited by hand (with an optional `Idempotency-Key`: [a change sent again](#what-it-is)) |
+| `wallet` | A customer's wallet credited or debited by hand — a debit past the balance leaves a debt ([the wallet](Customers.md#the-wallet)) — (with an optional `Idempotency-Key`: [a change sent again](#what-it-is)) |
 | `refunds` | A payment given back |
 | `payments` | «رد یکجای رسیدها»: the receipts waiting for review rejected in bulk (`POST /admin/payments/dismiss`), each as rejecting one does, an uploaded picture deleted ([receipts](Orders-And-Payments.md#receipts)) |
 | `extend` | A service given days and traffic |

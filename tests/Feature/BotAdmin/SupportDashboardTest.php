@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Feature\BotAdmin;
 
 use App\Core\Scheduling\Scheduler;
+use App\Modules\Agency\Services\AgencyActions;
 use App\Modules\Auth\Principal;
 use App\Modules\Auth\PrincipalKind;
 use App\Modules\Bots\CurrentBot;
@@ -21,6 +22,7 @@ use App\Modules\Telegram\BotState;
 use App\Modules\Users\Enums\UserRole;
 use App\Support\Persian;
 use App\Support\PhpVersion;
+use Illuminate\Support\Carbon;
 use Tests\BotTestCase;
 
 /**
@@ -189,5 +191,22 @@ final class SupportDashboardTest extends BotTestCase
         self::assertStringNotContainsString('وضعیت سیستم', $said);
         self::assertContains(Nav::to('acc'), $this->callbacks(0), 'their account a tap away');
         self::assertContains('https://t.me/amo_shop_bot', array_column(array_merge(...$this->inlineKeyboard(0)), 'url'), 'where traffic is bought');
+    }
+
+    public function testAnAgentWhoseRenewalWaitsIsToldItWaitsNotToAskAgain(): void
+    {
+        Carbon::setTestNow('2026-10-01 12:00:00');
+        $bot = $this->sellingTerms($this->agentBot(), Carbon::parse('2026-10-03 18:00:00'));
+        $press = 'برای تمدید، در «💼 حساب نمایندگی» «🔄 درخواست تمدید نمایندگی» را بزنید.';
+        $waits = 'درخواست تمدید شما در انتظار بررسی است.';
+
+        $this->sendTo($bot, $this->message('/admin', chat: self::AGENT_TELEGRAM_ID));
+        $this->sendTo($bot, $this->tap(Nav::to('db'), chat: self::AGENT_TELEGRAM_ID));
+        self::assertStringContainsString($press, $this->said()[0], 'the end near: how to renew it');
+
+        self::assertNotNull($this->service(AgencyActions::class)->requestRenewal($bot->agent ?? self::fail('no agent')));
+        $this->sendTo($bot, $this->tap(Nav::to('db'), chat: self::AGENT_TELEGRAM_ID));
+        self::assertStringContainsString('ربات شما فروش تازه‌ای ندارد؛ ' . $waits, $this->said()[0], 'GET /account read for the end');
+        self::assertStringNotContainsString($press, $this->said()[0]);
     }
 }

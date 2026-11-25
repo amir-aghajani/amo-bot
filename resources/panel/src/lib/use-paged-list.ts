@@ -221,6 +221,8 @@ export function usePagedList<K extends string, R extends { meta: PageMeta } & Re
     refetch: () => void queryClient.invalidateQueries({ queryKey }),
     typed,
     setTyped,
+    /** The search the list is read with — what the box settled to —; '' for none. */
+    search: view.search,
     filter: view.status,
     setFilter: (status: F) => change({ status }),
     params: view.params,

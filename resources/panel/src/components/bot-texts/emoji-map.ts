@@ -24,14 +24,46 @@ export function emojiLookup(answer: PremiumTextsResponse | undefined): EmojiLook
   return new Map(answer.premium_texts.items.map((item) => [emojiKey(item.emoji), item.emoji_id]))
 }
 
+/**
+ * What of an emoji's code points makes it an emoji, not a sign counted among them (━ ★ ✓ ● ■ №): a pictograph past
+ * U+1F000, or one of the few below it Unicode counts as emoji (its Emoji property: ❤ ☎ ⚠ ✅ ✔ ⭐ ©); its variation
+ * selector and keycap mark looked for apart (EmojiMap::DRAWN).
+ */
+const DRAWN =
+  /[\u{1F000}-\u{1FAFF}\u00A9\u00AE\u203C\u2049\u2122\u2139\u2194-\u2199\u21A9\u21AA\u231A\u231B\u2328\u23CF\u23E9-\u23F3\u23F8-\u23FA\u24C2\u25AA\u25AB\u25B6\u25C0\u25FB-\u25FE\u2600-\u2604\u260E\u2611\u2614\u2615\u2618\u261D\u2620\u2622\u2623\u2626\u262A\u262E\u262F\u2638-\u263A\u2640\u2642\u2648-\u2653\u265F\u2660\u2663\u2665\u2666\u2668\u267B\u267E\u267F\u2692-\u2697\u2699\u269B\u269C\u26A0\u26A1\u26A7\u26AA\u26AB\u26B0\u26B1\u26BD\u26BE\u26C4\u26C5\u26C8\u26CE\u26CF\u26D1\u26D3\u26D4\u26E9\u26EA\u26F0-\u26F5\u26F7-\u26FA\u26FD\u2702\u2705\u2708-\u270D\u270F\u2712\u2714\u2716\u271D\u2721\u2728\u2733\u2734\u2744\u2747\u274C\u274E\u2753-\u2755\u2757\u2763\u2764\u2795-\u2797\u27A1\u27B0\u27BF\u2934\u2935\u2B05-\u2B07\u2B1B\u2B1C\u2B50\u2B55\u3030\u303D\u3297\u3299]/u
+
+/**
+ * Whether an emoji (one isEmoji() takes) is drawn as one, not a sign counted among them by its code point alone — only
+ * these are listed and newly mapped (EmojiMap::drawnAsEmoji()).
+ */
+export function drawnAsEmoji(emoji: string): boolean {
+  return emoji.includes('\uFE0F') || emoji.includes('\u20E3') || DRAWN.test(emoji)
+}
+
+/** The zero-width non-joiners and joiners a grapheme ends in: a half-space typed after an emoji, no part of it. */
+const TAIL = /(?:\u200C|\u200D)+$/u
+
+/**
+ * A grapheme and the half-spaces it ends in, apart — the segmenter takes them in, but they belong to the reading, kept
+ * outside a tag; one that is only those stays whole (EmojiMap::untailed()).
+ */
+export function untailed(grapheme: string): [string, string] {
+  const bare = grapheme.replace(TAIL, '')
+  return bare === '' ? [grapheme, ''] : [bare, grapheme.slice(bare.length)]
+}
+
 const wrap = (emoji: string, id: string) => `<tg-emoji emoji-id="${id}">${emoji}</tg-emoji>`
 
-/** Each mapped emoji of a run of words drawn premium, one as the server reads one (graphemes()), kept as typed inside its tag. */
+/**
+ * Each mapped emoji of a run of words drawn premium, one as the server reads one (graphemes()), kept as typed inside its
+ * tag — a half-space after it outside.
+ */
 function wrapEmoji(words: string, map: EmojiLookup): string {
   let out = ''
   for (const grapheme of graphemes(words)) {
-    const id = map.get(emojiKey(grapheme))
-    out += id !== undefined && isEmoji(grapheme) ? wrap(grapheme, id) : grapheme
+    const [emoji, tail] = untailed(grapheme)
+    const id = map.get(emojiKey(emoji))
+    out += id !== undefined && isEmoji(emoji) ? wrap(emoji, id) + tail : grapheme
   }
   return out
 }

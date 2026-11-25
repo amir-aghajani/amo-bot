@@ -2,12 +2,12 @@ import type { CSSProperties } from 'react'
 import { ArrowDownLeft, ArrowUpRight } from 'lucide-react'
 import { IconTile } from '@/apps/app/ui/visuals'
 import type { StoreWalletTransaction } from '@/lib/api-types'
-import { formatAmount, formatDate } from '@/lib/format'
+import { formatAmount, formatDate, isDebt } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
 /*
  * A line of the wallet's ledger as a bank's statement shows it: money in (green, an arrow in) or out, what it was for in
- * the shop's words beside the amount signed, and under them when it was beside the balance it left.
+ * the shop's words beside the amount signed, and under them when it was beside the balance it left (or the debt).
  */
 
 /** The hairline under a row starts where its words do: past the 16px edge, the 40px circle and its 12px gap. */
@@ -36,7 +36,8 @@ export function LedgerLine({ line, time = 'date' }: LedgerLineProps) {
         </span>
         <span className="text-hint flex flex-wrap justify-between gap-x-3 text-footnote">
           <span className="whitespace-nowrap">{when}</span>
-          <span className="whitespace-nowrap">موجودی {formatAmount(line.balance_after)}</span>
+          {/* Below zero, the debt it left as the bot words one, never a bare minus — nor «بدهی ۰» for under half a Toman. */}
+          <span className="whitespace-nowrap">{isDebt(line.balance_after) ? `بدهی ${formatAmount(-Number(line.balance_after))}` : `موجودی ${formatAmount(line.balance_after)}`}</span>
         </span>
       </span>
     </div>

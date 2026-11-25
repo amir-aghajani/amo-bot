@@ -97,6 +97,15 @@ final class MessagesTest extends TestCase
         self::assertSame(Messages::UNLIMITED, Messages::devices(0));
     }
 
+    public function testABalanceBelowZeroReadsAsADebtButNeverADebtOfNothing(): void
+    {
+        self::assertSame('۸۰٬۰۰۰ تومان', Messages::balance('80000.00'));
+        self::assertSame('۲۰٬۰۰۰ تومان بدهی', Messages::balance('-20000.00'), 'never a bare minus');
+        self::assertSame(['۰ تومان', '۰ تومان'], [Messages::balance('-0.40'), Messages::balance('-0.49')], 'under half a Toman: no debt of nothing');
+        self::assertSame('۱ تومان بدهی', Messages::balance('-0.50'), 'rounded as the amount shows');
+        self::assertSame([false, false, true], [Messages::isDebt('0.00'), Messages::isDebt('-0.49'), Messages::isDebt('-0.50')]);
+    }
+
     public function testFillFillsEachVariableAndNeverReadsAValueAgain(): void
     {
         self::assertSame('صفحه ۲ از ۵', Messages::fill('صفحه %page% از %pages%', ['page' => '۲', 'pages' => '۵']));

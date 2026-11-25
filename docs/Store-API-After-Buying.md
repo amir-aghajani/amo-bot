@@ -277,8 +277,9 @@ there is none.
 }
 ```
 
-`balance` is the ledger's last line; `credit` is how far below zero an agent's wallet may go (`"0.00"` for anyone else);
-`spendable` is what the wallet can pay now. `top_up` is what the bot's «افزایش موجودی» offers: the smallest and the
+`balance` is the ledger's last line — below zero a debt (an agent's credit in use, or support's debit by hand), which a
+top-up pays off first; `credit` is how far below zero an agent's buying may take their wallet (`"0.00"` for anyone
+else); `spendable` is what the wallet can pay now, below zero while a debt is past the credit. `top_up` is what the bot's «افزایش موجودی» offers: the smallest and the
 largest top-up, the amounts shown as buttons, ascending, and — while the shop asks for them (none by default) — amounts
 drawn at random within its range, shown after the presets, ascending, none a preset; each answer draws them anew. Send
 any of them back as it is ([a wallet top-up](Store-API-Buying.md#a-wallet-top-up)). `transfer` is what the customer may
@@ -351,7 +352,7 @@ Every refusal is a `422`, in words to show as they are:
 |---|---|
 | `errors.status` | the shop does not offer it now (`انتقال موجودی در این فروشگاه فعال نیست.`) |
 | `errors.telegram_id` | no number (`شناسه عددی تلگرام را وارد کنید: …`); no customer of this shop has it (`مشتری‌ای با این شناسه تلگرام در این فروشگاه نیست؛ …`); the customer themselves; a banned account |
-| `errors.amount` | the customer can send nothing now, `GET` too: less than the least in the wallet (`برای انتقال، دست‌کم ۱۰٬۰۰۰ تومان موجودی در کیف پول لازم است.`) or the daily cap used up (`… امروز پر شده است؛ …`); no whole number of Toman (`مبلغ را به تومان و بدون اعشار بنویسید.`); below the least (`کمترین مبلغ انتقال ۱۰٬۰۰۰ تومان است.`) or above the most (`بیشترین مبلغ هر انتقال … است.`); more than the balance (`موجودی کیف پول شما (…) برای این انتقال کافی نیست.`, with `اعتبار نمایندگی منتقل نمی‌شود.` for an agent); past the daily cap (`سقف انتقال روزانه … است و امروز تا … دیگر می‌توانید منتقل کنید.`, or `… امروز پر شده است؛ …`) |
+| `errors.amount` | the customer can send nothing now, `GET` too: less than the least in the wallet (`برای انتقال، دست‌کم ۱۰٬۰۰۰ تومان موجودی در کیف پول لازم است.`), a wallet below zero (`کیف پول شما … بدهی دارد؛ تا بدهی صاف نشود، چیزی منتقل نمی‌شود.`) or the daily cap used up (`… امروز پر شده است؛ …`); no whole number of Toman (`مبلغ را به تومان و بدون اعشار بنویسید.`); below the least (`کمترین مبلغ انتقال ۱۰٬۰۰۰ تومان است.`) or above the most (`بیشترین مبلغ هر انتقال … است.`); more than the balance (`موجودی کیف پول شما (…) برای این انتقال کافی نیست.`, with `اعتبار نمایندگی منتقل نمی‌شود.` for an agent); past the daily cap (`سقف انتقال روزانه … است و امروز تا … دیگر می‌توانید منتقل کنید.`, or `… امروز پر شده است؛ …`) |
 
 Each `GET` — and each `POST`, which looks the recipient up again — counts: at most 10 in 10 minutes per customer,
 together with [service transfers'](#handing-a-service-to-another-customer); and at most 10 transfers an hour. Past

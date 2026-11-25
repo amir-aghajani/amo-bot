@@ -148,11 +148,15 @@ heart: the default wordings and the ones you reworded alike, without a text to e
   why. `/emoji` finds it out too,
   and so does every message the bot sends with premium emoji. An agent's shop is checked from the agent's own panel or
   bot: the owner's panel cannot, as the agent's bot has no chat with the owner.
-- **The list** — each plain emoji, the premium one in its place, and how many of the bot's texts it is in now («در ۱۲
-  متن»); ✕ takes one off. ❤ and ❤️ count as one. «افزودن ایموجی» picks a premium emoji from the bot's own — one the bot
-  knows, shown it with `/emoji` ([above](#premium-emoji)) — and fills in its own plain emoji: keep it, or write the one
-  it should stand for; «افزودن» adds it, and «ذخیره» keeps the card. At most 100. Telegram draws at most 100 premium emoji in
-  one message; any past that show plain.
+- **«ایموجی‌های متن‌ها»** — every emoji the bot's texts carry, the default wordings and yours alike (and the start
+  menu's buttons while it is «دکمه‌های شیشه‌ای»), the most used first: each with the premium emoji swapped in — an empty
+  box while none — and where it is («در ۲۹ متن», «در ۲ متن و ۱ دکمه منو»); a sign that is no emoji (━, ★, ✓) is not one. «انتخاب ایموجی پرمیوم» («انتخاب» on a phone)
+  opens the bot's own premium emoji — the ones it knows, shown it with `/emoji` ([above](#premium-emoji)), less those
+  standing for another emoji —, and the one you pick is swapped in; «تغییر» picks another, ✕ takes it off. «همه»,
+  «عوض‌شده» and «عوض‌نشده» narrow the list, which shows its first 12 until «نمایش همه». ❤ and ❤️ are one. An emoji no
+  text carries yet — for a text you are about to write — is swapped with «ایموجی دیگر»: pick the premium emoji, keep its
+  own plain emoji or write the one it stands for, then «افزودن». «ذخیره» keeps the card. At most 100 emoji are swapped.
+  Telegram draws at most 100 premium emoji in one message; any past that show plain.
 - **The previews show them**: a text's «پیش‌نمایش» draws the mapped emoji premium and says so under it, and the
   keyboard's preview gives the menu's buttons their icons.
 - **When the owner's Premium lapses**, Telegram stops drawing them: messages go with their plain emoji and nothing is

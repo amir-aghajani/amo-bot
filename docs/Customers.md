@@ -127,8 +127,11 @@ wrote it — a bot admin by their account's first and last name where it has one
 - **«افزایش» / «کاهش»** — an amount in whole Toman, and an optional note of 190 characters at most, which the customer
   reads in their wallet's history — in the bot's «کیف پول» and on the website; without one the line reads «افزایش
   موجودی توسط پشتیبانی» / «کاهش موجودی توسط پشتیبانی».
-- A decrease never takes the balance below zero — an agent's credit included: it is refused («موجودی کاربر … است و از
-  این بیشتر نمی‌شود کم کرد.»). An increase always lands, a debt or not.
+- A decrease may take anyone's balance below zero — an ordinary customer's too, an agent's past their credit: a debt
+  («… تومان بدهی», in red), which their next top-ups pay off first. It is no credit: the wallet pays nothing until what
+  it can spend covers the price. Before it goes, a decrease past the balance says what it leaves («موجودی پس از کاهش:
+  ۲۰٬۰۰۰ تومان بدهی»), so a zero too many shows. A debt deeper than 1,000,000,000 Toman is refused («بدهی کاربر از
+  ۱٬۰۰۰٬۰۰۰٬۰۰۰ تومان بیشتر نمی‌شود؛ موجودی فعلی: …»). An increase always lands, a debt or not.
 - The customer is not sent a message about it: the line in their history is what they see.
 - Pressing «افزایش موجودی» or «کاهش موجودی» again after the panel got no answer never writes the line twice.
 

@@ -228,6 +228,22 @@ final class ReferralCommissionTest extends BotTestCase
         self::assertSame('100000.00', $this->friend->balance(), 'the top-up stays in their wallet');
     }
 
+    public function testATopUpsRefundWhileTheReferrerIsInDebtSaysSoAndWhatSupportMayDo(): void
+    {
+        $topUp = $this->paidByCard($this->topUpOrder($this->friend, '100000'));
+        // Support's debit by hand took the referrer's wallet past zero: not spent, held no more.
+        $this->service(WalletService::class)->debit($this->referrer, '15000', 'اصلاح', UserActions::DEBT_MAX);
+
+        try {
+            $this->service(PaymentActions::class)->refund($topUp, $this->panelActor(), null);
+            self::fail('refused');
+        } catch (RefundRefusedException $e) {
+            self::assertSame('موجودی کیف پول معرف مشتری ۵٬۰۰۰ تومان بدهی است، کمتر از پورسانتی که این شارژ برایش آورد؛ برای همین پورسانت از آن پس گرفته نمی‌شود و چیزی بازپرداخت نشد.', $e->getMessage());
+        }
+
+        self::assertSame([PaymentStatus::Paid, '-5000.00', '100000.00'], [$topUp->refresh()->status, $this->referrer->balance(), $this->friend->balance()], 'nothing refunded, nothing taken back');
+    }
+
     public function testAnAgentReferrersCreditCoversTheCommissionTakenBack(): void
     {
         $agent = $this->agent(credit: '50000', overrides: ['telegram_id' => self::FRIEND + 5]);

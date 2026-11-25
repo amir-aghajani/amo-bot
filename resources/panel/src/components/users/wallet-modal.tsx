@@ -2,7 +2,7 @@ import { useQuery, useQueryClient, type QueryKey } from '@tanstack/react-query'
 import { Receipt } from 'lucide-react'
 import { toast } from 'sonner'
 import { Balance } from '@/components/balance'
-import { BalanceAdjust } from '@/components/balance-adjust'
+import { BalanceAdjust, type Direction } from '@/components/balance-adjust'
 import { EmptyState } from '@/components/empty-state'
 import { LedgerList } from '@/components/ledger-list'
 import { ListView } from '@/components/list-view'
@@ -14,7 +14,7 @@ import { UserLabel, userLabel, userPage } from '@/components/user-identity'
 import { api } from '@/lib/api'
 import type { UserRow, UserWalletResponse } from '@/lib/api-types'
 import { isolateIds } from '@/lib/direction'
-import { formatAmount, formatBalance, formatDate } from '@/lib/format'
+import { formatAmount, formatBalance, formatDate, isDebt } from '@/lib/format'
 import { queryKeys } from '@/lib/query-keys'
 
 interface WalletModalProps {
@@ -43,22 +43,34 @@ interface WalletPanelProps {
   onCancel?: () => void
 }
 
+/**
+ * A debit that takes the wallet below zero, said before it goes — «موجودی پس از کاهش: ۲۰٬۰۰۰ تومان بدهی» —, so a zero
+ * too many shows: anyone's wallet may be left a debt by hand (UserActions::adjustWallet()). Nothing for a credit, or a
+ * debit the balance covers — under half a Toman short too, which shows as no debt (isDebt).
+ */
+function debtAfter(direction: Direction, balance: string, amount: string): string | undefined {
+  const after = (Number(balance) - Number(amount)).toFixed(2)
+  return direction === 'remove' && isDebt(after) ? `موجودی پس از کاهش: ${formatBalance(after)}` : undefined
+}
+
 /** A customer's wallet — in its dialog, or on their page: the balance, a manual credit or debit with a note, and the ledger. */
 export function WalletPanel({ user, onChanged, invalidates, onCancel }: WalletPanelProps) {
   const queryClient = useQueryClient()
   const read = useQuery({ queryKey: queryKeys.userWallet(user.id), queryFn: () => api.get<UserWalletResponse>(`/users/${user.id}/wallet`) })
   const transactions = read.data?.transactions ?? []
+  const balance = read.data?.user.balance ?? user.balance
 
   return (
     <div className="grid gap-5">
       <BalanceAdjust
         balanceLabel="موجودی فعلی"
-        balance={<Balance balance={read.data?.user.balance ?? user.balance} />}
+        balance={<Balance balance={balance} />}
         fields={{ amount: 'amount', note: 'description' }}
         amountLabel="مبلغ (تومان)"
         amountPlaceholder="50000"
         whole
         amountHint={amountHint}
+        preview={(direction, amount) => debtAfter(direction, balance, amount)}
         noteHint="مشتری این متن را در تاریخچه کیف پولش می‌بیند."
         notePlaceholders={{ add: 'مثلا: هدیه، جبران قطعی', remove: 'مثلا: اصلاح اشتباه' }}
         submitLabels={{ add: 'افزایش موجودی', remove: 'کاهش موجودی' }}

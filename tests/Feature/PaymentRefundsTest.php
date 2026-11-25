@@ -29,6 +29,7 @@ use App\Modules\Telegram\Texts\BotText;
 use App\Modules\Users\Enums\WalletTransactionType;
 use App\Modules\Users\Models\User;
 use App\Modules\Users\Models\WalletTransaction;
+use App\Modules\Users\Services\UserActions;
 use App\Modules\Users\Services\WalletService;
 use App\Support\Money;
 use App\Support\Traffic;
@@ -541,6 +542,19 @@ final class PaymentRefundsTest extends HttpTestCase
             'note' => self::text(BotText::AdminNote, ['comment' => 'برگشت به کارت']),
             'balance' => Messages::balance('0.00'),
         ])], $this->telegram()->sentTo(1001));
+    }
+
+    public function testATopUpRefundOfAWalletInDebtSaysSoAndWhatSupportMayDo(): void
+    {
+        $payment = $this->paidByCard($this->topUpOrder($this->ali, '50000.00'), $this->card);
+        // Support's debit by hand took the wallet past zero: not spent, held no more.
+        $this->service(WalletService::class)->debit($this->ali, '60000', 'اصلاح', UserActions::DEBT_MAX);
+
+        $refused = $this->postJson("/api/admin/payments/{$payment->id}/refund", []);
+
+        self::assertSame(422, $refused->getStatusCode());
+        self::assertSame('موجودی کیف پول مشتری ۱۰٬۰۰۰ تومان بدهی است، کمتر از مبلغ این شارژ؛ برای همین مبلغ شارژ از آن پس گرفته نمی‌شود و چیزی بازپرداخت نشد.', $this->decode($refused)['message']);
+        self::assertSame([PaymentStatus::Paid, '-10000.00'], [$payment->refresh()->status, $this->ali->balance()], 'nothing moved');
     }
 
     public function testAnAgentsTopUpIsTakenBackAsFarAsTheirCreditGoes(): void

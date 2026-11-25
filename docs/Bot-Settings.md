@@ -184,7 +184,7 @@ with no fee:
   least the least transfer — one below it would leave no transfer to make, and is refused (as is raising the least past
   the cap).
 
-Only the wallet's own balance goes, never an agent's credit: an agent in debt sends nothing. The recipient must be a
+Only the wallet's own balance goes, never an agent's credit: a wallet in debt sends nothing, and says so. The recipient must be a
 customer of the same shop who started the bot once, not banned. The money moves at once, in one piece: each wallet's
 history gets a line naming the other customer («انتقال موجودی به Sara (@sara)», «دریافت موجودی از Ali (@ali)»), the
 recipient is told in the bot, the sender keeps a notice on the website, and every transfer is reported in the report

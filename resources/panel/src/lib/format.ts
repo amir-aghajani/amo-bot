@@ -61,10 +61,16 @@ export function formatMoney(value: number | string): string {
   return `${formatAmount(value)} ${MONEY_UNIT}`
 }
 
-/** A wallet as the bot words it (Messages::balance): "۸۰٬۰۰۰ تومان", below zero "۲۰٬۰۰۰ تومان بدهی" — an agent's credit in use. */
+/** Whether a balance is a debt as it shows: below zero by what rounds to a Toman at least — never «۰ تومان بدهی». */
+export function isDebt(balance: number | string): boolean {
+  const amount = Number(balance)
+  return amount < 0 && formatAmount(-amount) !== formatAmount(0)
+}
+
+/** A wallet as the bot words it (Messages::balance): "۸۰٬۰۰۰ تومان", below zero "۲۰٬۰۰۰ تومان بدهی" — anyone's debt. */
 export function formatBalance(balance: string): string {
   const amount = Number(balance)
-  return amount < 0 && formatAmount(-amount) !== formatAmount(0) ? `${formatMoney(-amount)} بدهی` : formatMoney(amount)
+  return isDebt(amount) ? `${formatMoney(-amount)} بدهی` : formatMoney(amount)
 }
 
 /** An agency level's price: "هر گیگابایت ۳٬۰۰۰ تومان". */

@@ -9,7 +9,50 @@ screen shows it to every shop before it updates ([Releasing](Releasing.md#publis
 While a version is being made its changes collect under **Unreleased**; releasing it renames that heading to
 `## Version <version>`. The versions follow [Semantic Versioning](https://semver.org/).
 
-## Unreleased
+## Version 0.10.3
+
+### Added
+
+- **«درخواست تمدید نمایندگی»** — an agent whose agency has an end asks for it to be moved on: «🔄 درخواست تمدید
+  نمایندگی» in the main bot's «🤝 نمایندگی» (and under the warning before their agency ends, and under the message that
+  their bot stopped selling for it), and on «حساب نمایندگی» in their panel and in their own bot's «⚙️ مدیریت». One waits
+  at a time. You decide it in «فروش › نمایندگان › درخواست‌ها» — approved with the program's «مدت نمایندگی» on from
+  their end (from now once it passed), an end of your own (never earlier than an end still ahead), or none at all —, in
+  the bot's «⚙️ مدیریت › نمایندگان», or in the report group's «نمایندگی», whose «تایید» gives the program's term at
+  once; «رد» takes an optional note. The agent is told, and a bot stopped for its end sells again; ending an agency
+  closes the request still waiting ([Agency](Agency.md#renewing-an-agency)).
+
+### Changed
+
+- **Your «کاهش موجودی» may take a customer's wallet below zero** — a debt they see as «بدهی», which their next top-ups
+  pay off first; they cannot pay with the wallet until it covers the price. A debt of 1,000,000,000 Toman at most. The
+  amount it leaves shows before you confirm, and in the report group a debit that leaves a debt asks «✅ تایید» first.
+  An agent's shop does the same for its customers ([Customers](Customers.md#the-wallet)).
+- **«تمدید خودکار» short of money says how much to top up** — the debt included: the notice's new `%missing%`; a
+  wording of your own without it still goes.
+- **The warning before an agency ends and the message that its bot stopped selling** point the agent at «درخواست تمدید
+  نمایندگی» instead of support, and so do their panel's and their bot's dashboards; a wording of your own is kept.
+- **«ایموجی پرمیوم متن‌ها» lists the emoji your texts use** — every emoji the bot's texts carry, the default wordings and
+  yours alike (and the start menu's buttons while it is «دکمه‌های شیشه‌ای»), the most used first, each with how many
+  texts it is in. Pick a premium emoji for any of them and it is swapped in every text; change it or take it off the same
+  way. An emoji no text carries yet can still be given one with «ایموجی دیگر». A sign that is no emoji (━, ★, ✓) is not
+  listed and can no longer be given a premium emoji — Telegram wants an emoji there —; one given one before stays. In both panels and in the bot's «💎
+  ایموجی پرمیوم متن‌ها» ([Bot texts and keyboards](Bot-Texts-And-Keyboards.md#premium-emoji-in-every-text)).
+
+### Fixed
+
+- **An emoji with a half-space typed right after it** («✅‌ثبت») is drawn premium too; before, that one stayed plain.
+- **A free plan's «تمدید خودکار» renews whatever the wallet owes**; a wallet in debt (an ended agency's, an imported
+  debtor's) took it for one short of money.
+- **What a wallet payment says is missing** counts the wallet's debt: topping up that much is enough.
+- **A debt in a message reads «… تومان بدهی»**, never with a bare minus — a manual order's refusal, a refund's, the
+  wheel's, the report group's, the bot's agents list.
+
+### Upgrading
+
+- **Update from «تنظیمات پنل › به‌روزرسانی»**: nothing else to do. The update gives the agency requests two columns —
+  what a request asks for, and the end a renewal gave —, every request before it one to become an agent; the emoji you
+  swapped in 0.10.2 stay as they are.
 
 ## Version 0.10.2
 

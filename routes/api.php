@@ -408,6 +408,7 @@ return static function (App $app): void {
         $owner->get('/agency/settings', [AgencySettingsController::class, 'show']);
         $owner->put('/agency/settings', [AgencySettingsController::class, 'update']);
         $owner->get('/agency/requests', [AgencyController::class, 'requests']);
+        $owner->get('/agency/requests/{id:[0-9]+}', [AgencyController::class, 'show']);
         $owner->post('/agency/requests/{id:[0-9]+}/approve', [AgencyController::class, 'approve']);
         $owner->post('/agency/requests/{id:[0-9]+}/reject', [AgencyController::class, 'reject']);
         $owner->get('/agency/agents', [AgencyController::class, 'agents']);
@@ -450,10 +451,11 @@ return static function (App $app): void {
         $owner->get('/imports/{id:[0-9]+}/problems', [ImportsController::class, 'problems']);
     };
 
-    // An agent's own account: their agency's terms and their traffic.
+    // An agent's own account: their agency's terms and their traffic, and their request for its end to be moved on.
     $agentAccount = static function (RouteCollectorProxy $agent): void {
         $agent->get('/account', [AccountController::class, 'show']);
         $agent->get('/account/traffic', [AccountController::class, 'traffic']);
+        $agent->post('/account/renewal', [AccountController::class, 'renewal']);
     };
 
     // The owner's panel: config.php's login (or its recovery by a key off the host's files), each request in the shop

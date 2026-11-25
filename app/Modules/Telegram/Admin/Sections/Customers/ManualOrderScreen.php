@@ -607,7 +607,7 @@ final class ManualOrderScreen extends BaseScreen
         $missing = $balance === null ? null : Money::subtract($amount, Money::add($balance, $credit));
         $short = $balance !== null && $missing !== null && Money::isPositive($missing);
         if ($short) {
-            $view->line('⚠️ ' . Fmt::e(sprintf(ManualOrders::WALLET_SHORT, Money::format($balance), Money::format($missing))) . ' مبلغ یا روش پرداخت را عوض کنید.');
+            $view->line('⚠️ ' . Fmt::e(sprintf(ManualOrders::WALLET_SHORT, Messages::balance($balance), Money::format($missing))) . ' مبلغ یا روش پرداخت را عوض کنید.');
         }
         $view->card([
             'سرویس' => $service,

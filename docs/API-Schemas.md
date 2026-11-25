@@ -129,7 +129,7 @@ An agent (a main-bot customer on an agency level), with their bot.
 | `status` | [UserStatus](#userstatus) | yes |  |
 | `level` | [AgencyLevelRef](#agencylevelref) | yes |  |
 | `credit_limit` | string | yes | How far below zero their wallet may go, in Toman. |
-| `balance` | string | yes | Their wallet balance in Toman; below zero while they use their credit. |
+| `balance` | string | yes | Their wallet balance in Toman. Below zero is a debt: their credit in use, or past it by support's debit by hand. |
 | `bot` | [AgentBot](#agentbot) or null | yes | Their bot (its shop is created when they are approved). |
 | `counts` | object | yes |  |
 | `counts.customers` | integer | yes | Their bot's customers. |
@@ -1534,7 +1534,7 @@ A customer, as a row of the users table. (The panel login is not a customer.)
 | `phone_exempt` | boolean | yes | Excused from the shop's phone rule: never asked for their phone number. |
 | `status` | [UserStatus](#userstatus) | yes |  |
 | `role` | [UserRole](#userrole) | yes |  |
-| `balance` | string | yes |  |
+| `balance` | string | yes | Their wallet balance in Toman. Below zero is a debt: an agent's credit in use, or a debit by hand past the balance. |
 | `discount_percent` | integer | yes | Their personal discount («تخفیف اختصاصی»): a percent off what they buy for themselves. It is one of the automatic discounts, of which the largest applies. 0 for none. |
 | `counts` | object | yes |  |
 | `counts.orders` | integer | yes |  |

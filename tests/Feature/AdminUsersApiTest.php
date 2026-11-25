@@ -11,6 +11,7 @@ use App\Modules\Orders\Enums\OrderStatus;
 use App\Modules\Subscriptions\Enums\SubscriptionStatus;
 use App\Modules\Users\Enums\UserStatus;
 use App\Modules\Users\Models\User;
+use App\Modules\Users\Models\WalletTransaction;
 use App\Modules\Users\Services\UserActions;
 use App\Modules\Users\Services\WalletService;
 use Tests\HttpTestCase;
@@ -249,20 +250,50 @@ final class AdminUsersApiTest extends HttpTestCase
         self::assertSame('60000.00', $this->decode($debited)['user']['balance']);
         self::assertSame(WalletService::LINE_DEBIT_BY_SUPPORT, $this->decode($debited)['transaction']['description'], 'a note is written when none is given');
 
-        $tooMuch = $this->postJson("/api/admin/users/{$ali->id}/wallet", ['type' => 'debit', 'amount' => 999999]);
-        self::assertSame(422, $tooMuch->getStatusCode());
-        self::assertStringContainsString('۶۰٬۰۰۰ تومان', $this->decode($tooMuch)['errors']['amount'][0]);
-        self::assertSame('60000.00', $ali->balance(), 'nothing moved');
+        // Past the balance: a debt, an ordinary customer's too — its line says what it left.
+        $debt = $this->decode($this->postJson("/api/admin/users/{$ali->id}/wallet", ['type' => 'debit', 'amount' => 100000, 'description' => 'اصلاح اشتباه']));
+        self::assertSame(['-40000.00', '-40000.00', '100000.00'], [$debt['user']['balance'], $debt['transaction']['balance_after'], $debt['transaction']['amount']]);
+        self::assertSame('-40000.00', $ali->balance());
 
         $fraction = $this->postJson("/api/admin/users/{$ali->id}/wallet", ['type' => 'credit', 'amount' => '1000.50']);
         self::assertSame(['amount'], array_keys($this->decode($fraction)['errors'] ?? []), 'Toman has no fraction: the bot would round it away');
-        self::assertSame('60000.00', $ali->balance());
+        self::assertSame('-40000.00', $ali->balance());
 
         $bad = $this->unchecked()->postJson("/api/admin/users/{$ali->id}/wallet", ['type' => 'gift', 'amount' => '-5', 'description' => str_repeat('x', 200)]);
         self::assertSame(422, $bad->getStatusCode());
         self::assertSame(['type', 'amount', 'description'], array_keys($this->decode($bad)['errors']));
 
         self::assertSame(404, $this->get('/api/admin/users/999999/wallet')->getStatusCode());
+    }
+
+    /**
+     * A debit by hand may leave anyone a debt, down to a billion Toman exactly; past that it is refused with the balance
+     * as a debt, nothing moved. A credit then lands onto the debt, paying it off first.
+     */
+    public function testADebitByHandLeavesADebtNoDeeperThanABillion(): void
+    {
+        $ali = $this->customer(['telegram_id' => 1001]);
+
+        $deepest = $this->postJson("/api/admin/users/{$ali->id}/wallet", ['type' => 'debit', 'amount' => UserActions::DEBT_MAX]);
+        self::assertSame(201, $deepest->getStatusCode(), (string) $deepest->getBody());
+        self::assertSame(['-1000000000.00', '-1000000000.00'], [$this->decode($deepest)['user']['balance'], $this->decode($deepest)['transaction']['balance_after']], 'as deep as the most');
+
+        $this->assertRefusedUnder('amount', 'بدهی کاربر از ۱٬۰۰۰٬۰۰۰٬۰۰۰ تومان بیشتر نمی‌شود؛ موجودی فعلی: ۱٬۰۰۰٬۰۰۰٬۰۰۰ تومان بدهی.', $this->postJson("/api/admin/users/{$ali->id}/wallet", ['type' => 'debit', 'amount' => 1]));
+        self::assertSame(['-1000000000.00', 1], [$ali->balance(), WalletTransaction::query()->where('user_id', $ali->id)->count()], 'nothing moved');
+
+        $credited = $this->decode($this->postJson("/api/admin/users/{$ali->id}/wallet", ['type' => 'credit', 'amount' => 50000]));
+        self::assertSame('-999950000.00', $credited['user']['balance'], 'a credit pays the debt off first');
+    }
+
+    /** An agent's wallet is debited by hand past their credit: a debt their buying cannot spend from. */
+    public function testAnAgentIsDebitedByHandPastTheirCredit(): void
+    {
+        $reza = $this->wallet($this->agent(credit: '100000', overrides: ['telegram_id' => 1002]), '20000');
+
+        $debited = $this->postJson("/api/admin/users/{$reza->id}/wallet", ['type' => 'debit', 'amount' => 300000]);
+
+        self::assertSame(201, $debited->getStatusCode(), (string) $debited->getBody());
+        self::assertSame(['-280000.00', '-180000.00'], [$reza->balance(), $reza->spendable()], 'past the credit: nothing to spend');
     }
 
     /** Who of the shop's admins wrote each line by hand, by their account's name — read once for the whole ledger. */

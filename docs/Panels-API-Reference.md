@@ -939,11 +939,11 @@ Credit or debit a customer's wallet.
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
 | `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
-| `Idempotency-Key` | header | string matching `^[A-Za-z0-9_-]{1,64}$` | no | A key the caller makes for each credit or debit (a UUID; the panels send one with every change, and a new one once it went through or the form was edited): 1 to 64 Latin letters, digits, `-` and `_`. Without one, every request is a change of its own. Repeating the request with the same key (a network retry, its answer lost) answers with the line the key wrote (a 200) and the wallet as it is now: never a second credit or debit, even when two arrive at the same moment, and never refused for what changed since (a debit the balance no longer covers). The same key with another `type`, `amount` or `description` is a 422 on `idempotency_key`; so is a malformed key. A key is the customer's for good: the next change takes a new key. |
+| `Idempotency-Key` | header | string matching `^[A-Za-z0-9_-]{1,64}$` | no | A key the caller makes for each credit or debit (a UUID; the panels send one with every change, and a new one once it went through or the form was edited): 1 to 64 Latin letters, digits, `-` and `_`. Without one, every request is a change of its own. Repeating the request with the same key (a network retry, its answer lost) answers with the line the key wrote (a 200) and the wallet as it is now: never a second credit or debit, even when two arrive at the same moment, and never refused for what changed since (a debit that would now leave too deep a debt). The same key with another `type`, `amount` or `description` is a 422 on `idempotency_key`; so is a malformed key. A key is the customer's for good: the next change takes a new key. |
 
 **Body**, as JSON:
 
-A manual credit or debit, with the line the customer sees in their ledger. A debit cannot exceed the balance.
+A manual credit or debit, with the line the customer sees in their ledger. A debit may take anyone's balance below zero: a debt, which their next top-ups pay off first, and nothing they may spend. A debt past 1,000,000,000 Toman is a 422 on `amount`.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -4506,7 +4506,8 @@ Operations only the owner's panel has.
 | [`PUT /api/admin/schedule`](#put-apiadminschedule) | Save the schedule |
 | [`GET /api/admin/agency/settings`](#get-apiadminagencysettings) | The agency program's settings |
 | [`PUT /api/admin/agency/settings`](#put-apiadminagencysettings) | Save the agency program's settings |
-| [`GET /api/admin/agency/requests`](#get-apiadminagencyrequests) | Requests to become an agent |
+| [`GET /api/admin/agency/requests`](#get-apiadminagencyrequests) | Requests to become an agent, and agents' renewal requests |
+| [`GET /api/admin/agency/requests/{id}`](#get-apiadminagencyrequestsid) | One agency request as the list shows it, as it stands now |
 | [`POST /api/admin/agency/requests/{id}/approve`](#post-apiadminagencyrequestsidapprove) | Approve an agency request |
 | [`POST /api/admin/agency/requests/{id}/reject`](#post-apiadminagencyrequestsidreject) | Reject an agency request |
 | [`GET /api/admin/agency/agents`](#get-apiadminagencyagents) | The agents |
@@ -5972,13 +5973,14 @@ The agency settings, saved whole, with the fields named as in AgencySettings. Th
 
 ### GET /api/admin/agency/requests
 
-Requests to become an agent. Newest first (`dir=asc` for oldest first); one status or all.
+Requests to become an agent, and agents' renewal requests. Newest first (`dir=asc` for oldest first); one status or all, one kind or both.
 
 **Parameters**
 
 | Name | In | Type | Required | What it is |
 |---|---|---|---|---|
 | `status` | query | [AgencyRequestStatus](#agencyrequeststatus) | no | The status tab. Empty for all requests |
+| `kind` | query | [AgencyRequestKind](#agencyrequestkind) | no | One kind of request. Empty for both |
 | `search` | query | string | no | The search text ("#12" finds by number) |
 | `page` | query | integer, at least 1 | no | The page, from 1 (`PageMeta.per_page` rows a page); a page past the last answers the last |
 | `sort` | query | [AgencyRequestSort](#agencyrequestsort) | no | What to sort by. Anything else sorts by creation time |
@@ -5991,9 +5993,26 @@ Requests to become an agent. Newest first (`dir=asc` for oldest first); one stat
 | `200` | OK | [AgencyRequestsResponse](#agencyrequestsresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
+### GET /api/admin/agency/requests/{id}
+
+One agency request as the list shows it, as it stands now — read again before a decision (the bot's renewal card).
+
+**Parameters**
+
+| Name | In | Type | Required | What it is |
+|---|---|---|---|---|
+| `id` | path | integer | yes | The row's id. A row of another shop, or on the Store API another customer's, is a 404 as a missing one is |
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `200` | OK | [AgencyRequestResponse](#agencyrequestresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
 ### POST /api/admin/agency/requests/{id}/approve
 
-Approve an agency request. Sets the level and the starting credit, and the terms of selling — `expires_at` and `monthly_minimum`, the program's (`term_days`, `monthly_minimum`) while left out; the customer is notified.
+Approve an agency request; the customer is notified. A request to become an agent (`kind` join) takes `AgencyTermsRequest`: the level and the starting credit, and the terms of selling — `expires_at` and `monthly_minimum`, the program's (`term_days`, `monthly_minimum`) while left out. A renewal (`kind` renewal) takes `AgencyRenewalRequest`: the agent's new end.
 
 **Parameters**
 
@@ -6003,7 +6022,11 @@ Approve an agency request. Sets the level and the starting credit, and the terms
 
 **Body**, as JSON:
 
-An agent's terms, when approving a request or changing an agent: their level, how far below zero their wallet may go, and their terms of selling — each of these two left out is the program's on an approval, kept on a change.
+An agency request's approval: a request to become an agent takes the agent's terms, a renewal the agent's new end.
+
+One of:
+
+**`AgencyTermsRequest`** — An agent's terms, when approving a request or changing an agent: their level, how far below zero their wallet may go, and their terms of selling — each of these two left out is the program's on an approval, kept on a change.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -6011,6 +6034,12 @@ An agent's terms, when approving a request or changing an agent: their level, ho
 | `credit_limit` | [AmountInput](API-Schemas.md#amountinput) | yes | Whole Toman; 0 for none. |
 | `expires_at` | string or null | no | When their agency ends — their selling stops then —, as a day and an hour on the shop's clock ("2026-10-12T18:00", whatever the browser's zone); blank or null for never. |
 | `monthly_minimum` | [AmountInput](API-Schemas.md#amountinput) | no | The Toman of traffic they buy each Jalali month at least: whole Toman, 0 for none — the program's own field (AgencySettings `monthly_minimum`), refused in its words. |
+
+**`AgencyRenewalRequest`** — A renewal's approval: the agent's new end.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `expires_at` | string or null | no | The new end, as a day and an hour on the shop's clock ("2026-10-12T18:00"), ahead of now and no later than the last day the shop keeps; blank or null for none at all; left out for `term_end` (a 422 on `expires_at` while that is null). |
 
 **Answers**
 
@@ -6021,7 +6050,7 @@ An agent's terms, when approving a request or changing an agent: their level, ho
 
 ### POST /api/admin/agency/requests/{id}/reject
 
-Reject an agency request. The customer is notified, with the note.
+Reject an agency request — to become an agent, or a renewal. The customer is notified, with the note.
 
 **Parameters**
 
@@ -6844,6 +6873,7 @@ Operations only an agent's panel has.
 | [`POST /api/agent/auth/sessions/end`](#post-apiagentauthsessionsend) | Sign the agent out of every other browser |
 | [`GET /api/agent/account`](#get-apiagentaccount) | The agent's account («حساب نمایندگی») |
 | [`GET /api/agent/account/traffic`](#get-apiagentaccounttraffic) | The agent's traffic ledger |
+| [`POST /api/agent/account/renewal`](#post-apiagentaccountrenewal) | «درخواست تمدید نمایندگی» |
 
 ### POST /api/agent/auth/link
 
@@ -6904,6 +6934,19 @@ The agent's traffic ledger. Newest line first.
 | Status | What it is | Body |
 |---|---|---|
 | `200` | OK | [TrafficLinesResponse](#trafficlinesresponse) |
+| any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
+
+### POST /api/agent/account/renewal
+
+«درخواست تمدید نمایندگی»: the agent asks for their agency's end to be moved on. The owner decides — on the agents page or in the main bot's report group — and the agent is told in the main bot. Only while `account.actions.request_renewal`: a 422 on `status` when one waits already, or their agency has no end.
+
+**Body:** none.
+
+**Answers**
+
+| Status | What it is | Body |
+|---|---|---|
+| `201` | Requested | [AccountResponse](#accountresponse) |
 | any other | [Error](API-Schemas.md#response-error) | [ErrorResponse](API-Schemas.md#errorresponse) |
 
 ## The web installer
@@ -7115,6 +7158,15 @@ An AbanGateway method (abangateway.ir), an online gateway: the customer transfer
 | `account.credit_limit` | string | yes | How far below zero their main-bot wallet may go, in Toman. |
 | `account.balance` | string | yes | Their wallet balance in the main bot, in Toman. |
 | `account.standing` | [AgencyStanding](API-Schemas.md#agencystanding) | yes |  |
+| `account.renewal` | object or null | yes | Their latest request for their agency's end to be moved on («درخواست تمدید نمایندگی»), whatever became of it; null before the first. |
+| `account.renewal.id` | integer | yes |  |
+| `account.renewal.status` | [AgencyRequestStatus](#agencyrequeststatus) | yes |  |
+| `account.renewal.extended_to` | string (date-time) or null | yes | Approved: the end it gave; null for none at all, and while not approved. |
+| `account.renewal.reason` | string or null | yes | Rejected: the owner's note, if they left one. |
+| `account.renewal.created_at` | string (date-time) or null | yes |  |
+| `account.renewal.decided_at` | string (date-time) or null | yes |  |
+| `account.actions` | object | yes |  |
+| `account.actions.request_renewal` | boolean | yes | Whether they may ask for their agency to be renewed now (POST /account/renewal): their agency has an end, passed or not, and no request of theirs waits. |
 
 ### AgencyLevelResponse
 
@@ -7143,6 +7195,12 @@ An agency level.
 |---|---|---|---|
 | `levels` | list of [AgencyLevelRow](#agencylevelrow) | yes |  |
 
+### AgencyRequestKind
+
+What an agency request asks for: `join` — a customer asks to become an agent; `renewal` — an agent asks for their agency's end to be moved on («درخواست تمدید نمایندگی»).
+
+String: `join`, `renewal`.
+
 ### AgencyRequestResponse
 
 | Field | Type | Required | What it is |
@@ -7151,17 +7209,21 @@ An agency level.
 
 ### AgencyRequestRow
 
-A customer's request to become an agent.
+A customer's request to become an agent, or an agent's request for their agency's end to be moved on (`kind`).
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `id` | integer | yes |  |
+| `kind` | [AgencyRequestKind](#agencyrequestkind) | yes |  |
 | `user` | [UserRef](API-Schemas.md#userref) | yes |  |
 | `user_status` | [UserStatus](API-Schemas.md#userstatus) | yes |  |
 | `agent` | boolean | yes | Whether the customer is an agent now. |
 | `status` | [AgencyRequestStatus](#agencyrequeststatus) | yes |  |
 | `note` | string or null | yes | What the customer wrote. |
 | `level` | [AgencyLevelRef](API-Schemas.md#agencylevelref) or null | yes | The level given on approval. |
+| `expires_at` | string (date-time) or null | yes | A renewal: the agent's agency's end now; null for none, and for a request to become an agent. |
+| `extended_to` | string (date-time) or null | yes | An approved renewal: the end it gave; null for none at all, and for anything else. |
+| `term_end` | string (date-time) or null | yes | A renewal still waiting: the end the program's term (`term_days`) gives it now — on from the agent's end while it lies ahead, from now once it passed —, what the report group's «تایید» gives and an approval naming none. Null without a term or an end to move on (an approval then names one), and for anything else. |
 | `reason` | string or null | yes | Support's note on a rejection. |
 | `reviewer` | string or null | yes | Who decided it: the panel login, or a bot admin (@username or tg:&lt;id&gt;). |
 | `reviewer_name` | string or null | yes | The name of the bot admin `reviewer` is, as their account has it (their first and last name), to show beside it. Null for the owner, an agent, an admin whose account is gone or shows no name, a handle no admin of the shop has now, and while `reviewer` is null. |
@@ -7223,7 +7285,7 @@ The agency program's numbers, shown above the lists (its settings are AgencySett
 | `levels` | integer | yes |  |
 | `agents` | integer | yes |  |
 | `bots` | integer | yes | Agents' bots that are running (connected and switched on). |
-| `pending` | integer | yes | Requests waiting for a decision. |
+| `pending` | integer | yes | Requests waiting for a decision: to become an agent, and agents' renewals. |
 
 ### AgencySummaryResponse
 
@@ -8980,6 +9042,17 @@ A plain emoji the bot's texts draw as a premium one, and how many texts it is in
 | `emoji_id` | string | yes | The premium emoji's Telegram id: digits, as a string. |
 | `texts` | integer | yes | How many of the shop's texts it is drawn premium in, as they are worded now. |
 
+### PremiumTextUse
+
+A plain emoji the shop's texts carry where the map would draw it premium, and the premium emoji it is swapped for.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `emoji` | string | yes | One plain emoji, as first met (the form with its variation selector preferred); ❤ and ❤️ are one. |
+| `texts` | integer | yes | How many of the shop's texts carry it where the map would draw it: their own words outside a premium emoji, code, a link or a date; a button's leading emoji, with words after it and no premium emoji of its own right after (a name filled in may still bring one); never a popup. Signs that are no emoji (━, ★, ✓) are left out. |
+| `menu` | integer | yes | How many buttons of the start menu as a customer is shown it (programs switched off left out), while it is inline buttons, start with it, have words after it and no icon of their own; 0 for a keyboard under the text field. |
+| `emoji_id` | string or null | yes | The premium emoji the map swaps it for (digits, as a string); null while it has none. |
+
 ### PremiumTextsResponse
 
 | Field | Type | Required | What it is |
@@ -8987,6 +9060,7 @@ A plain emoji the bot's texts draw as a premium one, and how many texts it is in
 | `premium_texts` | object | yes |  |
 | `premium_texts.enabled` | boolean | yes | The texts draw the mapped emoji premium — every text's own words, the default and the reworded alike; a premium emoji a text carries itself wins. |
 | `premium_texts.items` | list of [PremiumTextRow](#premiumtextrow) | yes | In the admin’s order. |
+| `premium_texts.emojis` | list of [PremiumTextUse](#premiumtextuse) | yes | Every plain emoji the shop's texts and its inline start menu carry, the most carried first, with the premium emoji swapped in; then the map's emoji nothing carries any more, in its order. |
 | `premium_texts.status` | object or null | yes | Whether the bot can send premium emoji, as last found — by the check, /emoji or a message Telegram answered —; null before it was ever found. |
 | `premium_texts.status.ok` | boolean | yes |  |
 | `premium_texts.status.checked_at` | string (date-time) | yes |  |

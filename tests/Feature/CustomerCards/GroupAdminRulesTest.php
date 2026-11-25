@@ -87,11 +87,14 @@ final class GroupAdminRulesTest extends DatabaseTestCase
         $actions = $this->service(UserActions::class);
         $agent = $this->agent(overrides: ['telegram_id' => 9292]);
 
-        try {
-            $actions->adjustWallet($agent, $this->groupAdminActor(), ['type' => 'credit', 'amount' => 50000]);
-            self::fail('credited all the same');
-        } catch (ActorRefusedException $e) {
-            self::assertSame(ActorRefusedException::AGENT_ACCOUNT, $e->getMessage());
+        // A debit too, which by hand may leave a debt: never from the group.
+        foreach (['credit', 'debit'] as $type) {
+            try {
+                $actions->adjustWallet($agent, $this->groupAdminActor(), ['type' => $type, 'amount' => 50000]);
+                self::fail("{$type} made all the same");
+            } catch (ActorRefusedException $e) {
+                self::assertSame(ActorRefusedException::AGENT_ACCOUNT, $e->getMessage(), $type);
+            }
         }
         self::assertSame('0.00', $agent->balance());
 

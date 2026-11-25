@@ -6,6 +6,7 @@ namespace App\Modules\Agency\Services;
 
 use App\Core\Database\Page;
 use App\Core\Database\PageRequest;
+use App\Modules\Agency\Enums\AgencyRequestKind;
 use App\Modules\Agency\Enums\AgencyRequestStatus;
 use App\Modules\Agency\Models\AgencyLevel;
 use App\Modules\Agency\Models\AgencyRequest;
@@ -17,11 +18,13 @@ use App\Modules\Orders\Models\Order;
 use App\Modules\Users\Models\User;
 use App\Modules\Users\Services\UserDirectory;
 use App\Support\JalaliMonth;
+use App\Support\LocalTime;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Database\Query\Builder as QueryBuilder;
+use Illuminate\Support\Carbon;
 
 /**
  * The owner's «نمایندگان» page and the agent's own account page: the program's numbers, the requests, and the agents with
@@ -51,13 +54,20 @@ final class AgencyDirectory
         ];
     }
 
-    /** The requests, newest first (or the oldest, `dir`): one status or all, searched by the customer. */
+    /**
+     * The requests, newest first (or the oldest, `dir`): one status or all, one kind (to become an agent, a renewal) or
+     * both, searched by the customer.
+     */
     public function requests(PageRequest $list): Page
     {
-        $query = AgencyRequest::query()->with(['user', 'level']);
+        $query = AgencyRequest::query()->with(['user.ownBot', 'level']);
         $status = $list->enum('status', AgencyRequestStatus::class);
         if ($status !== null) {
             $query->where('status', $status->value);
+        }
+        $kind = $list->enum('kind', AgencyRequestKind::class);
+        if ($kind !== null) {
+            $query->where('kind', $kind->value);
         }
         if ($list->term !== '') {
             // A few hundred requests are read whole faster than the customers a term finds are listed first.
@@ -117,6 +127,11 @@ final class AgencyDirectory
     public function account(Bot $bot): array
     {
         $agent = $bot->agent ?? throw new \LogicException("Bot #{$bot->id} has no agent.");
+        // Their latest renewal of this agency: none filed before their latest approval (a return starts afresh) — a request
+        // to become an agent waits only while they are none, so it is filed after any renewal of an agency before.
+        $since = AgencyRequest::query()->where('user_id', $agent->id)->where('kind', AgencyRequestKind::Join->value)->where('status', AgencyRequestStatus::Approved->value)->max('id');
+        $renewal = AgencyRequest::query()->where('user_id', $agent->id)->where('kind', AgencyRequestKind::Renewal->value)
+            ->when($since !== null, static fn(Builder $row) => $row->where('id', '>', $since))->latest('id')->first();
 
         return [
             'bot' => $this->presentBot($bot),
@@ -125,7 +140,22 @@ final class AgencyDirectory
             'credit_limit' => $agent->credit_limit,
             'balance' => $agent->balance(),
             'standing' => $this->standing->present($bot),
+            'renewal' => $renewal === null ? null : [
+                'id' => $renewal->id,
+                'status' => $renewal->status->value,
+                'extended_to' => $renewal->extended_to?->toIso8601String(),
+                'reason' => $renewal->reason,
+                'created_at' => $renewal->created_at?->toIso8601String(),
+                'decided_at' => $renewal->decided_at?->toIso8601String(),
+            ],
+            'actions' => ['request_renewal' => AgencyActions::mayRequestRenewal($agent)],
         ];
+    }
+
+    /** A renewal's term end as the list offers it: none past the last day the shop keeps (the approval would refuse it). */
+    private static function termEnd(?Carbon $end): ?string
+    {
+        return $end === null || LocalTime::tooLate($end) ? null : $end->toIso8601String();
     }
 
     /** @return array<string, mixed> One request, its customer and level loaded with it. */
@@ -136,7 +166,9 @@ final class AgencyDirectory
 
     /**
      * Requests as the page shows them, the names of the shop's admins who decided them — in the report group — read once
-     * for them all (Reviewers::names()).
+     * for them all (Reviewers::names()). A renewal carries the agent's end now (`expires_at`), the end its approval gave
+     * (`extended_to`), and while it waits the end the program's term would give it now (`term_end`; null: no term, or no
+     * end to move on — the panel then asks one).
      *
      * @param Collection<int, AgencyRequest> $requests
      * @return list<array<string, mixed>>
@@ -145,17 +177,23 @@ final class AgencyDirectory
     {
         $names = $this->reviewers->names($requests->pluck('reviewer'));
 
-        return array_values($requests->map(static function (AgencyRequest $request) use ($names): array {
+        return array_values($requests->map(function (AgencyRequest $request) use ($names): array {
             $open = $request->status === AgencyRequestStatus::Pending;
+            $bot = $request->isRenewal() ? $request->user->ownBot : null;
+            $ends = $bot?->agency_expires_at;
 
             return [
                 'id' => $request->id,
+                'kind' => $request->kind->value,
                 'user' => UserDirectory::presentRef($request->user),
                 'user_status' => $request->user->status->value,
                 'agent' => $request->user->isAgent(),
                 'status' => $request->status->value,
                 'note' => $request->note,
                 'level' => $request->level === null ? null : AgencyLevels::presentRef($request->level),
+                'expires_at' => $ends?->toIso8601String(),
+                'extended_to' => $request->extended_to?->toIso8601String(),
+                'term_end' => $open && $bot !== null && $ends !== null && $request->user->isAgent() ? self::termEnd($this->standing->renewalEnd($bot)) : null,
                 'reason' => $request->reason,
                 'reviewer' => $request->reviewer,
                 'reviewer_name' => $names[$request->reviewer ?? ''] ?? null,

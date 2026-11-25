@@ -1,15 +1,19 @@
 import { describe, expect, it } from 'vitest'
-import { emojiKey, emojiLookup, mapLabel, mapWording } from '@/components/bot-texts/emoji-map'
+import { drawnAsEmoji, emojiKey, emojiLookup, mapLabel, mapWording } from '@/components/bot-texts/emoji-map'
 import { premiumTextsResponse } from '@/test/rows'
 
 /*
  * «ایموجی پرمیوم متن‌ها» in the editor's preview (components/bot-texts/emoji-map), as the server draws them
  * (EmojiMap::apply(), EmojiMap::label()): each mapped plain emoji of the shop's own words drawn premium — ❤ and ❤️ the
  * same, one as a reader sees it —, never inside a premium emoji, code, a link or a date, nor in HTML Telegram would not
- * take; a button's leading one alone, its icon; none in a popup, none while the map is off.
+ * take — a half-space after one kept outside its tag —; a button's leading one alone, its icon; none in a popup, none
+ * while the map is off. And which emoji are drawn as emoji, not signs (EmojiMap::drawnAsEmoji()).
  */
 
 const tag = (id: string, plain: string) => `<tg-emoji emoji-id="${id}">${plain}</tg-emoji>`
+/** A zero-width non-joiner (a half-space) and joiner. */
+const ZWNJ = String.fromCodePoint(0x200c)
+const ZWJ = String.fromCodePoint(0x200d)
 
 /** ❤️ → 41, 🔥 → 42. */
 const MAP = emojiLookup(premiumTextsResponse({ enabled: true }))
@@ -87,6 +91,15 @@ describe('a text’s wording', () => {
     expect(mapLabel('🇩🇪\uFE0F %name%', '🇩🇪\uFE0F آلمان', flags)).toBe(`${tag('46', '🇩🇪')}\uFE0F آلمان`)
   })
 
+  it('keeps a half-space typed after an emoji outside its tag — a run of joiners alone as it is (EmojiMap::untailed())', () => {
+    const check = new Map([['✅', '111']])
+    expect(mapWording(`✅${ZWNJ}ثبت`, 'message', check)).toBe(`${tag('111', '✅')}${ZWNJ}ثبت`)
+    expect(mapWording(`✅${ZWNJ}${ZWJ} و ❤️${ZWJ} x`, 'message', new Map([...check, ...MAP]))).toBe(`${tag('111', '✅')}${ZWNJ}${ZWJ} و ${tag('41', '❤️')}${ZWJ} x`)
+    expect(mapWording(`${ZWNJ}${ZWJ} ✅`, 'message', check)).toBe(`${ZWNJ}${ZWJ} ${tag('111', '✅')}`)
+    // A button's leading one ending in a half-space is left, as EmojiMap::label() leaves it.
+    expect(mapLabel(`✅${ZWNJ} ثبت`, `✅${ZWNJ} ثبت`, check)).toBe(`✅${ZWNJ} ثبت`)
+  })
+
   it('is drawn again as it is: a mapped one is drawn once', () => {
     const once = mapWording('❤️ <i>🔥</i>', 'message', MAP)
     expect(mapWording(once, 'message', MAP)).toBe(once)
@@ -131,5 +144,24 @@ describe('a button’s label', () => {
   it('is as it is while the map does not have its emoji, or is off', () => {
     expect(mapLabel('⭐ امتیاز', '⭐ امتیاز', MAP)).toBe('⭐ امتیاز')
     expect(mapLabel('🔥 خرید', '🔥 خرید', new Map())).toBe('🔥 خرید')
+  })
+})
+
+describe('an emoji drawn as one', () => {
+  it('is one Unicode counts as emoji, or carries its variation selector or keycap mark; a sign of the same blocks is not', () => {
+    for (const emoji of ['❤', '❤️', '✔', '☎', '⚠', '©', '✅', '⭐', '🔥', '1️⃣', '👍🏽', '🇩🇪']) expect(drawnAsEmoji(emoji), emoji).toBe(true)
+    for (const sign of ['━', '★', '✓', '●', '■', '№']) expect(drawnAsEmoji(sign), sign).toBe(false)
+  })
+
+  // The list is typed by hand (EmojiMap::DRAWN, copied here): held to Unicode's own Emoji property, below U+1F000.
+  it('takes every character Unicode counts as emoji below U+1F000, and no other but the two marks', () => {
+    const apart: string[] = []
+    for (let point = 0xa0; point < 0x1f000; point++) {
+      if (point >= 0xd800 && point <= 0xdfff) continue
+      const character = String.fromCodePoint(point)
+      const emoji = /\p{Emoji}/u.test(character) || point === 0x20e3 || point === 0xfe0f
+      if (drawnAsEmoji(character) !== emoji) apart.push(point.toString(16))
+    }
+    expect(apart).toEqual([])
   })
 })

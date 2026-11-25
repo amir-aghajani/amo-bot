@@ -139,15 +139,24 @@ final class ShopReports
         ]), 'keyboard' => self::managing($alert->referrer)]);
     }
 
-    /** A customer asked to become an agent: what they wrote, with the bot admins' «تایید» / «رد» buttons (AgencyReview). */
+    /**
+     * A customer asked to become an agent — what they wrote —, or an agent for their agency's end to be moved on — their
+     * bot and its end —, with the bot admins' «تایید» / «رد» buttons (AgencyReview).
+     */
     public function agencyRequested(AgencyRequest $request): void
     {
         $this->report(Bot::MAIN, Topic::Agency, static function () use ($request): array {
-            $lines = [
+            $bot = $request->isRenewal() ? $request->user->ownBot : null;
+            $lines = $bot === null ? [
                 sprintf("🤝 <b>درخواست نمایندگی</b> · \u{200E}#%d", $request->id),
                 '👤 ' . self::customer($request->user),
                 ...self::note(self::CUSTOMER_NOTE, $request->note),
                 '⏳ در انتظار بررسی — همین‌جا، یا در صفحه «نمایندگان» پنل',
+            ] : [
+                sprintf("🔄 <b>درخواست تمدید نمایندگی</b> · \u{200E}#%d", $request->id),
+                ...self::agentLines($bot),
+                '📅 پایان نمایندگی: ' . ($bot->agency_expires_at === null ? 'ندارد' : Persian::date($bot->agency_expires_at, withTime: true)) . ($bot->agency_expires_at?->isPast() ? ' (گذشته است)' : ''),
+                '⏳ در انتظار بررسی — «تایید» همین‌جا نمایندگی را به اندازه «مدت نمایندگی» تنظیمات نمایندگی تمدید می‌کند؛ برای تاریخی دیگر، «نمایندگان» پنل یا «⚙️ مدیریت» ربات',
             ];
 
             return [
@@ -163,9 +172,13 @@ final class ShopReports
     {
         $this->report(Bot::MAIN, Topic::Agency, static function () use ($request): array {
             $level = $request->level;
-            $text = $request->status === AgencyRequestStatus::Approved
-                ? sprintf("✅ درخواست نمایندگی \u{200E}#%d تایید شد: سطح «%s»، هر گیگابایت %s.", $request->id, self::name($level->name ?? '—'), Money::format($level->price_per_gb ?? '0'))
-                : sprintf("❌ درخواست نمایندگی \u{200E}#%d رد شد.", $request->id);
+            $approved = $request->status === AgencyRequestStatus::Approved;
+            $text = match (true) {
+                $request->isRenewal() && $approved => sprintf("✅ درخواست تمدید نمایندگی \u{200E}#%d تایید شد: %s.", $request->id, $request->extended_to === null ? 'نمایندگی دیگر پایانی ندارد' : 'پایان نمایندگی ' . Persian::date($request->extended_to, withTime: true)),
+                $request->isRenewal() => sprintf("❌ درخواست تمدید نمایندگی \u{200E}#%d رد شد.", $request->id),
+                $approved => sprintf("✅ درخواست نمایندگی \u{200E}#%d تایید شد: سطح «%s»، هر گیگابایت %s.", $request->id, self::name($level->name ?? '—'), Money::format($level->price_per_gb ?? '0')),
+                default => sprintf("❌ درخواست نمایندگی \u{200E}#%d رد شد.", $request->id),
+            };
 
             return [
                 'text' => implode("\n", [$text, ...self::note(self::SUPPORT_NOTE, $request->reason)]),
@@ -255,7 +268,7 @@ final class ShopReports
             '👤 ' . self::customer($payment->order->user),
             sprintf('💰 %s · %s', Money::format($payment->amount), self::name($payment->method->label)),
             sprintf("سفارش \u{200E}#%d پیش از رسیدن این پرداخت بسته شده بود؛ مبلغ به کیف پول مشتری رفت.", $payment->order_id),
-            '👛 موجودی: ' . Money::format($payment->order->user->balance()),
+            '👛 موجودی: ' . Messages::balance($payment->order->user->balance()),
         ]), 'keyboard' => self::managing($payment->order->user)]);
     }
 
@@ -427,7 +440,7 @@ final class ShopReports
             '👤 از: ' . self::customer($transfer->sender),
             '👤 به: ' . self::customer($transfer->recipient),
             '💳 مبلغ: ' . Money::format($transfer->amount),
-            sprintf('👛 موجودی فرستنده: %s · گیرنده: %s', Money::format($transfer->sender->balance()), Money::format($transfer->recipient->balance())),
+            sprintf('👛 موجودی فرستنده: %s · گیرنده: %s', Messages::balance($transfer->sender->balance()), Messages::balance($transfer->recipient->balance())),
         ]), 'keyboard' => self::managingBoth($transfer->sender, '⚙️ مدیریت فرستنده', $transfer->recipient, '⚙️ مدیریت گیرنده')]);
     }
 
@@ -996,7 +1009,7 @@ final class ShopReports
             sprintf("💰 <b>شارژ کیف پول</b> · سفارش \u{200E}#%d", $order->id),
             '👤 ' . self::customer($order->user),
             self::paid($order, $payment),
-            '👛 موجودی: ' . Money::format($order->user->balance()),
+            '👛 موجودی: ' . Messages::balance($order->user->balance()),
         ];
 
         return implode("\n", [...$lines, ...self::commission($payment)]);

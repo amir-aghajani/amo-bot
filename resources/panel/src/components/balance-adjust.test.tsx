@@ -13,7 +13,8 @@ import { json, offline, server } from '@/test/server'
  * the API's form however it was typed — Toman whole, «۱۵۰٬۰۰۰» is "150000"; gigabytes with decimals too, «۱٫۵» or «1.5»
  * is "1.5", never 15 —, and one that is no such number (a fraction of a Toman, three decimals, two points, words) is the
  * form's to refuse, nothing sent. It makes a ledger's line — no revert: nothing saved to go back to —, and what it would
- * lose is what was typed: a direction picked alone is nothing to ask about.
+ * lose is what was typed: a direction picked alone is nothing to ask about. A wallet's debit past the balance says the
+ * debt it would leave before it goes; an agent's traffic, which never goes below zero, says nothing of the kind.
  */
 
 const CUSTOMER = userRow()
@@ -116,7 +117,76 @@ describe('a wallet’s amount', () => {
   })
 })
 
+describe('a wallet’s debit', () => {
+  it('past the balance says before it goes the debt it would leave — nothing for a credit, or a debit the balance covers', () => {
+    wallet()
+    const said = () => screen.queryByText(/^موجودی پس از کاهش/)?.textContent ?? null
+
+    fireEvent.change(screen.getByLabelText('مبلغ (تومان)'), { target: { value: '250000' } })
+    expect(said()).toBeNull()
+    fireEvent.click(screen.getByRole('radio', { name: 'کاهش' }))
+    expect(said()).toBe('موجودی پس از کاهش: ۲۲۵٬۰۰۰ تومان بدهی')
+
+    fireEvent.change(screen.getByLabelText('مبلغ (تومان)'), { target: { value: '25000' } })
+    expect(said()).toBeNull()
+  })
+
+  it('says the debt in one live region there all along — its words swapped —, which describes the amount while it speaks', () => {
+    wallet()
+    const amount = screen.getByLabelText('مبلغ (تومان)')
+    const region = screen.getByRole('status')
+    expect(region.textContent).toBe('')
+    expect(amount.getAttribute('aria-describedby') ?? '').not.toContain(region.id)
+
+    fireEvent.click(screen.getByRole('radio', { name: 'کاهش' }))
+    fireEvent.change(amount, { target: { value: '250000' } })
+    expect(screen.getByRole('status')).toBe(region)
+    expect(region.textContent).toBe('موجودی پس از کاهش: ۲۲۵٬۰۰۰ تومان بدهی')
+    expect(amount.getAttribute('aria-describedby')?.split(' ')).toContain(region.id)
+
+    fireEvent.change(amount, { target: { value: '25000' } })
+    expect(screen.getByRole('status')).toBe(region)
+    expect(region.textContent).toBe('')
+    expect(amount.getAttribute('aria-describedby') ?? '').not.toContain(region.id)
+  })
+
+  it('short by under half a Toman says nothing: it shows as no debt, never «۰ تومان»', () => {
+    const user = userRow({ balance: '24999.60' })
+    server()
+      .on('GET', '/api/admin/users/10/wallet', json({ user, transactions: [] } satisfies UserWalletResponse))
+      .on('POST', '/api/admin/users/10/wallet', json({ user, transaction: null, transactions: [] }))
+    render(<WalletPanel user={user} onChanged={() => undefined} />, { wrapper: providers().wrapper })
+
+    fireEvent.click(screen.getByRole('radio', { name: 'کاهش' }))
+    fireEvent.change(screen.getByLabelText('مبلغ (تومان)'), { target: { value: '25000' } })
+
+    expect(screen.queryByText(/^موجودی پس از کاهش/)).toBeNull()
+    fireEvent.change(screen.getByLabelText('مبلغ (تومان)'), { target: { value: '25001' } })
+    expect(screen.getByText(/^موجودی پس از کاهش/).textContent).toBe('موجودی پس از کاهش: ۱ تومان بدهی')
+  })
+
+  it('past the balance is sent all the same: the server leaves the debt', async () => {
+    wallet()
+
+    fireEvent.click(screen.getByRole('radio', { name: 'کاهش' }))
+    adjust('مبلغ (تومان)', '250000', 'کاهش موجودی')
+
+    await until(() => expect(sent('/api/admin/users/10/wallet')).toHaveLength(1))
+    expect(sent('/api/admin/users/10/wallet')[0]).toMatchObject({ type: 'debit', amount: '250000' })
+  })
+})
+
 describe('an agent’s traffic', () => {
+  it('says nothing of what a decrease would leave: it never goes below zero, the server refuses it', () => {
+    server().on('GET', '/api/admin/agency/agents/10/traffic', json({ lines: [], meta: { page: 1, per_page: 25, total: 0, last_page: 1 } }))
+    render(<TrafficModal agent={AGENT} onClose={() => undefined} onSaved={() => undefined} />, { wrapper: providers().wrapper })
+
+    fireEvent.click(screen.getByRole('radio', { name: 'کاهش' }))
+    fireEvent.change(screen.getByLabelText('حجم (گیگابایت)'), { target: { value: '50' } })
+
+    expect(screen.queryByText(/پس از کاهش/)).toBeNull()
+  })
+
   it('is set right by the GB typed, a decimal kept — and taken away with a minus sign', async () => {
     server()
       .on('GET', '/api/admin/agency/agents/10/traffic', json({ lines: [], meta: { page: 1, per_page: 25, total: 0, last_page: 1 } }))

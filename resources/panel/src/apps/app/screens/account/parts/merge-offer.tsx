@@ -3,7 +3,7 @@ import { Fact, Section } from '@/apps/app/ui/section'
 import { Notice } from '@/apps/app/ui/states'
 import { IconTile } from '@/apps/app/ui/visuals'
 import type { StoreMergeOfferResponse } from '@/lib/api-types'
-import { formatDate, formatMoney, formatNumber } from '@/lib/format'
+import { formatBalance, formatDate, formatNumber } from '@/lib/format'
 
 /*
  * The merge offer of an email that is another account's of the shop: that account as the customer can tell it is theirs
@@ -39,7 +39,7 @@ export function MergeOffer({ offer, email }: { offer: Offer; email: string }) {
         <Fact label="عضو از">{formatDate(account.created_at, { dateStyle: 'long' })}</Fact>
         <Fact label="سرویس‌های فعال">{formatNumber(account.services)}</Fact>
         <Fact label="سفارش‌ها">{formatNumber(account.orders)}</Fact>
-        <Fact label="موجودی کیف پول">{formatMoney(account.balance)}</Fact>
+        <Fact label="موجودی کیف پول">{formatBalance(account.balance)}</Fact>
         <Fact label="روش‌های ورود">{waysOf(account)}</Fact>
       </Section>
 

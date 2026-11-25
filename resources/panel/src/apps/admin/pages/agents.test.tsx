@@ -13,7 +13,8 @@ import { json, refusal, server } from '@/test/server'
  * The agency's page (apps/admin/pages/agents): the program's numbers that could not be read say so, with a way to ask
  * again, and stay «—» — never zeros, nothing pulsing for ever — while the lists stand; the requests' status pill lists
  * «همه» first, as every pill does, the list still opening on the requests that wait, a decided one naming who decided it
- * as their account has it; an agent's shop is a link of the
+ * as their account has it; an agent's renewal request is marked apart — the agent's end, or the end it gave —, approved
+ * with a new end, and listed alone by the kind pill; an agent's shop is a link of the
  * agents list's, opened here — its menu closed before the unsaved-changes question — or in a new tab; an agent's selling is stopped by hand (with a note) and let go again — never
  * past its end, which is extended instead —, and the servers and plans kept from their shop are ticked in a dialog.
  */
@@ -102,6 +103,46 @@ describe('a request decided', () => {
 
     expect((await screen.findAllByText('سارا احمدی')).length).toBeGreaterThan(0)
     expect(screen.queryByText(/شناسه تلگرام/)).toBeNull()
+  })
+})
+
+describe('the agents’ renewal requests', () => {
+  it('are marked apart from the requests to become an agent, a waiting one with the agent’s end passed, an approved one with the end it gave', async () => {
+    server().on('GET', '/api/admin/agency', refusal(500, 'خطای سرور.'))
+    const waiting = agencyRequestRow({ id: 5, kind: 'renewal', agent: true, expires_at: '2026-09-23T10:00:00Z', term_end: '2027-01-10T20:30:00Z' })
+    const endless = agencyRequestRow({
+      id: 6,
+      kind: 'renewal',
+      agent: true,
+      status: 'approved',
+      expires_at: null,
+      extended_to: null,
+      decided_at: '2026-10-06T10:00:00Z',
+      actions: { approve: false, reject: false },
+    })
+    open('/agents', [REZA], false, [agencyRequestRow(), waiting, endless])
+
+    expect(await screen.findByText('درخواست نمایندگی')).toBeTruthy()
+    expect(screen.getAllByText('تمدید نمایندگی')).toHaveLength(2)
+    expect(screen.getByText(/^پایان فعلی: .+ \(گذشته است\)$/)).toBeTruthy()
+    expect(screen.getByText('تمدید: بدون پایان')).toBeTruthy()
+
+    // «تایید» on the renewal asks for its new end, not for a level.
+    fireEvent.click(screen.getAllByRole('button', { name: 'تایید' })[1] as HTMLElement)
+    const dialog = within(await screen.findByRole('dialog', { name: /^تمدید نمایندگی / }))
+    expect(dialog.getByLabelText('پایان تازه نمایندگی')).toBeTruthy()
+    expect(dialog.queryByLabelText('سطح')).toBeNull()
+  })
+
+  it('are listed alone by the kind pill', async () => {
+    server().on('GET', '/api/admin/agency', refusal(500, 'خطای سرور.'))
+    open()
+
+    fireEvent.keyDown(await screen.findByRole('combobox', { name: 'نوع همه' }), { key: 'Enter' })
+    fireEvent.click(await screen.findByRole('option', { name: 'تمدید نمایندگی' }))
+
+    await until(() => expect(server().sent('GET', '/api/admin/agency/requests').at(-1)?.query.get('kind')).toBe('renewal'))
+    expect(screen.getByRole('combobox', { name: 'نوع تمدید نمایندگی' })).toBeTruthy()
   })
 })
 

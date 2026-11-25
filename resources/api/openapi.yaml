@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: AmoBot API
-  version: 0.10.2
+  version: 0.10.3
   description: |
     AmoBot's HTTP API. Every answer is JSON; the panels are static files that render their own pages.
 
@@ -307,6 +307,17 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/TrafficLinesResponse' }
+        default: { $ref: '#/components/responses/Error' }
+  /api/agent/account/renewal:
+    post:
+      x-no-body: true
+      summary: "«درخواست تمدید نمایندگی»: the agent asks for their agency's end to be moved on. The owner decides — on the agents page or in the main bot's report group — and the agent is told in the main bot. Only while `account.actions.request_renewal`: a 422 on `status` when one waits already, or their agency has no end."
+      responses:
+        '201':
+          description: Requested
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AccountResponse' }
         default: { $ref: '#/components/responses/Error' }
   /api/{panel}/changes:
     parameters: [{ $ref: '#/components/parameters/Panel' }, { $ref: '#/components/parameters/Shop' }]
@@ -2456,9 +2467,10 @@ paths:
   /api/admin/agency/requests:
     parameters: [{ $ref: '#/components/parameters/Shop' }]
     get:
-      summary: Requests to become an agent. Newest first (`dir=asc` for oldest first); one status or all.
+      summary: "Requests to become an agent, and agents' renewal requests. Newest first (`dir=asc` for oldest first); one status or all, one kind or both."
       parameters:
         - { name: status, in: query, description: 'The status tab. Empty for all requests', schema: { $ref: '#/components/schemas/AgencyRequestStatus' } }
+        - { name: kind, in: query, description: 'One kind of request. Empty for both', schema: { $ref: '#/components/schemas/AgencyRequestKind' } }
         - { $ref: '#/components/parameters/Search' }
         - { $ref: '#/components/parameters/Page' }
         - { name: sort, in: query, description: "What to sort by. Anything else sorts by creation time", schema: { $ref: '#/components/schemas/AgencyRequestSort' } }
@@ -2470,11 +2482,22 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/AgencyRequestsResponse' }
         default: { $ref: '#/components/responses/Error' }
+  /api/admin/agency/requests/{id}:
+    parameters: [{ $ref: '#/components/parameters/Id' }, { $ref: '#/components/parameters/Shop' }]
+    get:
+      summary: "One agency request as the list shows it, as it stands now — read again before a decision (the bot's renewal card)."
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AgencyRequestResponse' }
+        default: { $ref: '#/components/responses/Error' }
   /api/admin/agency/requests/{id}/approve:
     parameters: [{ $ref: '#/components/parameters/Id' }, { $ref: '#/components/parameters/Shop' }]
     post:
-      summary: "Approve an agency request. Sets the level and the starting credit, and the terms of selling — `expires_at` and `monthly_minimum`, the program's (`term_days`, `monthly_minimum`) while left out; the customer is notified."
-      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/AgencyTermsRequest' } } } }
+      summary: "Approve an agency request; the customer is notified. A request to become an agent (`kind` join) takes `AgencyTermsRequest`: the level and the starting credit, and the terms of selling — `expires_at` and `monthly_minimum`, the program's (`term_days`, `monthly_minimum`) while left out. A renewal (`kind` renewal) takes `AgencyRenewalRequest`: the agent's new end."
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/AgencyApproveRequest' } } } }
       responses:
         '200':
           description: Approved
@@ -2485,7 +2508,7 @@ paths:
   /api/admin/agency/requests/{id}/reject:
     parameters: [{ $ref: '#/components/parameters/Id' }, { $ref: '#/components/parameters/Shop' }]
     post:
-      summary: 'Reject an agency request. The customer is notified, with the note.'
+      summary: 'Reject an agency request — to become an agent, or a renewal. The customer is notified, with the note.'
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/NoteRequest' } } } }
       responses:
         '200':
@@ -4822,7 +4845,7 @@ components:
     Store: { name: store, in: path, required: true, description: "The store key of the shop's website, or of its Telegram mini app (each has a key of its own), which names the shop. Not a secret; the panel shows the website's with the base address and can replace it", schema: { type: string, pattern: '^[0-9a-f]{24}$' } }
     TransferKey: { name: Idempotency-Key, in: header, required: true, description: "A key the website makes for each «انتقال موجودی» the customer confirms (a UUID): 1 to 64 Latin letters, digits, `-` and `_`. Repeating the request with the same key (a network retry) answers the transfer the key made, never a second one — even when two arrive at the same moment. The same key with another `telegram_id` or `amount` is a 422 on `idempotency_key`; so is a missing or malformed key. A key is the customer's for good: a new transfer takes a new key.", schema: { type: string, pattern: '^[A-Za-z0-9_-]{1,64}$' } }
     ManualOrderKey: { name: Idempotency-Key, in: header, required: true, description: "A key the panel makes for each order support makes by hand (a UUID), and a new one after a refusal: 1 to 64 Latin letters, digits, `-` and `_`. Repeating the request with the same key (a network retry) returns the order the key made, as it is now: never a second order or charge, and never refused for what changed since (the wallet it charged, the name it took). Two identical requests at the same moment get one order. A key already used for another order of the customer's, or for another way to pay, is a 422 on `idempotency_key`; so is a missing or malformed key. A key is remembered for a week.", schema: { type: string, pattern: '^[A-Za-z0-9_-]{1,64}$' } }
-    WalletAdjustmentKey: { name: Idempotency-Key, in: header, required: false, description: "A key the caller makes for each credit or debit (a UUID; the panels send one with every change, and a new one once it went through or the form was edited): 1 to 64 Latin letters, digits, `-` and `_`. Without one, every request is a change of its own. Repeating the request with the same key (a network retry, its answer lost) answers with the line the key wrote (a 200) and the wallet as it is now: never a second credit or debit, even when two arrive at the same moment, and never refused for what changed since (a debit the balance no longer covers). The same key with another `type`, `amount` or `description` is a 422 on `idempotency_key`; so is a malformed key. A key is the customer's for good: the next change takes a new key.", schema: { type: string, pattern: '^[A-Za-z0-9_-]{1,64}$' } }
+    WalletAdjustmentKey: { name: Idempotency-Key, in: header, required: false, description: "A key the caller makes for each credit or debit (a UUID; the panels send one with every change, and a new one once it went through or the form was edited): 1 to 64 Latin letters, digits, `-` and `_`. Without one, every request is a change of its own. Repeating the request with the same key (a network retry, its answer lost) answers with the line the key wrote (a 200) and the wallet as it is now: never a second credit or debit, even when two arrive at the same moment, and never refused for what changed since (a debit that would now leave too deep a debt). The same key with another `type`, `amount` or `description` is a 422 on `idempotency_key`; so is a malformed key. A key is the customer's for good: the next change takes a new key.", schema: { type: string, pattern: '^[A-Za-z0-9_-]{1,64}$' } }
     TrafficAdjustmentKey: { name: Idempotency-Key, in: header, required: false, description: "A key the caller makes for each adjustment (a UUID; the panel sends one with every adjustment, and a new one once it went through or the form was edited): 1 to 64 Latin letters, digits, `-` and `_`. Without one, every request is an adjustment of its own. Repeating the request with the same key (a network retry, its answer lost) answers with the agent as they are now, the key's line written once: never a second adjustment, even when two arrive at the same moment, and never refused for traffic the agent's bot has sold since. The same key with another `gb` or `note` is a 422 on `idempotency_key`; so is a malformed key. A key is the agent's for good: the next adjustment takes a new key.", schema: { type: string, pattern: '^[A-Za-z0-9_-]{1,64}$' } }
     TicketAnswerKey: { name: Idempotency-Key, in: header, required: false, description: "A key the caller makes for each answer (a UUID; the panels send one with every answer, and a new one once it went or the form was edited): 1 to 64 Latin letters, digits, `-` and `_`. Without one, every request is an answer of its own. Repeating the request with the same key (a network retry, its answer lost) answers with the ticket as it is now, the key's answer in it once: never a second message, nor the customer told twice, even when two arrive at the same moment, and never refused for the messages the ticket took since. The same key with another `body`, or another picture (told by its file name; none is another too), is a 422 on `idempotency_key`; so is a malformed key. A key is the ticket's for good: the next answer takes a new key.", schema: { type: string, pattern: '^[A-Za-z0-9_-]{1,64}$' } }
     IdempotencyKey: { name: Idempotency-Key, in: header, required: true, description: "A key the website makes for each checkout attempt (a UUID), and a new one when the customer picks another payment method: 1 to 64 Latin letters, digits, `-` and `_`. Repeating the request with the same key and `method_id` (a network retry) returns the order the key led to, either the one it created or the open order for the same thing it found and paid, as it is now. Never a second order or charge, whatever changed since: even after a price change it is the order made at the old price. Two identical requests at the same moment get one order and one answer. If the order was cancelled since (by support, or left unpaid past its deadline, maybe days ago), the answer is a 409 with its own message («این سفارش لغو شده است…»), unlike the 409 for an order closed elsewhere a moment ago: buying again is a new attempt with a new key. A key already used for a different order (another type, plan, server or service, or a top-up of another amount), or first sent with another `method_id`, is a 422 on `idempotency_key`; so is a missing or malformed key. A key is remembered for a week; after that, a request with it counts as new.", schema: { type: string, pattern: '^[A-Za-z0-9_-]{1,64}$' } }
@@ -5383,7 +5406,7 @@ components:
         phone_exempt: { type: boolean, description: "Excused from the shop's phone rule: never asked for their phone number." }
         status: { $ref: '#/components/schemas/UserStatus' }
         role: { $ref: '#/components/schemas/UserRole' }
-        balance: { type: string }
+        balance: { type: string, description: "Their wallet balance in Toman. Below zero is a debt: an agent's credit in use, or a debit by hand past the balance." }
         discount_percent: { type: integer, description: "Their personal discount («تخفیف اختصاصی»): a percent off what they buy for themselves. It is one of the automatic discounts, of which the largest applies. 0 for none." }
         counts:
           type: object
@@ -5617,7 +5640,7 @@ components:
         transactions: { type: array, items: { $ref: '#/components/schemas/WalletTransactionRow' } }
 
     WalletAdjustmentRequest:
-      description: "A manual credit or debit, with the line the customer sees in their ledger. A debit cannot exceed the balance."
+      description: "A manual credit or debit, with the line the customer sees in their ledger. A debit may take anyone's balance below zero: a debt, which their next top-ups pay off first, and nothing they may spend. A debt past 1,000,000,000 Toman is a 422 on `amount`."
       type: object
       additionalProperties: false
       required: [type, amount]
@@ -8767,6 +8790,17 @@ components:
         emoji_id: { type: string, description: "The premium emoji's Telegram id: digits, as a string." }
         texts: { type: integer, description: "How many of the shop's texts it is drawn premium in, as they are worded now." }
 
+    PremiumTextUse:
+      description: "A plain emoji the shop's texts carry where the map would draw it premium, and the premium emoji it is swapped for."
+      type: object
+      additionalProperties: false
+      required: [emoji, texts, menu, emoji_id]
+      properties:
+        emoji: { type: string, description: "One plain emoji, as first met (the form with its variation selector preferred); ❤ and ❤️ are one." }
+        texts: { type: integer, description: "How many of the shop's texts carry it where the map would draw it: their own words outside a premium emoji, code, a link or a date; a button's leading emoji, with words after it and no premium emoji of its own right after (a name filled in may still bring one); never a popup. Signs that are no emoji (━, ★, ✓) are left out." }
+        menu: { type: integer, description: "How many buttons of the start menu as a customer is shown it (programs switched off left out), while it is inline buttons, start with it, have words after it and no icon of their own; 0 for a keyboard under the text field." }
+        emoji_id: { type: string, nullable: true, description: "The premium emoji the map swaps it for (digits, as a string); null while it has none." }
+
     PremiumTextsRequest:
       type: object
       additionalProperties: false
@@ -8782,10 +8816,11 @@ components:
         premium_texts:
           type: object
           additionalProperties: false
-          required: [enabled, items, status, can_enable, max]
+          required: [enabled, items, emojis, status, can_enable, max]
           properties:
             enabled: { type: boolean, description: "The texts draw the mapped emoji premium — every text's own words, the default and the reworded alike; a premium emoji a text carries itself wins." }
             items: { type: array, items: { $ref: '#/components/schemas/PremiumTextRow' }, description: 'In the admin’s order.' }
+            emojis: { type: array, items: { $ref: '#/components/schemas/PremiumTextUse' }, description: "Every plain emoji the shop's texts and its inline start menu carry, the most carried first, with the premium emoji swapped in; then the map's emoji nothing carries any more, in its order." }
             status:
               type: object
               nullable: true
@@ -10648,7 +10683,7 @@ components:
         levels: { type: integer }
         agents: { type: integer }
         bots: { type: integer, description: "Agents' bots that are running (connected and switched on)." }
-        pending: { type: integer, description: Requests waiting for a decision. }
+        pending: { type: integer, description: "Requests waiting for a decision: to become an agent, and agents' renewals." }
 
     AgencySummaryResponse:
       type: object
@@ -10711,19 +10746,28 @@ components:
       type: string
       enum: [pending, approved, rejected]
 
+    AgencyRequestKind:
+      description: "What an agency request asks for: `join` — a customer asks to become an agent; `renewal` — an agent asks for their agency's end to be moved on («درخواست تمدید نمایندگی»)."
+      type: string
+      enum: [join, renewal]
+
     AgencyRequestRow:
-      description: A customer's request to become an agent.
+      description: "A customer's request to become an agent, or an agent's request for their agency's end to be moved on (`kind`)."
       type: object
       additionalProperties: false
-      required: [id, user, user_status, agent, status, note, level, reason, reviewer, reviewer_name, decided_at, created_at, actions]
+      required: [id, kind, user, user_status, agent, status, note, level, expires_at, extended_to, term_end, reason, reviewer, reviewer_name, decided_at, created_at, actions]
       properties:
         id: { type: integer }
+        kind: { $ref: '#/components/schemas/AgencyRequestKind' }
         user: { $ref: '#/components/schemas/UserRef' }
         user_status: { $ref: '#/components/schemas/UserStatus' }
         agent: { type: boolean, description: 'Whether the customer is an agent now.' }
         status: { $ref: '#/components/schemas/AgencyRequestStatus' }
         note: { type: string, nullable: true, description: What the customer wrote. }
         level: { allOf: [{ $ref: '#/components/schemas/AgencyLevelRef' }], nullable: true, description: The level given on approval. }
+        expires_at: { type: string, format: date-time, nullable: true, description: "A renewal: the agent's agency's end now; null for none, and for a request to become an agent." }
+        extended_to: { type: string, format: date-time, nullable: true, description: 'An approved renewal: the end it gave; null for none at all, and for anything else.' }
+        term_end: { type: string, format: date-time, nullable: true, description: "A renewal still waiting: the end the program's term (`term_days`) gives it now — on from the agent's end while it lies ahead, from now once it passed —, what the report group's «تایید» gives and an approval naming none. Null without a term or an end to move on (an approval then names one), and for anything else." }
         reason: { type: string, nullable: true, description: "Support's note on a rejection." }
         reviewer: { type: string, nullable: true, description: 'Who decided it: the panel login, or a bot admin (@username or tg:<id>).' }
         reviewer_name: { type: string, nullable: true, description: *reviewerName }
@@ -10763,6 +10807,19 @@ components:
       required: [request]
       properties:
         request: { $ref: '#/components/schemas/AgencyRequestRow' }
+
+    AgencyApproveRequest:
+      description: "An agency request's approval: a request to become an agent takes the agent's terms, a renewal the agent's new end."
+      oneOf:
+        - { $ref: '#/components/schemas/AgencyTermsRequest' }
+        - { $ref: '#/components/schemas/AgencyRenewalRequest' }
+
+    AgencyRenewalRequest:
+      description: "A renewal's approval: the agent's new end."
+      type: object
+      additionalProperties: false
+      properties:
+        expires_at: { type: string, nullable: true, description: 'The new end, as a day and an hour on the shop''s clock ("2026-10-12T18:00"), ahead of now and no later than the last day the shop keeps; blank or null for none at all; left out for `term_end` (a 422 on `expires_at` while that is null).' }
 
     AgencyTermsRequest:
       description: "An agent's terms, when approving a request or changing an agent: their level, how far below zero their wallet may go, and their terms of selling — each of these two left out is the program's on an approval, kept on a change."
@@ -10864,7 +10921,7 @@ components:
         status: { $ref: '#/components/schemas/UserStatus' }
         level: { $ref: '#/components/schemas/AgencyLevelRef' }
         credit_limit: { type: string, description: 'How far below zero their wallet may go, in Toman.' }
-        balance: { type: string, description: 'Their wallet balance in Toman; below zero while they use their credit.' }
+        balance: { type: string, description: "Their wallet balance in Toman. Below zero is a debt: their credit in use, or past it by support's debit by hand." }
         bot: { allOf: [{ $ref: '#/components/schemas/AgentBot' }], nullable: true, description: Their bot (its shop is created when they are approved). }
         counts:
           type: object
@@ -10917,7 +10974,7 @@ components:
         account:
           type: object
           additionalProperties: false
-          required: [bot, agent, level, credit_limit, balance, standing]
+          required: [bot, agent, level, credit_limit, balance, standing, renewal, actions]
           properties:
             bot: { $ref: '#/components/schemas/AgentBot' }
             agent: { $ref: '#/components/schemas/UserRef' }
@@ -10925,6 +10982,25 @@ components:
             credit_limit: { type: string, description: 'How far below zero their main-bot wallet may go, in Toman.' }
             balance: { type: string, description: 'Their wallet balance in the main bot, in Toman.' }
             standing: { $ref: '#/components/schemas/AgencyStanding' }
+            renewal:
+              description: "Their latest request for their agency's end to be moved on («درخواست تمدید نمایندگی»), whatever became of it; null before the first."
+              type: object
+              nullable: true
+              additionalProperties: false
+              required: [id, status, extended_to, reason, created_at, decided_at]
+              properties:
+                id: { type: integer }
+                status: { $ref: '#/components/schemas/AgencyRequestStatus' }
+                extended_to: { type: string, format: date-time, nullable: true, description: 'Approved: the end it gave; null for none at all, and while not approved.' }
+                reason: { type: string, nullable: true, description: "Rejected: the owner's note, if they left one." }
+                created_at: { type: string, format: date-time, nullable: true }
+                decided_at: { type: string, format: date-time, nullable: true }
+            actions:
+              type: object
+              additionalProperties: false
+              required: [request_renewal]
+              properties:
+                request_renewal: { type: boolean, description: 'Whether they may ask for their agency to be renewed now (POST /account/renewal): their agency has an end, passed or not, and no request of theirs waits.' }
 
     TrafficLine:
       description: One line of an agent's traffic ledger.
@@ -11847,7 +11923,7 @@ components:
         two_factor: { type: boolean, description: 'Password sign-in also asks for their authenticator app''s code (or a recovery code).' }
         phone: { type: string, nullable: true, description: "Their verified mobile number in E.164 form (+98912…): the one they shared with the bot, or proved by a texted code on the website. While the website signs in by SMS it is a way in; null if none." }
         phone_exempt: { type: boolean, description: "The shop's phone rule never asks them for their number (`shop.phone_required`, `shop.phone_moments`), through either key: support excused them, or they are a bot admin." }
-        balance: { type: string, description: "Their wallet balance in Toman, as a decimal string ('120000.00'). Below zero is an agent's debt." }
+        balance: { type: string, description: "Their wallet balance in Toman, as a decimal string ('120000.00'). Below zero is a debt: an agent's credit in use, or support's debit by hand." }
         created_at: { type: string, format: date-time, nullable: true, description: "When they became a customer of the shop." }
 
     StoreMeResponse:
@@ -13042,9 +13118,9 @@ components:
       additionalProperties: false
       required: [balance, credit, spendable, top_up, transfer]
       properties:
-        balance: { type: string, description: "Below zero is an agent's debt." }
-        credit: { type: string, description: "How far below zero an agent's wallet may go; '0.00' for everyone else." }
-        spendable: { type: string, description: 'What the wallet can pay now: the balance plus the credit.' }
+        balance: { type: string, description: "Below zero is a debt: an agent's credit in use, or support's debit by hand. A top-up pays it off first." }
+        credit: { type: string, description: "How far below zero an agent's buying may take their wallet; '0.00' for everyone else." }
+        spendable: { type: string, description: "What the wallet can pay now: the balance plus the credit. Below zero while a debt is past the credit: nothing is paid from the wallet until top-ups cover the price." }
         transfer:
           type: object
           nullable: true
@@ -13177,7 +13253,7 @@ components:
     StoreNoticeType:
       description: "The kind of notice; one for each message the bot sends a customer on its own. Payments: approved (the service delivered or the wallet charged, or the delivery failed and support will finish it), an online payment that came in once its order had closed (its money put in the wallet), receipt rejected, order cancelled by support, payment refunded to the wallet, wallet top-up refunded, payment reminder. «انتقال موجودی»: money they sent another customer from their wallet (kept here whichever door they used; in Telegram only when they sent it from the website), money another customer sent them. Services: switched off, back on, deleted, moved (with its new link), given away by support («انتقال سرویس», to its previous owner) or received from another customer (to its new one), given days or traffic; reminders («یادآوری») of a service ending soon or running low on traffic; auto-renewal («تمدید خودکار») done, short of money, or paid but not delivered. Referrals: a new customer joined through their link, a commission, a commission taken back (the wallet top-up that earned it refunded), a start gift («هدیه شروع», for the referrer or the new customer), a free service for invitations («جایزه دعوت»). Agency: request approved or rejected, agency changed or ended, the bot's traffic too low for an order. Account security: two-factor sign-in turned off (by support or by them) or on, a way in added or removed, a password set, another account merged into it, the second step locked after failed codes, emailed codes locked after failures (these go to every channel they have: Telegram and email). Tickets: support's answer, and closing. Rewards: moved up a loyalty tier («سطح وفاداری»), cashback earned («کش‌بک»), won the nightly draw («قرعه‌کشی شبانه»). Support: a message support wrote by hand («ارسال پیام»)."
       type: string
-      enum: [payment_settled, payment_credited, payment_rejected, order_cancelled, payment_refunded, topup_refunded, wallet_sent, wallet_received, payment_reminder, service_disabled, service_enabled, service_deleted, service_moved, service_transferred, service_received, service_granted, expiry_reminder, traffic_reminder, auto_renewed, auto_renew_short, renewal_failed, referral_joined, referral_commission, referral_commission_back, referral_start_gift, referral_reward, agency_approved, agency_rejected, agency_changed, agency_revoked, agency_traffic_short, agency_expiring, agency_minimum_short, agency_suspended, agency_resumed, two_factor_disabled, way_in_added, way_in_removed, password_changed, two_factor_enabled, account_merged, second_step_locked, email_codes_failed, ticket_answered, ticket_closed, loyalty_tier_up, cashback_earned, lottery_won, support_message]
+      enum: [payment_settled, payment_credited, payment_rejected, order_cancelled, payment_refunded, topup_refunded, wallet_sent, wallet_received, payment_reminder, service_disabled, service_enabled, service_deleted, service_moved, service_transferred, service_received, service_granted, expiry_reminder, traffic_reminder, auto_renewed, auto_renew_short, renewal_failed, referral_joined, referral_commission, referral_commission_back, referral_start_gift, referral_reward, agency_approved, agency_rejected, agency_changed, agency_revoked, agency_traffic_short, agency_expiring, agency_minimum_short, agency_suspended, agency_resumed, agency_renewed, agency_renewal_rejected, two_factor_disabled, way_in_added, way_in_removed, password_changed, two_factor_enabled, account_merged, second_step_locked, email_codes_failed, ticket_answered, ticket_closed, loyalty_tier_up, cashback_earned, lottery_won, support_message]
 
     StoreNotification:
       description: "A notification the bot sent the customer, with the same text as the Telegram message (sent, or that would have been sent)."

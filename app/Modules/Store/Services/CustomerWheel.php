@@ -13,6 +13,7 @@ use App\Modules\Rewards\Exceptions\WheelRefusedException;
 use App\Modules\Rewards\Models\WheelPrize;
 use App\Modules\Rewards\Services\LuckyWheel;
 use App\Modules\Rewards\Services\WheelSettings;
+use App\Modules\Telegram\Messages;
 use App\Modules\Users\Models\User;
 use App\Support\Money;
 use App\Support\Persian;
@@ -125,7 +126,7 @@ final class CustomerWheel
         $plan = (string) $reward->plan?->name;
         $given = match ($reward->kind) {
             RewardKind::Nothing => null,
-            RewardKind::Wallet => Money::format($reward->amount ?? '0') . ' به کیف پول شما اضافه شد؛ موجودی: ' . Money::format($customer->balance()) . '.',
+            RewardKind::Wallet => Money::format($reward->amount ?? '0') . ' به کیف پول شما اضافه شد؛ موجودی: ' . Messages::balance($customer->balance()) . '.',
             RewardKind::Traffic, RewardKind::Days => $reward->words() . ' به سرویس ' . (string) $spun->given->subscription?->shownAs() . ' اضافه شد.',
             RewardKind::Plan => $spun->given->order?->status === OrderStatus::Fulfilled
                 ? "سرویس «{$plan}» برای شما ساخته شد و در سرویس‌های شماست."

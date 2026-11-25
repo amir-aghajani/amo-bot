@@ -68,7 +68,7 @@ export function UsersList() {
     }
   }
   // What found nothing, to say what to change: the search, the filters, or both.
-  const searched = list.typed.trim() !== ''
+  const searched = list.search !== ''
   const inGroup = list.params.group ?? ''
   const narrowed = list.filter !== '' || (list.params.role ?? '') !== '' || inGroup !== ''
   // A group deleted while the list was narrowed to it (in the groups' section, or since the address was kept) still
