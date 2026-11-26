@@ -11,6 +11,7 @@ use App\Modules\Accounts\Exceptions\AccountRefusedException;
 use App\Modules\Accounts\Services\CustomerSessions;
 use App\Modules\Accounts\Services\TwoFactor;
 use App\Modules\Auth\Actor;
+use App\Modules\Auth\ActorKind;
 use App\Modules\Auth\Exceptions\ActorRefusedException;
 use App\Modules\Bots\Models\Bot;
 use App\Modules\Notifications\Enums\Delivery;
@@ -70,7 +71,8 @@ final class UserActions
      *
      * @param array<string, mixed> $input {status}
      * @throws ActorRefusedException 403 from the website, an admin's account or an agent's; from the report group, their
-     *                               own account, an agent's, or an admin banned
+     *                               own account, an agent's, or an admin banned; from anyone but the owner, a Telegram
+     *                               account linked as the owner banned
      * @throws ValidationException 422 on `status`
      */
     public function setStatus(User $user, Actor $actor, array $input): User
@@ -79,6 +81,16 @@ final class UserActions
         $this->mayTouch($user, $actor);
         if ($actor->isGroupAdmin() && $status === UserStatus::Banned && $user->isAdmin()) {
             throw ActorRefusedException::adminBanned();
+        }
+        // A banned account manages nothing from the bot: one linked as the owner is banned by the owner alone, an agent's
+        // own in their bot by the agent or the owner.
+        if ($status === UserStatus::Banned && !$actor->isTheOwner()) {
+            if ($this->isOwnersAccount($user)) {
+                throw ActorRefusedException::ownerBanned();
+            }
+            if (!$actor->isTheAgent() && $this->isAgentsAccount($user)) {
+                throw ActorRefusedException::agentBanned();
+            }
         }
 
         $user->forceFill(['status' => $status])->save();
@@ -157,6 +169,11 @@ final class UserActions
         if ($actor->isGroupAdmin() && $role === UserRole::Admin && !$user->isAdmin() && ($user->discount_percent > 0 || $user->paysAgentPrices())) {
             throw ActorRefusedException::adminWithOwnPrices();
         }
+        // Set by hand, a linked account's role outlives its link (OwnerLinks::chosen()): the owner's own choice alone (or
+        // the shop's itself, no person's).
+        if (!$actor->isTheOwner() && $actor->kind !== ActorKind::System && $this->isOwnersAccount($user)) {
+            throw ActorRefusedException::ownerRole();
+        }
 
         $user->forceFill(['role' => $role])->save();
         // Set by hand: the owner's choice, which unlinking an owner account no longer takes back.
@@ -227,7 +244,8 @@ final class UserActions
      * @param mixed $ids The `group_ids` the panel sent
      * @throws ActorRefusedException 403 from the website, an admin's account or an agent's — or a «همکار» group added
      *                               without the `catalog` grant; from the report group, their own account, an
-     *                               agent's, or an admin put in a «همکار» group
+     *                               agent's, or an admin put in a «همکار» group; from anywhere, a «همکار» group added
+     *                               to the admin's own account
      * @throws ValidationException 422 on `group_ids` when one is not a group
      */
     public function assignGroups(User $user, Actor $actor, mixed $ids): void
@@ -235,6 +253,9 @@ final class UserActions
         $this->mayTouch($user, $actor);
         if ($actor->isGroupAdmin() && $user->isAdmin() && is_array($ids) && $this->groups->addsAgentPricing($user, $ids)) {
             throw ActorRefusedException::adminToAgentGroup();
+        }
+        if ($actor->is($user->id) && is_array($ids) && $this->groups->addsAgentPricing($user, $ids)) {
+            throw ActorRefusedException::ownPrices();
         }
 
         $groups = $this->groups->assign($user, $actor, $ids);
@@ -254,6 +275,9 @@ final class UserActions
         $this->mayTouch($user, $actor);
         if ($in && $actor->isGroupAdmin() && $user->isAdmin() && $this->groups->addsAgentPricing($user, [$groupId])) {
             throw ActorRefusedException::adminToAgentGroup();
+        }
+        if ($in && $actor->is($user->id) && $this->groups->addsAgentPricing($user, [$groupId])) {
+            throw ActorRefusedException::ownPrices();
         }
 
         $groups = $in ? $this->groups->join($user, $actor, $groupId) : $this->groups->leave($user, $groupId);
@@ -296,6 +320,23 @@ final class UserActions
         if ($actor->isGroupAdmin() && $user->isAdmin()) {
             throw ActorRefusedException::adminAccount();
         }
+    }
+
+    /** Whether `$user` is a Telegram account linked as the owner (OwnerLinks), in the main bot. */
+    private function isOwnersAccount(User $user): bool
+    {
+        return (int) $user->bot_id === Bot::MAIN && $user->telegram_id !== null && $this->owners->isOwner((int) $user->telegram_id);
+    }
+
+    /** Whether `$user` is the agent's own account in their bot (the one AdminSeats seats as the agent). */
+    private function isAgentsAccount(User $user): bool
+    {
+        if ((int) $user->bot_id === Bot::MAIN || $user->telegram_id === null) {
+            return false;
+        }
+        $agent = Bot::query()->find($user->bot_id)?->agent;
+
+        return $agent !== null && $agent->telegram_id === $user->telegram_id;
     }
 
     /**

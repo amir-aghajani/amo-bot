@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Modules\Telegram\Admin\Sections\Panel\MiniApp;
 
-use App\Modules\Telegram\Admin\AdminSeat;
 use App\Modules\Telegram\Admin\Sections\Panel\Forms\DraftForm;
 use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\Answer;
@@ -54,11 +53,6 @@ final class PreviewScreen extends BaseScreen
             'bottom_bar_bg_color' => '#212121',
         ],
     ];
-
-    public function allows(AdminSeat $seat): bool
-    {
-        return $seat->configures();
-    }
 
     public function show(Admin $admin, array $args): View
     {

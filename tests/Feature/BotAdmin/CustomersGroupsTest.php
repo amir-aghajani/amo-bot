@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Tests\Feature\BotAdmin;
 
-use App\Modules\Telegram\Admin\Door\BotAdminDoor;
 use App\Modules\Telegram\Admin\Ui\Nav;
 use App\Modules\Users\Enums\UserRole;
 use App\Modules\Users\Models\CustomerGroup;
@@ -13,7 +12,8 @@ use Tests\BotTestCase;
 /**
  * «👥 گروه‌های کاربران» in the bot's management: the groups in the admin's order with their members, a group added (its
  * name typed, «همکار» switched on the form), renamed, switched, moved and deleted — asked first — through the panel's
- * routes; its customers on the users list; the `catalog` grant for a shop's admin.
+ * routes; its customers on the users list; a shop's admin changing them as the owner does, but for «همکار» prices of
+ * their own account.
  */
 final class CustomersGroupsTest extends BotTestCase
 {
@@ -131,24 +131,81 @@ final class CustomersGroupsTest extends BotTestCase
         self::assertContains(Nav::to('usg', 'sw', $ali->id, $groups[0]->id, 1), $this->window());
     }
 
-    public function testAShopsAdminChangesTheGroupsOnlyWithTheCatalogue(): void
+    public function testAShopsAdminChangesTheGroupsAsTheOwnerDoes(): void
     {
         $this->customer(['telegram_id' => self::STAFF, 'first_name' => 'Staff', 'role' => UserRole::Admin]);
         $vip = $this->customerGroup('VIP');
 
         $this->send($this->tap(Nav::to('ug'), chat: self::STAFF));
-        self::assertContains(Nav::to('ugv', 'show', $vip->id), $this->window(), 'the groups read');
-        self::assertNotContains(Nav::to('ug', 'add', 'new'), $this->window());
+        self::assertContains(Nav::to('ugv', 'show', $vip->id), $this->window());
+        self::assertContains(Nav::to('ug', 'add', 'new'), $this->window(), 'no grant of the catalogue asked');
         $this->send($this->tap(Nav::to('ugv', 'show', $vip->id), chat: self::STAFF));
-        self::assertNotContains(Nav::to('ugv', 'del', $vip->id), $this->window());
+        self::assertContains(Nav::to('ugv', 'del', $vip->id), $this->window());
 
+        $this->send($this->tap(Nav::to('ugv', 'ap', $vip->id, 1), chat: self::STAFF));
+        self::assertTrue($vip->refresh()->agent_pricing, 'made a «همکار» group');
         $this->send($this->tap(Nav::to('ugv', 'gone', $vip->id), chat: self::STAFF));
-        self::assertSame(BotAdminDoor::NOT_GRANTED, $this->popup(), 'the door says no');
-        self::assertNotNull(CustomerGroup::query()->find($vip->id));
+        self::assertNull(CustomerGroup::query()->find($vip->id), 'deleted through the panel\'s route');
+    }
 
-        $this->botSettings('bot_admins', ['bot_admins_grant_catalog' => true]);
+    public function testAnAdminsOwnAccountIsPutInNoPartnerGroupByThemselves(): void
+    {
+        $staff = $this->customer(['telegram_id' => self::STAFF, 'first_name' => 'Staff', 'role' => UserRole::Admin]);
+        $this->customer(['telegram_id' => 7200, 'first_name' => 'Reza', 'role' => UserRole::Admin]);
+        $ali = $this->customer(['telegram_id' => 1111, 'first_name' => 'Ali']);
+        $vip = $this->customerGroup('VIP');
+        $partners = $this->customerGroup('همکاران', overrides: ['agent_pricing' => true]);
+        $wholesale = $this->customerGroup('عمده', [$staff], ['agent_pricing' => true]);
+        $note = 'این حساب خود شماست؛ گذاشتنش در گروه «همکار» با مدیر دیگری است.';
+
+        $this->send($this->tap(Nav::to('usg', 'show', $staff->id), chat: self::STAFF));
+        self::assertContains(Nav::to('usg', 'sw', $staff->id, $vip->id, 1), $this->window(), 'a plain group still switches');
+        self::assertNotContains(Nav::to('usg', 'sw', $staff->id, $partners->id, 1), $this->window(), 'a «همکار» group they are not in: another admin\'s');
+        self::assertContains(Nav::to('usg', 'sw', $staff->id, $wholesale->id, 0), $this->window(), 'one they are in: leaving it stays');
+        self::assertStringContainsString('۳ گروه · عضو ۱', $this->screen(), 'every group counted');
+        self::assertStringContainsString($note, $this->screen());
+
+        $this->send($this->tap(Nav::to('usg', 'sw', $staff->id, $vip->id, 1), chat: self::STAFF));
+        self::assertTrue($staff->groups()->whereKey($vip->id)->exists(), 'a switch kept is one the server takes');
+
+        $this->send($this->tap(Nav::to('usg', 'show', $staff->id), chat: 7200));
+        self::assertContains(Nav::to('usg', 'sw', $staff->id, $partners->id, 1), $this->window(), 'another admin puts them in it');
+        self::assertStringNotContainsString('خود شماست', $this->screen());
+
+        $this->send($this->tap(Nav::to('usg', 'show', $ali->id), chat: self::STAFF));
+        self::assertContains(Nav::to('usg', 'sw', $ali->id, $partners->id, 1), $this->window(), 'another customer\'s, every switch');
+        self::assertStringNotContainsString('خود شماست', $this->screen());
+    }
+
+    public function testAGroupAnAdminIsInIsMadeAPartnerGroupByAnotherAdmin(): void
+    {
+        $staff = $this->customer(['telegram_id' => self::STAFF, 'first_name' => 'Staff', 'role' => UserRole::Admin]);
+        $this->customer(['telegram_id' => 7200, 'first_name' => 'Reza', 'role' => UserRole::Admin]);
+        $vip = $this->customerGroup('VIP', [$staff]);
+        $gold = $this->customerGroup('طلایی');
+        $partners = $this->customerGroup('همکاران', [$staff], ['agent_pricing' => true]);
+        $note = 'حساب خود شما در این گروه است؛ روشن کردن «همکار» آن با مدیر دیگری است.';
+
         $this->send($this->tap(Nav::to('ugv', 'show', $vip->id), chat: self::STAFF));
-        self::assertContains(Nav::to('ugv', 'del', $vip->id), $this->window(), 'granted');
+        self::assertNotContains(Nav::to('ugv', 'ap', $vip->id, 1), $this->window(), '«همکار» on: another admin\'s');
+        self::assertContains(Nav::to('ugv', 'name', $vip->id), $this->window(), 'renaming stays');
+        self::assertContains(Nav::to('ugv', 'del', $vip->id), $this->window(), 'and deleting');
+        self::assertStringContainsString($note, $this->screen());
+
+        $this->send($this->tap(Nav::to('ugv', 'show', $gold->id), chat: self::STAFF));
+        self::assertContains(Nav::to('ugv', 'ap', $gold->id, 1), $this->window(), 'a group they are not in');
+        self::assertStringNotContainsString('خود شماست', $this->screen());
+        $this->send($this->tap(Nav::to('ugv', 'show', $partners->id), chat: self::STAFF));
+        self::assertContains(Nav::to('ugv', 'ap', $partners->id, 0), $this->window(), 'a «همکار» one they are in is still switched off');
+        self::assertStringNotContainsString('خود شماست', $this->screen());
+
+        $this->send($this->tap(Nav::to('ugv', 'name', $vip->id), chat: self::STAFF));
+        $this->send($this->message('VIP ویژه', chat: self::STAFF));
+        self::assertSame(['VIP ویژه', false], [$vip->refresh()->name, $vip->agent_pricing], 'renamed by them, «همکار» left off');
+
+        $this->send($this->tap(Nav::to('ugv', 'show', $vip->id), chat: 7200));
+        self::assertContains(Nav::to('ugv', 'ap', $vip->id, 1), $this->window(), 'another admin switches it');
+        self::assertStringNotContainsString('خود شماست', $this->screen());
     }
 
     /** @return list<string> The window's buttons, as the last screen drew them. */

@@ -23,7 +23,8 @@ use App\Modules\Telegram\Admin\Ui\Words as UiWords;
  * standing — the level given, support's reason, who decided when —, and what its status allows (the panel's `actions`):
  * «✅ تایید» on a level and terms (AgencyApproveScreen), «🚫 رد» asked first — with a note the customer reads, or none.
  * An agent's renewal request says their end now (passed or not) and, while it waits, the end the program's term gives;
- * once approved, the end it gave — its «✅ تایید» asks the end (AgencyRenewScreen), never a level.
+ * once approved, the end it gave — its «✅ تایید» asks the end (AgencyRenewScreen), never a level. The seat's own request
+ * (AgentScreen::own()) has no «✅ تایید»: another admin approves it.
  *
  * Actions: `no` (id: asks), `nw` (id: asks the note), `nn` (id: rejects without one).
  */
@@ -40,7 +41,7 @@ final class AgencyRequestScreen extends BaseScreen
     {
         $row = self::row($admin, self::id($args));
 
-        return $row === null ? $admin->open(AgencyRequestsScreen::ID) : $this->view($row);
+        return $row === null ? $admin->open(AgencyRequestsScreen::ID) : $this->view($admin, $row);
     }
 
     public function act(Admin $admin, string $action, array $args): View
@@ -140,11 +141,11 @@ final class AgencyRequestScreen extends BaseScreen
         $row = (array) ($admin->api->post("/agency/requests/{$id}/reject", ['note' => $note])['request'] ?? []);
         $admin->notice('🚫 درخواست رد شد');
 
-        return $this->view(self::keep($admin, $row));
+        return $this->view($admin, self::keep($admin, $row));
     }
 
     /** @param array<string, mixed> $row */
-    private function view(array $row): View
+    private function view(Admin $admin, array $row): View
     {
         $id = (int) ($row['id'] ?? 0);
         $level = is_array($row['level'] ?? null) ? $row['level'] : null;
@@ -169,9 +170,15 @@ final class AgencyRequestScreen extends BaseScreen
             $view->section('✍️ نوشته مشتری')->line('<blockquote>' . Fmt::e($row['note']) . '</blockquote>');
         }
         $actions = Json::part($row, 'actions');
+        // Nobody approves their own request (AgencyActions: ActorRefusedException::ownRequest()); rejecting it stays.
+        $user = is_array($row['user'] ?? null) ? $row['user'] : [];
+        $own = AgentScreen::own($admin, is_int($user['id'] ?? null) ? $user['id'] : 0);
+        if ($own && Json::on($actions, 'approve')) {
+            $view->note('این درخواست خود شماست؛ تاییدش با مدیر دیگری است.');
+        }
 
         return $view->row(
-            Json::on($actions, 'approve') ? Button::to('✅ تایید', $renewal ? AgencyRenewScreen::ID : AgencyApproveScreen::ID, 'new', $id)->success() : null,
+            !$own && Json::on($actions, 'approve') ? Button::to('✅ تایید', $renewal ? AgencyRenewScreen::ID : AgencyApproveScreen::ID, 'new', $id)->success() : null,
             Json::on($actions, 'reject') ? Button::to('🚫 رد', self::ID, 'no', $id)->danger() : null,
         )->back(AgencyRequestsScreen::ID);
     }

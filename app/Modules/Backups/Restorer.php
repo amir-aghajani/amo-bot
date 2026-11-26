@@ -9,6 +9,8 @@ use App\Core\Database\Schema;
 use App\Core\Database\Upgrades;
 use App\Modules\Auth\Services\Reviewers;
 use App\Modules\Backups\Exceptions\BackupRefusedException;
+use App\Modules\Bots\Models\Bot;
+use App\Modules\Telegram\Admin\OwnerLinks;
 use Illuminate\Database\Connection;
 use Illuminate\Database\Query\Builder;
 
@@ -16,6 +18,7 @@ use Illuminate\Database\Query\Builder;
  * Puts a checked backup file (BackupReader::read()) back, in one transaction — all of it or nothing:
  * - the whole installation: every table it holds emptied and filled from the file; the sign-ins, the chats half-way and
  *   the queued reports emptied (BackupTables::TRANSIENT): every customer signs in again (the panels stay signed in);
+ *   who is the owner in the bot stays as it is now (keepOwnerLinks());
  * - one shop: its own rows deleted and filled from the file, its sign-ins, chats half-way and queued reports emptied —
  *   its customers sign in again —, and nothing else touched — never the owner's (the shop's terms, traffic and
  *   servers; a plan the owner keeps from sale stays kept: OWNERS_COLUMNS; what only the owner reads, which the file
@@ -99,6 +102,7 @@ final class Restorer
         $restored = ForeignKeys::without($this->db, fn(): array => $this->db->transaction(function () use ($path, $scope, $tables, $analysis, $deleteActs): array {
             $owners = $scope->isShop() ? $this->ownersRows($scope, $deleteActs) : null;
             $epochs = $scope->isShop() ? [] : $this->db->table('bots')->pluck('panel_epoch', 'id')->all();
+            $links = $scope->isShop() ? null : $this->ownerLinks();
             foreach (array_diff(BackupTables::TRANSIENT, BackupTables::KEPT_ON_RESTORE, $scope->isShop() ? BackupTables::OWNERS_TRANSIENT : []) as $table) {
                 $this->db->table($table)->when($scope->shop !== null, static fn(Builder $query) => $query->where('bot_id', $scope->shop))->delete();
             }
@@ -109,8 +113,9 @@ final class Restorer
             $restored = $this->insertAll($path, $tables, $analysis);
             if ($owners !== null) {
                 $this->putBack($owners);
-            } else {
+            } elseif ($links !== null) {
                 $this->keepSignOuts($epochs);
+                $this->keepOwnerLinks($links);
             }
 
             return $restored;
@@ -137,6 +142,58 @@ final class Restorer
             $this->db->table('bots')->where('id', $id)->where('panel_epoch', '<', (int) $epoch)->update(['panel_epoch' => (int) $epoch]);
         }
         $this->db->table('bots')->whereNotNull('login_code')->update(['login_code' => null, 'login_code_expires_at' => null]);
+    }
+
+    /**
+     * Who is the owner in the bot now, read before the installation's rows go: the main shop's settings that say it
+     * (OwnerLinks::KEYS), as their rows are, and the Telegram ids of its accounts that are admins now.
+     *
+     * @return array{rows: list<array<string, mixed>>, admins: list<int>}
+     */
+    private function ownerLinks(): array
+    {
+        $rows = $this->db->table('settings')->where('bot_id', Bot::MAIN)->whereIn('key', OwnerLinks::KEYS)->get(['bot_id', 'key', 'value', 'updated_at']);
+        // Users\Enums\UserRole's admin, as the column keeps it.
+        $admins = $this->db->table('users')->where('bot_id', Bot::MAIN)->where('role', 'admin')->whereNotNull('telegram_id')->pluck('telegram_id');
+
+        return ['rows' => array_values($rows->map(static fn(object $row): array => (array) $row)->all()), 'admins' => array_values($admins->map(intval(...))->all())];
+    }
+
+    /**
+     * The whole installation's restore leaves who is the owner in the bot as it was just before it — as no restore signs
+     * the owner out of the panel —: the main shop's settings that say it as they were (ownerLinks()), so an account the
+     * owner let go since the backup is not linked again, one linked since stays linked, and no link the file held opens;
+     * and each account a link names, in the file or now, an admin only if it was one just before — a role a link gave goes
+     * with the link, and one given since stays —: an admin of the main bot manages it from the bot with the owner's seat.
+     *
+     * @param array{rows: list<array<string, mixed>>, admins: list<int>} $links
+     */
+    private function keepOwnerLinks(array $links): void
+    {
+        // The accounts linked, or raised by a link, in the file and now: a list of Telegram ids each, kept as JSON.
+        $accounts = [OwnerLinks::IDS, OwnerLinks::RAISED];
+        $lists = [
+            ...$this->db->table('settings')->where('bot_id', Bot::MAIN)->whereIn('key', $accounts)->pluck('value')->all(),
+            ...array_column(array_filter($links['rows'], static fn(array $row): bool => in_array($row['key'], $accounts, true)), 'value'),
+        ];
+        $named = [];
+        foreach ($lists as $list) {
+            $ids = is_string($list) ? json_decode($list, true) : null;
+            foreach (is_array($ids) ? array_filter($ids, is_numeric(...)) : [] as $id) {
+                $named[(int) $id] = true;
+            }
+        }
+        $named = array_keys($named);
+
+        $this->db->table('settings')->where('bot_id', Bot::MAIN)->whereIn('key', OwnerLinks::KEYS)->delete();
+        if ($links['rows'] !== []) {
+            $this->db->table('settings')->insert($links['rows']);
+        }
+        if ($named !== []) {
+            // Users\Enums\UserRole's values, as the column keeps them.
+            $this->db->table('users')->where('bot_id', Bot::MAIN)->whereIn('telegram_id', array_intersect($named, $links['admins']))->update(['role' => 'admin']);
+            $this->db->table('users')->where('bot_id', Bot::MAIN)->whereIn('telegram_id', array_diff($named, $links['admins']))->update(['role' => 'customer']);
+        }
     }
 
     /**

@@ -46,7 +46,7 @@ final class CustomerAccount implements GroupHandler
     private const NO_DEVICES = 'در هیچ دستگاهی وارد سایت نیست.';
 
     /** Why a bot admin's sign-in has no buttons here (UserActions refuses it: ActorRefusedException::adminAccount()). */
-    private const ADMIN_LOCK = '🔒 حساب مدیر ربات است؛ ورودش به سایت فقط از پنل تغییر می‌کند.';
+    private const ADMIN_LOCK = '🔒 حساب مدیر ربات است؛ ورودش به سایت فقط از پنل یا «⚙️ مدیریت» ربات تغییر می‌کند.';
 
     public function __construct(
         private readonly CustomerCards $cards,

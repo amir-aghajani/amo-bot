@@ -25,6 +25,8 @@ use App\Core\Mail\MailFailedException;
 use App\Core\Sms\Sms;
 use App\Core\Sms\SmsCredit;
 use App\Core\Sms\SmsFailedException;
+use App\Modules\Auth\Exceptions\ActorRefusedException;
+use App\Modules\Auth\Principal;
 use App\Modules\Auth\Services\AdminAccount;
 use App\Modules\Settings\Exceptions\MailNotReadyException;
 use App\Modules\Settings\Exceptions\SmsCreditUnreadException;
@@ -131,7 +133,16 @@ final class ConfigSettings
         } catch (ValidationException $e) {
             $errors = $e->errors();
         }
+        // Whoever knows the webhook's secret sends the shop updates in anyone's name: set by the owner themselves alone.
+        $secret = $settings['TELEGRAM_WEBHOOK_SECRET'] ?? null;
+        if ($group === 'telegram' && is_string($secret) && $secret !== (string) $this->file->get('TELEGRAM_WEBHOOK_SECRET') && !Principal::of($request)->isTheOwner()) {
+            throw ActorRefusedException::ownersSecret();
+        }
         if ($group === 'telegram' && $this->movesBotApi($input)) {
+            // Refused before the password is judged: an admin's wrong tries would count against the owner's sign-in.
+            if (!Principal::of($request)->isTheOwner()) {
+                throw ActorRefusedException::ownersPassword();
+            }
             $unproven = $this->owner->confirm($request, Input::password($input, 'current_password'));
             if ($unproven !== null) {
                 $errors['current_password'][] = $unproven;

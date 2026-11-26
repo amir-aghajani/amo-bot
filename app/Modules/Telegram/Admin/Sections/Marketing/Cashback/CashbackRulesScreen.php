@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Modules\Telegram\Admin\Sections\Marketing\Cashback;
 
-use App\Modules\Telegram\Admin\AdminSeat;
 use App\Modules\Telegram\Admin\Sections\Marketing\Words as Marketing;
 use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\Button;
@@ -35,11 +34,6 @@ final class CashbackRulesScreen extends ListScreen
 
     /** Whether the program runs, as summary() read it for extra(). */
     private bool $on = false;
-
-    public function allows(AdminSeat $seat): bool
-    {
-        return $seat->configures();
-    }
 
     protected function screen(): string
     {

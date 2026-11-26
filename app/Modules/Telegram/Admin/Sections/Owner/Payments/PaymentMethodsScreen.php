@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Modules\Telegram\Admin\Sections\Owner\Payments;
 
-use App\Modules\Telegram\Admin\AdminSeat;
 use App\Modules\Telegram\Admin\Door\ApiRefusal;
 use App\Modules\Telegram\Admin\Sections\Catalog\CatalogFmt;
 use App\Modules\Telegram\Admin\Ui\Admin;
@@ -28,12 +27,6 @@ final class PaymentMethodsScreen extends BaseScreen
     public const ID = 'pm';
 
     public const TITLE = PaymentWords::TITLE;
-
-
-    public function allows(AdminSeat $seat): bool
-    {
-        return $seat->configures();
-    }
 
     public function show(Admin $admin, array $args): View
     {

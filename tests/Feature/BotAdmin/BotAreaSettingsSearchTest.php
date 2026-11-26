@@ -9,7 +9,6 @@ use App\Modules\Bots\Models\Bot;
 use App\Modules\Settings\Services\BotSettingsScreen;
 use App\Modules\Telegram\Admin\AdminSeat;
 use App\Modules\Telegram\Admin\AdminSeats;
-use App\Modules\Telegram\Admin\BotAdminSettings;
 use App\Modules\Telegram\Admin\Sections\Panel\Search\SettingsEntry;
 use App\Modules\Telegram\Admin\Sections\Panel\Search\SettingsIndex;
 use App\Modules\Telegram\Admin\Ui\Admin;
@@ -31,12 +30,12 @@ use Tests\BotTestCase;
  * half-space, a letter off — finds the panel's settings where the bot has them, the seat's own alone; a result opens the
  * very field (a typed value asked at once), the part of a card, or the card a switch is on, never flipping it; what the
  * panel alone sets is said with why. And a card's parts and fields by name (SettingsScreen::PART, ::FIELD): whatever is
- * done in a part comes back to it, the bot admins' grants set while admins are not let in yet, the wallet's random sum a
- * switch that asks its most.
+ * done in a part comes back to it — a switch turned there too —, a part's help its own fields', the wallet's random sum
+ * a switch that asks its most.
  */
 final class BotAreaSettingsSearchTest extends BotTestCase
 {
-    private const STAFF = 7100;
+    private const ADMIN = 7100;
 
     protected function setUp(): void
     {
@@ -150,12 +149,14 @@ final class BotAreaSettingsSearchTest extends BotTestCase
         $this->sendTo($bot, $this->message('منطقه زمانی', chat: self::AGENT_TELEGRAM_ID));
         self::assertNotContains(Nav::to('ppa'), $this->callbacks($this->windowCall()));
 
-        // A shop's admin has no settings to find, and the home search offers none.
-        $this->customer(['telegram_id' => self::STAFF, 'role' => UserRole::Admin]);
-        $this->send($this->tap(Nav::to('ss'), chat: self::STAFF));
-        self::assertStringStartsWith('<b>⚠️ ' . Words::OLD_BUTTON, $this->said()[0] ?? '');
-        $this->send($this->tap(Nav::to(Screens::SEARCH), chat: self::STAFF));
-        self::assertNotContains(Nav::to('ss'), $this->callbacks(0));
+        // A shop's admin works with the owner's seat in the main bot: the same settings to find, config.php's too, and the
+        // home search offers them.
+        $this->customer(['telegram_id' => self::ADMIN, 'role' => UserRole::Admin]);
+        $this->send($this->tap(Nav::to('ss'), chat: self::ADMIN));
+        $this->send($this->message('منطقه زمانی', chat: self::ADMIN));
+        self::assertContains(Nav::to('ppa'), $this->callbacks($this->windowCall()), 'the owner\'s config.php, for an admin too');
+        $this->send($this->tap(Nav::to(Screens::SEARCH), chat: self::ADMIN));
+        self::assertContains(Nav::to('ss'), $this->callbacks(0));
         $this->send($this->tap(Nav::to(Screens::SEARCH), chat: self::OWNER));
         self::assertContains(Nav::to('ss'), $this->callbacks(0), 'the home search\'s other mode, for the owner');
     }
@@ -195,27 +196,24 @@ final class BotAreaSettingsSearchTest extends BotTestCase
         self::assertStringStartsWith('<b>🧩 حجم، زمان و کاربر اضافه</b>', $this->said()[0], 'opened afresh: the card itself');
     }
 
-    public function testTheGrantsAreSetBeforeTheAdminsAreLetIn(): void
+    public function testASwitchTurnedInAPartComesBackToItAndThePartsHelpIsItsOwn(): void
     {
         $this->owner(UserRole::Admin);
-        $this->botSettings('bot_admins', ['bot_admins_enabled' => false]);
 
-        $this->send($this->tap(Nav::to('ba'), chat: self::OWNER));
-        self::assertStringContainsString('پلن‌ها و دسته‌بندی‌ها: <b>' . Words::OFF . '</b>', $this->said()[0], 'every grant said while the switch is off');
-        $this->send($this->tap(Nav::to('ba', 'p', 0), chat: self::OWNER));
-        $this->send($this->tap(Nav::to('ba', 'e', 1, 1), chat: self::OWNER));
-        self::assertSame(['catalog'], $this->service(BotAdminSettings::class)->grants(), 'saved through the panel\'s route');
-        self::assertFalse($this->service(BotAdminSettings::class)->enabled(), 'the admins still kept out');
-        self::assertStringStartsWith('<b>➕ کارهای بیشتر</b>', $this->said()[0], 'a switch turned in a part: the part again');
-        self::assertContains('⏸ خاموش کردن «پلن‌ها و دسته‌بندی‌ها»', $this->buttonLabels($this->windowCall()));
+        $this->send($this->tap(Nav::to('tss', 'p', 0), chat: self::OWNER));
+        $this->send($this->tap(Nav::to('tss', 'e', 4, 1), chat: self::OWNER));
+        self::assertTrue($this->service(BotSettingsScreen::class)->present()['test_newcomers_only'] ?? null, 'saved through the panel\'s route');
+        self::assertStringStartsWith('<b>🔢 سهمیه</b>', $this->said()[0], 'a switch turned in a part: the part again');
+        self::assertContains('⏸ خاموش کردن «فقط مشتری‌هایی که خرید نکرده‌اند»', $this->buttonLabels($this->windowCall()));
 
         // A part's «❔ راهنما»: its own fields' hints, and back to the part.
-        self::assertContains(Nav::to('ba', 'help'), $this->callbacks($this->windowCall()));
-        $this->send($this->tap(Nav::to('ba', 'help'), chat: self::OWNER));
-        self::assertStringContainsString('افزایش و کم کردن موجودی کیف پول مشتری', $this->said()[0]);
-        self::assertStringNotContainsString('<b>کار مدیران از ربات</b>', $this->said()[0], 'the card\'s other fields not');
-        $this->send($this->tap(Nav::to('ba', 'v'), chat: self::OWNER));
-        self::assertStringStartsWith('<b>➕ کارهای بیشتر</b>', $this->said()[0]);
+        self::assertContains(Nav::to('tss', 'help'), $this->callbacks($this->windowCall()));
+        $this->send($this->tap(Nav::to('tss', 'help'), chat: self::OWNER));
+        self::assertStringContainsString('روزی حداکثر چند اکانت تست', $this->said()[0]);
+        self::assertStringNotContainsString('<b>اکانت تست فعال باشد</b>', $this->said()[0], 'the card\'s other fields not');
+        self::assertStringNotContainsString('<b>اکانت‌های تمام‌شده حذف شوند</b>', $this->said()[0], 'nor another part\'s');
+        $this->send($this->tap(Nav::to('tss', 'v'), chat: self::OWNER));
+        self::assertStringStartsWith('<b>🔢 سهمیه</b>', $this->said()[0]);
     }
 
     public function testAPickOpenedByNameAndTheResultsPaged(): void

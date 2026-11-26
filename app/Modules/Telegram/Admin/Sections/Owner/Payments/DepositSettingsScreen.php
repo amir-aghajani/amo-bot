@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Modules\Telegram\Admin\Sections\Owner\Payments;
 
-use App\Modules\Telegram\Admin\AdminSeat;
 use App\Modules\Telegram\Admin\Door\ApiRefusal;
 use App\Modules\Telegram\Admin\Sections\Sales\DepositsScreen;
 use App\Modules\Telegram\Admin\Ui\Admin;
@@ -54,11 +53,6 @@ final class DepositSettingsScreen extends BaseScreen
 
     /** Why Rikhtam is not connected while the shop's address is not on https (the panel's words). */
     private const NOT_HTTPS = 'آدرس سایت فروشگاه با https شروع نمی‌شود و ریختم فقط به آدرس https خبر می‌دهد؛ تا آدرس سایت https نشود، ریختم وصل نمی‌شود.';
-
-    public function allows(AdminSeat $seat): bool
-    {
-        return $seat->configures();
-    }
 
     public function show(Admin $admin, array $args): View
     {

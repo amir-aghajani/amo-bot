@@ -9,6 +9,7 @@ use App\Core\Config\Repository as Config;
 use App\Modules\Auth\Actor;
 use App\Modules\Auth\Services\AdminAccount;
 use App\Modules\Auth\Services\SignInThrottle;
+use App\Modules\Telegram\Admin\AdminSeats;
 use App\Modules\Telegram\Admin\OwnerLinks;
 use App\Modules\Users\Enums\UserRole;
 use App\Modules\Users\Models\User;
@@ -61,7 +62,7 @@ final class AdminCredentialsApiTest extends HttpTestCase
         self::assertSame(200, $this->signIn(self::ADMIN_USERNAME, self::NEW_PASSWORD));
     }
 
-    public function testTheChangeLetsGoOfEveryTelegramAccountLinkedAsTheOwnerAndTheRolesTheirLinksGave(): void
+    public function testTheChangeLetsGoOfEveryTelegramAccountLinkedAsTheOwnerAndTheirRoles(): void
     {
         $this->config(['telegram.username' => 'amo_shop_bot']);
         $links = $this->service(OwnerLinks::class);
@@ -75,6 +76,8 @@ final class AdminCredentialsApiTest extends HttpTestCase
         $this->service(UserActions::class)->setRole($chosen, Actor::system(), ['role' => UserRole::Admin->value]);
         $open = $links->link() ?? self::fail('No link: the main bot has no username.');
         $logs = $this->logs();
+        $seats = $this->service(AdminSeats::class);
+        self::assertNotNull($seats->of($chosen->refresh()), 'a seat in the bot\'s management before');
 
         $changed = $this->putJson(self::URL, $this->change(['username' => 'boss']));
 
@@ -83,8 +86,12 @@ final class AdminCredentialsApiTest extends HttpTestCase
         self::assertNull($links->openUntil(), 'the open link ended');
         self::assertFalse($links->redeem(self::payload($open['url']), 7004), 'and opens nothing');
         self::assertSame(UserRole::Customer, $raised->refresh()->role, 'the admin role a link gave goes with it');
-        self::assertSame(UserRole::Admin, $before->refresh()->role, 'an admin before the link stays one');
-        self::assertSame(UserRole::Admin, User::query()->findOrFail($chosen->id)->role, 'a role set by hand stays');
+        // An admin manages the shop from the bot with the owner's seat: a linked account's role kept would keep it.
+        self::assertSame(UserRole::Customer, $before->refresh()->role, 'an admin before the link is let go too');
+        self::assertSame(UserRole::Customer, User::query()->findOrFail($chosen->id)->role, 'and a role set by hand');
+        foreach ([$raised, $before, $chosen] as $account) {
+            self::assertNull($seats->of($account->refresh()), "Telegram {$account->telegram_id}: no seat in the bot's management left, the owner's nor an admin's");
+        }
         self::assertTrue($logs->hasWarningThatContains('every Telegram account linked as the owner was let go (Telegram ids 7001, 7002, 7003)'));
 
         // Linked again under the new login, as before.

@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Modules\Telegram\Admin\Sections\Bot\Keyboards;
 
-use App\Modules\Telegram\Admin\AdminSeat;
 use App\Modules\Telegram\Admin\Door\ApiRefusal;
 use App\Modules\Telegram\Admin\Sections\Bot\BotScreens;
 use App\Modules\Telegram\Admin\Ui\Admin;
@@ -37,11 +36,6 @@ final class KeyboardScreen extends BaseScreen
         'reply' => ['کیبورد پایین صفحه', 'دکمه‌ها زیر جعبه متن می‌مانند و همیشه در دسترس‌اند؛ متن هر دکمه همان پیامی است که مشتری با زدنش می‌فرستد.'],
         'inline' => ['دکمه‌های شیشه‌ای', 'دکمه‌ها زیر پیام خوش‌آمد می‌چسبند؛ صفحه‌های بعدی دکمه «بازگشت» به منو می‌گیرند.'],
     ];
-
-    public function allows(AdminSeat $seat): bool
-    {
-        return $seat->configures();
-    }
 
     public function show(Admin $admin, array $args): View
     {

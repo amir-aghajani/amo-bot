@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Telegram\Admin\Sections\Customers;
 
-use App\Modules\Auth\StaffGrant;
+use App\Modules\Telegram\Admin\Door\ApiRefusal;
 use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\Answer;
 use App\Modules\Telegram\Admin\Ui\BaseScreen;
@@ -18,9 +18,10 @@ use App\Modules\Telegram\Admin\Ui\Words;
 
 /**
  * One customer group (a row of the panel's «گروه‌ها»; it has no route for one: read from the list): a card of its members,
- * its «همکار» switch and its place in the admin's order; its customers on the users list (the screen's main way on); and,
- * for a seat the `catalog` grant opens, renamed (typed), «همکار» switched, moved up or down, deleted — asked first, red,
- * in the panel's words (its customers only leave it).
+ * its «همکار» switch and its place in the admin's order; its customers on the users list (the screen's main way on); and
+ * the group renamed (typed), «همکار» switched, moved up or down, deleted — asked first, red, in the panel's words (its
+ * customers only leave it). A group the seat's own account is in (one of the shop's admins') is not switched to
+ * «همکار» from here: their own prices are another admin's.
  *
  * Opened with the group's id. Actions: `users` (id: the users list narrowed to it), `name` (id: asks), `ap` (id, 1|0:
  * «همکار» on or off), `up` / `down` (id), `del` (id: asks), `gone` (id: deleted). Answers: `name` (id).
@@ -131,6 +132,26 @@ final class GroupScreen extends BaseScreen
     }
 
     /**
+     * Whether group `$id` holds the seat's own account, one of the shop's admins' (AdminSeat::isAdmin()) — read from
+     * their customer page (GET /users/{id}), not remembered as the customer the screens are on; false when it cannot be
+     * read.
+     */
+    private static function holdsOwn(Admin $admin, int $id): bool
+    {
+        $own = $admin->seat->principal->customer?->id;
+        if ($own === null) {
+            return false;
+        }
+        try {
+            $groups = Json::rows(Customer::row($admin->api->get('/users/' . $own)), 'groups');
+        } catch (ApiRefusal) {
+            return false;
+        }
+
+        return in_array($id, Customer::ids($groups), true);
+    }
+
+    /**
      * @param array<string, mixed> $group
      * @param list<array<string, mixed>> $groups
      */
@@ -149,14 +170,18 @@ final class GroupScreen extends BaseScreen
                 'ساخته شده' => Fmt::date(Customer::text($group, 'created_at')),
             ])
             ->row(Button::to(Icons::CUSTOMERS . ' مشتری‌های این گروه', self::ID, 'users', $id)->primary());
-        if ($admin->seat->holds(StaffGrant::Catalog)) {
-            $view->tiles(Button::to(Words::edit('نام'), self::ID, 'name', $id), Button::to(Words::turn(!$partner, 'همکار'), self::ID, 'ap', $id, $partner ? 0 : 1))
-                ->row(
-                    $at > 0 ? Button::to(Words::UP . ' بالاتر', self::ID, 'up', $id) : null,
-                    $at < count($ids) - 1 ? Button::to(Words::DOWN . ' پایین‌تر', self::ID, 'down', $id) : null,
-                )
-                ->row(Button::to(Words::DELETE . ' گروه', self::ID, 'del', $id)->danger());
+        // «همکار» switched on for a group the seat's own account is in would set their own prices
+        // (ActorRefusedException::ownPrices()): another admin switches it.
+        $mine = !$partner && self::holdsOwn($admin, $id);
+        if ($mine) {
+            $view->note('حساب خود شما در این گروه است؛ روشن کردن «همکار» آن با مدیر دیگری است.');
         }
+        $view->tiles(Button::to(Words::edit('نام'), self::ID, 'name', $id), $mine ? null : Button::to(Words::turn(!$partner, 'همکار'), self::ID, 'ap', $id, $partner ? 0 : 1))
+            ->row(
+                $at > 0 ? Button::to(Words::UP . ' بالاتر', self::ID, 'up', $id) : null,
+                $at < count($ids) - 1 ? Button::to(Words::DOWN . ' پایین‌تر', self::ID, 'down', $id) : null,
+            )
+            ->row(Button::to(Words::DELETE . ' گروه', self::ID, 'del', $id)->danger());
 
         return $view->help('همکار: ' . GroupsScreen::PARTNER)->back(GroupsScreen::ID);
     }

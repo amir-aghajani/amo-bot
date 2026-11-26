@@ -6,12 +6,8 @@ namespace Tests\Feature\BotAdmin;
 
 use App\Core\Scheduling\Scheduler;
 use App\Modules\Agency\Services\AgencyActions;
-use App\Modules\Auth\Principal;
-use App\Modules\Auth\PrincipalKind;
-use App\Modules\Bots\CurrentBot;
 use App\Modules\Bots\Enums\SellingSuspension;
-use App\Modules\Telegram\Admin\AdminSeat;
-use App\Modules\Telegram\Admin\Door\ApiRefusal;
+use App\Modules\Telegram\Admin\AdminSeats;
 use App\Modules\Telegram\Admin\Door\PanelBridge;
 use App\Modules\Telegram\Admin\SeatKind;
 use App\Modules\Telegram\Admin\Sections\Sales\Sales;
@@ -27,8 +23,8 @@ use Tests\BotTestCase;
 
 /**
  * «📊 داشبورد» in the bot's management (Sections\Support\Dashboard*): the range's figures against the range before, what
- * needs a hand — each queue a button to its list on the count's tab —, the owner's system state alone, the daily curve
- * by metric and range, the latest orders and customers, and an agent's terms of selling said to them.
+ * needs a hand — each queue a button to its list on the count's tab —, the system state on the owner's seat, the daily
+ * curve by metric and range, the latest orders and customers, and an agent's terms of selling said to them.
  */
 final class SupportDashboardTest extends BotTestCase
 {
@@ -155,7 +151,7 @@ final class SupportDashboardTest extends BotTestCase
         self::assertContains('👤 Sara · همین حالا', $this->buttonLabels(0));
     }
 
-    public function testAShopsAdminSeesTheDailyWorkWithoutTheSystem(): void
+    public function testAShopsAdminSeesTheSystemAsTheOwnerDoes(): void
     {
         $admin = $this->customer(['telegram_id' => 7100, 'role' => UserRole::Admin]);
 
@@ -165,15 +161,12 @@ final class SupportDashboardTest extends BotTestCase
 
         self::assertStringContainsString('📊 داشبورد', $this->said()[0]);
         self::assertStringContainsString(UiWords::NOTHING_WAITING, $this->said()[0]);
-        self::assertStringNotContainsString('وضعیت سیستم', $this->said()[0], 'the installation is the owner\'s');
+        self::assertStringContainsString('وضعیت سیستم', $this->said()[0], 'the installation, as the owner reads it: here it needs fixing');
+        self::assertContains(Nav::to('ppv'), $this->callbacks(0), 'the fix a tap away');
 
-        $staff = $this->service(PanelBridge::class)->for(new AdminSeat(SeatKind::Staff, new Principal(PrincipalKind::Staff, 'tg:7100', CurrentBot::main(), $admin, []), $admin));
-        try {
-            $staff->get('/system');
-            self::fail('the door let an admin read the system');
-        } catch (ApiRefusal $refusal) {
-            self::assertSame(404, $refusal->status);
-        }
+        $seat = $this->service(AdminSeats::class)->of($admin);
+        self::assertSame(SeatKind::Owner, $seat?->kind);
+        self::assertArrayHasKey('system', $this->service(PanelBridge::class)->for($seat)->get('/system'), 'the door lets them read it');
     }
 
     public function testAnAgentIsToldTheirTermsOfSelling(): void

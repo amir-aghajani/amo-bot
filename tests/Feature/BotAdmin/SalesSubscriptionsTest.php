@@ -9,7 +9,6 @@ use App\Modules\Catalog\Models\Plan;
 use App\Modules\Providers\Models\Server;
 use App\Modules\Subscriptions\Enums\SubscriptionStatus;
 use App\Modules\Subscriptions\Models\Subscription;
-use App\Modules\Telegram\Admin\Door\BotAdminDoor;
 use App\Modules\Telegram\Admin\Ui\Nav;
 use App\Modules\Telegram\Admin\Ui\Words;
 use App\Modules\Users\Enums\UserRole;
@@ -20,10 +19,10 @@ use Tests\Fakes\FakeProvider;
 
 /**
  * «📡 اشتراک‌ها» in the bot's management (Telegram\Admin\Sections\Sales): a service synced, switched off with a note typed
- * for the customer and on again; extended only with the grant, a preset and an amount typed; moved to another server —
- * on without a previous server that does not answer —, several at once; handed to another customer only with the grant;
- * deleted, from the shop alone when its panel does not answer; and the list narrowed by server — each through the
- * panel's own routes.
+ * for the customer and on again; extended, a preset and an amount typed; moved to another server — on without a
+ * previous server that does not answer —, several at once; handed to another customer; deleted, from the shop alone
+ * when its panel does not answer; and the list narrowed by server — each through the panel's own routes, a shop's
+ * admin's as the owner's, their own service (in an agent's shop they work too) read again and its link copied alone.
  */
 final class SalesSubscriptionsTest extends BotTestCase
 {
@@ -69,20 +68,14 @@ final class SalesSubscriptionsTest extends BotTestCase
         self::assertStringContainsString('دوباره فعال شد', (string) $this->popup());
     }
 
-    public function testAnAdminExtendsAServiceOnlyWithTheGrant(): void
+    public function testAnAdminExtendsAService(): void
     {
         $this->staff();
         $service = $this->mirrored($this->subscription($this->ali, $this->plan, $this->server, 'ali_r_1'));
         $ends = $service->expires_at;
 
         $this->send($this->tap(Nav::to('sbv', 'show', $service->id), chat: 7100));
-        self::assertNotContains(Nav::to('sbe', 'new', $service->id), $this->callbacks(0), 'extending is a grant');
-        $this->send($this->tap(Nav::to('sbe', 'go', $service->id), chat: 7100));
-        self::assertStringContainsString('مدیریت فروشگاه', $this->said()[0], 'a screen it may not open is the home');
-
-        $this->botSettings('bot_admins', ['bot_admins_grant_extend' => true]);
-        $this->send($this->tap(Nav::to('sbv', 'show', $service->id), chat: 7100));
-        self::assertContains(Nav::to('sbe', 'new', $service->id), $this->callbacks(0));
+        self::assertContains(Nav::to('sbe', 'new', $service->id), $this->callbacks(0), 'no grant asked');
 
         $this->send($this->tap(Nav::to('sbe', 'new', $service->id), chat: 7100));
         self::assertNotContains(Nav::to('sbe', 'go', $service->id), $this->callbacks(0), 'nothing to give yet');
@@ -155,18 +148,14 @@ final class SalesSubscriptionsTest extends BotTestCase
         self::assertContains(Nav::to('sbm'), $this->callbacks(0), 'back on the services list');
     }
 
-    public function testAServiceIsHandedToAnotherCustomerOnlyWithTheGrant(): void
+    public function testAnAdminHandsAServiceToAnotherCustomer(): void
     {
         $this->staff();
         $sara = $this->customer(['telegram_id' => 5252, 'first_name' => 'Sara']);
         $service = $this->mirrored($this->subscription($this->ali, $this->plan, $this->server, 'ali_r_1'));
 
         $this->send($this->tap(Nav::to('sbv', 'show', $service->id), chat: 7100));
-        self::assertNotContains(Nav::to('sbv', 'tr', $service->id), $this->callbacks(0), 'handing a service over is a grant');
-        $this->send($this->tap(Nav::to('sbv', 'trg', $service->id, 5252), chat: 7100));
-        self::assertSame(BotAdminDoor::NOT_GRANTED, $this->popup(), 'the door refuses it');
-
-        $this->botSettings('bot_admins', ['bot_admins_grant_delete' => true]);
+        self::assertContains(Nav::to('sbv', 'tr', $service->id), $this->callbacks(0), 'no grant asked');
         $this->send($this->tap(Nav::to('sbv', 'tr', $service->id), chat: 7100));
         self::assertStringContainsString('شناسه عددی تلگرام مشتری جدید', $this->said()[0]);
 
@@ -304,6 +293,90 @@ final class SalesSubscriptionsTest extends BotTestCase
         self::assertNotContains(Nav::to('sbf', 's', 'kind', 'claimed'), $this->callbacks(0), 'only the main shop takes services by their link');
         $this->sendTo($bot, $this->tap(Nav::to('orf'), chat: self::AGENT_TELEGRAM_ID));
         self::assertNotContains(Nav::to('orf', 's', 'type', 'traffic'), $this->callbacks(0), 'an agent\'s traffic is bought in the main shop');
+    }
+
+    public function testAnAdminsOwnServiceOffersItsSyncAndLinkAloneAndAnotherAdminEverything(): void
+    {
+        $this->target();
+        $boss = $this->customer(['telegram_id' => 7100, 'first_name' => 'Boss', 'role' => UserRole::Admin]);
+        $this->customer(['telegram_id' => 7200, 'first_name' => 'Reza', 'role' => UserRole::Admin]);
+        $service = $this->mirrored($this->subscription($boss, $this->plan, $this->server, 'boss_1'));
+        $changes = [
+            Nav::to('sbe', 'new', $service->id),
+            Nav::to('sbv', 'mv', $service->id),
+            Nav::to('sbv', 'tr', $service->id),
+            Nav::to('sbv', 'di', $service->id),
+            Nav::to('sbv', 'de', $service->id),
+        ];
+
+        $this->send($this->tap(Nav::to('sbv', 'show', $service->id), chat: 7100));
+        $buttons = $this->callbacks($this->windowCall());
+        self::assertContains(Nav::to('sbv', 'sy', $service->id), $buttons, 'reading it again stays');
+        self::assertSame(['https://fake.test/sub/boss_1'], $this->copied(), 'and its link');
+        foreach ($changes as $change) {
+            self::assertNotContains($change, $buttons, "{$change}: another admin's");
+        }
+        self::assertStringContainsString('این سرویس خود شماست؛ تغییرش با مدیر دیگری است.', $this->screen());
+
+        $this->send($this->tap(Nav::to('sbv', 'sy', $service->id), chat: 7100));
+        self::assertStringContainsString('از پنل به‌روز شد', (string) $this->popup(), 'the button kept is one the server takes');
+        self::assertNotNull($service->refresh()->last_synced_at);
+
+        $this->send($this->tap(Nav::to('sbv', 'show', $service->id), chat: 7200));
+        $buttons = $this->callbacks($this->windowCall());
+        foreach ($changes as $change) {
+            self::assertContains($change, $buttons, "{$change}: another admin's to make");
+        }
+        self::assertStringNotContainsString('خود شماست', $this->screen());
+
+        // Switched off by another admin: switching it on again is theirs as well.
+        $service->forceFill(['status' => SubscriptionStatus::Disabled, 'disabled_at' => now()])->save();
+        $this->send($this->tap(Nav::to('sbv', 'show', $service->id), chat: 7100));
+        self::assertNotContains(Nav::to('sbv', 'en', $service->id), $this->callbacks($this->windowCall()));
+        self::assertContains(Nav::to('sbv', 'sy', $service->id), $this->callbacks($this->windowCall()));
+        self::assertStringContainsString('این سرویس خود شماست؛ تغییرش با مدیر دیگری است.', $this->screen());
+        $this->send($this->tap(Nav::to('sbv', 'show', $service->id), chat: 7200));
+        self::assertContains(Nav::to('sbv', 'en', $service->id), $this->callbacks($this->windowCall()));
+    }
+
+    public function testAnAdminsOwnServiceInAnAgentsShopTheyWorkIsTheirsThereToo(): void
+    {
+        $bot = $this->agentBot();
+        $this->customer(['telegram_id' => 7100, 'first_name' => 'Boss', 'role' => UserRole::Admin]);
+        $this->customer(['telegram_id' => 7200, 'first_name' => 'Reza', 'role' => UserRole::Admin]);
+        $service = CurrentBot::run($bot, fn(): Subscription => $this->mirrored($this->subscription($this->customer(['telegram_id' => 7100, 'first_name' => 'Boss']), $this->plan(['name' => 'پلن نماینده']), $this->server, 'boss_1')));
+
+        $this->send($this->tap(Nav::to('shop', 'pick', $bot->id), chat: 7100));
+        $this->send($this->tap(Nav::to('sbv', 'show', $service->id), chat: 7100));
+        $buttons = $this->callbacks($this->windowCall());
+        self::assertContains(Nav::to('sbv', 'sy', $service->id), $buttons, 'their service of the agent\'s shop, read');
+        self::assertNotContains(Nav::to('sbe', 'new', $service->id), $buttons, 'their account in that shop is theirs');
+        self::assertNotContains(Nav::to('sbv', 'tr', $service->id), $buttons);
+        self::assertNotContains(Nav::to('sbv', 'de', $service->id), $buttons);
+        self::assertStringContainsString('این سرویس خود شماست', $this->screen());
+
+        $this->send($this->tap(Nav::to('shop', 'pick', $bot->id), chat: 7200));
+        $this->send($this->tap(Nav::to('sbv', 'show', $service->id), chat: 7200));
+        self::assertContains(Nav::to('sbe', 'new', $service->id), $this->callbacks($this->windowCall()), 'another admin in the same shop');
+        self::assertContains(Nav::to('sbv', 'tr', $service->id), $this->callbacks($this->windowCall()));
+        self::assertContains(Nav::to('sbv', 'de', $service->id), $this->callbacks($this->windowCall()));
+        self::assertStringNotContainsString('خود شماست', $this->screen());
+    }
+
+    /** What the window says now. */
+    private function screen(): string
+    {
+        return $this->params($this->windowCall())['text'] ?? '';
+    }
+
+    /**
+     * What the window's buttons copy at a tap.
+     *
+     * @return list<string>
+     */
+    private function copied(): array
+    {
+        return array_values(array_filter(array_map(static fn(array $button): ?string => $button['copy_text']['text'] ?? null, array_merge(...$this->inlineKeyboard($this->windowCall())))));
     }
 
     /** A second server services may move to. */

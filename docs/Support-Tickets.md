@@ -53,7 +53,7 @@ from the group, the website or the bot's management — by the first and last na
 احمدی»), else by their handle or number. Anyone but you reads your login as «پشتیبانی» alone; the customer never sees who — every answer is
 «🎧 پشتیبانی» to them. The bot's admins may answer, close and open tickets from the shop's website too, while it lets
 them in ([Website](Website.md#the-shops-admins)), and from the bot's private chat — «⚙️ مدیریت › 🎧 پشتیبانی», words or a
-picture with its caption —, while «مدیران ربات» lets them in; you and an agent do too, from your own Telegram accounts.
+picture with its caption —, the role being enough there; you and an agent do too, from your own Telegram accounts.
 
 ## Read ticks
 

@@ -7,7 +7,6 @@ namespace Tests\Feature\BotAdmin;
 use App\Modules\Store\Models\Website;
 use App\Modules\Store\Services\Websites;
 use App\Modules\Telegram\Admin\AdminSeats;
-use App\Modules\Telegram\Admin\Door\ApiRefusal;
 use App\Modules\Telegram\Admin\Door\PanelBridge;
 use App\Modules\Telegram\Admin\Ui\Nav;
 use App\Modules\Users\Enums\UserRole;
@@ -17,7 +16,7 @@ use Tests\BotTestCase;
  * «🌐 تنظیمات وب‌سایت» in the bot (Telegram\Admin\Sections\Panel\Website): its sections as cards saved a field at a time
  * through PATCH /website — a switch the API refuses said in a popup, the store key renewed on a yes, a secret typed and
  * never shown back, a staff grant switched —, the captcha's described form as a draft saved whole; the owner's and an
- * agent's, never a shop's admin.
+ * agent's, and a shop's admin's as theirs.
  */
 final class PanelWebsiteTest extends BotTestCase
 {
@@ -118,7 +117,7 @@ final class PanelWebsiteTest extends BotTestCase
         self::assertStringNotContainsString('ذخیره نشده', $this->said()[0], 'saved: the draft gone');
     }
 
-    public function testAnAgentSetsTheirOwnWebsiteAndAShopsAdminNone(): void
+    public function testAnAgentSetsTheirOwnWebsiteAndTheMainShopsAdminTheMainOne(): void
     {
         $bot = $this->agentBot();
         $this->sendTo($bot, $this->tap(Nav::to('hc'), chat: self::AGENT_TELEGRAM_ID));
@@ -130,19 +129,19 @@ final class PanelWebsiteTest extends BotTestCase
         self::assertSame('1234567890-abc123.apps.googleusercontent.com', Website::query()->withoutGlobalScopes()->where('bot_id', $bot->id)->sole()->googleClientId(), 'their shop\'s website');
         self::assertNull(Website::query()->first()?->googleClientId(), 'not the main shop\'s');
 
+        // The main shop's admin: the main shop's website, as the owner sets it.
         $staff = $this->customer(['telegram_id' => 7100, 'role' => UserRole::Admin]);
+        $this->send($this->tap(Nav::to('wsc', 'e', 1), chat: 7100));
+        self::assertStringContainsString('آدرس وب‌سایت', $this->said()[0], 'the address asked, not the home');
+        $this->send($this->message('https://shop.example', chat: 7100));
         $this->send($this->tap(Nav::to('wsc', 'e', 0), chat: 7100));
-        self::assertStringContainsString('مدیریت فروشگاه', $this->said()[0], 'a screen it may not open is the home');
-        self::assertNotTrue(Website::query()->first()?->enabled);
+        self::assertSame(['https://shop.example', true], [$this->site()->url, $this->site()->enabled], 'through the panel\'s route');
 
         $seat = $this->service(AdminSeats::class)->of($staff);
         self::assertNotNull($seat);
-        try {
-            $this->service(PanelBridge::class)->for($seat)->patch('/website', ['enabled' => true]);
-            self::fail('the door let a shop\'s admin set the website');
-        } catch (ApiRefusal $refusal) {
-            self::assertSame(404, $refusal->status, 'the configuration is no admin\'s');
-        }
+        $this->service(PanelBridge::class)->for($seat)->patch('/website', ['enabled' => false]);
+        self::assertFalse($this->site()->enabled, 'the door lets them in');
+        self::assertNull(Website::query()->withoutGlobalScopes()->where('bot_id', $bot->id)->sole()->url, 'the agent\'s website as it was');
     }
 
     private function site(): Website

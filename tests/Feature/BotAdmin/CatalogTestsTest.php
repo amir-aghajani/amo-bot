@@ -141,16 +141,15 @@ final class CatalogTestsTest extends BotTestCase
         self::assertStringContainsString('ذخیره شد', $this->said()[0]);
     }
 
-    public function testAShopsAdminHasNoTests(): void
+    public function testAShopsAdminSetsTheTestsUpAsTheOwnerDoes(): void
     {
         $this->customer(['telegram_id' => 7100, 'role' => UserRole::Admin]);
 
         $this->send($this->tap(Nav::to('hs'), chat: 7100));
-        self::assertNotContains(Nav::to('ts'), $this->callbacks(0), 'the tests are the shop\'s configuration');
+        self::assertContains(Nav::to('ts'), $this->callbacks(0), 'the tests, on the shop\'s menu');
 
         $this->send($this->tap(Nav::to('tss', 'e', 0, 1), chat: 7100));
-        self::assertStringContainsString('مدیریت فروشگاه', $this->said()[0]);
-        self::assertFalse($this->setting('test_enabled'));
+        self::assertTrue($this->setting('test_enabled'), 'switched on through the panel\'s route');
     }
 
     private function setting(string $name): mixed

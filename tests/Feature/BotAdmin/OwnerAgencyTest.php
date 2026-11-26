@@ -8,12 +8,18 @@ use App\Modules\Agency\Models\AgencyLevel;
 use App\Modules\Agency\Models\AgencyRequest;
 use App\Modules\Agency\Services\AgencyActions;
 use App\Modules\Agency\Services\AgencySettings;
+use App\Modules\Auth\Exceptions\ActorRefusedException;
+use App\Modules\Bots\CurrentBot;
+use App\Modules\Telegram\Admin\AdminSeats;
+use App\Modules\Telegram\Admin\Door\ApiRefusal;
+use App\Modules\Telegram\Admin\Door\PanelBridge;
 use App\Modules\Telegram\Admin\Sections\Owner\Agency\AgencyEnd;
 use App\Modules\Telegram\Admin\Ui\ListScreen;
 use App\Modules\Telegram\Admin\Ui\Nav;
 use App\Modules\Telegram\Admin\Ui\Words;
 use App\Modules\Telegram\Keyboard\KeyboardLayouts;
 use App\Modules\Users\Enums\UserRole;
+use App\Modules\Users\Models\User;
 use App\Support\LocalTime;
 use App\Support\Persian;
 use App\Support\Traffic;
@@ -25,7 +31,7 @@ use Tests\BotTestCase;
  * and terms or rejected with a note, an agent's renewal request listed apart and approved with an end (the program's,
  * one picked, none) or rejected, an agent's page — their terms changed, traffic added, servers hidden, selling
  * stopped and let go, the agency ended —, the levels added, moved and deleted, and the program's rules — every write
- * through the panel's own routes; the owner's alone.
+ * through the panel's own routes; the owner's and the main shop's admins', never an admin's own request.
  */
 final class OwnerAgencyTest extends BotTestCase
 {
@@ -298,15 +304,193 @@ final class OwnerAgencyTest extends BotTestCase
         self::assertContains(Nav::to('age', 'edit', $agent->id), $this->callbacks(0), 'back on the agent\'s page');
     }
 
-    public function testAShopsAdminHasNoAgency(): void
+    public function testAShopsAdminDecidesTheRequestsButNeverTheirOwn(): void
     {
         $request = $this->agencyRequest($this->customer(['telegram_id' => 8100]));
-        $this->customer(['telegram_id' => 7100, 'role' => UserRole::Admin]);
+        $admin = $this->customer(['telegram_id' => 7100, 'role' => UserRole::Admin]);
 
         $this->send($this->message('/admin', chat: 7100));
-        self::assertNotContains(Nav::to('ag'), $this->callbacks(0));
+        self::assertContains(Nav::to('ag'), $this->callbacks(0), 'the agency, on the home');
         $this->send($this->tap(Nav::to('agrv', 'nn', $request->id), chat: 7100));
-        self::assertSame('pending', AgencyRequest::query()->findOrFail($request->id)->status->value);
+        $request->refresh();
+        self::assertSame(['rejected', 'tg:7100'], [$request->status->value, $request->reviewer], 'through the panel\'s route, under their own name');
+
+        // Their own request is another admin's to approve.
+        $own = $this->agencyRequest($admin);
+        $seat = $this->service(AdminSeats::class)->of($admin);
+        self::assertNotNull($seat);
+        try {
+            $this->service(PanelBridge::class)->for($seat)->post("/agency/requests/{$own->id}/approve", ['level_id' => $this->agencyLevel()->id, 'credit_limit' => 0]);
+            self::fail('an admin approved their own agency');
+        } catch (ApiRefusal $refusal) {
+            self::assertSame([403, ActorRefusedException::OWN_REQUEST], [$refusal->status, $refusal->getMessage()]);
+        }
+        self::assertSame('pending', $own->refresh()->status->value);
+    }
+
+    public function testAnAdminWhoIsAnAgentTooChangesNothingOfTheirOwnAgency(): void
+    {
+        $this->fakePanel();
+        $server = $this->fakeServer('آلمان');
+        $this->agencyLevel();
+        $level = $this->agencyLevel(['name' => 'نقره‌ای']);
+        $agent = $this->agent(overrides: ['telegram_id' => 7100, 'first_name' => 'Sara', 'role' => UserRole::Admin]);
+        $bot = $this->agentBot($agent, traffic: 20);
+        $was = $agent->agency_level_id;
+        $own = $this->bridge($agent);
+        $other = $this->bridge($this->customer(['telegram_id' => 7200, 'first_name' => 'Reza', 'role' => UserRole::Admin]));
+        $other->post("/agency/agents/{$agent->id}/suspend", ['note' => 'تسویه نشده']);
+        self::assertSame('manual', $bot->refresh()->sellingSuspension()?->value, 'another admin stops their selling');
+
+        $refusals = [
+            'their terms' => static fn() => $own->put("/agency/agents/{$agent->id}", ['level_id' => $level->id, 'credit_limit' => '50000']),
+            'their traffic' => static fn() => $own->post("/agency/agents/{$agent->id}/traffic", ['gb' => 5, 'note' => 'برای خودم']),
+            'their selling let go' => static fn() => $own->post("/agency/agents/{$agent->id}/resume"),
+            'their selling stopped' => static fn() => $own->post("/agency/agents/{$agent->id}/suspend", ['note' => 'دوباره']),
+            'their hidden servers' => static fn() => $own->put("/agency/agents/{$agent->id}/hidden", ['server_ids' => [$server->id], 'plan_ids' => []]),
+            'their agency ended' => static fn() => $own->post("/agency/agents/{$agent->id}/revoke", ['note' => 'پایان']),
+        ];
+        foreach ($refusals as $what => $call) {
+            $refused = self::refusal($call);
+            self::assertSame([403, ActorRefusedException::OWN_AGENCY], [$refused->status, $refused->getMessage()], $what);
+        }
+        $agent->refresh();
+        $bot->refresh();
+        self::assertSame([$was, '0'], [$agent->agency_level_id, (string) (int) $agent->credit_limit], 'their terms as they were');
+        self::assertSame([Traffic::bytesOfGb(20), 'manual', []], [$bot->trafficBalance(), $bot->sellingSuspension()?->value, $bot->fresh()?->hiddenServerIds()], 'their traffic, their selling and their servers');
+        self::assertTrue($agent->isAgent(), 'still an agent');
+
+        // From their bot's management, the same refusal.
+        $this->send($this->tap(Nav::to('agv', 'res', $agent->id), chat: 7100));
+        self::assertSame(ActorRefusedException::OWN_AGENCY, $this->popup());
+        self::assertSame('manual', $bot->refresh()->sellingSuspension()?->value);
+
+        // The owner, and another admin, make each of them.
+        $this->send($this->tap(Nav::to('agv', 'res', $agent->id), chat: self::OWNER));
+        self::assertNull($bot->refresh()->sellingSuspension(), 'the owner lets their selling go');
+        $other->post("/agency/agents/{$agent->id}/traffic", ['gb' => 5]);
+        $other->put("/agency/agents/{$agent->id}/hidden", ['server_ids' => [$server->id], 'plan_ids' => []]);
+        $other->put("/agency/agents/{$agent->id}", ['level_id' => $level->id, 'credit_limit' => '50000']);
+        self::assertSame([Traffic::bytesOfGb(25), [$server->id]], [$bot->refresh()->trafficBalance(), $bot->fresh()?->hiddenServerIds()]);
+        self::assertSame([$level->id, '50000'], [$agent->refresh()->agency_level_id, (string) (int) $agent->credit_limit]);
+        $other->post("/agency/agents/{$agent->id}/revoke", ['note' => 'پایان همکاری']);
+        self::assertNull($agent->refresh()->agency_level_id, 'the agency ended by another admin');
+    }
+
+    public function testAnAdminWorkingTheirOwnAgentsShopChangesNothingOfTheirAgencyThereEither(): void
+    {
+        [$agent, $own] = $this->adminInTheirOwnAgentsShop();
+        $silver = $this->agencyLevel(['name' => 'نقره‌ای']);
+
+        $refused = self::refusal(static fn() => $own->put("/agency/agents/{$agent->id}", ['level_id' => $silver->id, 'credit_limit' => '50000']));
+        self::assertSame([403, ActorRefusedException::OWN_AGENCY], [$refused->status, $refused->getMessage()], 'their agency, from whichever shop they work');
+        $agent->refresh();
+        self::assertNotSame($silver->id, $agent->agency_level_id);
+        self::assertSame('0', (string) (int) $agent->credit_limit);
+    }
+
+    public function testAnAdminWorkingTheirOwnAgentsShopRenewsNotTheirOwnAgency(): void
+    {
+        [$agent, $own] = $this->adminInTheirOwnAgentsShop();
+        $renewal = $this->renewalRequest($agent);
+
+        $refused = self::refusal(static fn() => $own->post("/agency/requests/{$renewal->id}/approve", ['expires_at' => null]));
+        self::assertSame([403, ActorRefusedException::OWN_REQUEST], [$refused->status, $refused->getMessage()], 'their own renewal, from whichever shop they work');
+        self::assertSame('pending', $renewal->refresh()->status->value);
+    }
+
+    public function testAnAdminsOwnRequestsOfferTheirRejectionButNoApproval(): void
+    {
+        $this->agencyLevel();
+        $boss = $this->customer(['telegram_id' => 7100, 'first_name' => 'Boss', 'role' => UserRole::Admin]);
+        $this->customer(['telegram_id' => 7200, 'first_name' => 'Reza', 'role' => UserRole::Admin]);
+        $agent = $this->agent(overrides: ['telegram_id' => 7300, 'first_name' => 'Sara', 'role' => UserRole::Admin]);
+        $this->agentBot($agent);
+        $join = $this->agencyRequest($boss);
+        $renewal = $this->renewalRequest($agent);
+        $note = 'این درخواست خود شماست؛ تاییدش با مدیر دیگری است.';
+
+        // Their request to become an agent.
+        $this->send($this->tap(Nav::to('agr'), chat: 7100));
+        $this->send($this->tap(Nav::to('agrv', 'show', $join->id), chat: 7100));
+        self::assertStringContainsString('کانال فروش دارم', $this->said()[0], 'the request\'s own card');
+        self::assertNotContains(Nav::to('agra', 'new', $join->id), $this->callbacks(0), '«✅ تایید» another admin\'s');
+        self::assertContains(Nav::to('agrv', 'no', $join->id), $this->callbacks(0), '«🚫 رد» stays');
+        self::assertStringContainsString($note, $this->said()[0]);
+
+        // An agent's renewal request of their own.
+        $this->send($this->tap(Nav::to('agr'), chat: 7300));
+        $this->send($this->tap(Nav::to('agrv', 'show', $renewal->id), chat: 7300));
+        self::assertStringContainsString('درخواست تمدید نمایندگی', $this->said()[0]);
+        self::assertNotContains(Nav::to('agrn', 'new', $renewal->id), $this->callbacks(0));
+        self::assertContains(Nav::to('agrv', 'no', $renewal->id), $this->callbacks(0));
+        self::assertStringContainsString($note, $this->said()[0]);
+
+        // Another admin approves either.
+        $this->send($this->tap(Nav::to('agr'), chat: 7200));
+        $this->send($this->tap(Nav::to('agrv', 'show', $join->id), chat: 7200));
+        self::assertContains(Nav::to('agra', 'new', $join->id), $this->callbacks(0));
+        self::assertStringNotContainsString('خود شماست', $this->said()[0]);
+        $this->send($this->tap(Nav::to('agrv', 'show', $renewal->id), chat: 7200));
+        self::assertContains(Nav::to('agrn', 'new', $renewal->id), $this->callbacks(0));
+        self::assertStringNotContainsString('خود شماست', $this->said()[0]);
+
+        // Rejecting their own is taken from them.
+        $this->send($this->tap(Nav::to('agrv', 'nn', $join->id), chat: 7100));
+        $join->refresh();
+        self::assertSame(['rejected', 'tg:7100'], [$join->status->value, $join->reviewer]);
+        $this->send($this->tap(Nav::to('agrv', 'nn', $renewal->id), chat: 7300));
+        self::assertSame('rejected', $renewal->refresh()->status->value);
+    }
+
+    public function testAnAdminWhoIsAnAgentFindsTheirShopAloneOnTheirOwnAgentsPage(): void
+    {
+        $agent = $this->agent(overrides: ['telegram_id' => 7100, 'first_name' => 'Sara', 'role' => UserRole::Admin]);
+        $bot = $this->agentBot($agent, traffic: 20);
+        $this->customer(['telegram_id' => 7200, 'first_name' => 'Reza', 'role' => UserRole::Admin]);
+        $note = 'این نمایندگی خود شماست؛ تغییرش با مدیر دیگری است.';
+        $changes = [
+            Nav::to('age', 'edit', $agent->id),
+            Nav::to('agt', 'show', $agent->id),
+            Nav::to('agh', 'show', $agent->id),
+            Nav::to('agv', 'sus', $agent->id),
+            Nav::to('agv', 'rev', $agent->id),
+        ];
+
+        $this->send($this->tap(Nav::to('agv', 'show', $agent->id), chat: 7100));
+        $buttons = $this->callbacks($this->windowCall());
+        self::assertContains(Nav::to('shop', 'pick', $bot->id), $buttons, '«🏪 باز کردن فروشگاه» stays');
+        foreach ($changes as $change) {
+            self::assertNotContains($change, $buttons, "{$change}: another admin's");
+        }
+        self::assertStringContainsString($note, $this->said()[0]);
+
+        $this->send($this->tap(Nav::to('agv', 'show', $agent->id), chat: 7200));
+        $buttons = $this->callbacks($this->windowCall());
+        foreach ($changes as $change) {
+            self::assertContains($change, $buttons, "{$change}: another admin's to make");
+        }
+        self::assertStringNotContainsString('خود شماست', $this->said()[0]);
+
+        // Their selling stopped by another admin: letting it go is another admin's too.
+        $this->send($this->tap(Nav::to('agv', 'susn', $agent->id), chat: 7200));
+        self::assertSame('manual', $bot->refresh()->sellingSuspension()?->value);
+        self::assertContains(Nav::to('agv', 'res', $agent->id), $this->callbacks($this->windowCall()));
+        $this->send($this->tap(Nav::to('agv', 'show', $agent->id), chat: 7100));
+        self::assertNotContains(Nav::to('agv', 'res', $agent->id), $this->callbacks($this->windowCall()));
+        self::assertStringContainsString($note, $this->said()[0]);
+
+        // Working their own agent's shop, a customer of it too (its account the seat's own there): their agency all the
+        // same.
+        CurrentBot::run($bot, fn(): User => $this->customer(['telegram_id' => 7100, 'first_name' => 'Sara']));
+        $this->send($this->tap(Nav::to('shop', 'pick', $bot->id), chat: 7100));
+        self::assertStringContainsString('🏪 فروشگاه نماینده · 🛡 مدیر ربات', implode("\n", $this->said()), 'in the agent\'s shop');
+        $this->send($this->tap(Nav::to('agv', 'show', $agent->id), chat: 7100));
+        $buttons = $this->callbacks($this->windowCall());
+        self::assertContains(Nav::to('shop', 'pick', $bot->id), $buttons);
+        self::assertNotContains(Nav::to('agv', 'res', $agent->id), $buttons);
+        self::assertNotContains(Nav::to('age', 'edit', $agent->id), $buttons);
+        self::assertStringContainsString($note, $this->said()[0]);
     }
 
     public function testTheAgentsAreSortedAsThePanelsColumnsSortThem(): void
@@ -577,6 +761,44 @@ final class OwnerAgencyTest extends BotTestCase
         self::assertStringNotContainsString('فروردین ۱۴۰۶', implode("\n", $this->said()), 'never the next month\'s first');
         $this->send($this->message('۱۴۰۸/۱۲/۳۰', chat: self::OWNER));
         self::assertStringContainsString('پایان تازه: <b>۳۰ اسفند ۱۴۰۸', implode("\n", $this->said()));
+    }
+
+    /**
+     * One of the main shop's admins who is an agent too (Telegram 7100), working their own agent's shop from the main bot
+     * — a customer of their own bot as well, so the seat's own account there is that one (AdminSeat::in()) —, and the
+     * panels' API as that seat asks it.
+     *
+     * @return array{User, PanelBridge}
+     */
+    private function adminInTheirOwnAgentsShop(): array
+    {
+        $agent = $this->agent(overrides: ['telegram_id' => 7100, 'first_name' => 'Sara', 'role' => UserRole::Admin]);
+        $bot = $this->agentBot($agent);
+        CurrentBot::run($bot, fn(): User => $this->customer(['telegram_id' => 7100]));
+        $seat = $this->service(AdminSeats::class)->of($agent, $bot->id);
+        self::assertSame([$bot->id, false], [$seat?->shop()->id, $seat?->principal->isTheOwner()], 'the owner\'s seat, in their shop, not the owner');
+
+        return [$agent, $this->service(PanelBridge::class)->for($seat ?? self::fail('no seat'))];
+    }
+
+    /** The panels' API as `$user`'s seat in the main bot asks it, the seat as the bot gives it (AdminSeats::of()). */
+    private function bridge(User $user): PanelBridge
+    {
+        $seat = $this->service(AdminSeats::class)->of($user);
+        self::assertNotNull($seat);
+
+        return $this->service(PanelBridge::class)->for($seat);
+    }
+
+    private static function refusal(\Closure $call): ApiRefusal
+    {
+        try {
+            $call();
+        } catch (ApiRefusal $refusal) {
+            return $refusal;
+        }
+
+        self::fail('the API answered');
     }
 
     /**

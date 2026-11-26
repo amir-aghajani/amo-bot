@@ -35,8 +35,8 @@ use App\Support\Persian;
  * looked for at once among the customers, the orders, the payments and the services, through each list's own search
  * (the panel's search box: «#12» is row 12 alone, a bare number any row it names). Each found row is a button to its
  * own page; past SHOWN of one kind, a button opens that list with the search in it. A list the seat may not open, or
- * the panel refuses, is left out. Its other mode, for a seat that sets the shop up, is «⚙️ جستجوی تنظیمات» (a setting
- * found by its words: Panel\Search\SettingsSearchScreen), offered beside the question and under the results.
+ * the panel refuses, is left out. Its other mode is «⚙️ جستجوی تنظیمات» (a setting found by its words:
+ * Panel\Search\SettingsSearchScreen), offered beside the question and under the results.
  *
  * Actions: `all` (list screen: that list, searched); any other shows the last search's results again (a question
  * for one when there is none).
@@ -79,7 +79,7 @@ final class SearchScreen extends BaseScreen
             hint: 'شماره یا «#شماره»، نام کاربری با @، شماره موبایل، لینک یا نام سرویس؛ در مشتری‌ها، سفارش‌ها، پرداخت‌ها و سرویس‌ها.',
             cancel: Button::to(Words::CANCEL, Screens::HOME),
         ))->example('@ali_r');
-        // The other mode: a setting found by its words, for a seat that sets the shop up.
+        // The other mode: a setting found by its words.
         $settings = self::settingsSearch($admin);
 
         return $admin->ask($settings === null ? $prompt : $prompt->choices($settings));

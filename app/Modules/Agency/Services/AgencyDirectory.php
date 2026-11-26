@@ -195,7 +195,7 @@ final class AgencyDirectory
                 'extended_to' => $request->extended_to?->toIso8601String(),
                 'term_end' => $open && $bot !== null && $ends !== null && $request->user->isAgent() ? self::termEnd($this->standing->renewalEnd($bot)) : null,
                 'reason' => $request->reason,
-                'reviewer' => $request->reviewer,
+                'reviewer' => $this->reviewers->present($request->reviewer),
                 'reviewer_name' => $names[$request->reviewer ?? ''] ?? null,
                 'decided_at' => $request->decided_at?->toIso8601String(),
                 'created_at' => $request->created_at?->toIso8601String(),

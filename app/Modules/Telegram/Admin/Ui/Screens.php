@@ -7,6 +7,7 @@ namespace App\Modules\Telegram\Admin\Ui;
 use App\Modules\Telegram\Admin\AdminSeat;
 use App\Modules\Telegram\Admin\Door\ApiRefusal;
 use App\Modules\Telegram\Admin\Sections\Bot\BotScreens;
+use App\Modules\Telegram\Admin\Sections\Bot\SwitchesScreen;
 use App\Modules\Telegram\Admin\Sections\Catalog\CatalogScreens;
 use App\Modules\Telegram\Admin\Sections\Core\BotAdminsScreen;
 use App\Modules\Telegram\Admin\Sections\Core\HomeScreen;
@@ -172,7 +173,7 @@ final class Screens
      * The menu of `$id`; null when it is no menu. Each section is reached from one menu alone: a settings card of a
      * feature's (the discount codes', the test accounts', the custom services', the referrals') from that feature's own
      * screen, never from «🤖 تنظیمات ربات» too; the channels and the report group from «🤖 ربات»; «🛡 مدیران ربات» from
-     * «⚙️ تنظیمات».
+     * «⚙️ تنظیمات». «⚡️ کلیدهای اصلی» is the one reached from two: «⚙️ تنظیمات» and the home.
      */
     private function hub(string $id): ?HubScreen
     {
@@ -212,6 +213,7 @@ final class Screens
             ], 'آنچه مشتری در ربات می‌بیند و می‌گیرد، و گزارش‌هایی که به شما می‌رسد.'),
             'hc' => new HubScreen($this, Icons::SETTINGS . ' تنظیمات', [Words::ROOT], [
                 ['ss', Icons::SEARCH . ' جستجوی تنظیمات'],
+                [SwitchesScreen::ID, SwitchesScreen::TITLE],
                 ['bs', Icons::BOT . ' تنظیمات ربات'],
                 ['ba', Icons::BOT_ADMINS . ' مدیران ربات'],
                 ['ws', Icons::WEBSITE . ' تنظیمات وب‌سایت'],

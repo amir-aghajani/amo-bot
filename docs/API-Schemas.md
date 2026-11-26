@@ -1515,7 +1515,7 @@ A reference to a customer, as every screen shows one: their id, the three Telegr
 
 ### UserRole
 
-`admin`: a bot admin. They can use /broadcast, are exempt from the bot's gates, and can use the website's admin API while the website lets admins in. Unrelated to the panel login.
+`admin`: a bot admin. They manage the shop from its bot's private chat («⚙️ مدیریت», /admin) — the owner's access in the main bot, the agent's in an agent's bot while the agency stands; their decisions under their own name, none about their own account —, can use /broadcast, are exempt from the bot's gates, and can use the website's admin API while the website lets admins in. Unrelated to the panel login.
 
 String: `customer`, `admin`.
 

@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Telegram\Admin\Sections\Sales;
 
-use App\Modules\Auth\StaffGrant;
 use App\Modules\Telegram\Admin\Door\ApiRefusal;
+use App\Modules\Telegram\Admin\Sections\Customers\Customer;
 use App\Modules\Telegram\Admin\Sections\Customers\CustomerRowsScreen;
 use App\Modules\Telegram\Admin\Sections\Owner\Payments\DepositSettingsScreen;
 use App\Modules\Telegram\Admin\Sections\Owner\Payments\PaymentWords;
@@ -25,14 +25,14 @@ use App\Modules\Telegram\Admin\Ui\Words;
  * One payment (the panel's review dialog, GET /payments/{id}): its receipt — the screen is the picture, its summary card
  * the caption; a receipt that is no picture is sent as a file —, or why it has none; its standing and who decided it, its
  * customer, what it paid for, its method and gateway, its moments and notes; its order and service a button each. What
- * its state allows (`actions`): approve and deliver — a shop's admin only a receipt in review, as the API holds them —,
- * ask the online gateway, reject (with a reason for the customer, or without), cancel (asked first), remind the
- * customer, retry the delivery, and — with the grant — refund to the wallet (asked first). An open card payment while
- * Rikhtam is connected takes «📎 پیوست واریز ریختم»: the deposits Rikhtam holds that matched no payment (GET
- * /payments/{id}/rikhtam, the closest first, kept in the screen's state — a deposit's id is no button's to carry, only a
+ * its state allows (`actions`): approve and deliver, ask the online gateway, reject (with a reason for the customer, or
+ * without), cancel (asked first), remind the customer, retry the delivery, and refund to the wallet (asked first). An
+ * open card payment while Rikhtam is connected takes «📎 پیوست واریز ریختم»: the deposits Rikhtam holds that matched no
+ * payment (GET /payments/{id}/rikhtam, the closest first, kept in the screen's state — a deposit's id is no button's to carry, only a
  * mark of it the kept one must match, so a stale or second tap never attaches another —), one picked, asked first, and
  * attached (POST /payments/{id}/rikhtam), which approves the payment; Rikhtam's words are the notice. Whatever else comes
  * of it — the payment taken another way meanwhile, Rikhtam out of reach — is said over the payment as it now stands.
+ * The seat's own payment (Customer::own()) offers no approval, deposit nor refund: those are another admin's.
  *
  * The review queue (a receipt in review opened from the shop's payments, not a customer's): «✅ تایید و …، بعدی» approves
  * and opens the next receipt waiting, a rejection moves on the same way, «⏭ رسید بعدی» skips — as the dialog's «بعدی»
@@ -767,9 +767,13 @@ final class PaymentScreen extends BaseScreen
         $inReview = $status === PaymentsScreen::REVIEW;
         $queued = self::queued($admin, $id);
         $queue = $inReview && $queued;
-        // A shop's admin approves a receipt in review alone (ActorRefusedException::RECEIPT_FIRST): no manual approval.
-        $mayApprove = $inReview || !$admin->seat->isStaff();
-        $approves = Json::on($actions, 'approve') && $mayApprove;
+        // One of the shop's admins never approves, attaches a deposit to nor refunds their own payment (PaymentActions,
+        // RikhtamDeposits: ActorRefusedException::ownPayment()); rejecting, cancelling, reminding stay.
+        $own = Customer::own($admin, (int) (Json::part($payment, 'user')['id'] ?? 0));
+        if ($own && (Json::on($actions, 'approve') || Json::on($actions, 'rikhtam') || Json::on($actions, 'refund'))) {
+            $view->note('این پرداخت خود شماست؛ تایید یا بازپرداختش با مدیر دیگری است.');
+        }
+        $approves = !$own && Json::on($actions, 'approve');
         $view->row(
             match (true) {
                 !$approves => null,
@@ -782,11 +786,10 @@ final class PaymentScreen extends BaseScreen
         $tab = (array) ($admin->state(PaymentsScreen::ID)['f'] ?? []);
         $walks = $queued && ($inReview || ($tab['status'] ?? null) === PaymentsScreen::REVIEW);
         $view->row($walks ? Button::to(Sales::NEXT . ' رسید بعدی', self::ID, 'nx', $id) : null);
-        // Attaching a Rikhtam deposit approves the payment: refused to a shop's admin exactly where approving is.
         $view->tiles(
             Json::on($actions, 'check') ? Button::to(Sales::CHECK . ' استعلام از درگاه', self::ID, 'ck', $id)->primary() : null,
             Json::on($actions, 'retry') ? Button::to(Sales::RETRY . ' تلاش دوباره برای تحویل', self::ID, 'rt', $id)->primary() : null,
-            Json::on($actions, 'rikhtam') && $mayApprove ? Button::to(Sales::ATTACH . ' پیوست واریز ریختم', self::ID, 'bg', $id) : null,
+            !$own && Json::on($actions, 'rikhtam') ? Button::to(Sales::ATTACH . ' پیوست واریز ریختم', self::ID, 'bg', $id) : null,
             Json::on($actions, 'remind') ? Button::to(Sales::REMIND . ' یادآوری به مشتری', self::ID, 'rm', $id) : null,
             $file ? Button::to(Sales::FILE . ' فایل رسید', self::ID, 'fl', $id) : null,
         );
@@ -798,7 +801,7 @@ final class PaymentScreen extends BaseScreen
         // What undoes or ends it, last.
         $view->row(
             Json::on($actions, 'cancel') ? Button::to(Sales::CANCEL . ' لغو پرداخت', self::ID, 'cx', $id)->danger() : null,
-            Json::on($actions, 'refund') && $admin->seat->holds(StaffGrant::Refunds) ? Button::to(Sales::REFUND . ' ' . (($order['type'] ?? '') === 'wallet_topup' ? 'بازپرداخت شارژ' : 'بازپرداخت به کیف پول'), self::ID, 'rf', $id)->danger() : null,
+            !$own && Json::on($actions, 'refund') ? Button::to(Sales::REFUND . ' ' . (($order['type'] ?? '') === 'wallet_topup' ? 'بازپرداخت شارژ' : 'بازپرداخت به کیف پول'), self::ID, 'rf', $id)->danger() : null,
         );
 
         // In the queue's walk, back is the payments; else the list it was opened from.

@@ -109,13 +109,14 @@ final class BotAreaChannelsTest extends BotTestCase
         self::assertNull($this->service(ReportGroupState::class)->chatId());
     }
 
-    public function testAShopsAdminHasNeither(): void
+    public function testAShopsAdminHasBothAsTheOwnerDoes(): void
     {
         $this->customer(['telegram_id' => 7100, 'role' => UserRole::Admin]);
+        $this->reportGroup();
 
         $this->send($this->tap(Nav::to('ch', 'join', 1, 'y'), chat: 7100));
-        self::assertFalse($this->service(BotSettings::class)->joinRequired());
+        self::assertTrue($this->service(BotSettings::class)->joinRequired(), 'the rule, through the panel\'s route');
         $this->send($this->tap(Nav::to('rg', 'cutd'), chat: 7100));
-        self::assertStringContainsString('مدیریت فروشگاه', $this->said()[0]);
+        self::assertNull($this->service(ReportGroupState::class)->chatId(), 'the report group let go');
     }
 }

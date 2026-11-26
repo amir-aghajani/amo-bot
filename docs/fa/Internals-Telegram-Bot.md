@@ -26,7 +26,7 @@
 | <code dir="ltr">Polling/</code>، <code dir="ltr">Controllers/</code>، <code dir="ltr">Services/</code> | حلقه `bot:poll`، اندپوینت Webhook، مدیریت Webhook و هویت |
 | <code dir="ltr">Notifications/</code>، <code dir="ltr">Qr/</code>، <code dir="ltr">Emoji/</code> | `ServiceCard` (یک سرویس به شکل کارت QR یا متن)، تصویر QR، ایموجی پرمیوم |
 | <code dir="ltr">Contracts/</code> | آنچه ربات از ماژول دیگری از راه interface خودش می‌پرسد: `MiniAppAddress`، آدرس مینی‌اپ فروشگاه |
-| <code dir="ltr">Admin/</code> | مدیریت فروشگاه در چت خصوصی: چه کسی مدیریت می‌کند (`AdminSeats`، `OwnerLinks`، `BotAdminSettings`)، ورودی API پنل‌ها (<code dir="ltr">Door/</code>)، چارچوب صفحه‌ها (<code dir="ltr">Ui/</code>) و صفحه‌های هر بخش (<code dir="ltr">Sections/</code>) ([پایین‌تر](#مدیریت-فروشگاه)) |
+| <code dir="ltr">Admin/</code> | مدیریت فروشگاه در چت خصوصی: چه کسی مدیریت می‌کند (`AdminSeats`، `OwnerLinks`)، ورودی API پنل‌ها (<code dir="ltr">Door/</code>)، چارچوب صفحه‌ها (<code dir="ltr">Ui/</code>) و صفحه‌های هر بخش (<code dir="ltr">Sections/</code>) ([پایین‌تر](#مدیریت-فروشگاه)) |
 
 اول این‌ها را باز کنید: `routes/bot.php`، `Update/Dispatcher.php`، `Context.php`، `Handlers/CheckoutScreen.php`،
 `Texts/BotTexts.php` و `Reports/ShopReports.php`.
@@ -544,22 +544,32 @@ Subscriptions، Support…)، هرگز در خود هندلر: ربات فقط �
 `LINK_MINUTES` برای باز کردنش، حداکثر `MOST` حساب؛ <code dir="ltr">POST /settings/owner-telegram/link</code> پنل
 `current_password` را می‌خواهد مگر درخواست `BotAdminDoor::SEAT` ورودی ربات را داشته باشد، و
 <code dir="ltr">OwnerAuth::changeCredentials()</code> همه لینک‌ها را با <code dir="ltr">OwnerLinks::revokeAll()</code> تمام
-می‌کند) مالک است، در فروشگاهی که چت انتخاب کرده؛ در ربات یک نماینده، حساب خود
-نماینده نماینده است، تا وقتی نمایندگی‌اش برقرار است (همان‌طور که `AgentAuth` می‌پرسد)؛ و یک مدیر ربات،
-تا وقتی `BotAdminSettings` (`bot_admins`) روشن است، staff است و مجوزهایش مجوزهای `Principal` می‌شود. مسدود شدن هر
-کدام را تمام می‌کند. هر کدام از این principalها `inBot` را دارد، که به `Actor::$inBot` می‌رسد: پاسخ تیکتی که از اینجا
+می‌کند) مالک است، در فروشگاهی که چت انتخاب کرده؛ و هر مدیر ربات اصلی هم همین‌طور: یک `Principal` از نوع Owner با
+حساب او به عنوان `customer` و نام خودش (<code dir="ltr">Reviewers::forAdmin()</code>)، بدون مجوز. در ربات یک نماینده، تا
+وقتی نمایندگی‌اش برقرار است (همان‌طور که `AgentAuth` می‌پرسد)، حساب خود نماینده نماینده است، و هر مدیر آن ربات هم به همین
+شکل جایگاه نماینده را دارد. جایگاه سومی و کلیدی در کار نیست: `SeatKind` فقط `Owner` یا `Agent` است، و نقش با هر آپدیت
+پرسیده می‌شود. مسدود شدن هر کدام را تمام می‌کند. <code dir="ltr">AdminSeat::isAdmin()</code> (یک `customer` روی principal)
+یکی از مدیران را نشان می‌دهد: سرویس‌ها تصمیم درباره حساب خودش را رد می‌کنند (<code dir="ltr">Actor::is()</code>،
+<code dir="ltr">ActorRefusedException::own…()</code>)، <code dir="ltr">Reviewers::present()</code> نام ورود مالک را برایش
+«پشتیبانی» نشان می‌دهد، و آنچه فقط مال خود مالک است، یعنی حساب‌های وصل‌شده (`OwnerAccountsScreen`، مسیرهای
+<code dir="ltr">/settings/owner-telegram</code>، <code dir="ltr">ActorRefusedException::ownerOnly()</code>)، مسدود کردن و نقش
+یک حساب وصل‌شده (<code dir="ltr">ownerBanned()</code>، <code dir="ltr">ownerRole()</code>)، و آدرس Bot API و رمز Webhook
+ربات اصلی (`ConfigSettings`: <code dir="ltr">ownersPassword()</code>، <code dir="ltr">ownersSecret()</code>)،
+<code dir="ltr">Principal::isTheOwner()</code> (<code dir="ltr">Actor::isTheOwner()</code>) را می‌پرسد؛ حساب خود نماینده
+در رباتش فقط به دست <code dir="ltr">Actor::isTheAgent()</code> یا مالک مسدود می‌شود (<code dir="ltr">agentBanned()</code>).
+<code dir="ltr">AdminSeat::in()</code> حساب مدیر را در فروشگاه انتخاب‌شده می‌آورد، پس <code dir="ltr">Actor::is()</code>
+آنجا هم برقرار است. هر کدام از این principalها `inBot` را دارد، که به `Actor::$inBot` می‌رسد: پاسخ تیکتی که از اینجا
 نوشته شود `TicketChannel::Manage` است.
 
-**ورودی**: `Door\BotAdminDoor`، که در `routes/api.php` زیر <code dir="ltr">/api/bot-admin/{owner|agent|staff}</code> روی همان
+**ورودی**: `Door\BotAdminDoor`، که در `routes/api.php` زیر <code dir="ltr">/api/bot-admin/{owner|agent}</code> روی همان
 گروه‌های مسیر پنل‌ها سوار شده: برای مالک <code dir="ltr">$operations</code>، <code dir="ltr">$configuration</code>، و
 همچنین <code dir="ltr">$system</code>، <code dir="ltr">$everywhere</code> (با `shop.everywhere`)، <code dir="ltr">$main</code>
-(با `shop.main`) و <code dir="ltr">/shops</code>؛ برای نماینده <code dir="ltr">$agentAccount</code>،
-<code dir="ltr">$operations</code> و <code dir="ltr">$configuration</code>؛ و برای staff فقط <code dir="ltr">$operations</code>.
+(با `shop.main`) و <code dir="ltr">/shops</code>؛ و برای نماینده <code dir="ltr">$agentAccount</code>،
+<code dir="ltr">$operations</code> و <code dir="ltr">$configuration</code>.
 این ورودی Session، کوکی و هدر CSRF ندارد: درخواست فقط با یک `AdminSeat` در attribute `SEAT` خودش وارد می‌شود، که فقط خود پروسه
-می‌تواند آن را بگذارد؛ از بیرون، هر مسیر آن 404 است. بعد نوع جایگاه باید نوع همان ورودی باشد، و مسیری که
-`StaffGrant::ARGUMENT` را نام می‌برد باید مجوزش داده شده باشد (`NOT_GRANTED`)؛ درخواست در فروشگاه جایگاه و به نام
-principal آن اجرا می‌شود، و هر تغییر (نه GET) با جایگاه، مسیر و وضعیت پاسخ لاگ می‌شود. مجوزی که یک سرویس می‌پرسد
-(`ActorRefusedException` با `grant` آن) با کلمه‌های ربات جواب داده می‌شود.
+می‌تواند آن را بگذارد؛ از بیرون، هر مسیر آن 404 است. بعد نوع جایگاه باید نوع همان ورودی باشد (جایگاه نماینده هرگز ورودی
+مالک را نمی‌گیرد)؛ هیچ مجوزی پرسیده نمی‌شود. درخواست در فروشگاه جایگاه و به نام principal آن اجرا می‌شود، و هر تغییر (نه
+GET) با جایگاه، مسیر و وضعیت پاسخ لاگ می‌شود.
 
 **پل**: <code dir="ltr">Door\PanelBridge::for($seat)</code> هر درخواست را می‌سازد (`get`، `post`، `put`، `patch`، `delete`،
 `upload` برای یک فایل multipart، `file` برای پاسخی که فایل است) و آن را داخل همان پروسه به هسته HTTP خود برنامه می‌دهد:
@@ -702,8 +712,7 @@ principal آن اجرا می‌شود، و هر تغییر (نه GET) با جا�
 موبایلی که به شکل ایرانی نوشته شده به شکل ده رقم آخرش خوانده می‌شود، و بیشتر از آن دکمه‌ای که همان فهرست را با جستجو باز
 می‌کند.
 
-**جستجوی تنظیمات**: «🔎 جستجوی تنظیمات» (`Panel\Search\SettingsSearchScreen`، `ss`،
-<code dir="ltr">$seat->configures()</code>) در فهرست تنظیمات خود پنل می‌گردد: `Panel\Search\PanelSettings` کپی
+**جستجوی تنظیمات**: «🔎 جستجوی تنظیمات» (`Panel\Search\SettingsSearchScreen`، `ss`، همه جایگاه‌ها) در فهرست تنظیمات خود پنل می‌گردد: `Panel\Search\PanelSettings` کپی
 <code dir="ltr">lib/settings-search/settings.generated.ts</code> پنل است که `pnpm settings:index` کنار آن می‌نویسد (نسخه
 منتشرشده سورس پنل را ندارد)، و هرگز دستی ویرایش نمی‌شود. `Panel\Search\SettingsIndex` آن را به ربات وصل می‌کند: `SECTIONS`،
 یعنی هر آدرس پنل ← صفحه ربات، نامش، منوهایی که زیرشان است و کلمه‌های دیگر؛ `SETTINGS`، یعنی تنظیم‌هایی که جور دیگری جز بخششان
@@ -729,10 +738,14 @@ principal آن اجرا می‌شود، و هر تغییر (نه GET) با جا�
 <code dir="ltr">active()</code> برای برچسب‌های وضعیت، <code dir="ltr">badge()</code> برای یک
 شمارش).
 
-**دسترسی‌ها آینه ورودی‌اند**: صفحه‌ای روی مسیرهای کارهای روزانه به همه جایگاه‌ها اجازه می‌دهد؛ روی پیکربندی،
-<code dir="ltr">$seat->configures()</code> (مالک و نماینده)؛ روی سیستم، سرورها، نمایندگی، هدیه همگانی و تنظیمات پنل،
-<code dir="ltr">$seat->isOwner()</code>؛ و کاری که مسیرش یک مجوز را نام می‌برد فقط تا وقتی نشان داده می‌شود که
-<code dir="ltr">$seat->holds()</code> آن را داشته باشد. پنهان کردن فقط ادب صفحه‌هاست: ورودی هر چیز دیگری را رد می‌کند.
+**دسترسی‌ها آینه ورودی‌اند**: هر صفحه به همه جایگاه‌ها اجازه می‌دهد (<code dir="ltr">BaseScreen::allows()</code>)، چون
+مسیرهایی که می‌خواند مال هر دو پنل است؛ روی سرورها، نمایندگی، هدیه همگانی و تعویض فروشگاه،
+<code dir="ltr">$seat->isOwner()</code>؛ روی آنچه فقط فروشگاه اصلی دارد (سرویس دلخواه، افزودن سرویس با لینک)،
+<code dir="ltr">$seat->shop()->isMain()</code>؛ روی تنظیمات پنل، <code dir="ltr">Access::main()</code> (مالک در فروشگاه
+اصلی) یا <code dir="ltr">Access::system()</code>؛ روی حساب نماینده، <code dir="ltr">$seat->isAgent()</code>؛ و روی
+حساب‌های وصل‌شده مالک، <code dir="ltr">$seat->principal->isTheOwner()</code>. حساب خود یک مدیر
+(<code dir="ltr">Customers\Customer::own()</code>) دکمه افزایش یا کاهش کیف پول، سفارش یا تخفیف اختصاصی ندارد. پنهان کردن
+فقط ادب صفحه‌هاست: ورودی و سرویس‌ها هر چیز دیگری را رد می‌کنند.
 
 ## رابط API تلگرام
 
@@ -797,6 +810,6 @@ unit testهای API، متن‌ها و کیبوردها در `tests/Unit/Telegra
 <code dir="ltr">Marketing*</code>، <code dir="ltr">BotArea*</code>، <code dir="ltr">Owner*</code> و
 <code dir="ltr">Panel*</code>، یعنی `PanelConfigTest`، `PanelWebsiteTest`، `PanelMiniAppTest`،
 و همچنین `PanelUpdateTest`، `PanelImportsTest` و `PanelOperationsTest`)، و هر کدام فهرست ← ردیف ← کار ← اثرش در API را می‌پیماید،
-جایگاهی بدون مجوز (بدون دکمه، و رد ورودی) و یک پاسخ نوشتنی را. [تست](Testing.md) را ببینید.
+جایگاه یک مدیر را هر جا فرق دارد (حساب خودش، صفحه‌های خود مالک) و یک پاسخ نوشتنی را. [تست](Testing.md) را ببینید.
 
 </div>

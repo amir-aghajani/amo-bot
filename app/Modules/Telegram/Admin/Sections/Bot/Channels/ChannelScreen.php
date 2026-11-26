@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Modules\Telegram\Admin\Sections\Bot\Channels;
 
-use App\Modules\Telegram\Admin\AdminSeat;
 use App\Modules\Telegram\Admin\Sections\Bot\BotScreens;
 use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\BaseScreen;
@@ -25,11 +24,6 @@ use App\Modules\Telegram\Admin\Ui\Words;
 final class ChannelScreen extends BaseScreen
 {
     public const ID = 'chv';
-
-    public function allows(AdminSeat $seat): bool
-    {
-        return $seat->configures();
-    }
 
     public function show(Admin $admin, array $args): View
     {

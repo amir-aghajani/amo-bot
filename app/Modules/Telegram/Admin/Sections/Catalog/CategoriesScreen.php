@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Modules\Telegram\Admin\Sections\Catalog;
 
-use App\Modules\Auth\StaffGrant;
 use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\BaseScreen;
 use App\Modules\Telegram\Admin\Ui\Button;
@@ -17,9 +16,8 @@ use App\Modules\Telegram\Admin\Ui\Words;
 
 /**
  * «🗂 دسته‌بندی‌ها» (the panel's «دسته‌بندی‌ها»): the groups plans are filed under, in the order customers see them,
- * each a button that is its row — its chip, name and how many plans — to its page (CategoryScreen); with the
- * catalogue's grant, «➕ افزودن دسته»; how categories work folded away. The panel's route answers every category at
- * once: the pages are cut here.
+ * each a button that is its row — its chip, name and how many plans — to its page (CategoryScreen); «➕ افزودن دسته»;
+ * how categories work folded away. The panel's route answers every category at once: the pages are cut here.
  *
  * Actions: `page` (n).
  */
@@ -48,9 +46,7 @@ final class CategoriesScreen extends BaseScreen
                 (int) $category['id'],
             ));
         }
-        if ($admin->seat->holds(StaffGrant::Catalog)) {
-            $view->row(Button::to(Words::add('دسته'), CategoryScreen::ID, 'new')->success());
-        }
+        $view->row(Button::to(Words::add('دسته'), CategoryScreen::ID, 'new')->success());
         $view->pager($page, $pages, self::ID, 'page');
 
         return $view->help('تا وقتی دسته فعالی هست، مشتری در ربات اول دسته را انتخاب می‌کند و پلن‌های بی‌دسته زیر «سایر پلن‌ها» می‌آیند. هر پلن دسته‌اش را در فرم خودش می‌گیرد؛ ترتیب همین لیست ترتیب نمایش است و هر دسته در صفحه خودش با 🔼 و 🔽 جابه‌جا می‌شود.')

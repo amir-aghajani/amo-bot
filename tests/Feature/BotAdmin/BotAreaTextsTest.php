@@ -192,13 +192,14 @@ final class BotAreaTextsTest extends BotTestCase
         self::assertNotSame(CustomEmojiHandler::STATE, $this->service(SessionStore::class)->load(self::ADMIN)->state());
     }
 
-    public function testAShopsAdminHasNoTexts(): void
+    public function testAShopsAdminRewordsATextAsTheOwnerDoes(): void
     {
         $this->customer(['telegram_id' => 7100, 'role' => UserRole::Admin]);
 
         $this->send($this->tap(Nav::to('txv', 'e', 'welcome'), chat: 7100));
-        self::assertStringContainsString('مدیریت فروشگاه', $this->said()[0]);
-        self::assertNotSame(Admin::INPUT, $this->service(SessionStore::class)->load(7100)->state());
+        self::assertStringContainsString('%name%', $this->said()[0], 'the new wording asked, not the home');
+        $this->send($this->message('سلام %name% عزیز', chat: 7100));
+        self::assertSame('سلام %name% عزیز', $this->service(BotTexts::class)->present(BotText::Welcome)['value'], 'saved through the panel\'s route');
     }
 
     /** @return list<string> The buttons of the window as the bot last drew it. */

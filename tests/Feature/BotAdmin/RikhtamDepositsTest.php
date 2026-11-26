@@ -6,6 +6,7 @@ namespace Tests\Feature\BotAdmin;
 
 use App\Core\Http\Urls;
 use App\Modules\Admin\Api\PaymentRikhtamController;
+use App\Modules\Auth\Exceptions\ActorRefusedException;
 use App\Modules\Bots\Models\Bot;
 use App\Modules\Payments\Deposits\Services\DepositSettings;
 use App\Modules\Payments\Deposits\Services\RikhtamDeposits;
@@ -29,8 +30,8 @@ use Tests\Support\FakeRikhtam;
  * deposits as buttons, the exact sum marked, one asked first and attached — Rikhtam sending it to the shop's address in
  * the middle of the call, which approves the payment —, Rikhtam's refusal said and the deposits asked again; a stale or
  * second tap attaches nothing it was not asked, and what else comes of it (Rikhtam out of reach, the payment closed
- * meanwhile, an attach that paid nothing) is said over the payment as it stands; a shop's admin offered it only where
- * they may approve. Every write through the panel's own routes.
+ * meanwhile, an attach that paid nothing) is said over the payment as it stands; a shop's admin offered it as the owner
+ * is, never on their own payment. Every write through the panel's own routes.
  */
 final class RikhtamDepositsTest extends BotTestCase
 {
@@ -344,22 +345,42 @@ final class RikhtamDepositsTest extends BotTestCase
         self::assertNotContains(Nav::to('pyv', 'bg', $payment->id), $this->callbacks(0));
     }
 
-    public function testAShopsAdminIsOfferedItOnlyWhereTheyMayApprove(): void
+    public function testAShopsAdminIsOfferedItAsTheOwnerIsButNeverOnTheirOwnPayment(): void
     {
         $this->connect();
-        $this->customer(['telegram_id' => self::STAFF, 'first_name' => 'Boss', 'role' => UserRole::Admin]);
+        $admin = $this->customer(['telegram_id' => self::STAFF, 'first_name' => 'Boss', 'role' => UserRole::Admin]);
         $pending = $this->cardPayment($this->topUpOrder($this->ali, '50000.00'), $this->card);
         $inReview = $this->receipt($this->cardPayment($this->topUpOrder($this->ali, '60000.00'), $this->card));
 
         $this->send($this->tap(Nav::to('pyv', 'show', $pending->id), chat: self::STAFF));
-        self::assertContains(Nav::to('pyv', 'show', $pending->id), $this->callbacks($this->windowCall()), 'its screen');
-        self::assertNotContains(Nav::to('pyv', 'bg', $pending->id), $this->callbacks($this->windowCall()), 'no receipt to review: not theirs to approve');
-
+        self::assertContains(Nav::to('pyv', 'bg', $pending->id), $this->callbacks($this->windowCall()), 'an open card payment, no receipt asked first');
         $this->send($this->tap(Nav::to('pyv', 'show', $inReview->id), chat: self::STAFF));
-        self::assertContains(Nav::to('pyv', 'bg', $inReview->id), $this->callbacks($this->windowCall()), 'a receipt in review is');
+        self::assertContains(Nav::to('pyv', 'bg', $inReview->id), $this->callbacks($this->windowCall()), 'a receipt in review too');
+
+        $own = $this->cardPayment($this->topUpOrder($admin, '70000.00'), $this->card);
+        $this->send($this->tap(Nav::to('pyv', 'bg', $own->id), chat: self::STAFF));
+        self::assertSame(ActorRefusedException::OWN_PAYMENT, $this->popup(), 'their own: another admin\'s to approve');
 
         $this->send($this->tap(Nav::to('pmd'), chat: self::STAFF));
-        self::assertStringNotContainsString('اتصال ریختم', implode("\n", $this->said()), 'the settings are the owner\'s and an agent\'s');
+        self::assertStringContainsString('اتصال ریختم', implode("\n", $this->said()), 'its settings, as the owner\'s');
+    }
+
+    public function testAnAdminsOwnPaymentOffersNoDepositToAttachAndAnotherAdminDoes(): void
+    {
+        $this->connect();
+        $admin = $this->customer(['telegram_id' => self::STAFF, 'first_name' => 'Boss', 'role' => UserRole::Admin]);
+        $this->customer(['telegram_id' => 7200, 'first_name' => 'Reza', 'role' => UserRole::Admin]);
+        $own = $this->cardPayment($this->topUpOrder($admin, '70000.00'), $this->card);
+
+        $this->send($this->tap(Nav::to('pyv', 'show', $own->id), chat: self::STAFF));
+        $buttons = $this->callbacks($this->windowCall());
+        self::assertNotContains(Nav::to('pyv', 'bg', $own->id), $buttons, '«📎 پیوست واریز ریختم» another admin\'s');
+        self::assertContains(Nav::to('pyv', 'rm', $own->id), $buttons, 'the reminder stays');
+        self::assertStringContainsString('این پرداخت خود شماست؛ تایید یا بازپرداختش با مدیر دیگری است.', implode("\n", $this->said()));
+
+        $this->send($this->tap(Nav::to('pyv', 'show', $own->id), chat: 7200));
+        self::assertContains(Nav::to('pyv', 'bg', $own->id), $this->callbacks($this->windowCall()));
+        self::assertStringNotContainsString('خود شماست', implode("\n", $this->said()));
     }
 
     /** The shop's Rikhtam connected, as the owner's key in the panel connects it. */

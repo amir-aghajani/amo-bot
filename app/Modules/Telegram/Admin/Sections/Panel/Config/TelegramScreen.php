@@ -64,10 +64,10 @@ final class TelegramScreen extends ConfigScreen
         return DraftForm::fixed([
             $token,
             DraftForm::field('username', 'text', 'نام کاربری ربات اصلی', 'بدون @؛ با «🧪 بررسی توکن» خودش پر می‌شود.', ltr: true),
-            DraftForm::field('api_url', 'url', "آدرس \u{2068}API\u{2069} تلگرام", "برای سرور \u{2068}Bot API\u{2069} محلی یا آینه تغییر دهید؛ توکن همه ربات‌ها، ربات‌های نماینده‌ها هم، به همین آدرس فرستاده می‌شود.", required: true),
+            DraftForm::field('api_url', 'url', "آدرس \u{2068}API\u{2069} تلگرام", "برای سرور \u{2068}Bot API\u{2069} محلی یا آینه تغییر دهید؛ توکن همه ربات‌ها، ربات‌های نماینده‌ها هم، به همین آدرس فرستاده می‌شود؛ فقط خود مالک آن را عوض می‌کند.", required: true),
             DraftForm::field('current_password', 'secret', 'رمز عبور فعلی پنل', 'آدرس API تلگرام به جای دیگری می‌رود و از این به بعد توکن همه ربات‌ها، ربات‌های نماینده‌ها هم، به آن فرستاده می‌شود؛ برای همین رمز عبور ورود به پنل خواسته می‌شود.', required: true, transient: true),
             DraftForm::field('poll_timeout', 'number', "تایم‌اوت \u{2068}long polling\u{2069}", 'فقط در حالت polling استفاده می‌شود.', required: true, unit: 'ثانیه', min: 1, max: 60),
-            DraftForm::field('webhook_secret', 'secret', "رمز \u{2068}Webhook\u{2069}", 'بخشی از آدرس Webhook است' . ($webhook !== '' ? ': ' . $webhook : '') . '. بعد از تغییر، Webhook را در «🛰 دریافت پیام‌ها» دوباره ثبت کنید.', generate: 24),
+            DraftForm::field('webhook_secret', 'secret', "رمز \u{2068}Webhook\u{2069}", 'بخشی از آدرس Webhook است' . ($webhook !== '' ? ': ' . $webhook : '') . '. فقط خود مالک آن را عوض می‌کند؛ بعد از تغییر، Webhook را در «🛰 دریافت پیام‌ها» دوباره ثبت کنید.', generate: 24),
         ], $group);
     }
 

@@ -17,17 +17,11 @@ use App\Support\Persian;
 /**
  * What the customer screens share: a customer's page read from the panel (GET /users/{id}), how one is named — the
  * panel's one line: the name, else the handle, else the account — and marked, the customer the screens last opened, the
- * admin's groups, the path the screens are under, why a seat may only look at an account (an admin's of the bot, or an
- * agent's: the shop's owner alone changes them), and the Idempotency-Key of a change written in steps.
+ * admin's groups, the path the screens are under, whether an account is the seat's own (own()), and the Idempotency-Key of
+ * a change written in steps.
  */
 final class Customer
 {
-    /** Why the shop's admins only look at a bot admin's account (UserActions refuses them every change of it). */
-    public const ADMIN_LOCK = '🔒 حساب یکی از مدیران فروشگاه است؛ فقط مالک فروشگاه آن را تغییر می‌دهد.';
-
-    /** …and an agent's. */
-    public const AGENT_LOCK = '🔒 حساب نماینده است؛ فقط مالک فروشگاه آن را تغییر می‌دهد.';
-
     /** A banned customer's mark: their row's, the ban's button. */
     public const BANNED_MARK = '⛔️';
 
@@ -151,28 +145,12 @@ final class Customer
     }
 
     /**
-     * Why `$admin`'s seat may only look at this customer's account: one of the shop's admins over a bot admin's account or
-     * an agent's (the panel's rule for them, UserActions); null when it may change it.
-     *
-     * @param array<string, mixed> $detail
+     * Whether the customer is the seat's own account, one of the shop's admins' (AdminSeat::isAdmin()): they never adjust
+     * their own wallet, order for themselves nor give themselves an own discount — another admin does it for them.
      */
-    public static function lock(Admin $admin, array $detail): ?string
-    {
-        if (!$admin->seat->isStaff()) {
-            return null;
-        }
-
-        return match (true) {
-            (self::row($detail)['role'] ?? null) === 'admin' => self::ADMIN_LOCK,
-            is_array($detail['agency'] ?? null) => self::AGENT_LOCK,
-            default => null,
-        };
-    }
-
-    /** Whether the customer is the seat's own account: one of the shop's admins never adjusts their own wallet nor orders for themselves. */
     public static function own(Admin $admin, int $id): bool
     {
-        return $admin->seat->isStaff() && $admin->seat->user->id === $id;
+        return in_array($id, [$admin->seat->principal->customer?->id, $admin->seat->principal->home?->id], true);
     }
 
     /**

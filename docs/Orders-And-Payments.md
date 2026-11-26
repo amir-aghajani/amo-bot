@@ -121,8 +121,9 @@ login as «پشتیبانی».
 without a reason — do what this dialog does ([Report group](Telegram-Group.md)). They may work this screen from the
 shop's website too, while it lets them in ([Website](Website.md#the-shops-admins)): there they approve only a payment
 whose receipt waits for review, and refund only when the website grants it; they ask an online payment's gateway as you
-do. **An admin never approves or refunds their own payment**, in the group or on the website: another admin, or you,
-does. A card's review window approves a receipt sent in the bot that nobody decided in time
+do. From the bot's private chat they work it as you do, the role being enough there
+([Managing the shop from the bot](Bot-Management.md#sales)). **An admin never approves or refunds their own payment**, in
+the group, the bot or on the website: another admin, or you, does. A card's review window approves a receipt sent in the bot that nobody decided in time
 ([Payment methods](Payment-Methods.md#approving-receipts-by-themselves)).
 
 ### Receipts

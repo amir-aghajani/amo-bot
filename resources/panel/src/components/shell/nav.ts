@@ -221,9 +221,10 @@ export const BROADCAST_MESSAGES: NavSection<'messages'> = { value: 'messages', t
  * added by their link («افزودن سرویس با لینک») are the main shop's alone. The gift codes' switch, the lucky wheel's rules,
  * cashback's switch, the nightly draw's rules, the discounts' two (on «کدهای تخفیف» › «تنظیمات») and the test accounts'
  * rules are groups of the bot settings too, set on their own pages. Last, the shop's admins managing it from the bot
- * («مدیران ربات»).
+ * («مدیران ربات»): what they may do there, no group of its own — who is one is the users' role.
  */
-export type BotSettingsSection = Exclude<BotSettingsGroup, 'auto_renew' | 'gift_codes' | 'wheel' | 'cashback' | 'lottery' | 'discounts' | 'agent_perks' | 'test_accounts' | 'custom_services'>
+export type BotSettingsSection =
+  Exclude<BotSettingsGroup, 'auto_renew' | 'gift_codes' | 'wheel' | 'cashback' | 'lottery' | 'discounts' | 'agent_perks' | 'test_accounts' | 'custom_services'> | 'bot_admins'
 
 export const BOT_SETTINGS_SECTIONS: NavSection<BotSettingsSection>[] = [
   { value: 'general', title: 'عمومی', to: '/bot-settings/general' },

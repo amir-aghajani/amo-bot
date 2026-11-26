@@ -377,9 +377,8 @@ final class BotAdminFoundationTest extends BotTestCase
             self::assertContains('editMessageText', $this->calls(), "«{$data}»: in place");
         }
 
-        // A seat that may no longer open the screen: the same.
-        $this->customer(['telegram_id' => 7100, 'role' => UserRole::Admin]);
-        $this->send($this->tap(Nav::to('hc'), chat: 7100));
+        // A seat that may not open the screen: the same — an agent at the owner's servers.
+        $this->sendTo($this->agentBot(), $this->tap(Nav::to('sv'), chat: self::AGENT_TELEGRAM_ID));
         self::assertStringStartsWith('<b>⚠️ ' . Words::OLD_BUTTON . '</b>', $this->said()[0] ?? '');
     }
 

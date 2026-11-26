@@ -54,8 +54,9 @@ final class LayersTest extends TestCase
         // (Catalog), services adopted as a claimed one is (Subscriptions), codes (Discounts, Rewards), a code's order
         // types (Orders), cards of the card-to-card method (Payments), required channels, which Telegram is asked about
         // (Telegram); a referral it brings is marked as decided, so no start gift is paid for it (Referrals); a backup file too
-        // large is refused in the backups' words of the host's limit (Backups).
-        'Imports' => ['Backups', 'Bots', 'Catalog', 'Discounts', 'Orders', 'Payments', 'Providers', 'Referrals', 'Rewards', 'Subscriptions', 'Telegram', 'Users'],
+        // large is refused in the backups' words of the host's limit (Backups). Who started an import is read as its reader
+        // sees them (Auth's Reviewers); an account linked as the owner keeps its standing (Telegram's OwnerLinks).
+        'Imports' => ['Auth', 'Backups', 'Bots', 'Catalog', 'Discounts', 'Orders', 'Payments', 'Providers', 'Referrals', 'Rewards', 'Subscriptions', 'Telegram', 'Users'],
         'Installer' => ['Auth', 'Settings', 'Telegram'],
         // A loyalty tier reached is announced with its name and perks (Discounts' LoyaltyTier); a refund says the cashback it took
         // back (Rewards' Cashback).

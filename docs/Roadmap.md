@@ -94,8 +94,8 @@ Rough order of work. Items marked ✅ exist in the code today; `[ ]` are open.
   Faoxima's and MirzaBot's first, each other bot a migrator driver
 - ✅ The shop managed from its bot («⚙️ مدیریت», `/admin`): every section of the panel as the bot's own menus in the
   private chat, no web page, every read and write through the panel's own API; the owner from a Telegram account linked
-  by a one-time link, in any shop, an agent in their own bot, the shop's admins with the daily work and «مدیران ربات»'s
-  own grants
+  by a one-time link, in any shop, an agent in their own bot, the shop's admins with the seat of the bot they write to —
+  the owner's in the main bot —; the bot's on/off switch and «⚡️ کلیدهای اصلی» on its home
 - [ ] Activity log
 
 ## Scheduled tasks

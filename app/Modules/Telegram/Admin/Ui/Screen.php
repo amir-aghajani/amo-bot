@@ -16,7 +16,7 @@ use App\Modules\Telegram\Admin\Door\ApiRefusal;
  */
 interface Screen
 {
-    /** Whether `$seat` may open it (and see it on the menus): the owner, an agent, an admin with a grant. */
+    /** Whether `$seat` may open it (and see it on the menus): by its kind, the owner's or an agent's, and its shop. */
     public function allows(AdminSeat $seat): bool;
 
     /**

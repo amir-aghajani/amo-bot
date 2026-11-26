@@ -89,19 +89,26 @@ they cannot put one in a customer group, nor switch a group an admin is in to «
 prices. Making or changing the customer groups, and putting a customer in a «همکار» group, need the catalogue's grant,
 as the plans do; and two accounts merged never bring a «همکار» group into an admin's or an agent's account. Every
 change they ask for is logged with them on the line. These guards are each admin's own — two admins can
-act for each other —, so the role is for people the owner trusts. The shop's configuration is the panels' alone.
+act for each other —, so the role is for people the owner trusts. The shop's configuration is not on the website: it is the panels' and the
+bot's management's.
 
 ### Managing from the bot
 
 The shop's management in its bot's private chat ([Managing the shop from the bot](Bot-Management.md)) is the panels'
 own API, handled inside the application: its door answers nothing from outside — every address of it is a 404 to a
-request from the internet —, and a request gets in only with the seat the bot gave it, asked again on every message (the
-owner's linked account, an agent in their own bot, or one of the shop's admins while the shop lets them in). An admin
-there holds the daily work and only the grants the bot's own switches give, under the same guards as on the website.
-The owner's account is linked by a link that works once, for ten minutes, from the main bot alone, whose code the shop
-keeps only as a hash; the panel asks its password before it makes one — a wrong one counts as a failed sign-in —, so a
-session alone links no account, and a new panel login (changed, or recovered with the key) lets every linked account
-go, with the admin roles their links gave, and ends a link not opened yet. An answer typed into the chat — a token, a password, a card number — is deleted once read, and a
+request from the internet —, and a request gets in only with the seat the bot gave it, asked again on every message: the
+owner's — a linked account, or any admin of the main bot — or an agent's — the agent, or any admin of their bot, while
+the agency stands. An admin there has that whole seat, with no grants: the role is the switch, so it is for people the
+owner trusts, and taking it away or a ban ends it at once. The guards that stay are their own account's — in any shop
+they work, no decision about it, no prices of their own, no change of their own agency — and the owner's own: the
+linked Telegram accounts, their ban and their role are refused to an admin, who reads the owner's login as «پشتیبانی»;
+so are the Bot API's address and the main bot's webhook secret (whoever knows it could send updates in anyone's name);
+the panel's login changes in the panel alone; and an agent's own account in their bot is banned by the agent or the
+owner alone. The owner's account is linked by a link that works once, for ten minutes, from the main bot alone, whose
+code the shop keeps only as a hash; the panel asks its password before it makes one — a wrong one counts as a failed
+sign-in —, so a session alone links no account, and a new panel login (changed, or recovered with the key) lets every
+linked account go, with its admin role — one given by hand too, since it would keep the owner's seat —, and ends a link
+not opened yet. An answer typed into the chat — a token, a password, a card number — is deleted once read, and a
 secret typed into a half-made form waits encrypted with `APP_KEY` until it is saved. Every change asked from the bot is
 logged with who asked it.
 

@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 namespace App\Modules\Telegram\Admin\Sections\Sales;
 
-use App\Modules\Auth\StaffGrant;
-use App\Modules\Telegram\Admin\AdminSeat;
 use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\Answer;
 use App\Modules\Telegram\Admin\Ui\Button;
@@ -18,9 +16,8 @@ use App\Modules\Telegram\Admin\Ui\Words;
 use Illuminate\Support\Carbon;
 
 /**
- * «☑️ رد چند رسید» (the panel's selection on the payments list and its DismissReceiptsModal; the grant to dismiss
- * receipts in bulk): the receipts waiting for review, each ticked or not at a tap — a page at once too —, then the ticked
- * ones rejected together, or every one waiting; asked first, with the panel's words of what it does, and with a reason
+ * «☑️ رد چند رسید» (the panel's selection on the payments list and its DismissReceiptsModal): the receipts waiting for
+ * review, each ticked or not at a tap — a page at once too —, then the ticked ones rejected together, or every one waiting; asked first, with the panel's words of what it does, and with a reason
  * for the customers or without (POST /payments/dismiss, a hundred a request; «همه» round after round, held to the
  * receipts that had come when its confirmation was shown — one sent while the admin read it is left for them to see).
  * The way to review them one after another instead (PaymentScreen's queue) is beside them.
@@ -54,11 +51,6 @@ final class ReceiptsScreen extends ListScreen
 
     /** How many receipts wait, as this showing's meta said it (summary()). */
     private int $waiting = 0;
-
-    public function allows(AdminSeat $seat): bool
-    {
-        return $seat->holds(StaffGrant::Payments);
-    }
 
     public function show(Admin $admin, array $args): View
     {

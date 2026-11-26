@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Modules\Telegram\Admin\Sections\Marketing\Loyalty;
 
-use App\Modules\Telegram\Admin\AdminSeat;
 use App\Modules\Telegram\Admin\Sections\Marketing\Words as Marketing;
 use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\Button;
@@ -30,11 +29,6 @@ final class LoyaltyTiersScreen extends ListScreen
     /** The program in a paragraph: the panel's ⓘ. */
     private const PROGRAM = 'هر مشتری روی بالاترین سطحی است که جمع خریدهایش به حد آن رسیده؛ خرید، تمدید و حجم، زمان و کاربر اضافه حساب می‌شود، شارژ کیف پول و سفارش برگشت‌خورده نه. مشتری سطحش را در کیف پول ربات و در وب‌سایت می‌بیند و وقتی به سطح بالاتری برسد خبردار می‌شود.' . "\n\n"
         . 'تخفیف سطح یکی از تخفیف‌های خودکار است: از میان فروش ویژه، تخفیف اختصاصی مشتری و تخفیف سطح، فقط بزرگ‌ترین روی قیمت اعمال می‌شود و کد تخفیف بعد از آن. کش‌بک سطح به درصد قانون‌های کش‌بک اضافه می‌شود، تا وقتی کش‌بک روشن است.';
-
-    public function allows(AdminSeat $seat): bool
-    {
-        return $seat->configures();
-    }
 
     protected function screen(): string
     {

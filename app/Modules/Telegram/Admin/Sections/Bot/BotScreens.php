@@ -67,6 +67,7 @@ final class BotScreens
         ReportGroupScreen::ID => ReportGroupScreen::class,
         ReportTopicsCard::ID => ReportTopicsCard::class,
         BotSettingsMenu::ID => BotSettingsMenu::class,
+        SwitchesScreen::ID => SwitchesScreen::class,
         GeneralCard::ID => GeneralCard::class,
         ClientNamesCard::ID => ClientNamesCard::class,
         WalletCard::ID => WalletCard::class,

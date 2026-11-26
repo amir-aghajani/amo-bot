@@ -15,8 +15,8 @@ use Slim\Psr7\UploadedFile;
 
 /**
  * The panels' API as one seat in the bot uses it (for()): each request is the panel's very route, under the seat's door
- * (BotAdminDoor), handled in-process by the app's own HTTP kernel — the same validation, refusals, grants and log lines
- * as the panels, the answers the same JSON. A 2xx answers its body; anything else is an ApiRefusal with the panel's
+ * (BotAdminDoor), handled in-process by the app's own HTTP kernel — the same validation, refusals and log lines as the
+ * panels, the answers the same JSON. A 2xx answers its body; anything else is an ApiRefusal with the panel's
  * Persian words. Paths are the panels' (`/plans`, `/payments/12/approve`), without /api/admin.
  */
 final class PanelBridge

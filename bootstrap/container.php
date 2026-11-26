@@ -109,7 +109,6 @@ use App\Modules\Subscriptions\Services\RenewalSettings;
 use App\Modules\Subscriptions\Services\ServiceClaimSettings;
 use App\Modules\Subscriptions\Services\ServiceTransferSettings;
 use App\Modules\Subscriptions\Services\TestAccountSettings;
-use App\Modules\Telegram\Admin\BotAdminSettings;
 use App\Modules\Telegram\Admin\Ui\AdminHandler;
 use App\Modules\Telegram\Api\BotApi;
 use App\Modules\Telegram\BotSettings;
@@ -366,7 +365,6 @@ return [
         $c->get(WheelSettings::class),
         $c->get(CashbackSettings::class),
         $c->get(LotterySettings::class),
-        $c->get(BotAdminSettings::class),
     ])),
 
     // The shop's configuration: config.php beside the app, as WordPress keeps wp-config.php — written by the

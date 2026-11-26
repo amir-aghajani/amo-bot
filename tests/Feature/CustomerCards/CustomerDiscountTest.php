@@ -128,8 +128,8 @@ final class CustomerDiscountTest extends BotTestCase
         $agent = $this->agent(overrides: ['telegram_id' => 9292, 'username' => 'agent_reza']);
         $locked = [
             ActorRefusedException::OWN_ACCOUNT => [$this->boss, '🔒 حساب خودتان است؛ با مدیر دیگری یا از پنل تغییر می‌کند.'],
-            ActorRefusedException::AGENT_ACCOUNT => [$agent, '🔒 حساب نماینده است؛ فقط از پنل تغییر می‌کند.'],
-            ActorRefusedException::ADMIN_DISCOUNT => [$sara, '🔒 حساب مدیر ربات است؛ تخفیف اختصاصی‌اش فقط از پنل تغییر می‌کند.'],
+            ActorRefusedException::AGENT_ACCOUNT => [$agent, '🔒 حساب نماینده است؛ فقط از پنل یا «⚙️ مدیریت» ربات تغییر می‌کند.'],
+            ActorRefusedException::ADMIN_DISCOUNT => [$sara, '🔒 حساب مدیر ربات است؛ تخفیف اختصاصی‌اش فقط از پنل یا «⚙️ مدیریت» ربات تغییر می‌کند.'],
         ];
         foreach ($locked as $why => [$user, $lock]) {
             $this->send($this->press("ud:o:{$user->id}"));

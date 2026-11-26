@@ -5,24 +5,25 @@ declare(strict_types=1);
 namespace Tests\Feature\BotAdmin;
 
 use App\Modules\Auth\Actor;
-use App\Modules\Telegram\Admin\BotAdminSettings;
 use App\Modules\Telegram\Admin\OwnerLinks;
 use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\AdminHandler;
 use App\Modules\Telegram\Admin\Ui\Nav;
+use App\Modules\Telegram\BotSettings;
 use App\Modules\Telegram\Handlers\StartHandler;
 use App\Modules\Telegram\Messages;
 use App\Modules\Telegram\Session\SessionStore;
 use App\Modules\Telegram\Texts\BotText;
 use App\Modules\Users\Enums\UserRole;
+use App\Modules\Users\Enums\UserStatus;
 use App\Modules\Users\Models\User;
 use App\Modules\Users\Services\UserActions;
 use Tests\BotTestCase;
 
 /**
  * The shop's management in the bot's private chat (Telegram\Admin): the owner's one-time link, «⚙️ مدیریت» for whoever
- * manages the shop and nobody else, its home and menus by what the seat may open, and a settings card saved through
- * the panel's own route.
+ * manages the shop — the owner and the shop's admins alike, every section — and nobody else, its home and menus by what
+ * the seat may open, and a settings card saved through the panel's own route.
  */
 final class BotAdminFlowTest extends BotTestCase
 {
@@ -63,33 +64,37 @@ final class BotAdminFlowTest extends BotTestCase
         self::assertContains(Nav::to('shop'), $this->callbacks(0), 'the owner picks a shop');
 
         $this->send($this->tap(Nav::to('hc'), chat: 7001));
-        self::assertContains(Nav::to('ba'), $this->callbacks(0));
+        self::assertContains(Nav::to('bs'), $this->callbacks(0));
         self::assertContains(Nav::to('ol'), $this->callbacks(0));
 
-        $this->send($this->tap(Nav::to('ba'), chat: 7001));
-        self::assertStringContainsString('مدیران ربات', $this->said()[0]);
-        self::assertContains(Nav::to('ba', 'p', 0), $this->callbacks(0), 'the grants, a part of their own');
-        $this->send($this->tap(Nav::to('ba', 'p', 0), chat: 7001));
-        self::assertContains(Nav::to('ba', 'e', 1, 1), $this->callbacks(0), 'a grant, shown in its part');
-
-        $this->send($this->tap(Nav::to('ba', 'e', 1, 1), chat: 7001));
-        self::assertSame(['catalog'], $this->service(BotAdminSettings::class)->grants(), 'saved through the panel\'s route');
+        $this->send($this->tap(Nav::to('bsg', 'e', 0, 0, 'y'), chat: 7001));
+        self::assertFalse($this->service(BotSettings::class)->enabled(), 'saved through the panel\'s route');
         self::assertStringContainsString('ذخیره شد', (string) $this->popup());
     }
 
-    public function testAShopsAdminHasTheDailyWorkAndNoSettings(): void
+    public function testAShopsAdminHasEverySectionTheOwnerHas(): void
     {
         $this->customer(['telegram_id' => 7100, 'role' => UserRole::Admin]);
 
         $this->send($this->message('/admin', chat: 7100));
-
         self::assertStringContainsString('🛡 مدیر ربات', $this->said()[0]);
-        self::assertNotContains(Nav::to('hc'), $this->callbacks(0), 'no settings of the shop\'s');
-        self::assertNotContains(Nav::to('shop'), $this->callbacks(0));
+        self::assertContains(Nav::to('hc'), $this->callbacks(0), 'the shop\'s settings, as the owner\'s');
+        self::assertContains(Nav::to('shop'), $this->callbacks(0), 'and any shop');
 
-        $this->send($this->tap(Nav::to('ba', 'e', 0), chat: 7100));
-        self::assertStringContainsString('مدیریت فروشگاه', $this->said()[0], 'a screen it may not open is the home');
-        self::assertTrue($this->service(BotAdminSettings::class)->enabled(), 'nothing changed');
+        $this->send($this->tap(Nav::to('hc'), chat: 7100));
+        foreach (['bs', 'ws', 'ma', 'pp'] as $menu) {
+            self::assertContains(Nav::to($menu), $this->callbacks(0), $menu);
+        }
+
+        // The bot turned off from the bot: a customer is held back, the admin is not.
+        $this->send($this->tap(Nav::to('bsg', 'e', 0, 0, 'y'), chat: 7100));
+        self::assertFalse($this->service(BotSettings::class)->enabled(), 'saved through the panel\'s route');
+        self::assertStringContainsString('ذخیره شد', (string) $this->popup());
+        $this->send($this->message('/admin', chat: 7100));
+        self::assertStringContainsString('مدیریت فروشگاه', $this->said()[0], 'the off switch never shuts out who manages');
+        $this->customer(['telegram_id' => 7200]);
+        $this->send($this->message('/start', chat: 7200));
+        self::assertSame([self::text(BotText::BotOff)], $this->said());
     }
 
     public function testNobodyElseGetsTheManagement(): void
@@ -98,13 +103,8 @@ final class BotAdminFlowTest extends BotTestCase
         $this->send($this->message('/admin', chat: 7200));
         self::assertNotContains(true, array_map(static fn(string $said): bool => str_contains($said, 'مدیریت فروشگاه'), $this->said()));
 
-        // The admins shut out: an admin is anyone else.
-        $this->customer(['telegram_id' => 7300, 'role' => UserRole::Admin]);
-        $this->owner();
-        $this->send($this->message('/admin', chat: 7001));
-        $this->send($this->tap(Nav::to('ba', 'e', 0), chat: 7001));
-        self::assertFalse($this->service(BotAdminSettings::class)->enabled());
-
+        // Nor a banned admin.
+        $this->customer(['telegram_id' => 7300, 'role' => UserRole::Admin, 'status' => UserStatus::Banned]);
         $this->send($this->message('/admin', chat: 7300));
         self::assertNotContains(true, array_map(static fn(string $said): bool => str_contains($said, 'مدیریت فروشگاه'), $this->said()));
         $this->send($this->tap(Nav::to('h'), chat: 7300));

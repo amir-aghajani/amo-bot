@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Telegram\Admin\Sections\Sales;
 
-use App\Modules\Auth\StaffGrant;
 use App\Modules\Telegram\Admin\Door\ApiRefusal;
+use App\Modules\Telegram\Admin\Sections\Customers\Customer;
 use App\Modules\Telegram\Admin\Sections\Customers\CustomerRowsScreen;
 use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\Answer;
@@ -23,11 +23,12 @@ use App\Modules\Telegram\Messages;
  * One service (the panel's service dialog, GET /subscriptions/{id}): its summary card as of the panel's last answer
  * (who, plan, server, devices, renewal, moments), its traffic and its time each with a bar of what is used, its link —
  * tapped or «📋 کپی لینک», copied —, and every operation its state allows (`actions`): «📥 به‌روزرسانی از پنل»,
- * «🎁 افزایش زمان و حجم» (the grant; ExtendScreen), switch it off (asked first, a note for the customer or none) or on,
- * move it to another server (a server picked, asked first; a previous server that does not answer asks whether to move
- * without it), hand it to another customer (the grant: their Telegram id, whom it names shown before anything is sent)
- * and delete it (the grant: asked first — a claimed one may leave the shop alone, its client kept; a panel that does not
- * answer asks whether to delete without it).
+ * «🎁 افزایش زمان و حجم» (ExtendScreen), switch it off (asked first, a note for the customer or none) or on, move it to
+ * another server (a server picked, asked first; a previous server that does not answer asks whether to move without
+ * it), hand it to another customer (their Telegram id, whom it names shown before anything is sent) and delete it
+ * (asked first — a claimed one may leave the shop alone, its client kept; a panel that does not answer asks whether to
+ * delete without it). On the seat's own service (Customer::own()) only «📥 به‌روزرسانی از پنل» and the link are offered:
+ * the rest is another admin's.
  *
  * Actions (each with the service's id): `sy`, `en`, `di` (asks) → `dig` | `din`; `mv` (servers) → `mvs` (server: asks)
  * → `mvg` (server) → `mvl` (server: without the previous one); `tr` (asks the id) → `trg` (Telegram id); `de` (asks)
@@ -420,16 +421,22 @@ final class SubscriptionScreen extends BaseScreen
         }
 
         $actions = Json::part($service, 'actions');
-        $seat = $admin->seat;
+        // One of the shop's admins changes nothing of their own service but reading it again (SubscriptionActions,
+        // ServiceTransfers: ActorRefusedException::ownService()).
+        $own = Customer::own($admin, (int) (Json::part($service, 'user')['id'] ?? 0));
+        $changes = $own ? [] : $actions;
+        if ($own && array_filter(array_intersect_key($actions, array_flip(['enable', 'extend', 'move', 'transfer', 'disable', 'delete']))) !== []) {
+            $view->note('این سرویس خود شماست؛ تغییرش با مدیر دیگری است.');
+        }
         $view->row(
-            Json::on($actions, 'enable') ? Button::to(Words::ACTIVATE, self::ID, 'en', $id)->success() : null,
-            Json::on($actions, 'extend') && $seat->holds(StaffGrant::Extend) ? Button::to(ExtendScreen::TITLE, ExtendScreen::ID, 'new', $id)->primary() : null,
+            Json::on($changes, 'enable') ? Button::to(Words::ACTIVATE, self::ID, 'en', $id)->success() : null,
+            Json::on($changes, 'extend') ? Button::to(ExtendScreen::TITLE, ExtendScreen::ID, 'new', $id)->primary() : null,
         );
         $view->grid(
             2,
             Json::on($actions, 'sync') ? Button::to(Sales::SYNC . ' به‌روزرسانی از پنل', self::ID, 'sy', $id) : null,
-            Json::on($actions, 'move') ? Button::to(self::MOVE, self::ID, 'mv', $id) : null,
-            Json::on($actions, 'transfer') && $seat->holds(StaffGrant::Delete) ? Button::to(Sales::HAND_OVER . ' انتقال به مشتری دیگر', self::ID, 'tr', $id) : null,
+            Json::on($changes, 'move') ? Button::to(self::MOVE, self::ID, 'mv', $id) : null,
+            Json::on($changes, 'transfer') ? Button::to(Sales::HAND_OVER . ' انتقال به مشتری دیگر', self::ID, 'tr', $id) : null,
             // A link of nothing, or too long to copy whole, is left out (Button::fits()).
             $dead ? null : Button::copy(Words::copy('لینک'), $link),
         );
@@ -439,8 +446,8 @@ final class SubscriptionScreen extends BaseScreen
         }
         // What switches it off or ends it, last.
         $view->row(
-            Json::on($actions, 'disable') ? Button::to(Words::DEACTIVATE, self::ID, 'di', $id)->danger() : null,
-            Json::on($actions, 'delete') && $seat->holds(StaffGrant::Delete) ? Button::to(Words::DELETE . ' سرویس', self::ID, 'de', $id)->danger() : null,
+            Json::on($changes, 'disable') ? Button::to(Words::DEACTIVATE, self::ID, 'di', $id)->danger() : null,
+            Json::on($changes, 'delete') ? Button::to(Words::DELETE . ' سرویس', self::ID, 'de', $id)->danger() : null,
         );
 
         return $view->back(CustomerRowsScreen::back($admin, self::ID, $id, SubscriptionsScreen::ID))->refresh(self::ID, 'show', $id);

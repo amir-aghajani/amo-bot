@@ -7,9 +7,7 @@ namespace App\Modules\Telegram\Admin\Door;
 use App\Core\Exceptions\DomainRuleException;
 use App\Core\Http\Json;
 use App\Modules\Auth\CurrentPrincipal;
-use App\Modules\Auth\Exceptions\ActorRefusedException;
 use App\Modules\Auth\Principal;
-use App\Modules\Auth\StaffGrant;
 use App\Modules\Bots\CurrentBot;
 use App\Modules\Telegram\Admin\AdminSeat;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -24,13 +22,10 @@ use Slim\Routing\RouteContext;
 
 /**
  * The door of the shop's management from its bot's private chat (routes/api.php, PATH): the panels' very routes, under
- * `/owner`, `/agent` and `/staff`. A request gets in only with the seat the bot put on it in-process (SEAT, a request
- * attribute — no client can send one): from outside, every path here is a 404, as if there were none. Then, asked in
- * this order:
- * 1. the seat's kind is the door's (an admin never takes the owner's);
- * 2. an operation that needs a grant (StaffGrant::ARGUMENT on its route) is granted to an admin («مدیران ربات»);
- * and the request runs in the seat's shop, as its principal — every change logged with them on the line. A grant a
- * service asks of the operation itself (a customer put in a «همکار» group) is refused in the bot's words.
+ * `/owner` and `/agent`. A request gets in only with the seat the bot put on it in-process (SEAT, a request attribute —
+ * no client can send one) and only at its own panel's (an agent's seat never takes the owner's): from outside, every
+ * path here is a 404, as if there were none. The request runs in the seat's shop, as its principal — every change logged
+ * with them on the line.
  */
 final class BotAdminDoor implements MiddlewareInterface
 {
@@ -39,9 +34,6 @@ final class BotAdminDoor implements MiddlewareInterface
 
     /** The request attribute the bot puts the seat under (PanelBridge). */
     public const SEAT = 'bot_admin_seat';
-
-    public const NOT_GRANTED = 'مالک فروشگاه این کار را به مدیران ربات نسپرده است.';
-    public const AGENT_GROUP_NOT_GRANTED = 'مالک فروشگاه گذاشتن مشتری در گروه «همکار» را به مدیران ربات نسپرده است.';
 
     /** The methods that change nothing, left out of the log. */
     private const READS = ['GET', 'HEAD'];
@@ -58,27 +50,12 @@ final class BotAdminDoor implements MiddlewareInterface
         if (!$seat instanceof AdminSeat || $route === null || !str_starts_with($route->getPattern(), self::PATH . '/' . $seat->kind->value . '/')) {
             return Json::error($this->responses->createResponse(), 'صفحه مورد نظر پیدا نشد.', 404);
         }
-        $named = $route->getArgument(StaffGrant::ARGUMENT);
-        $grant = $named === null ? null : StaffGrant::tryFrom($named) ?? throw new \LogicException("The route names no grant there is: {$named}.");
-        if ($grant !== null && !$seat->holds($grant)) {
-            return Json::error($this->responses->createResponse(), self::NOT_GRANTED, 403);
-        }
 
         $principal = $seat->principal;
 
         return CurrentBot::run($principal->shop, fn(): ResponseInterface => CurrentPrincipal::run($principal, function () use ($request, $handler, $principal, $seat): ResponseInterface {
             try {
                 $response = $handler->handle($request->withAttribute(Principal::ATTRIBUTE, $principal));
-            } catch (ActorRefusedException $refused) {
-                if ($refused->grant === null) {
-                    $this->changed($request, $seat, $refused->status());
-
-                    throw $refused;
-                }
-                // A grant a service asks (putting a customer in a «همکار» group): said in the bot's words, not the website's.
-                $this->changed($request, $seat, 403);
-
-                return Json::error($this->responses->createResponse(), $refused->grant === StaffGrant::Catalog ? self::AGENT_GROUP_NOT_GRANTED : self::NOT_GRANTED, 403);
             } catch (\Throwable $e) {
                 // The status the error handler answers it with: a refusal is no failure.
                 $this->changed($request, $seat, match (true) {

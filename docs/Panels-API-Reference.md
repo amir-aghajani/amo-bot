@@ -834,7 +834,7 @@ One customer, as their page shows them. Their row, referral numbers and, for an 
 
 ### PATCH /api/{panel}/users/{id}
 
-Ban or unban a customer. On the website's admin API, an admin's account (their own included) or an agent's can only be changed from a panel (403).
+Ban or unban a customer. On the website's admin API, an admin's account (their own included) or an agent's can only be changed from a panel (403). A Telegram account linked as the owner in the main bot (`/settings/owner-telegram`) is banned by the owner alone: anyone else — one of the main bot's admins working its management with the owner's seat among them — is refused (403 `این حساب تلگرام مالک فروشگاه است و مسدود نمی‌شود.`). An agent's own account in their bot is banned by the agent or the owner alone: that bot's admins are refused (403 `این حساب نماینده صاحب این ربات است و مسدود نمی‌شود.`).
 
 - **On the website:** the website's admins can also use it, as [`PATCH /users/{id}`](Store-Admin-API-Reference.md#patch-usersid).
 
@@ -861,7 +861,7 @@ Ban or unban a customer.
 
 ### PUT /api/{panel}/users/{id}/role
 
-Make a customer a bot admin, or take the role back. An admin can use /broadcast, the report group's buttons and, while the website lets admins in, its admin API.
+Make a customer a bot admin, or take the role back. An admin manages the shop from the bot's private chat («⚙️ مدیریت», /admin) with the owner's access in the main bot and the agent's in an agent's bot while the agency stands, can use /broadcast and the report group's buttons and, while the website lets admins in, its admin API. Taking the role (or a ban) ends their management at their next message. The role of a Telegram account linked as the owner in the main bot (`/settings/owner-telegram`) is changed by the owner alone: anyone else — one of the main bot's admins among them — is refused (403 `نقش حساب تلگرام مالک فروشگاه را فقط خود مالک عوض می‌کند.`).
 
 **Parameters**
 
@@ -886,7 +886,7 @@ Make a customer a bot admin, or take the role back.
 
 ### PUT /api/{panel}/users/{id}/discount
 
-Set a customer's personal discount («تخفیف اختصاصی»). It lasts until changed; 0 removes it. Logged with who set it. Panels only.
+Set a customer's personal discount («تخفیف اختصاصی»). It lasts until changed; 0 removes it. Logged with who set it. Panels only. An admin setting their own from the bot's management is a 403 (`قیمت‌های خودتان را نمی‌توانید عوض کنید؛ تخفیف اختصاصی و گروه «همکار» خودتان با مدیر دیگری است.`): another admin, or the owner, does it.
 
 **Parameters**
 
@@ -998,7 +998,7 @@ An order support makes for a customer by hand: a plan (`plan_id`), or — withou
 
 ### PUT /api/{panel}/users/{id}/groups
 
-Set a customer's groups. Replaces their groups with the ones listed. On the website's admin API, an admin's account (their own included) or an agent's can only be changed from a panel (403): a «همکار» group (`agent_pricing`) would set their prices. There, a «همکار» group the customer is not in yet asks the `catalog` grant and a recent sign-in, as a granted operation does (403 `فروشگاه گذاشتن مشتری در گروه «همکار» را به مدیران وب‌سایت نسپرده است.`, or the recent sign-in's refusal); the plain groups, and a «همکار» group they are in already, ask neither. A 422 on `group_ids` when one is not a group of the shop.
+Set a customer's groups. Replaces their groups with the ones listed. On the website's admin API, an admin's account (their own included) or an agent's can only be changed from a panel (403): a «همکار» group (`agent_pricing`) would set their prices. There, a «همکار» group the customer is not in yet asks the `catalog` grant and a recent sign-in, as a granted operation does (403 `فروشگاه گذاشتن مشتری در گروه «همکار» را به مدیران وب‌سایت نسپرده است.`, or the recent sign-in's refusal); the plain groups, and a «همکار» group they are in already, ask neither. An admin putting their own account in a «همکار» group it is not in — from the bot's management, where no rule above stops it — is a 403 (`قیمت‌های خودتان را نمی‌توانید عوض کنید؛ تخفیف اختصاصی و گروه «همکار» خودتان با مدیر دیگری است.`). A 422 on `group_ids` when one is not a group of the shop.
 
 - **On the website:** the website's admins can also use it, as [`PUT /users/{id}/groups`](Store-Admin-API-Reference.md#put-usersidgroups).
 
@@ -1173,7 +1173,7 @@ The rows of an admin-ordered list in their new order, by id: 1 to 1000. A 422 on
 
 ### PUT /api/{panel}/customer-groups/{id}
 
-Update a customer group. A switch left out keeps its value. On the website's admin API, «همکار» (`agent_pricing`) is not switched on for a group one of the shop's admins is in (403): it would set an admin's prices. A panel can.
+Update a customer group. A switch left out keeps its value. On the website's admin API, «همکار» (`agent_pricing`) is not switched on for a group one of the shop's admins is in (403): it would set an admin's prices. A panel can — but never for a group the admin asking is in themselves, from the bot's management with the owner's or the agent's seat (403 `قیمت‌های خودتان را نمی‌توانید عوض کنید؛ تخفیف اختصاصی و گروه «همکار» خودتان با مدیر دیگری است.`).
 
 - **On the website:** the website's admins can also use it, as [`PUT /customer-groups/{id}`](Store-Admin-API-Reference.md#put-customer-groupsid), when the website grants `catalog` ([grants](Store-Admin-API-Reference.md#grants)) and the sign-in is at most 15 minutes old.
 
@@ -2880,20 +2880,6 @@ One of:
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `agents_without_perks` | boolean | yes |  |
-
-**`BotBotAdminsSettingsRequest`** — «مدیران ربات»: whether the shop's admins manage it from the bot, and a switch per grant beyond the daily work (`BotSettingsData.bot_admins_*`).
-
-| Field | Type | Required | What it is |
-|---|---|---|---|
-| `bot_admins_enabled` | boolean | yes |  |
-| `bot_admins_grant_catalog` | boolean | yes |  |
-| `bot_admins_grant_wallet` | boolean | yes |  |
-| `bot_admins_grant_refunds` | boolean | yes |  |
-| `bot_admins_grant_payments` | boolean | yes |  |
-| `bot_admins_grant_extend` | boolean | yes |  |
-| `bot_admins_grant_manual_orders` | boolean | yes |  |
-| `bot_admins_grant_delete` | boolean | yes |  |
-| `bot_admins_grant_account_security` | boolean | yes |  |
 
 **Answers**
 
@@ -4602,7 +4588,7 @@ A new panel login set without the old one: the recovery key from the host's file
 
 ### PUT /api/admin/auth/credentials
 
-Change the panel's login. Every other session ends; this one stays signed in. Every Telegram account linked as the owner (`/settings/owner-telegram`) is let go too, with the bot admin role its link gave it, and an open link ends: they are linked again afterwards. A 422 under the field refused (a wrong current password counts as a failed sign-in), or on `file` while the server may not write config.php; a 429 while this address or the account must wait after failures.
+Change the panel's login. Every other session ends; this one stays signed in. Every Telegram account linked as the owner (`/settings/owner-telegram`) is let go too, with its bot admin role — one set by hand too, since an admin of the main bot has the owner's seat in its management —, and an open link ends: they are linked again afterwards. A 422 under the field refused (a wrong current password counts as a failed sign-in), or on `file` while the server may not write config.php; a 429 while this address or the account must wait after failures.
 
 **Body**, as JSON:
 
@@ -6096,7 +6082,7 @@ The agents. Newest first, or sorted by `sort` and `dir`; on one level or all.
 
 ### PUT /api/admin/agency/agents/{id}
 
-Change an agent's level and credit, and their terms of selling — `expires_at` and `monthly_minimum`, each kept while left out. The id is the agent's customer id. An end that lies ahead (or none) lifts a suspension for an end passed; no minimum lifts one for the minimum; an end passed suspends at once. The agent is notified of a change, and the answer says whether the notice reached them.
+Change an agent's level and credit, and their terms of selling — `expires_at` and `monthly_minimum`, each kept while left out. The id is the agent's customer id. An end that lies ahead (or none) lifts a suspension for an end passed; no minimum lifts one for the minimum; an end passed suspends at once. The agent is notified of a change, and the answer says whether the notice reached them. One of the main bot's admins who is this agent is refused it, as every change of their own agency here (403 `نمایندگی خودتان را نمی‌توانید تغییر دهید؛ این کار با مدیر دیگری است.`): another admin, or the owner, makes it.
 
 **Parameters**
 
@@ -6124,7 +6110,7 @@ An agent's terms, when approving a request or changing an agent: their level, ho
 
 ### POST /api/admin/agency/agents/{id}/revoke
 
-End an agency. The agent's bot stops; the agent is notified, with the note.
+End an agency. The agent's bot stops; the agent is notified, with the note. An admin who is this agent is refused it (403 `نمایندگی خودتان را نمی‌توانید تغییر دهید؛ این کار با مدیر دیگری است.`).
 
 **Parameters**
 
@@ -6167,7 +6153,7 @@ An agent's traffic ledger. Newest line first.
 
 ### POST /api/admin/agency/agents/{id}/traffic
 
-Adjust an agent's traffic. A negative `gb` takes traffic away.
+Adjust an agent's traffic. A negative `gb` takes traffic away. An admin who is this agent is refused it (403 `نمایندگی خودتان را نمی‌توانید تغییر دهید؛ این کار با مدیر دیگری است.`).
 
 **Parameters**
 
@@ -6194,7 +6180,7 @@ A manual adjustment of an agent's traffic (never below zero), with the note for 
 
 ### POST /api/admin/agency/agents/{id}/suspend
 
-Suspend an agent's selling by hand: their shop takes no purchase, renewal, extra traffic, time or devices, wallet top-up or free test until it is resumed (`/resume`), while their bot, panel and existing services keep working. Over a suspension for another reason. The agent is notified, with the note. A 422 on `status` while it is suspended by hand already, or for a customer who is no agent.
+Suspend an agent's selling by hand: their shop takes no purchase, renewal, extra traffic, time or devices, wallet top-up or free test until it is resumed (`/resume`), while their bot, panel and existing services keep working. Over a suspension for another reason. The agent is notified, with the note. A 422 on `status` while it is suspended by hand already, or for a customer who is no agent. An admin who is this agent is refused it (403 `نمایندگی خودتان را نمی‌توانید تغییر دهید؛ این کار با مدیر دیگری است.`).
 
 **Parameters**
 
@@ -6219,7 +6205,7 @@ Support's note to the customer with a decision (a cancellation, a rejection, a s
 
 ### POST /api/admin/agency/agents/{id}/resume
 
-Resume an agent's selling, whatever suspended it. The agent is notified. A 422 on `status` while their agency's end has passed (extend it with `PUT /agency/agents/{id}` instead), while it is not suspended, or for a customer who is no agent.
+Resume an agent's selling, whatever suspended it. The agent is notified. A 422 on `status` while their agency's end has passed (extend it with `PUT /agency/agents/{id}` instead), while it is not suspended, or for a customer who is no agent. An admin who is this agent is refused it (403 `نمایندگی خودتان را نمی‌توانید تغییر دهید؛ این کار با مدیر دیگری است.`).
 
 **Parameters**
 
@@ -6255,7 +6241,7 @@ What the owner keeps from an agent's shop: every server of the installation and 
 
 ### PUT /api/admin/agency/agents/{id}/hidden
 
-Keep exactly these servers and plans from an agent's shop. A hidden server sells none of their plans, gives no free test and takes no service they move to it — the services they have there keep working, renewed and given extras, and the owner's own moves (a server's services, or one service from their shop) still carry theirs; a hidden plan is not sold («پنهان‌شده توسط پشتیبانی» in their panel, which calls the owner «پشتیبانی فروشگاه اصلی»), and they cannot show it again. Both lists are sent every time, an empty one for none. A 422 on `server_ids` or `plan_ids` for a list left out or longer than 1000, or for one that is not there (or not the agent's plan).
+Keep exactly these servers and plans from an agent's shop. A hidden server sells none of their plans, gives no free test and takes no service they move to it — the services they have there keep working, renewed and given extras, and the owner's own moves (a server's services, or one service from their shop) still carry theirs; a hidden plan is not sold («پنهان‌شده توسط پشتیبانی» in their panel, which calls the owner «پشتیبانی فروشگاه اصلی»), and they cannot show it again. Both lists are sent every time, an empty one for none. A 422 on `server_ids` or `plan_ids` for a list left out or longer than 1000, or for one that is not there (or not the agent's plan). An admin who is this agent is refused it (403 `نمایندگی خودتان را نمی‌توانید تغییر دهید؛ این کار با مدیر دیگری است.`).
 
 **Parameters**
 
@@ -6502,7 +6488,7 @@ The SMS account's credit by the saved settings, asked of its provider (which als
 
 ### PUT /api/admin/settings/config/{group}
 
-Save one group of the config.php settings.
+Save one group of the config.php settings. Two changes of `telegram` are the owner's themselves alone — one of the main bot's admins, working its management with the owner's seat, is refused them: the Bot API's address moved to another origin (403 `این تغییر رمز عبور پنل را می‌خواهد و فقط کار خود مالک است.`, before the password is judged), and a new webhook secret (403 `رمز Webhook ربات اصلی را فقط خود مالک عوض می‌کند.`).
 
 **Parameters**
 
@@ -6532,10 +6518,10 @@ One of:
 | `token` | string | no | Left out or blank: the stored token stays, as long as the Bot API address (`api_url`) stays on the same host. |
 | `clear_token` | boolean | no |  |
 | `username` | string | no | The bot's username, with or without the @; blank for none. |
-| `api_url` | string | yes | The Bot API's address: http(s) with a host, without credentials, ? or #. Moving it to another origin (scheme, host or port) sends every bot's token there, agents' included, so the save then needs `current_password`. |
+| `api_url` | string | yes | The Bot API's address: http(s) with a host, without credentials, ? or #. Moving it to another origin (scheme, host or port) sends every bot's token there, agents' included, so the save then needs `current_password` — and the owner themselves: an admin of the main bot is refused it (403). |
 | `current_password` | string | no | The owner's current panel password. Read only when `api_url` moves to another origin: blank or wrong (a wrong one counts as a failed sign-in) is a 422 on it, and nothing is saved. |
 | `poll_timeout` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Seconds, 1 to 60. |
-| `webhook_secret` | string | no |  |
+| `webhook_secret` | string | no | The secret part of the main bot's webhook address. A new one is the owner's themselves alone: an admin of the main bot is refused it (403). |
 | `clear_webhook_secret` | boolean | no |  |
 
 **`ConfigMailRequest`** — The shop's email settings, saved whole: the transport and, for a mail driver, its settings and the sender. One closed shape per transport; the other drivers' stored settings are not changed.
@@ -6648,7 +6634,7 @@ One of:
 
 ### GET /api/admin/settings/owner-telegram
 
-«مدیریت از ربات» (the owner's, «تنظیمات پنل › ورود به پنل»): the Telegram accounts that are the owner in the main bot's private chat — every section of every shop from «⚙️ مدیریت» (/admin), as this login has in the panel —, oldest first, and until when the one-time link made last may be opened.
+«مدیریت از ربات» (the owner's, «تنظیمات پنل › ورود به پنل»): the Telegram accounts that are the owner in the main bot's private chat — every section of every shop from «⚙️ مدیریت» (/admin), as this login has in the panel —, oldest first, and until when the one-time link made last may be opened. These accounts are the owner's own: one of the main bot's admins, though they work its management with the owner's seat, is refused this route, the link and the unlink alike (403 `حساب‌های تلگرام مالک را فقط خود مالک تغییر می‌دهد.`).
 
 **Answers**
 
@@ -6659,7 +6645,7 @@ One of:
 
 ### POST /api/admin/settings/owner-telegram/link
 
-A new one-time link (`t.me/<main bot>?start=owner-<code>`): the Telegram account that opens it within ten minutes becomes the owner in the main bot — and its bot admin, unless it was one already. It works once; a new link ends the last. At most five accounts are linked, a sixth letting the oldest go with the admin role its link gave it. The panel's current password comes first (`current_password`): blank or wrong is a 422 on it, and a wrong one counts as a failed sign-in (a 429 while this address or the account must wait). Then a 422 on `link` while the main bot's username is not known yet (check its token in «تنظیمات پنل › ربات تلگرام»). The bot's own screen («👑 حساب تلگرام مالک»), asked by an account linked already, sends no password. A new panel login (`PUT /auth/credentials`, or a recovery) lets every linked account go and ends an open link.
+A new one-time link (`t.me/<main bot>?start=owner-<code>`): the Telegram account that opens it within ten minutes becomes the owner in the main bot — and its bot admin, unless it was one already. It works once; a new link ends the last. At most five accounts are linked, a sixth letting the oldest go with the admin role its link gave it. The panel's current password comes first (`current_password`): blank or wrong is a 422 on it, and a wrong one counts as a failed sign-in (a 429 while this address or the account must wait). Then a 422 on `link` while the main bot's username is not known yet (check its token in «تنظیمات پنل › ربات تلگرام»). The bot's own screen («👑 حساب تلگرام مالک»), asked by an account linked already, sends no password; one of the main bot's admins is refused (403 `حساب‌های تلگرام مالک را فقط خود مالک تغییر می‌دهد.`). A new panel login (`PUT /auth/credentials`, or a recovery) lets every linked account go and ends an open link.
 
 **Body**, as JSON:
 
@@ -6678,7 +6664,7 @@ A new owner link asked from the panel: the panel's password typed again, so a se
 
 ### DELETE /api/admin/settings/owner-telegram/{telegram_id}
 
-The account is the owner no more, and the bot admin role its link gave it goes too: from its next message the bot's management is closed to it. An account that was a bot admin before its link stays one — with the daily work while «مدیران ربات» lets admins in. One not linked changes nothing. Answers the accounts left.
+The account is the owner no more, and the bot admin role its link gave it goes too: from its next message the bot's management is closed to it — unless it was a bot admin before its link: it stays one, and manages as every admin of the main bot does, with the owner's access and its decisions under its own name. One not linked changes nothing; one of the main bot's admins is refused (403 `حساب‌های تلگرام مالک را فقط خود مالک تغییر می‌دهد.`). Answers the accounts left.
 
 **Parameters**
 
@@ -7725,19 +7711,10 @@ How a bot runs. The main bot's mode applies to the whole installation: every bot
 | `lottery_plan_id` | integer or null | yes | For a plan prize: the plan whose service it gives; null while none is chosen. |
 | `lottery_entries` | string: `order`, `buyer` | yes | One entry per paid order, or one per buyer. |
 | `lottery_exclude_agents` | boolean | yes | Leave agents out of the draw (bot admins and banned customers are always left out). |
-| `bot_admins_enabled` | boolean | yes | «مدیران ربات»: the shop's admins (customers whose role is admin) manage it from its bot's private chat («⚙️ مدیریت», /admin): the daily work — payments, orders, services, customers, tickets, reviews, broadcasts, the dashboard and referrals — and what the grants below add. On by default. The owner's linked Telegram accounts (`/settings/owner-telegram`) and an agent in their own bot need none of it. |
-| `bot_admins_grant_catalog` | boolean | yes | «مدیران ربات» may also make, edit, reorder, switch and delete plans and categories, and the customer groups (a customer put in a «همکار» group too): StaffGrant `catalog`. Off by default. |
-| `bot_admins_grant_wallet` | boolean | yes | …credit or debit a customer's wallet: StaffGrant `wallet`. Off by default. |
-| `bot_admins_grant_refunds` | boolean | yes | …refund a payment: StaffGrant `refunds`. Off by default. |
-| `bot_admins_grant_payments` | boolean | yes | …reject the receipts waiting for review in bulk (one by one is always theirs): StaffGrant `payments`. Off by default. |
-| `bot_admins_grant_extend` | boolean | yes | …add days and traffic to a customer's service: StaffGrant `extend`. Off by default. |
-| `bot_admins_grant_manual_orders` | boolean | yes | …make an order for a customer by hand — free, from their wallet or paid outside the shop: StaffGrant `manual_orders`. Off by default. |
-| `bot_admins_grant_delete` | boolean | yes | …delete a customer's service for good, or hand it to another customer: StaffGrant `delete`. Off by default. |
-| `bot_admins_grant_account_security` | boolean | yes | …turn off a customer's two-factor sign-in on the website and sign them out of every device: StaffGrant `account_security`. Off by default. |
 
 ### BotSettingsGroup
 
-String: `general`, `channels`, `wallet`, `wallet_transfers`, `payments`, `renewal`, `auto_renew`, `extras`, `reminders`, `expired_services`, `test_accounts`, `service_claims`, `service_transfers`, `client_names`, `custom_services`, `referral`, `reports`, `qr`, `gift_codes`, `wheel`, `cashback`, `lottery`, `discounts`, `agent_perks`, `bot_admins`.
+String: `general`, `channels`, `wallet`, `wallet_transfers`, `payments`, `renewal`, `auto_renew`, `extras`, `reminders`, `expired_services`, `test_accounts`, `service_claims`, `service_transfers`, `client_names`, `custom_services`, `referral`, `reports`, `qr`, `gift_codes`, `wheel`, `cashback`, `lottery`, `discounts`, `agent_perks`.
 
 ### BotSettingsResponse
 

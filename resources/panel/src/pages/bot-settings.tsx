@@ -27,9 +27,9 @@ import { useMainShop } from '@/lib/auth'
 import { botSettingsQuery } from '@/lib/queries'
 
 /**
- * «تنظیمات ربات» (both panels): the shop's bot settings, a section per subject, each card saving its own group. The
- * running bot picks a change up within seconds; each bot (the shop on screen) has its own, and an agent's shop has none
- * of the main shop's own sections (sectionsOfShop()).
+ * «تنظیمات ربات» (both panels): the shop's bot settings, a section per subject, each card saving its own group — but the
+ * bot admins', which says what they may do and saves nothing. The running bot picks a change up within seconds; each
+ * bot (the shop on screen) has its own, and an agent's shop has none of the main shop's own sections (sectionsOfShop()).
  */
 export function BotSettingsPage() {
   const read = useQuery(botSettingsQuery)
@@ -97,6 +97,6 @@ function sectionsOf(data: BotSettingsResponse) {
     referral: <ReferralSection settings={settings} />,
     reports: <ReportsSection settings={settings} />,
     qr: <QrSection data={data} />,
-    bot_admins: <BotAdminsSection settings={settings} />,
+    bot_admins: <BotAdminsSection />,
   }
 }

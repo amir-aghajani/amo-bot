@@ -101,7 +101,8 @@ final class LoginRecoveryApiTest extends HttpTestCase
         self::assertSame([], $links->ids(), 'whoever had the lost login keeps nothing in the bot either');
         self::assertNull($links->openUntil(), 'the open link ended');
         self::assertSame(UserRole::Customer, $raised->refresh()->role, 'the admin role its link gave goes with it');
-        self::assertSame(UserRole::Admin, $before->refresh()->role, 'an admin before the link stays one');
+        // An admin manages the shop from the bot with the owner's seat: a linked account's role kept would keep it.
+        self::assertSame(UserRole::Customer, $before->refresh()->role, 'an admin before the link is let go too');
     }
 
     public function testAPanelWithNoLoginAtAllGetsOneThisWay(): void

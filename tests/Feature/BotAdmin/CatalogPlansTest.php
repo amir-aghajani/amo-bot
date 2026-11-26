@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Tests\Feature\BotAdmin;
 
 use App\Modules\Catalog\Models\Plan;
-use App\Modules\Telegram\Admin\Door\BotAdminDoor;
 use App\Modules\Telegram\Admin\Ui\Nav;
 use App\Modules\Telegram\Update\ReceivedUpdates;
 use App\Modules\Users\Enums\UserRole;
@@ -16,7 +15,7 @@ use Tests\BotTestCase;
  * «📦 پلن‌ها» in the bot's management (Telegram\Admin\Sections\Catalog): the list by category, a plan's page and what its
  * row menu does, the plan form as a wizard — a new plan asked field by field, an edit from its summary, one save of the
  * whole draft, a refused save kept —, its servers and own extras prices, the bulk price change previewed then applied,
- * and the catalogue's grant for the shop's admins.
+ * and the shop's admins working them as the owner.
  */
 final class CatalogPlansTest extends BotTestCase
 {
@@ -443,32 +442,24 @@ final class CatalogPlansTest extends BotTestCase
         self::assertCount(2, $plan->extras['traffic_options'] ?? []);
     }
 
-    public function testAShopsAdminReadsThePlansAndChangesThemOnlyWithTheGrant(): void
+    public function testAShopsAdminChangesThePlansAsTheOwnerDoes(): void
     {
         $this->customer(['telegram_id' => self::STAFF, 'role' => UserRole::Admin]);
         $server = $this->sellingServer();
         $plan = $this->plan([], $server);
 
         $this->send($this->tap(Nav::to('pl'), chat: self::STAFF));
-        self::assertContains(Nav::to('plv', 'show', $plan->id), $this->callbacks(0), 'the daily work reads the plans');
-        self::assertNotContains(Nav::to('ple', 'new'), $this->callbacks(0));
-        self::assertNotContains(Nav::to('plp', 'new'), $this->callbacks(0));
+        self::assertContains(Nav::to('plv', 'show', $plan->id), $this->callbacks(0));
+        self::assertContains(Nav::to('ple', 'new'), $this->callbacks(0), 'no grant of the catalogue asked');
+        self::assertContains(Nav::to('plp', 'new'), $this->callbacks(0));
 
-        $this->send($this->tap(Nav::to('plv', 'show', $plan->id), chat: self::STAFF));
-        self::assertNotContains(Nav::to('plv', 'tog', $plan->id, 0), $this->callbacks(0), 'no change offered');
-
-        $this->send($this->tap(Nav::to('plv', 'tog', $plan->id, 0), chat: self::STAFF));
-        self::assertSame(BotAdminDoor::NOT_GRANTED, $this->popup(), 'the door refuses it anyway');
-        self::assertTrue($plan->refresh()->is_active);
-
-        $this->send($this->tap(Nav::to('ple', 'new'), chat: self::STAFF));
-        self::assertStringContainsString('مدیریت فروشگاه', $this->said()[0], 'the form is the grant\'s');
-
-        $this->botSettings('bot_admins', ['bot_admins_grant_catalog' => true]);
         $this->send($this->tap(Nav::to('plv', 'show', $plan->id), chat: self::STAFF));
         self::assertContains(Nav::to('plv', 'tog', $plan->id, 0), $this->callbacks(0));
         $this->send($this->tap(Nav::to('plv', 'tog', $plan->id, 0), chat: self::STAFF));
-        self::assertFalse($plan->refresh()->is_active);
+        self::assertFalse($plan->refresh()->is_active, 'switched through the panel\'s route');
+
+        $this->send($this->tap(Nav::to('ple', 'new'), chat: self::STAFF));
+        self::assertStringContainsString('نام پلن', $this->said()[0], 'the form, not the home');
     }
 
     public function testAnAgentHasTheCatalogueOfTheirShopWithoutCustomServices(): void

@@ -11,13 +11,17 @@ screen, so a section never seen before reads like the last one.
 
 ## Who manages
 
-The bot asks it on every message: a role taken away, a ban, a switch turned off or an account let go ends it at once.
+The bot asks it on every message: a role taken away, a ban, an agency ended or an account let go ends it at once.
 
 | Who | In which bot | What they get |
 |---|---|---|
 | You, the owner | The main bot, from a Telegram account you linked ([below](#your-own-telegram-account)) | Every section of your panel, in any shop |
 | An agent | Their own bot, from their own Telegram account | Their panel's sections, in their shop |
-| The shop's admins | That shop's bot, while «مدیران ربات» lets them in | The daily work, and what you grant them ([below](#the-shops-admins)) |
+| The shop's admins | That shop's bot | The main bot's: what you get; an agent's: what the agent gets ([below](#the-shops-admins)) |
+
+So the bot has two seats: **the owner's** — your linked accounts and every admin of the main bot — and **an agent's** —
+the agent and every admin of their bot. Wherever this page says "the owner's", an admin of the main bot has it too —
+but «👑 حساب تلگرام مالک», yours alone —; "an agent's", an admin of that agent's bot.
 
 Whoever manages the shop passes the bot's own conditions — its off switch, the phone, the channels —, so nobody who
 manages is ever locked out of the management. A banned account manages nothing. Nobody else sees any of it: `/admin`
@@ -51,13 +55,17 @@ A few seconds later, the card in the panel lists the account.
   It is the owner no more from its next message, and the admin role its link gave it goes with it. An account that was
   the bot's admin before you linked it keeps that role ([Customers](Customers.md#the-bots-admins)).
 - **Changing the panel's username or password lets every account go**, and ends a link not opened yet — from «ورود به
-  پنل» or through the sign-in page's recovery alike: whoever had the old login keeps nothing in the bot either. The
-  admin roles the links gave go too; a role you set by hand in «کاربران» stays. Link your accounts again afterwards.
+  پنل» or through the sign-in page's recovery alike: whoever had the old login keeps nothing in the bot either. Every
+  linked account's admin role goes too — one you set by hand in «کاربران» as well, since an admin of the main bot has
+  the owner's seat —, and every role a link gave. Link your accounts again afterwards.
 
 «👑 حساب تلگرام مالک», in the bot, lists the linked accounts — yours marked «(شما)» — each with a red «🗑 برداشتن …»,
 and makes a link for another: «➕ افزودن حساب دیگر», then open the link from that other account («📋 کپی لینک» copies
-it). The bot asks no password there: only an account linked already has the screen. Letting your own account go warns
-that the bot's management closes for it until the panel links it again.
+it). The bot asks no password there: only an account linked already has the screen — not the shop's admins, who have
+the owner's seat but neither this screen nor «ورود به پنل»'s button to it, and whom the panel refuses these accounts
+(«حساب‌های تلگرام مالک را فقط خود مالک تغییر می‌دهد.»). Letting your own account go warns that the bot's management
+closes for it until the panel links it again — unless it was the bot's admin before you linked it: it keeps the
+management as an admin, under its own name.
 
 ### An agent
 
@@ -68,31 +76,34 @@ mass gift and the installation's settings — and their account with the main bo
 ### The shop's admins
 
 The shop's admins are its customers given the role — «کاربران», the row's menu, «مدیر ربات کردن»
-([Customers](Customers.md#the-bots-admins)). They manage it from its bot while **«تنظیمات ربات › مدیران ربات»** lets them
-in — in the panel, or in the bot's «⚙️ تنظیمات › 🛡 مدیران ربات» ([Bot settings](Bot-Settings.md#the-bots-admins)):
+([Customers](Customers.md#the-bots-admins)), or the bot's «⚙️ تنظیمات › 🛡 مدیران ربات» ([below](#settings)). **The role
+is the switch**: there is nothing to turn on and nothing to grant. They manage the shop with the seat of the bot they write to:
 
-- **«کار مدیران از ربات»** (on) — the daily work: the dashboard, receipts and payments, orders, services, customers,
-  tickets, reviews, referrals and broadcasts; the plans, categories and customer groups to read. Off, they have no
-  «⚙️ مدیریت» and the bot takes no management from them but `/broadcast` and `/emoji`, theirs as before; the report
-  group works for them as before.
-- **«کارهای بیشتر»** — a switch per grant, all off by default, the website's «مدیران سایت» list with switches of its own.
-  They can be set while «کار مدیران از ربات» is off, ready for when you turn it on:
+- **In the main bot**, every admin has the owner's: every section, the shop switcher and any shop
+  ([below](#another-shop)), the panel's settings — the bot's token and the database among them —, the backups and their
+  restore, the update.
+- **In an agent's bot**, its admins have the agent's — their panel's sections, in their shop — while the agency stands;
+  once it ends, nobody manages from that bot.
+- **Taking the role away, or a ban,** ends it at their next message.
 
-| Switch | What it opens in the bot |
-|---|---|
-| «پلن‌ها و دسته‌بندی‌ها» | Plans and categories made, changed, reordered, switched and deleted; the customer groups, and a customer put in a «همکار» group |
-| «کیف پول مشتری» | A customer's wallet credited or debited |
-| «بازپرداخت» | A payment given back |
-| «رد یکجای رسیدها» | The receipts waiting for review rejected together — one at a time is always open |
-| «افزایش زمان و حجم سرویس» | A service given days and traffic |
-| «افزودن سفارش برای مشتری» | A service made for a customer: free, from their wallet, or paid outside the shop |
-| «حذف یا انتقال سرویس» | A service deleted for good, or handed to another customer |
-| «امنیت حساب مشتری» | A customer's website account: two-factor sign-in turned off, every device signed out |
+What is still theirs alone:
 
-The shop's configuration is never theirs: the payment methods, the bot's settings, texts and keyboards, the discounts and
-rewards, the test accounts, the website and the mini app, a customer's role and own discount, and who its admins are.
-Each shop has its own switches: an agent sets their own bot's admins. Letting admins in on the website is a separate
-thing ([Store API: the shop's admins](Store-API-Admins.md#letting-admins-in)).
+- **Their decisions keep their own name** — their `@handle`, else `tg:<id>` or `user#<id>` — in the panel, the report group
+  and the log ([below](#the-panels-rules-and-its-log)). Your panel's login, where a decision of yours shows, reads
+  «پشتیبانی» to them.
+- **Nothing about their own account** — in whichever shop they work, their account there: their own wallet, a payment
+  or receipt of theirs, an order for themselves, their own prices (an own discount, a «همکار» group), their agency
+  request or their agency itself, their service changed: another admin, or you, does it
+  ([below](#what-an-admin-may-not-do)).
+- **Your own Telegram accounts and login stay yours**: «👑 حساب تلگرام مالک» is your linked accounts' alone
+  ([above](#your-own-telegram-account)), and so are their ban and their admin role; the panel's username and password
+  change in the panel alone, as for you; and moving the Bot API's address or the main bot's webhook secret is yours
+  alone too ([below](#what-an-admin-may-not-do)).
+
+The shop's website is another door: «مدیران سایت» and its grants still limit what the same admins do there, and there
+alone ([Store API: the shop's admins](Store-API-Admins.md#letting-admins-in)). The report group's buttons answer them as
+before ([Report group](Telegram-Group.md#acting-from-the-group)). An admin of the main bot holds your whole shop in the
+bot: make admins only of people you trust.
 
 ## Opening it
 
@@ -119,24 +130,30 @@ list at the tab it was counted on, any search or narrowing left there cleared, s
 sections you may open, two a row; **«🔎 جستجو»**; the owner's «🏪 تعویض فروشگاه» ([another shop](#another-shop)); and
 «🔄 تازه‌سازی». An agent has «💼 حساب نمایندگی» there too. A section you may not open is not there.
 
+**The bot's state** comes under the first line: «🟢 ربات روشن است», or «🔴 ربات خاموش است · مشتری‌ها فقط پیام «ربات فعلا
+غیرفعال است» را می‌گیرند.». A row of the home holds **«⚡️ کلیدهای اصلی»** ([below](#settings)) beside the bot's own switch:
+«⏸ خاموش کردن ربات» asks first, in the words of «⚙️ عمومی»'s «ربات فعال باشد», and «▶️ روشن کردن ربات» turns it back on
+at once — the same switch as «🤖 تنظیمات ربات › ⚙️ عمومی › ربات فعال باشد» ([Bot settings](Bot-Settings.md)). While it
+is off, customers get the off message; whoever manages the shop still passes.
+
 | Section | What is in it | Who |
 |---|---|---|
 | «📊 داشبورد» | The panel's dashboard | Everyone |
 | «💼 حساب نمایندگی» | The agent's account with the main bot | An agent |
 | «🎧 پشتیبانی», «⭐️ نظرات» | Tickets; reviews | Everyone |
 | «🛍 فروش» | «💳 پرداخت‌ها», «🛒 سفارش‌ها», «👥 کاربران», «📡 اشتراک‌ها», «🔗 زیرمجموعه‌گیری», «📩 واریزهای پیامکی» | Everyone |
-| «📦 فروشگاه» | «📦 پلن‌ها», «🗂 دسته‌بندی‌ها», «👫 گروه‌های کاربران», «🧪 اکانت تست», «🛠 سرویس دلخواه», «🏦 روش‌های پرداخت» | Everyone (an admin sees the first three; «🛠 سرویس دلخواه» is the main shop's) |
-| «🎉 تخفیف و جوایز» | «🏷 کدهای تخفیف», «🔥 فروش ویژه», «🏅 سطوح وفاداری», «💸 کش‌بک», «🎟 کدهای هدیه», «🎡 گردونه شانس», «🎲 قرعه‌کشی» | The owner and an agent |
-| «🤖 ربات» | «📣 ارسال همگانی», «🎁 هدیه همگانی», «📝 متن‌های ربات», «⌨️ کیبوردها», «📢 کانال‌های اجباری», «📋 گروه گزارش‌ها» | Everyone (an admin sees the broadcasts) |
+| «📦 فروشگاه» | «📦 پلن‌ها», «🗂 دسته‌بندی‌ها», «👫 گروه‌های کاربران», «🧪 اکانت تست», «🛠 سرویس دلخواه», «🏦 روش‌های پرداخت» | Everyone («🛠 سرویس دلخواه» is the main shop's) |
+| «🎉 تخفیف و جوایز» | «🏷 کدهای تخفیف», «🔥 فروش ویژه», «🏅 سطوح وفاداری», «💸 کش‌بک», «🎟 کدهای هدیه», «🎡 گردونه شانس», «🎲 قرعه‌کشی» | Everyone |
+| «🤖 ربات» | «📣 ارسال همگانی», «🎁 هدیه همگانی», «📝 متن‌های ربات», «⌨️ کیبوردها», «📢 کانال‌های اجباری», «📋 گروه گزارش‌ها» | Everyone («🎁 هدیه همگانی» is the owner's) |
 | «🖥 سرورها», «🤝 نمایندگان» | Servers; the agency | The owner |
-| «⚙️ تنظیمات» | «🔎 جستجوی تنظیمات», «🤖 تنظیمات ربات», «🛡 مدیران ربات», «🌐 تنظیمات وب‌سایت», «📱 مینی‌اپ تلگرام», «🧰 تنظیمات پنل», «👑 حساب تلگرام مالک» | The owner and an agent (each their part) |
+| «⚙️ تنظیمات» | «🔎 جستجوی تنظیمات», «⚡️ کلیدهای اصلی», «🤖 تنظیمات ربات», «🛡 مدیران ربات», «🌐 تنظیمات وب‌سایت», «📱 مینی‌اپ تلگرام», «🧰 تنظیمات پنل», «👑 حساب تلگرام مالک» | Everyone (each seat its part) |
 
 A menu says in a line what is in it, and counts a queue beside the entry that holds it («💳 پرداخت‌ها (۲)»). **Each
 section is reached from one place**, and a feature's own settings live with the feature, not in «🤖 تنظیمات ربات»: the
 channels and the report group in «🤖 ربات»; the referral rules in «🔗 زیرمجموعه‌گیری»; the test accounts', the custom
 services', the discount codes', the gift codes', the cashback's, the wheel's and the draw's settings on their own
-screens (each list's «⚙️ تنظیمات», or its card's own button); the automatic deposit approval with the payment methods;
-«🛡 مدیران ربات» in «⚙️ تنظیمات». Any of them is also found by its words ([below](#the-settings-search)).
+screens (each list's «⚙️ تنظیمات», or its card's own button); the automatic deposit approval with the payment methods.
+Any of them is also found by its words ([below](#the-settings-search)).
 
 ## Finding something
 
@@ -336,7 +353,7 @@ the account as it stands. The warning said first, for an end passed or near, poi
   the order (newest, oldest, the largest or smallest amount) and the days (today, yesterday, the last 7 or 30 days, this
   month or last, or «📅 بازه دلخواه»), all at once with «✔️ دیدن نتیجه»; «✖️ حذف فیلترها» drops them. A payment's receipt
   is the screen: the picture, its facts under it (one sent as a file comes with «📄 فایل رسید»). Then what its state
-  allows, each under its icon: «✅» approve (a bot admin only while the receipt waits for review), «❌ رد کردن» with or
+  allows, each under its icon: «✅» approve, «❌ رد کردن» with or
   without a reason, «🚫 لغو پرداخت», «🔍 استعلام از درگاه», «📨 یادآوری به مشتری», «🔁 تلاش دوباره برای تحویل», «↩️»
   refund — and, while the shop's Rikhtam is connected, **«📎 پیوست واریز ریختم»**: the deposits Rikhtam holds that no
   payment took, the closest sum first — «🎯» marks the payment's exact sum, «⚠️» one short of the order's own price,
@@ -348,7 +365,7 @@ the account as it stands. The warning said first, for an end passed or near, poi
   any receipt opened from the shop's payments is in the queue: **«✅ تایید و تحویل، بعدی»** (or «✅ تایید و شارژ کیف
   پول، بعدی» for a top-up) approves it and opens the next, a rejection moves on the same way, and «⏭ رسید بعدی» skips
   one — a receipt skipped comes round again at the end. A delivery that fails stays on its payment, its retry right
-  there. When none is left, the list says so. With the grant, **«☑️ رد چند رسید»** rejects the receipts ticked, or a
+  there. When none is left, the list says so. **«☑️ رد چند رسید»** rejects the receipts ticked, or a
   page of them, and «❌ رد همه رسیدهای در انتظار» every one that was waiting as you confirmed.
 - **«🛒 سفارش‌ها»** — the tabs with «🆘 نیازمند رسیدگی», a search, and «🎛 فیلتر و ترتیب» with the type besides; an
   order with its payments, its service and its customer; «🔁 تلاش دوباره برای تحویل», «🚫 لغو سفارش».
@@ -360,7 +377,7 @@ the account as it stands. The warning said first, for an end passed or near, poi
   first: «✉️ ارسال پیام» (blue: the words, a preview, «✔️ ارسال پیام»), «👛 کیف پول», «➕ افزودن سفارش», «📡 سرویس‌ها»,
   «🛒 سفارش‌ها», «💳 پرداخت‌ها», «🎧 تیکت‌ها», «👫 گروه‌ها», «🔐 ورود به وب‌سایت» (their ways in, two-factor sign-in and
   devices: «🔓 خاموش کردن ورود دو مرحله‌ای», «🚪 خروج از همه دستگاه‌ها»), «✏️ تخفیف اختصاصی», the excuse from the
-  phone number as a switch, «💬 گفتگو در تلگرام»; the admin's last — «🛡 مدیر ربات کردن», «✅ رفع مسدودی», and in red
+  phone number as a switch, «💬 گفتگو در تلگرام»; the admin's last — «🛡 مدیر ربات کردن» (asked first, saying what the role hands over, its yes red), «✅ رفع مسدودی», and in red
   «🛡 برداشتن مدیریت ربات» and «⛔️ مسدود کردن». **The wallet** lists its ledger, each line with the balance after it;
   «➕ افزایش موجودی» (green) or «➖ کاهش موجودی» asks the amount, then shows it with a note for the customer and the
   balance before and after — a decrease past the balance with a ⚠️ line of the debt it leaves; one past the deepest
@@ -531,6 +548,16 @@ A start or an end is typed as a Jalali day, an hour after it if you like, in the
 
 ### Settings
 
+- **«⚡️ کلیدهای اصلی»** — from the home and from «⚙️ تنظیمات», right after «🔎 جستجوی تنظیمات»: the switches turned on
+  and off most, in one place, by section — «🤖 ربات و مشتری» («ربات», «تایید شماره موبایل», «عضویت اجباری»), «🛍 فروش و
+  سرویس‌ها» («اکانت تست», «حجم، زمان و کاربر اضافه», «سرویس دلخواه», «افزودن سرویس با لینک», «انتقال سرویس», «انتقال
+  موجودی»), «🎉 تخفیف و جوایز» («زیرمجموعه‌گیری», «کد هدیه», «گردونه شانس», «کش‌بک», «قرعه‌کشی شبانه»), «⏰ یادآوری و
+  حذف خودکار» («یادآوری پایان زمان», «یادآوری پایان حجم», «حذف سرویس منقضی») and «🌐 وب‌سایت و مینی‌اپ» («API وب‌سایت»,
+  «مینی‌اپ»). Each is a button with its state — «🟢 …» on, «⏸ …» off —, a tap the other state, saved as its own card saves
+  it, and the screen comes back saying what was set. Turning the bot off, or the phone rule or the channels' rule on,
+  asks first, as their cards do. A switch the shop does not have is left out, as its card is: «سرویس دلخواه» and «افزودن
+  سرویس با لینک» are the main shop's. «⚙️ تنظیمات کامل ربات» opens «🤖 تنظیمات ربات»; opened from the home, «⬅️ بازگشت»
+  goes back there.
 - **«🤖 تنظیمات ربات»** (the owner and an agent) — the bot's own cards, two a row: «⚙️ عمومی», «🪪 نام کاربری سرویس»,
   «👛 کیف پول», «💱 انتقال موجودی», «🏧 پرداخت کارت به کارت», «🔳 کد QR», «🔁 تمدید سرویس», «🧩 حجم، زمان و کاربر
   اضافه», «⏰ یادآوری به مشتری», «🧹 حذف سرویس‌های منقضی‌شده», «🔀 انتقال سرویس» and «📎 افزودن سرویس با لینک» (the main
@@ -540,8 +567,15 @@ A start or an end is typed as a Jalali day, an hour after it if you like, in the
   is a card of its own, a button on «🔁 تمدید سرویس»; the QR card shows its background («👁 دیدن تصویر»), takes a
   picture sent as a new one («📤 آپلود تصویر جدید» — a photo, or an image file for its full quality), and puts the
   shop's back (asked) ([Bot settings](Bot-Settings.md)).
-- **«🛡 مدیران ربات»** (the owner and an agent) — [above](#the-shops-admins): «کار مدیران از ربات», and its grants in
-  the part «➕ کارهای بیشتر».
+- **«🛡 مدیران ربات»** — the shop's admins, a page at a time with a search (a name, a username or a Telegram id), each a
+  button to their customer page, where «🛡 برداشتن مدیریت ربات» takes the role away. Over the list, what an admin has
+  here — in the main shop your access to everything but «👑 حساب تلگرام مالک», in an agent's shop all the agent has there
+  —, their decisions under their own name and nothing on their own account ([above](#the-shops-admins)). **«➕ افزودن
+  مدیر ربات»** asks for a customer of the shop: their number with # («#۱۲»), their Telegram id, or their @username. One
+  found is asked in red — «این کاربر مدیر ربات شود؟», what the role hands over, «✔️ بله، مدیر ربات شود» — and the list
+  comes back with «✅ … مدیر ربات شد»; one already an admin is said so; several are offered under «🔎 کدام کاربر؟», each a
+  button to their page; none is asked again. Nothing to switch or grant: each admin has the seat of the bot they write
+  to.
 - **«🌐 تنظیمات وب‌سایت»** (the owner and an agent) — how the website stands, as a card, then its cards: «🔌 اتصال» (on
   or off, its address and other origins, the API's address and store key with «📋 کپی آدرس» and «📋 کپی کلید», «🔑 ساخت
   کلید جدید» asked first), «✈️ ورود با تلگرام» (the BotFather steps, the bot's id, Client ID, and a Client Secret typed,
@@ -561,7 +595,8 @@ A start or an end is typed as a Jalali day, an hour after it if you like, in the
   kept encrypted with the app's key until it is saved; the cron address and your panel password are never kept:
   - `config.php`'s groups, each a draft saved once with «💾 ذخیره», a refusal under its field: «🤖 ربات تلگرام» (the
     token — «🧪 بررسی توکن» fills the username in —, the API's address, the poll's timeout, the webhook secret and a new
-    one; your current password asked only when the API's address moves), «🗄 دیتابیس» (its driver's form, «🧪 تست
+    one; your current password asked only when the API's address moves — the address moved and a new secret are yours
+    alone, refused to an admin), «🗄 دیتابیس» (its driver's form, «🧪 تست
     اتصال»), «🏷 برنامه» (name, address, a time zone found by typing part of its name, debug), «📧 ایمیل» (a driver or
     none, the sender, «📧 ارسال ایمیل تست»), «📨 پیامک» (a driver or none, the agents' switch, «💰 اعتبار حساب»,
     «📱 ارسال پیامک آزمایشی» showing its code) and «🔧 پیشرفته» (log level, session length, timeout, secure cookie, the
@@ -584,8 +619,8 @@ A start or an end is typed as a Jalali day, an hour after it if you like, in the
   - «🛰 دریافت پیام‌ها» — the version and PHP's (an unsafe one warned of), the bot's state, the cron, the webhook's mode
     and address, the https warning, «🔗 ثبت Webhook» and «⛓ برداشتن Webhook» (asked), and what became of each bot.
   - «🔐 ورود به پنل» — changes nothing here: the panel's username and password change in the panel alone (saving there
-    signs other browsers out, which a chat cannot stand in for); it leads to «👑 حساب تلگرام مالک».
-- **«👑 حساب تلگرام مالک»** (the owner's) — [above](#your-own-telegram-account).
+    signs other browsers out, which a chat cannot stand in for); for you, it leads to «👑 حساب تلگرام مالک».
+- **«👑 حساب تلگرام مالک»** (your linked accounts' alone, not an admin's) — [above](#your-own-telegram-account).
 
 ## Another shop
 
@@ -600,20 +635,38 @@ runs, and a new one is composed in that shop's bot.
 
 ## What an admin may not do
 
-An admin of the shop sees the buttons the daily work and your grants give, and no other; a button they kept from before a
-grant was taken away is refused at the door: «مالک فروشگاه این کار را به مدیران ربات نسپرده است.» Beyond the grants,
-the panel's guards hold them as they do on the website:
+An admin of the shop has every button of their seat — the owner's or the agent's —: nothing is granted. What the panel
+still refuses them is their own account, as on the website and in the report group, and what is yours or the agent's
+alone:
 
-- **Never about themselves** — their own payment approved or refunded, their wallet, their service changed, their review,
-  a referral alert on them, an order made for themselves, a service handed to their own account: another admin decides.
-  On their own page they have no wallet or order buttons.
-- **Never an admin's or an agent's account** — no ban, groups, excuse from the phone number, message, two-factor sign-in
-  or devices: such a page is to look at, «🔒 حساب یکی از مدیران فروشگاه است؛ فقط مالک فروشگاه آن را تغییر می‌دهد.»
-- **A customer into a «همکار» group** needs «پلن‌ها و دسته‌بندی‌ها», since its members pay the agents' prices: «مالک
-  فروشگاه گذاشتن مشتری در گروه «همکار» را به مدیران ربات نسپرده است.»
+- **Never about themselves** — in whichever shop they work, their account there: their own payment approved or
+  refunded, their wallet, their service changed, their review, a referral alert on them, an order made for themselves,
+  a service handed to their own account, their own agency request — or, an agent too, their agency itself changed,
+  suspended, resumed or ended («نمایندگی خودتان را نمی‌توانید تغییر دهید؛ این کار با مدیر دیگری است.») —: another
+  admin decides, or you. The bot leaves those buttons out on their own records, with a line that another admin does
+  it: on their page the wallet's change, an order for themselves and their own discount; their payment's approval,
+  deposit attach and refund (reject and cancel stay); their service's changes (its sync stays); their review's
+  decision; clearing an alert on them; approving their agency request (reject stays); their agency's terms, traffic,
+  hidden list, suspension and end; a «همکار» group for their own account. Anything else the panel refuses in its words
+  («… این کار با مدیر دیگری است.»).
+- **Never their own prices** — an own discount, their own account put in a «همکار» group, whose members pay the agents'
+  prices, or «همکار» switched on for a group they are in: «قیمت‌های خودتان را نمی‌توانید عوض کنید؛ تخفیف اختصاصی و
+  گروه «همکار» خودتان با مدیر دیگری است.»
+- **Never your linked Telegram accounts** — «👑 حساب تلگرام مالک» is yours alone
+  ([above](#your-own-telegram-account)), and an account linked as the owner is banned, or its admin role changed, by you
+  alone, since a banned account manages nothing: «این حساب تلگرام مالک فروشگاه است و مسدود نمی‌شود.», «نقش حساب تلگرام
+  مالک فروشگاه را فقط خود مالک عوض می‌کند.»
+- **Never the main bot's keys** — moving the Bot API's address, which sends every bot's token there and asks your
+  password («این تغییر رمز عبور پنل را می‌خواهد و فقط کار خود مالک است.»), or a new webhook secret, whose holder could
+  send the shop updates in anyone's name («رمز Webhook ربات اصلی را فقط خود مالک عوض می‌کند.»).
+- **Never the agent's own account banned** in an agent's bot: the agent or you alone ban it, since it would shut them
+  out of their bot («این حساب نماینده صاحب این ربات است و مسدود نمی‌شود.»).
 
-These guards are each admin's own: two admins can do those things for each other. Make admins only of people you
-trust.
+Taking their own role away is still theirs: it asks first, and their management ends with it
+([below](#watch-out-for)). These guards are each admin's own: two admins can do those things for each other, and an
+admin changes another admin's account as you would. And what is yours alone guards against slips, not against an admin
+set on it: with the site's address, the database and the bot's token theirs to change, one could still reach what
+these rules keep for you. Make admins only of people you trust with the whole shop.
 
 ## The panel's rules and its log
 
@@ -622,14 +675,16 @@ trust.
   bot within seconds, and the bot shows the panel's.
 - **Every setting the panel has, the bot has** — or says why the panel alone sets it, as the settings search does
   ([above](#the-settings-search)).
-- **Decisions keep who made them**: the owner's as the panel's login (which everyone else reads as «پشتیبانی»), an
-  agent's as their bot, an admin's by their name. A ticket's answer from the bot reads «مدیریت ربات» in the panel and
+- **Decisions keep who made them**: the owner's as the panel's login (which everyone else, the admins too, reads as
+  «پشتیبانی»), an agent's as their bot, an admin's by their own name — `@handle`, else `tg:<id>` or `user#<id>` —
+  whichever seat they work with. A ticket's answer from the bot reads «مدیریت ربات» in the panel and
   «از مدیریت ربات» in the report group; the customer reads «🎧 پشتیبانی», as always.
 - **The shop's log has a line for every change asked from the bot** — who, as what, which change, and the panel's
   answer — beside the panel's own lines.
-- **The Telegram account is the sign-in**: the bot asks no password, and no recent sign-in before an approval, a
-  Rikhtam attach or a grant's work, as the website's admin API asks of its staff — whoever holds the account in
-  Telegram manages as it. Take an admin's role away, or unlink an owner account, the moment a phone is lost.
+- **The Telegram account is the sign-in**: the bot asks no password — but the panel's, before the Bot API's address
+  moves —, and no recent sign-in before an approval or a Rikhtam attach, as the website's admin API asks of its admins —
+  whoever holds the account in Telegram manages as it. Take an admin's role away, or unlink an owner account, the moment
+  a phone is lost.
 
 ## What it does not do
 
@@ -644,11 +699,14 @@ The first three, the panel does not do either:
 
 - **A linked account is your whole panel.** Anyone holding that Telegram account manages every shop: link your own
   accounts alone, turn on Telegram's two-step verification, and let an account go the day you lose it.
+- **So is an admin of the main bot.** Every shop, the panel's settings — the token, the database —, the backups and the
+  update are theirs in the bot: give the role only to people you trust, and take it away the day one leaves. An agent's
+  admins hold that agent's shop the same way.
 - **Taking the admin role from your own account** asks first: you and an agent keep «⚙️ مدیریت» and still pass the bot's
   conditions, but the report group's buttons answer admins alone; an admin of the shop loses the management with it.
 - **Telegram's file limits**: a bot is handed files of up to 20 MB and sends files of up to 50 MB. A larger backup, or
   a larger file to import, goes through the panel; the screens say so, and a file Telegram refuses is said in a popup.
 - **Colours and copy buttons are Telegram's**: an older Telegram app shows every button plain, and copies nothing at a
   tap — the value is still on the card, to copy by hand.
-- **The management is the private chat's**: the report group keeps its own buttons and `/manage`, which «مدیران ربات»
-  does not touch ([Report group](Telegram-Group.md)).
+- **The management is the private chat's**: the report group keeps its own buttons and `/manage`, under its own rules
+  for the admins ([Report group](Telegram-Group.md)).

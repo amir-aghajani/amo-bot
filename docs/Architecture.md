@@ -60,7 +60,7 @@ walks every route to prove it.
 |---|---|
 | `/api/admin` (the owner's panel) | installed › CSRF header on a change › session › the owner signed in › the shop the request names |
 | `/api/agent` (an agent's panel) | installed › CSRF header on a change › session › an agent signed in, in their bot's shop |
-| `/api/bot-admin/{owner,agent,staff}` (the bot's management, in-process) | the seat the bot put on the request, or a 404 › the seat's kind is the door's › a grant the route names › its shop, as its principal (`Telegram\Admin\Door\BotAdminDoor`) |
+| `/api/bot-admin/{owner,agent}` (the bot's management, in-process) | the seat the bot put on the request, or a 404 › the seat's kind is the door's › its shop, as its principal (`Telegram\Admin\Door\BotAdminDoor`) |
 | `/api/install` | not installed yet › CSRF header on a change › the install key |
 | `/api/store/v1/{store}` | installed › the website or the mini app the key opens › JSON bodies › (what one door alone has: that door) › (a customer's bearer token) |
 | `…/admin` under the store | › the website's door › a customer's token › one of the shop's admins, let in, on a session that is not the mini app's, signed in recently enough |
@@ -154,18 +154,19 @@ installation as a whole.
 ## Principals and actors
 
 Whoever works a shop through an API is a **principal** (`Auth\Principal`): the owner on their panel, an agent on
-theirs, or one of a shop's admins (a customer whose role is admin) on its website's admin API — or any of the three in
-the bot's private chat, whose management asks the panels' API in-process with a principal marked `inBot`
-([The bots at work](#the-bots-at-work)). The route group's guard
-puts it on the request (`Principal::of()`), runs the request in its shop, and makes it the request's reader
+theirs, or one of a shop's admins (a customer whose role is admin) on its website's admin API — or, in the bot's private
+chat, whose management asks the panels' API in-process with a principal marked `inBot`, the owner's or an agent's, one
+of the shop's admins among them with their account as its `customer` ([The bots at work](#the-bots-at-work)). The route
+group's guard puts it on the request (`Principal::of()`), runs the request in its shop, and makes it the request's reader
 (`Auth\CurrentPrincipal`) — an answer can depend on who reads it; the owner's login, for one, is shown to nobody else.
 
 Every operation that records a decision takes an **actor** (`Auth\Actor`): a principal, an admin pressing a button in
 the report group, or the shop itself (a timer). The actor's name is kept as the decision's `reviewer` and appears on
 the request's log lines, and an admin acting as themselves is refused decisions about their own account
-(`ActorRefusedException`). Anywhere else the name is read through `Auth\Services\Reviewers`: the owner's panel shows it
-as kept, everyone else — an agent, a website's admins, a report group (`ShopReports::bySupport()`, «🎧 توسط پشتیبانی») —
-reads the owner's login as «پشتیبانی». Where a screen shows who wrote something (a ticket's answer),
+(`ActorRefusedException`). Anywhere else the name is read through `Auth\Services\Reviewers`: the owner themselves
+reads it as kept (`Principal::isTheOwner()`), everyone else — an agent, a website's admins, a bot admin working with the
+owner's seat, a report group (`ShopReports::bySupport()`, «🎧 توسط پشتیبانی») — reads the owner's login as «پشتیبانی».
+Where a screen shows who wrote something (a ticket's answer),
 `Reviewers::names()` reads a shop admin's first and last name beside it — every name a screen needs in one query.
 
 ## The bots at work
@@ -178,8 +179,8 @@ callback or conversation step to; then the report group's queue is sent. The det
 [Internals: Telegram bot](Internals-Telegram-Bot.md).
 
 **The shop's management in the private chat** (`Telegram\Admin`) is a third client of the panels' API, beside the two
-panels and the website's admin area: whoever has a seat (`AdminSeats`: the owner's linked Telegram account, an agent in
-their own bot, a shop's admin while its «مدیران ربات» lets them in) moves through screens whose every read and write is a
+panels and the website's admin area: whoever has a seat (`AdminSeats`: the owner's seat — a linked Telegram account or an admin of
+the main bot —, or an agent's — the agent or an admin of their bot) moves through screens whose every read and write is a
 request to the panels' own routes, built by `PanelBridge` and handled by the app's HTTP kernel in the same process,
 through the door `/api/bot-admin` — no copy of a rule, the same refusals, the same log lines, the change feed moving
 open panels. A decision made there keeps its maker as the panels' do; a ticket's answer is written on the channel

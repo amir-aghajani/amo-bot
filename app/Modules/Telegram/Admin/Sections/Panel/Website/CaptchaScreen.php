@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Modules\Telegram\Admin\Sections\Panel\Website;
 
-use App\Modules\Telegram\Admin\AdminSeat;
 use App\Modules\Telegram\Admin\Sections\Panel\Forms\DraftForm;
 use App\Modules\Telegram\Admin\Sections\Panel\Forms\DraftScreen;
 use App\Modules\Telegram\Admin\Ui\Admin;
@@ -25,11 +24,6 @@ final class CaptchaScreen extends DraftScreen
         'label' => 'خاموش',
         'hint' => 'فرم‌های وب‌سایت تایید امنیتی نمی‌خواهند؛ ثبت‌نام، ورود با رمز عبور، بازیابی رمز و ثبت نظر فقط با محدودیت تعداد درخواست‌ها در برابر ربات‌ها نگه داشته می‌شوند.',
     ];
-
-    public function allows(AdminSeat $seat): bool
-    {
-        return $seat->configures();
-    }
 
     /**
      * The captcha the website uses, as its chip (plain text): «🟢 روشن · {driver}», «⏸ خاموش» for none.

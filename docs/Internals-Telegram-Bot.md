@@ -24,7 +24,7 @@ Everything lives in `app/Modules/Telegram`, the routes in `routes/bot.php`.
 | `Polling/`, `Controllers/`, `Services/` | `bot:poll`'s loop, the webhook endpoint, webhook and identity management |
 | `Notifications/`, `Qr/`, `Emoji/` | `ServiceCard` (a service as a QR card or text), the QR picture, premium emoji |
 | `Contracts/` | What the bot asks of another module through an interface of its own: `MiniAppAddress`, the shop's mini app's address |
-| `Admin/` | The shop's management in the private chat: who manages (`AdminSeats`, `OwnerLinks`, `BotAdminSettings`), the door to the panels' API (`Door/`), the screens' framework (`Ui/`) and each area's screens (`Sections/`) ([below](#the-shops-management)) |
+| `Admin/` | The shop's management in the private chat: who manages (`AdminSeats`, `OwnerLinks`), the door to the panels' API (`Door/`), the screens' framework (`Ui/`) and each area's screens (`Sections/`) ([below](#the-shops-management)) |
 
 Open first: `routes/bot.php`, `Update/Dispatcher.php`, `Context.php`, `Handlers/CheckoutScreen.php`,
 `Texts/BotTexts.php` and `Reports/ShopReports.php`.
@@ -525,19 +525,27 @@ shop's setting `owner.telegram_ids`, filled by the one-time `/start owner-<code>
 kept as its sha256 and spent by a compare-and-swap, `LINK_MINUTES` to open it, at most `MOST` accounts; the panel's
 `POST /settings/owner-telegram/link` asks `current_password` unless the request carries the door's `BotAdminDoor::SEAT`,
 and `OwnerAuth::changeCredentials()` ends every link with `OwnerLinks::revokeAll()`) is the owner, in
-the shop the chat picked; in an agent's bot, the agent's own account is the agent, while their agency stands (as
-`AgentAuth` asks it); a role admin, while `BotAdminSettings` (`bot_admins`) is on, is staff,
-its grants the `Principal`'s. A ban ends any of them. Every such principal has `inBot`, which reaches `Actor::$inBot`: a
-ticket's answer from here is `TicketChannel::Manage`.
+the shop the chat picked — and so is every role admin of the main bot: an Owner `Principal` with their account as its
+`customer` and their own name (`Reviewers::forAdmin()`), no grants. In an agent's bot, while their agency stands (as
+`AgentAuth` asks it), the agent's own account is the agent, and every role admin of it has the agent's seat the same
+way. There is no third seat and no switch: `SeatKind` is `Owner` or `Agent`, and the role is asked on every update. A
+ban ends any of them. `AdminSeat::isAdmin()` (a `customer` on the principal) marks one of the admins: services refuse
+them a decision about their own account (`Actor::is()`, `ActorRefusedException::own…()`), `Reviewers::present()` shows
+them the owner's login as «پشتیبانی», and what is the owner's own — the linked accounts (`OwnerAccountsScreen`, the
+`/settings/owner-telegram` routes, `ActorRefusedException::ownerOnly()`), a linked account's ban and role
+(`ownerBanned()`, `ownerRole()`), the Bot API's address and the main bot's webhook secret (`ConfigSettings`:
+`ownersPassword()`, `ownersSecret()`) — asks `Principal::isTheOwner()` (`Actor::isTheOwner()`); an agent's own account
+in their bot is banned by `Actor::isTheAgent()` or the owner alone (`agentBanned()`). `AdminSeat::in()` carries an
+admin's account in the shop picked, so `Actor::is()` holds there too. Every such principal has `inBot`, which reaches
+`Actor::$inBot`: a ticket's answer from here is `TicketChannel::Manage`.
 
-**The door** — `Door\BotAdminDoor`, mounted in `routes/api.php` at `/api/bot-admin/{owner|agent|staff}` over the panels'
-own route groups: the owner's `$operations`, `$configuration`, `$system`, `$everywhere` (with `shop.everywhere`), `$main`
-(with `shop.main`) and `/shops`; the agent's `$agentAccount`, `$operations` and `$configuration`; staff `$operations`
-alone. It has no session, cookie or CSRF header: a request gets in only with an `AdminSeat` in its `SEAT` attribute,
-which only the process can set — from outside, every path is a 404. Then the seat's kind must be the door's, and a route
-naming `StaffGrant::ARGUMENT` must be granted (`NOT_GRANTED`); the request runs in the seat's shop as its principal, and
-every change (not a GET) is logged with the seat, the path and the status. A grant a service asks
-(`ActorRefusedException` with its `grant`) is answered in the bot's words.
+**The door** — `Door\BotAdminDoor`, mounted in `routes/api.php` at `/api/bot-admin/{owner|agent}` over the panels' own
+route groups: the owner's `$operations`, `$configuration`, `$system`, `$everywhere` (with `shop.everywhere`), `$main`
+(with `shop.main`) and `/shops`; the agent's `$agentAccount`, `$operations` and `$configuration`. It has no session,
+cookie or CSRF header: a request gets in only with an `AdminSeat` in its `SEAT` attribute, which only the process can
+set — from outside, every path is a 404. Then the seat's kind must be the door's (an agent's seat never takes the
+owner's); no grant is asked. The request runs in the seat's shop as its principal, and every change (not a GET) is
+logged with the seat, the path and the status.
 
 **The bridge** — `Door\PanelBridge::for($seat)` builds each request (`get`, `post`, `put`, `patch`, `delete`, `upload`
 for a multipart file, `file` for an answer that is a file) and hands it to the app's own HTTP kernel in-process: the
@@ -658,7 +666,7 @@ window's buttons keep working.
 own searches (`/users`, `/orders`, `/payments`, `/subscriptions`), those the seat may open: `SHOWN` (5) rows of each, a
 phone typed the Iranian way read as its last ten digits, past them a button that opens the list searched.
 
-**The settings search** — «🔎 جستجوی تنظیمات» (`Panel\Search\SettingsSearchScreen`, `ss`, `$seat->configures()`) searches
+**The settings search** — «🔎 جستجوی تنظیمات» (`Panel\Search\SettingsSearchScreen`, `ss`, every seat) searches
 the panel's own settings index: `Panel\Search\PanelSettings` is a copy of the panel's
 `lib/settings-search/settings.generated.ts` that `pnpm settings:index` writes beside it (a release ships no panel
 source), never edited by hand. `Panel\Search\SettingsIndex` maps it onto the bot: `SECTIONS`, each panel address → the
@@ -680,10 +688,12 @@ owner's shop pick too: `pickShop()` empties every screen's state), `open()` anot
 shows (`e()` for whatever came from a person or the panel, `ltr()` and `code()` for Latin in a Persian line, money,
 quotas, dates in the Jalali calendar, `onOff()` and `active()` for the chips, `badge()` for a count).
 
-**Permissions mirror the door**: a screen over the daily work's routes allows every seat; over configuration,
-`$seat->configures()` (the owner and an agent); over the system, the servers, the agency, the mass gifts and the panel's
-settings, `$seat->isOwner()`; an action whose route names a grant shows only while `$seat->holds()` it. Hiding is the
-screens' courtesy: the door refuses anything else.
+**Permissions mirror the door**: a screen allows every seat (`BaseScreen::allows()`) — the routes it reads are both
+panels'; over the servers, the agency, the mass gifts and the shop switcher, `$seat->isOwner()`; over what the main shop
+alone has (the custom services, the link claims), `$seat->shop()->isMain()`; over the panel's settings, `Access::main()`
+(the owner in the main shop) or `Access::system()`; over the agent's account, `$seat->isAgent()`; over the owner's linked
+accounts, `$seat->principal->isTheOwner()`. An admin's own account (`Customers\Customer::own()`) shows no wallet credit
+or debit, order or own-discount button. Hiding is the screens' courtesy: the door and the services refuse anything else.
 
 ## Telegram's API
 
@@ -737,5 +747,5 @@ right to left, the one way around, the card and folded help, the pages' middle b
 search), `SettingsParityTest` (every panel setting has its place in the bot — [above](#the-shops-management)) and a
 file or more per area, named by its folder — `Support*`, `Customers*`, `Sales*`, `Catalog*`,
 `Marketing*`, `BotArea*`, `Owner*` and `Panel*` (`PanelConfigTest`, `PanelWebsiteTest`, `PanelMiniAppTest`,
-`PanelUpdateTest`, `PanelImportsTest`, `PanelOperationsTest`) —, each walking list → row → action → the API's effect, a
-seat without the grant (no button, and the door's refusal), and a typed answer. See [Testing](Testing.md).
+`PanelUpdateTest`, `PanelImportsTest`, `PanelOperationsTest`) —, each walking list → row → action → the API's effect, an
+admin's seat where it differs (their own account, the owner's own screens), and a typed answer. See [Testing](Testing.md).

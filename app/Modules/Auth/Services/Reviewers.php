@@ -5,16 +5,16 @@ declare(strict_types=1);
 namespace App\Modules\Auth\Services;
 
 use App\Modules\Auth\CurrentPrincipal;
-use App\Modules\Auth\PrincipalKind;
 use App\Modules\Users\Enums\UserRole;
 use App\Modules\Users\Models\User;
 use App\Support\Text;
 use Illuminate\Database\Eloquent\Builder;
 
 /**
- * A decision's `reviewer` as its reader sees it (CurrentPrincipal). The owner sees it as kept; anyone else sees the
- * owner's login as «پشتیبانی» — knowing it would let anyone lock the owner out (sign-in failures are counted per
- * username). Agents and admins show as kept (`@bot`, `@handle`, `tg:<id>`, `user#<id>`, `agent#<id>`); an admin's name
+ * A decision's `reviewer` as its reader sees it (CurrentPrincipal). The owner themselves sees it as kept
+ * (Principal::isTheOwner()); anyone else — an admin working with the owner's seat in the bot too — sees the owner's
+ * login as «پشتیبانی» — knowing it would let anyone lock the owner out (sign-in failures are counted per username).
+ * Agents and admins show as kept (`@bot`, `@handle`, `tg:<id>`, `user#<id>`, `agent#<id>`); an admin's name
  * is read beside it where a screen shows who wrote something (names()).
  */
 final class Reviewers
@@ -48,7 +48,7 @@ final class Reviewers
 
     public function present(?string $reviewer): ?string
     {
-        return CurrentPrincipal::get()?->kind === PrincipalKind::Owner ? $reviewer : $this->shared($reviewer);
+        return CurrentPrincipal::get()?->isTheOwner() === true ? $reviewer : $this->shared($reviewer);
     }
 
     /** The reviewer as anyone but the owner reads it, whoever reads it now: the report group, an agent, a website's admin. */

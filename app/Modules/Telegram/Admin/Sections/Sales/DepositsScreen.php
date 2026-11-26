@@ -18,8 +18,8 @@ use App\Modules\Telegram\Admin\Ui\View;
  * «📩 واریزهای پیامکی» (the payments page's «واریزهای پیامکی»): the bank deposits the phone app forwarded or Rikhtam told
  * («تایید خودکار واریز»), newest first, by what came of each (the tabs — what waits on support first) or searched by sum
  * or words; a row opens with the SMS as it came, or what Rikhtam sent (DepositScreen). The panel lists them alone: the
- * page's rows are kept for it. While «تایید خودکار واریز» is off, the owner and an agent read so over the list, with the
- * way to its switch («⚡️ تایید خودکار واریز»).
+ * page's rows are kept for it. While «تایید خودکار واریز» is off, that is said over the list, with the way to its switch
+ * («⚡️ تایید خودکار واریز»).
  */
 final class DepositsScreen extends ListScreen
 {
@@ -56,12 +56,10 @@ final class DepositsScreen extends ListScreen
     {
         $this->state = $admin->state(self::ID);
         $this->off = false;
-        if ($admin->seat->configures()) {
-            try {
-                $this->off = ($admin->api->get('/deposits/settings')['enabled'] ?? true) === false;
-            } catch (ApiRefusal) {
-                // Its settings unread: the list says enough.
-            }
+        try {
+            $this->off = ($admin->api->get('/deposits/settings')['enabled'] ?? true) === false;
+        } catch (ApiRefusal) {
+            // Its settings unread: the list says enough.
         }
 
         return parent::show($admin, $args);

@@ -7,12 +7,13 @@ namespace Tests\Feature\BotAdmin;
 use App\Modules\Reviews\Models\Review;
 use App\Modules\Telegram\Admin\Ui\Nav;
 use App\Modules\Users\Enums\UserRole;
+use App\Modules\Users\Models\User;
 use Tests\BotTestCase;
 
 /**
  * «⭐️ نظرات» in the bot's management (Sections\Support\Review*): the moderation queue by the panel's tabs, a review
- * approved green or rejected red at a tap — the next one waiting a tap away —, a decided one changed again, and a delete
- * asked first in red.
+ * approved green or rejected red at a tap — the next one waiting a tap away —, a decided one changed again, a delete
+ * asked first in red, and an admin's own review left to another admin.
  */
 final class SupportReviewsTest extends BotTestCase
 {
@@ -72,7 +73,8 @@ final class SupportReviewsTest extends BotTestCase
         self::assertSame(['approved', 'root'], [$review->refresh()->status->value, $review->reviewer]);
         self::assertMatchesRegularExpression('/تصمیم: <b>[^<]+ · توسط \x{2068}root\x{2069}<\/b>/u', $this->lastSaid(), 'the owner reads their own login');
 
-        // Anyone else reads «پشتیبانی» for it: the owner's login is never shown to them.
+        // Anyone else reads «پشتیبانی» for it — a shop's admin on the owner's seat too: the owner's login is never
+        // shown to them.
         $this->send($this->tap(Nav::to('rv', 'f', 'status', 'approved'), chat: self::STAFF));
         $this->send($this->tap(Nav::to('rvv', 'show', $review->id), chat: self::STAFF));
         self::assertMatchesRegularExpression('/تصمیم: <b>[^<]+ · توسط پشتیبانی<\/b>/u', $this->lastSaid());
@@ -107,6 +109,38 @@ final class SupportReviewsTest extends BotTestCase
         $this->send($this->tap(Nav::to('rv', 'f', 'status', 'approved'), chat: self::STAFF));
         self::assertStringContainsString('🟡 ۱ نظر در انتظار بررسی است.', $this->lastSaid());
         self::assertStringContainsString('۱ نظر · ✅ تاییدشده', $this->lastSaid());
+    }
+
+    public function testAnAdminsOwnReviewIsAnotherAdminsToDecideAndAGuestsIsTheirs(): void
+    {
+        $boss = User::query()->where('telegram_id', self::STAFF)->sole();
+        $this->customer(['telegram_id' => 7200, 'first_name' => 'Reza', 'role' => UserRole::Admin]);
+        $guest = $this->review(name: 'Sara', body: 'خوب بود.');
+        $own = $this->review($boss, name: 'Boss', body: 'عالی است.');
+        $decisions = [Nav::to('rvv', 'ok', $own->id), Nav::to('rvv', 'no', $own->id), Nav::to('rvv', 'del', $own->id)];
+
+        $this->send($this->tap(Nav::to('rv'), chat: self::STAFF));
+        $this->send($this->tap(Nav::to('rvv', 'show', $own->id), chat: self::STAFF));
+        self::assertStringContainsString('عالی است.', $this->lastSaid(), 'the review\'s own card');
+        foreach ($decisions as $decision) {
+            self::assertNotContains($decision, $this->buttons(), $decision);
+        }
+        self::assertContains(Nav::to('rvv', 'show', $guest->id), $this->buttons(), 'the next one waiting stays');
+        self::assertStringContainsString('این نظر خود شماست؛ تایید، رد یا حذفش با مدیر دیگری است.', $this->lastSaid());
+
+        // A guest's review (no customer behind it) is theirs to decide.
+        $this->send($this->tap(Nav::to('rvv', 'show', $guest->id), chat: self::STAFF));
+        foreach ([Nav::to('rvv', 'ok', $guest->id), Nav::to('rvv', 'no', $guest->id), Nav::to('rvv', 'del', $guest->id)] as $decision) {
+            self::assertContains($decision, $this->buttons(), $decision);
+        }
+        self::assertStringNotContainsString('خود شماست', $this->lastSaid());
+
+        $this->send($this->tap(Nav::to('rv'), chat: 7200));
+        $this->send($this->tap(Nav::to('rvv', 'show', $own->id), chat: 7200));
+        foreach ($decisions as $decision) {
+            self::assertContains($decision, $this->buttons(), "{$decision}: another admin's");
+        }
+        self::assertStringNotContainsString('خود شماست', $this->lastSaid());
     }
 
     /**

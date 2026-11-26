@@ -492,10 +492,10 @@ return static function (App $app): void {
         })->add('panel.agent');
     })->add(SessionMiddleware::class)->add(JsonCsrfMiddleware::class)->add(InstalledMiddleware::class);
 
-    // The shop's management from its bot's private chat (Telegram\Admin): the panels' very routes, run in-process for the
-    // owner's linked Telegram account (owner), the agent in their own bot (agent) and the shop's admins (staff: the daily
-    // work, its grants as the bot's «مدیران ربات» gives them). No session, no cookie, no CSRF header: BotAdminDoor lets a
-    // request in only with the seat the bot put on it in-process — from outside, every path here is a 404.
+    // The shop's management from its bot's private chat (Telegram\Admin): the panels' very routes, run in-process — the
+    // owner's in the main bot (its linked Telegram accounts and its admins), the agent's in an agent's bot (the agent and
+    // its admins). No session, no cookie, no CSRF header: BotAdminDoor lets a request in only with the seat the bot put on
+    // it in-process — from outside, every path here is a 404.
     $app->group(BotAdminDoor::PATH, function (RouteCollectorProxy $door) use ($operations, $configuration, $system, $everywhere, $main, $agentAccount): void {
         $door->group('/owner', function (RouteCollectorProxy $owner) use ($operations, $configuration, $system, $everywhere, $main): void {
             $owner->get('/shops', [OwnerAuthController::class, 'shops']);
@@ -510,7 +510,6 @@ return static function (App $app): void {
             $operations($agent);
             $configuration($agent);
         });
-        $door->group('/staff', fn(RouteCollectorProxy $staff) => $operations($staff));
     })->add(BotAdminDoor::class);
 
     // The Store API: the store key names a shop's website or its Telegram mini app (each has a key of its own), and the

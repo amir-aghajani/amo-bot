@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 namespace App\Modules\Telegram\Admin\Sections\Catalog;
 
-use App\Modules\Auth\StaffGrant;
-use App\Modules\Telegram\Admin\AdminSeat;
 use App\Modules\Telegram\Admin\Door\ApiRefusal;
 use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\Answer;
@@ -57,11 +55,6 @@ final class PlanPricesScreen extends BaseScreen
 
     /** The most of a refusal's lines the window shows. */
     private const REFUSED_MOST = 12;
-
-    public function allows(AdminSeat $seat): bool
-    {
-        return $seat->holds(StaffGrant::Catalog);
-    }
 
     public function show(Admin $admin, array $args): View
     {

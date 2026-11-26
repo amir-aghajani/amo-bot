@@ -9,7 +9,7 @@ use App\Modules\Telegram\Admin\AdminSeat;
 /**
  * Who opens which of the panel settings' screens, as the routes are mounted (routes/api.php): config.php, the schedule
  * and the imports are the owner's in the main shop (`$main`); the update and the webhooks the owner's in any shop
- * (`$system`); the website, the mini app and the backups every seat that sets the shop up (`$configuration`).
+ * (`$system`); the website, the mini app and the backups every seat, the owner's and an agent's (`$configuration`).
  */
 final class Access
 {

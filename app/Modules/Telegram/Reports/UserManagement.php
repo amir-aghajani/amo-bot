@@ -6,9 +6,11 @@ namespace App\Modules\Telegram\Reports;
 
 use App\Core\Exceptions\DomainRuleException;
 use App\Modules\Auth\Actor;
+use App\Modules\Bots\Models\Bot;
 use App\Modules\Bots\Services\Bots;
 use App\Modules\Orders\Models\Order;
 use App\Modules\Subscriptions\Models\Subscription;
+use App\Modules\Telegram\Admin\Sections\Core\BotAdminsScreen;
 use App\Modules\Telegram\Keyboard\InlineKeyboard;
 use App\Modules\Telegram\Messages;
 use App\Modules\Telegram\Reports\Customers\CardPress;
@@ -51,7 +53,7 @@ use App\Support\Persian;
  * What every section shares — the checks, the look, the questions — is CustomerCards'. Decisions go through UserActions
  * under the presser's name (Actor::groupAdmin()), by its rules for the report group: never the admin's own account nor
  * an agent's (the card offers neither: only what reads), never an admin banned nor put in a «همکار» group, never an
- * admin made of someone with their own discount or in a «همکار» group (the panel's). Only in the shop's connected report
+ * admin made of someone with their own discount or in a «همکار» group (the panel's or the bot's management's). Only in the shop's connected report
  * group, and only for its bot admins; anyone else is told who may.
  */
 final class UserManagement implements GroupHandler
@@ -352,12 +354,25 @@ final class UserManagement implements GroupHandler
         $this->cards->show($press, self::card($press->user, $press->admin), self::main($press->user, $press->admin), $word, $alert);
     }
 
-    /** A change asked again: the front with its question, «✔️ بله» (making it, to `$value`) and «⬅️ انصراف». */
+    /**
+     * What making someone a bot admin hands over (HTML), in «🛡 مدیران ربات»'s words (BotAdminsScreen::powers(), ALSO,
+     * OWN, warning()): in the main bot the owner's whole seat — every agent's shop too, but what stays the owner's
+     * alone —, in an agent's bot the agent's; what else the role has, and that their own account is another admin's.
+     */
+    private static function handsOver(bool $main): string
+    {
+        return htmlspecialchars(BotAdminsScreen::powers($main) . ' ' . sprintf(BotAdminsScreen::ALSO, '/broadcast') . ' ' . BotAdminsScreen::OWN . ' ' . BotAdminsScreen::warning($main));
+    }
+
+    /**
+     * A change asked again: the front with its question, «✔️ بله» (making it, to `$value`) and «⬅️ انصراف» — the role
+     * given said with what it hands over (the shop's whole management from the bot: handsOver()), its yes red.
+     */
     private function ask(CardPress $press, string $set, string $value): void
     {
         CustomerCards::mayChange($press->user, $press->admin);
         [$question, $style] = match ($value) {
-            UserRole::Admin->value => ['❓ <b>مدیر ربات شود؟</b> مدیرها دکمه‌های این گروه را دارند — رسیدها، تیکت‌ها، نمایندگی و همین کارت — و دستورهای مدیریتی ربات را.', 'success'],
+            UserRole::Admin->value => ['❓ <b>مدیر ربات شود؟</b> ' . self::handsOver((int) $press->user->bot_id === Bot::MAIN), 'danger'],
             UserRole::Customer->value => ['❓ <b>نقش مدیر از او برداشته شود؟</b>', 'danger'],
             UserStatus::Banned->value => ['❓ <b>مسدود شود؟</b> ربات و وب‌سایت دیگر جوابش را نمی‌دهند.', 'danger'],
             default => ['❓ <b>مسدودی‌اش برداشته شود؟</b>', 'success'],

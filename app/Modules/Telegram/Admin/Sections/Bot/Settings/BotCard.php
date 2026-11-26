@@ -8,7 +8,6 @@ use App\Core\Forms\Fields\Field;
 use App\Core\Forms\Fields\Number;
 use App\Core\Forms\Fields\Numbers;
 use App\Modules\Settings\Services\BotSettingsScreen;
-use App\Modules\Telegram\Admin\AdminSeat;
 use App\Modules\Telegram\Admin\Door\ApiRefusal;
 use App\Modules\Telegram\Admin\Sections\Bot\BotSettingsMenu;
 use App\Modules\Telegram\Admin\Ui\Admin;
@@ -45,11 +44,6 @@ abstract class BotCard extends SettingsScreen
 
     /** The bot settings group the card saves (PUT /bot/settings/{group}). */
     abstract protected function group(): string;
-
-    public function allows(AdminSeat $seat): bool
-    {
-        return $seat->configures();
-    }
 
     protected function path(): array
     {

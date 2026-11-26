@@ -115,6 +115,30 @@ final class SupportReferralsTest extends BotTestCase
         self::assertNotNull($this->popup());
     }
 
+    public function testAnAdminsOwnAlertHasNoClearButtonAndAnotherAdminsHasIt(): void
+    {
+        $staff = User::query()->where('telegram_id', self::STAFF)->firstOrFail();
+        $this->customer(['telegram_id' => 7200, 'first_name' => 'Nima', 'role' => UserRole::Admin]);
+        $own = $this->referralAlert($staff);
+        $rezas = $this->referralAlert($this->reza);
+
+        $this->send($this->tap(Nav::to('rfa'), chat: self::STAFF));
+        $this->send($this->tap(Nav::to('rfav', 'show', $own->id), chat: self::STAFF));
+        self::assertStringContainsString('عضویت پشت سر هم با یک لینک', $this->lastSaid(), 'the alert\'s own card');
+        self::assertNotContains(Nav::to('rfav', 'clr', $own->id), $this->buttons(), '«✅ رفع هشدار» another admin\'s');
+        self::assertContains(Nav::to('rfa'), $this->buttons(), 'back to the alerts');
+        self::assertStringContainsString('این هشدار روی حساب خود شماست؛ رفعش با مدیر دیگری است.', $this->lastSaid());
+
+        $this->send($this->tap(Nav::to('rfav', 'show', $rezas->id), chat: self::STAFF));
+        self::assertContains(Nav::to('rfav', 'clr', $rezas->id), $this->buttons(), 'another\'s alert is theirs to clear');
+        self::assertStringNotContainsString('خود شماست', $this->lastSaid());
+
+        $this->send($this->tap(Nav::to('rfa'), chat: 7200));
+        $this->send($this->tap(Nav::to('rfav', 'show', $own->id), chat: 7200));
+        self::assertContains(Nav::to('rfav', 'clr', $own->id), $this->buttons(), 'another admin clears it');
+        self::assertStringNotContainsString('خود شماست', $this->lastSaid());
+    }
+
     public function testTheProgramOffAndAMenuWithoutItsButtonAreSaid(): void
     {
         $this->send($this->tap(Nav::to('rf'), chat: self::STAFF));
@@ -123,9 +147,9 @@ final class SupportReferralsTest extends BotTestCase
         $this->referralProgram();
         $this->service(KeyboardLayouts::class)->save('start', ['type' => 'reply', 'rows' => [[['action' => 'buy', 'label' => 'خرید', 'style' => null]]]]);
         $this->send($this->tap(Nav::to('rf'), chat: self::STAFF));
-        self::assertStringNotContainsString('در منوی ربات نیست', $this->lastSaid(), 'the keyboards are no admin\'s to read');
-
-        self::assertSame([], array_intersect([Nav::to('bsf'), Nav::to('bs'), Nav::to('kb')], $this->buttons()), 'the rules and the keyboards are no admin\'s');
+        self::assertStringContainsString('دکمه «زیرمجموعه‌گیری» در منوی ربات نیست', $this->lastSaid(), 'a shop\'s admin reads the keyboards as the owner does');
+        self::assertContains(Nav::to('bsf'), $this->buttons(), 'the rules');
+        self::assertContains(Nav::to('kbl', 'show', 'start'), $this->buttons(), 'and the menu that lacks the button');
 
         $this->owner();
         $this->send($this->tap(Nav::to('rf'), chat: 7001));

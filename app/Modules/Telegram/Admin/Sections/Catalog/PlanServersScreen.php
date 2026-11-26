@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 namespace App\Modules\Telegram\Admin\Sections\Catalog;
 
-use App\Modules\Auth\StaffGrant;
-use App\Modules\Telegram\Admin\AdminSeat;
 use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\BaseScreen;
 use App\Modules\Telegram\Admin\Ui\Button;
@@ -37,10 +35,8 @@ final class PlanServersScreen extends BaseScreen
     /** The servers section (the owner's), where a shop without a server adds one. */
     private const SERVERS = 'sv';
 
-    public function allows(AdminSeat $seat): bool
-    {
-        return $seat->holds(StaffGrant::Catalog);
-    }
+    /** Who sets a server up for an agent's seat, which has no servers' pages: the main shop's support. */
+    private const SETS_UP = 'پشتیبانی';
 
     public function show(Admin $admin, array $args): View
     {
@@ -57,7 +53,7 @@ final class PlanServersScreen extends BaseScreen
         if ($servers === []) {
             $view->line()->line($admin->seat->isOwner()
                 ? 'هنوز سروری ندارید؛ اول یک سرور اضافه کنید، بعد این‌جا انتخابش کنید.'
-                : 'فروشگاه هنوز سروری ندارد که پلن روی آن فروخته شود؛ از ' . self::who($admin) . ' بخواهید سروری اضافه کند.');
+                : 'فروشگاه هنوز سروری ندارد که پلن روی آن فروخته شود؛ از ' . self::SETS_UP . ' بخواهید سروری اضافه کند.');
         } elseif ($remaining === []) {
             $view->note('همه سرورها به این پلن اضافه شده‌اند.');
         }
@@ -185,7 +181,7 @@ final class PlanServersScreen extends BaseScreen
             if (is_string($server['unsellable_reason'] ?? null)) {
                 $lines[] = '⚠️ ' . Fmt::e($server['unsellable_reason'] . ' تا درست نشود، مشتری این سرور را نمی‌بیند.');
             } elseif ($inbounds === []) {
-                $lines[] = '⚠️ فعلا اینباند قابل فروشی روی این سرور نیست؛ ' . ($admin->seat->isOwner() ? 'در صفحه سرور اینباندها را برای فروش علامت بزنید.' : 'از ' . self::who($admin) . ' بخواهید اینباندهایش را برای فروش علامت بزند.');
+                $lines[] = '⚠️ فعلا اینباند قابل فروشی روی این سرور نیست؛ ' . ($admin->seat->isOwner() ? 'در صفحه سرور اینباندها را برای فروش علامت بزنید.' : 'از ' . self::SETS_UP . ' بخواهید اینباندهایش را برای فروش علامت بزند.');
             }
         }
 
@@ -230,7 +226,7 @@ final class PlanServersScreen extends BaseScreen
         if (is_string($server['unsellable_reason'] ?? null)) {
             $view->line('⚠️ ' . Fmt::e($server['unsellable_reason'] . ' تا درست نشود، مشتری این پلن را روی آن نمی‌بیند.'));
         }
-        $view->line('• کل سرور: هر اینباندی که ' . ($admin->seat->isOwner() ? 'در صفحه سرور «قابل فروش» باشد' : self::who($admin) . ' روی این سرور برای فروش گذاشته باشد') . '، حالا و در آینده، جزو این پلن است (الان ' . Persian::number(self::sellableCount($server)) . ' مورد).')
+        $view->line('• کل سرور: هر اینباندی که ' . ($admin->seat->isOwner() ? 'در صفحه سرور «قابل فروش» باشد' : self::SETS_UP . ' روی این سرور برای فروش گذاشته باشد') . '، حالا و در آینده، جزو این پلن است (الان ' . Persian::number(self::sellableCount($server)) . ' مورد).')
             ->line('• انتخاب اینباندها: فقط همان اینباندهایی که علامت می‌زنید.');
 
         return $view->row(Button::to(Icons::SERVERS . ' کل سرور', self::ID, 'all', (int) $server['id'])->primary(), Button::to('☑️ انتخاب اینباندها', self::ID, 'in', (int) $server['id']))
@@ -259,7 +255,7 @@ final class PlanServersScreen extends BaseScreen
             $buttons[] = Button::to($mark . self::inboundName($inbound) . ($address !== '' ? " \u{2068}{$address}\u{2069}" : ''), self::ID, 't', $id);
         }
         if ($buttons === []) {
-            $view->line('این سرور هنوز اینباندی ندارد؛ ' . ($admin->seat->isOwner() ? 'از صفحه سرور به‌روزرسانی کنید.' : 'از ' . self::who($admin) . ' بخواهید آن را به‌روزرسانی کند.'));
+            $view->line('این سرور هنوز اینباندی ندارد؛ ' . ($admin->seat->isOwner() ? 'از صفحه سرور به‌روزرسانی کنید.' : 'از ' . self::SETS_UP . ' بخواهید آن را به‌روزرسانی کند.'));
         }
         $view->paged(1, $buttons, (int) ($pick['page'] ?? 1), static fn(int $page): array => [self::ID, 'ip', [$page]]);
         if ($buttons !== []) {
@@ -331,11 +327,5 @@ final class PlanServersScreen extends BaseScreen
         }
 
         return '#' . (int) ($inbound['id'] ?? 0);
-    }
-
-    /** Who sets a server up for a seat without the servers' pages: the main shop's support for an agent, else the owner. */
-    private static function who(Admin $admin): string
-    {
-        return $admin->seat->isAgent() ? 'پشتیبانی' : 'مالک فروشگاه';
     }
 }

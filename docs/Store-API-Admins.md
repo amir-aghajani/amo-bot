@@ -61,11 +61,11 @@ the website with the very account that has it — their Telegram, or a way in ad
 ([ways in](Store-API-Account.md#ways-in-adding-and-removing)). A website account they made with an email alone is
 another customer, and no admin.
 
-**The same admins may manage the shop from its bot's private chat** («⚙️ مدیریت»), with switches of its own —
-«تنظیمات ربات › مدیران ربات»: whether they may, and the same grants, set apart from the website's
-([Managing the shop from the bot](Bot-Management.md#the-shops-admins)). Neither carries over: a grant given on the
-website opens nothing in the bot, nor the bot's on the website. A ticket answered there carries the channel `manage`
-(«مدیریت ربات»), beside `web`, `bot`, `panel`, `staff` and `group`.
+**The same admins manage the shop from its bot's private chat** («⚙️ مدیریت») too, and there it is different: no
+switch and no grants — the role alone gives them the owner's access in the main bot, the agent's in an agent's bot
+([Managing the shop from the bot](Bot-Management.md#the-shops-admins)). Nothing of that carries over: the admin API keeps
+`staff_enabled`, the strong sign-in and its grants, and limits the website alone. A ticket answered from the bot carries
+the channel `manage` («مدیریت ربات»), beside `web`, `bot`, `panel`, `staff` and `group`.
 
 ## Signing in
 
@@ -158,10 +158,10 @@ And past the door, what no admin decides, whatever the row's state allows — a 
 | `نظر خودتان را نمی‌توانید تایید، رد یا حذف کنید؛ این کار با مدیر دیگری است.` | Their own review, approved, rejected or deleted |
 | `هشدار زیرمجموعه‌گیری خودتان را نمی‌توانید رفع کنید؛ این کار با مدیر دیگری است.` | A referral alert on themselves, cleared |
 | `برای خودتان نمی‌توانید سفارش ثبت کنید؛ این کار با مدیر دیگری است.` | An order made by hand for their own account |
-| `حساب مدیران فروشگاه فقط از پنل تغییر می‌کند.` | An admin's account — a ban, its groups, its excuse from the phone number, a message to it, two-factor sign-in, the devices —, theirs or another admin's |
-| `گروه «همکاران» حساب یکی از مدیران فروشگاه را دارد؛ «همکار» کردن آن فقط از پنل ممکن است.` | «همکار» switched on for a group an admin is in (the message names the group): a «همکار» group's members pay the agents' prices |
+| `حساب مدیران فروشگاه فقط از پنل یا «⚙️ مدیریت» ربات تغییر می‌کند.` | An admin's account — a ban, its groups, its excuse from the phone number, a message to it, two-factor sign-in, the devices —, theirs or another admin's |
+| `گروه «همکاران» حساب یکی از مدیران فروشگاه را دارد؛ «همکار» کردن آن فقط از پنل یا «⚙️ مدیریت» ربات ممکن است.` | «همکار» switched on for a group an admin is in (the message names the group): a «همکار» group's members pay the agents' prices |
 | `فروشگاه گذاشتن مشتری در گروه «همکار» را به مدیران وب‌سایت نسپرده است.` | A customer added to a «همکار» group while the website does not grant `catalog` (granted, a sign-in older than 15 minutes is the `403` of a recent sign-in instead) |
-| `حساب نماینده‌ها فقط از پنل تغییر می‌کند.` | An agent's account, the same way (a ban, its groups, its excuse from the phone number, a message to it, two-factor sign-in, the devices): the owner's partners are the panel's |
+| `حساب نماینده‌ها فقط از پنل یا «⚙️ مدیریت» ربات تغییر می‌کند.` | An agent's account, the same way (a ban, its groups, its excuse from the phone number, a message to it, two-factor sign-in, the devices): the owner's partners are the panel's |
 | `از وب‌سایت فقط پرداختی تایید می‌شود که رسیدش رسیده و در انتظار بررسی است.` | Approving a payment without a receipt in review |
 
 Nor does an admin hand a customer's service to themselves: a `422` on `telegram_id` (`سرویس را به حساب خودتان نمی‌توانید

@@ -9,6 +9,50 @@ screen shows it to every shop before it updates ([Releasing](Releasing.md#publis
 While a version is being made its changes collect under **Unreleased**; releasing it renames that heading to
 `## Version <version>`. The versions follow [Semantic Versioning](https://semver.org/).
 
+## Version 0.10.4
+
+### Added
+
+- **The bot's state on the management's home** — «🟢 ربات روشن است» or «🔴 ربات خاموش است», with «⏸ خاموش کردن ربات»
+  (asked first) or «▶️ روشن کردن ربات» beside **«⚡️ کلیدهای اصلی»**: the switches turned on and off most, on one screen
+  by section — the bot, the phone and channels rules, tests, extras, custom services, links, transfers, the reward
+  programs, reminders and the removal of ended services, the website and the mini app —, each a tap, the ones that hold
+  customers back asked first. It is in «⚙️ تنظیمات» too ([Managing the shop from the bot](Bot-Management.md#settings)).
+
+### Changed
+
+- **Every bot admin manages the shop from the bot with the owner's access** — in the main bot's «⚙️ مدیریت»
+  (`/admin`), each customer you made an admin now has every section, the shop switcher and any shop, the panel's
+  settings (the bot's token and the database among them), the backups and their restore, and the update; in an agent's
+  bot, its admins have the agent's while the agency stands. No switch and no grants: the role is the switch, and taking
+  it away (or a ban) ends it at their next message. Their decisions keep their own name, and they decide nothing about
+  their own account, in whichever shop they work — their wallet, a payment or order of theirs, their own discount or
+  «همکار» group, their service, their agency request or their agency itself: another admin does. Your linked Telegram
+  accounts («👑 حساب تلگرام مالک») stay yours alone — nobody but you bans one or changes its role either —, your login
+  reads «پشتیبانی» to them, the Bot API's address and the main bot's webhook secret are yours alone, and the panel's
+  login changes in the panel alone; an agent's own account in their bot is banned by the agent or you alone. The
+  website's «مدیران سایت» and its grants, and the report group, are as they were
+  ([Managing the shop from the bot](Bot-Management.md#what-an-admin-may-not-do)).
+- **A new panel login takes the admin role from every linked Telegram account** — a role you set by hand too, since an
+  admin of the main bot has your access in the bot — as it lets them go; link yours again afterwards
+  ([Managing the shop from the bot](Bot-Management.md#your-own-telegram-account)).
+- **A whole installation's restore leaves your linked Telegram accounts as they are** — who is you in the bot, and the
+  admin role of each of those accounts, stay as they were just before it; and an import from another bot never bans an
+  account linked as you nor changes its role ([Backups](Backups.md#watch-out-for)).
+- **«تنظیمات ربات › مدیران ربات» has nothing to set** — its switch and grants are gone, in both panels: the card explains
+  what the bot's admins can do and links to them ([Bot settings](Bot-Settings.md#the-bots-admins)). In the bot,
+  «⚙️ تنظیمات › 🛡 مدیران ربات» lists the shop's admins, searchable, and «➕ افزودن مدیر ربات» makes one by their
+  number, Telegram id or username, asked first. Making an admin — there, on a customer's page in the bot or on the
+  report group's card — now says what the role hands over, its yes red; the panel's «مدیر ربات کردن» and the «مدیر» mark
+  beside an admin's name say it too.
+
+### Upgrading
+
+- **Look at who your bot admins are before you update** — «کاربران», «نقش › مدیران ربات», in your shop and each agent's:
+  after the update every one of them has your access in the main bot's «⚙️ مدیریت» (an agent's, in their bot), whatever
+  «کار مدیران از ربات» and the grants said. Take the role from anyone who should not have it. Then update from
+  «تنظیمات پنل › به‌روزرسانی»: nothing else to do.
+
 ## Version 0.10.3
 
 ### Added

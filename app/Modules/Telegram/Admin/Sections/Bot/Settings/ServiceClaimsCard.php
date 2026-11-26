@@ -17,7 +17,7 @@ final class ServiceClaimsCard extends BotCard
 
     public function allows(AdminSeat $seat): bool
     {
-        return $seat->configures() && $seat->shop()->isMain();
+        return $seat->shop()->isMain();
     }
 
     protected function group(): string

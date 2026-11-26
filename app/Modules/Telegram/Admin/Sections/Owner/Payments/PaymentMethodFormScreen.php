@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Modules\Telegram\Admin\Sections\Owner\Payments;
 
-use App\Modules\Telegram\Admin\AdminSeat;
 use App\Modules\Telegram\Admin\Sections\Owner\Forms\DescribedForm;
 use App\Modules\Telegram\Admin\Sections\Owner\Forms\FormScreen;
 use App\Modules\Telegram\Admin\Sections\Owner\Words;
@@ -29,11 +28,6 @@ final class PaymentMethodFormScreen extends FormScreen
 
     /** The new card method's first card, in the draft (sent as its `cards`). */
     private const CARD = ['card_number' => 'number', 'card_holder' => 'holder', 'card_bank' => 'bank', 'card_cap' => 'daily_cap'];
-
-    public function allows(AdminSeat $seat): bool
-    {
-        return $seat->configures();
-    }
 
     protected function screen(): string
     {

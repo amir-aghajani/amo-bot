@@ -390,7 +390,7 @@ final class Sales
 
     /**
      * The servers a services screen picks from — to narrow the list by, or to move a service to —, read as the seat's
-     * panel reads them: the owner's every server with its running services, anyone else's the shop's as the plan form
+     * panel reads them: the owner's seat every server with its running services, an agent's the shop's as the plan form
      * offers them. Each with why nothing can be moved onto it now (null when it can).
      *
      * @return list<array{id: int, name: string, reason: string|null, active: int|null}>

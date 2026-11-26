@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Modules\Telegram\Admin\Sections\Marketing\Discounts;
 
-use App\Modules\Telegram\Admin\AdminSeat;
 use App\Modules\Telegram\Admin\Door\ApiRefusal;
 use App\Modules\Telegram\Admin\Sections\Marketing\Words as Marketing;
 use App\Modules\Telegram\Admin\Ui\Admin;
@@ -38,11 +37,6 @@ final class DiscountCodesScreen extends ListScreen
 
     /** The most of the panel's pages read for a list narrowed to a state (25 codes each). */
     private const WHOLE_MOST = 40;
-
-    public function allows(AdminSeat $seat): bool
-    {
-        return $seat->configures();
-    }
 
     /** Narrowed to a state, the list read whole and cut here; else the panel's pages, as any list. */
     public function show(Admin $admin, array $args): View

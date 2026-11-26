@@ -6,10 +6,12 @@ namespace Tests\Feature\Imports\Core;
 
 use App\Modules\Accounts\Services\AccountMerger;
 use App\Modules\Imports\Enums\ImportPhase;
+use App\Modules\Imports\Enums\ProblemReason;
 use App\Modules\Imports\Links;
 use App\Modules\Imports\Models\ImportLink;
 use App\Modules\Imports\Records\ImportedCustomer;
 use App\Modules\Imports\Writers\CustomerWriter;
+use App\Modules\Telegram\Admin\OwnerLinks;
 use App\Modules\Telegram\Models\ReportMessage;
 use App\Modules\Users\Enums\UserRole;
 use App\Modules\Users\Enums\UserStatus;
@@ -57,6 +59,43 @@ final class CustomersStageTest extends ImportTestCase
         self::assertSame(['old_name', 'رضا', '+989127654321', 5, UserStatus::Banned, UserRole::Admin], [$known->username, $known->first_name, $known->phone, $known->discount_percent, $known->status, $known->role]);
         self::assertSame(1, User::query()->count());
         self::assertSame(['created' => 0, 'linked' => 1, 'skipped' => 0], self::counts($import)['customers']);
+    }
+
+    /**
+     * Only the owner bans their own Telegram accounts or decides their role: an account linked as the owner in the bot
+     * comes neither banned nor an admin, whatever the other bot says and the switches bring — the shop's row, or one
+     * made now for a linked account the shop has no row of —, the rest of it as anyone's, and the report says so.
+     */
+    public function testAnAccountLinkedAsTheOwnerIsNeverBannedNorMadeAnAdminByAnImport(): void
+    {
+        $this->config(['telegram.username' => 'amo_shop_bot']);
+        $owner = $this->customer(['telegram_id' => 7001, 'first_name' => null]);
+        foreach ([7001, 7003, 7004] as $telegramId) {
+            $links = $this->service(OwnerLinks::class);
+            $link = $links->link();
+            self::assertNotNull($link);
+            self::assertTrue($links->redeem(substr($link['url'], (int) strpos($link['url'], '=') + 1), $telegramId));
+        }
+        $this->migrator->customers = [
+            new ImportedCustomer('o1', 7001, firstName: 'امیر', phone: '09121234567', banned: true, discountPercent: 10, admin: true, balance: '5000'),
+            new ImportedCustomer('r2', 7002, banned: true, admin: true),
+            new ImportedCustomer('o3', 7003, firstName: 'امیر', banned: true, admin: true),
+            new ImportedCustomer('o4', 7004, firstName: 'امیر'),
+        ];
+
+        $import = $this->importAll(['admins' => true]);
+
+        $owner->refresh();
+        self::assertSame([UserStatus::Active, UserRole::Customer, 'امیر', '+989121234567', 10, '5000.00'], [$owner->status, $owner->role, $owner->first_name, $owner->phone, $owner->discount_percent, $owner->balance()], 'the rest of it comes');
+        $made = User::query()->where('telegram_id', 7003)->sole();
+        self::assertSame([UserStatus::Active, UserRole::Customer], [$made->status, $made->role], 'a linked account the shop had no row of');
+        $other = User::query()->where('telegram_id', 7002)->sole();
+        self::assertSame([UserStatus::Banned, UserRole::Admin], [$other->status, $other->role], 'anyone else as the switches bring it');
+        self::assertSame(['created' => 3, 'linked' => 1, 'skipped' => 0], self::counts($import)['customers']);
+        self::assertSame([
+            ['kind' => 'customers', 'key' => 'o1', 'reason' => ProblemReason::Refused->value, 'detail' => CustomerWriter::OWNERS_ACCOUNT],
+            ['kind' => 'customers', 'key' => 'o3', 'reason' => ProblemReason::Refused->value, 'detail' => CustomerWriter::OWNERS_ACCOUNT],
+        ], self::problemRows($import), 'said only where something was left out');
     }
 
     public function testACustomerTheBotMadeAMomentAgoIsLinkedNotMadeTwice(): void

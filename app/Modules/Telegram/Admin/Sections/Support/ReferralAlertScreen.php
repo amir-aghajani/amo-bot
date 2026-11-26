@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Telegram\Admin\Sections\Support;
 
+use App\Modules\Telegram\Admin\Sections\Customers\Customer;
 use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\Button;
 use App\Modules\Telegram\Admin\Ui\Fmt;
@@ -15,7 +16,7 @@ use App\Modules\Telegram\Admin\Ui\Words as UiWords;
 /**
  * One alert on a referrer (a row of ReferralAlertsScreen's page): on whom, why and when, in one card — and
  * «✅ رفع هشدار», asked first in the panel's words: the referrer earns gifts again from then on, what was held stays
- * held.
+ * held. An alert on the seat's own account (Customer::own()) is another admin's to clear: no button for it.
  *
  * Actions: `clr` (id: asks), `clrd` (id: clears).
  */
@@ -68,10 +69,15 @@ final class ReferralAlertScreen extends KeptRowScreen
                 'معرف' => Words::account($referrer) . Words::banned($row['status'] ?? null),
                 'دلیل' => Fmt::e(ReferralAlertsScreen::reason($row)),
                 'زمان' => Fmt::date($created, true) . ' (' . Words::ago($created) . ')',
-            ])
-            ->help(Fmt::e(ReferralAlertsScreen::HELD));
+            ]);
+        // Nobody clears an alert on themselves (ReferralAlerts: ActorRefusedException::ownAlert()).
+        $own = $referrer !== null && Customer::own($admin, is_int($referrer['id'] ?? null) ? $referrer['id'] : 0);
+        if ($own) {
+            $view->note('این هشدار روی حساب خود شماست؛ رفعش با مدیر دیگری است.');
+        }
 
-        return $view->row(Button::to('✅ رفع هشدار', self::ID, 'clr', $id)->success())
+        return $view->help(Fmt::e(ReferralAlertsScreen::HELD))
+            ->row($own ? null : Button::to('✅ رفع هشدار', self::ID, 'clr', $id)->success())
             ->row(Links::customer($admin, $referrer, 'صفحه معرف'))
             ->back(ReferralAlertsScreen::ID);
     }

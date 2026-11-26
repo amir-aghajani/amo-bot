@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Modules\Telegram\Admin\Sections\Bot;
 
-use App\Modules\Telegram\Admin\AdminSeat;
 use App\Modules\Telegram\Admin\Sections\Bot\Settings\ClientNamesCard;
 use App\Modules\Telegram\Admin\Sections\Bot\Settings\ExpiredServicesCard;
 use App\Modules\Telegram\Admin\Sections\Bot\Settings\ExtrasCard;
@@ -56,11 +55,6 @@ final class BotSettingsMenu extends BaseScreen
         [ServiceTransfersCard::ID, ServiceTransfersCard::TITLE],
         [ServiceClaimsCard::ID, ServiceClaimsCard::TITLE],
     ];
-
-    public function allows(AdminSeat $seat): bool
-    {
-        return $seat->configures();
-    }
 
     public function show(Admin $admin, array $args): View
     {

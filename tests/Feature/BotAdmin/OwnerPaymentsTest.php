@@ -17,7 +17,8 @@ use Tests\Support\FakeZarinpal;
  * «💳 روش‌های پرداخت» in the bot (Telegram\Admin\Sections\Owner\Payments): the list in checkout order, a method switched,
  * moved and deleted (one with payments refused in the panel's words), a card method added by its driver's described form
  * with its first card, an online gateway whose secret is kept on an edit, a method's cards, and «تایید خودکار واریز» with
- * its key — every write through the panel's own routes; the owner's and an agent's in their own bot, no admin's.
+ * its key — every write through the panel's own routes; the owner's and an agent's in their own bot, the shop's admins'
+ * as theirs.
  */
 final class OwnerPaymentsTest extends BotTestCase
 {
@@ -185,7 +186,7 @@ final class OwnerPaymentsTest extends BotTestCase
         self::assertNotSame($key, $this->service(DepositSettings::class)->key());
     }
 
-    public function testAnAgentManagesTheirOwnMethodsAndAnAdminNone(): void
+    public function testAnAgentManagesTheirOwnMethodsAndTheMainShopsAdminTheMainOnes(): void
     {
         $bot = $this->agentBot();
         $agentMethod = CurrentBot::run($bot, fn(): PaymentMethod => $this->cardMethod('کارت نماینده'));
@@ -197,11 +198,13 @@ final class OwnerPaymentsTest extends BotTestCase
         $this->sendTo($bot, $this->tap(Nav::to('sv'), chat: self::AGENT_TELEGRAM_ID));
         self::assertStringNotContainsString('🖥 سرورها', $this->said()[0], 'the servers are the owner\'s');
 
+        // The main shop's admin: the main shop's methods, as the owner manages them.
         $card = $this->cardMethod();
         $this->customer(['telegram_id' => 7100, 'role' => UserRole::Admin]);
         $this->send($this->tap(Nav::to('hs'), chat: 7100));
-        self::assertNotContains(Nav::to('pm'), $this->callbacks(0));
+        self::assertContains(Nav::to('pm'), $this->callbacks(0));
         $this->send($this->tap(Nav::to('pmv', 'on', $card->id, 0), chat: 7100));
-        self::assertTrue($card->refresh()->enabled, 'an admin\'s tap changes nothing');
+        self::assertFalse($card->refresh()->enabled, 'through the owner panel\'s route');
+        self::assertFalse(CurrentBot::run($bot, static fn(): bool => $agentMethod->refresh()->enabled), 'the agent\'s as they left it');
     }
 }

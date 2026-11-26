@@ -236,7 +236,7 @@ final class TicketReportsTest extends BotTestCase
         $post = (int) ReportMessage::query()->sole()->message_id;
 
         $this->send($this->reply($post, 'من هم جواب می‌دهم', from: self::GROUP_MEMBER));
-        self::assertSame(['فقط مدیرهای ربات می‌توانند به تیکت پاسخ دهند؛ نقش «مدیر ربات» در صفحه کاربران پنل داده می‌شود.'], $this->telegram()->sentTo(self::REPORT_GROUP));
+        self::assertSame(['فقط مدیرهای ربات می‌توانند به تیکت پاسخ دهند؛ نقش «مدیر ربات» از صفحه کاربران پنل یا از «⚙️ مدیریت» ربات داده می‌شود.'], $this->telegram()->sentTo(self::REPORT_GROUP));
 
         $this->send($this->reply($post, 'ناشناس', ['sender_chat' => ['id' => self::REPORT_GROUP, 'type' => 'supergroup']]));
         self::assertSame([GroupButtons::ANONYMOUS], $this->telegram()->sentTo(self::REPORT_GROUP));
@@ -310,7 +310,7 @@ final class TicketReportsTest extends BotTestCase
         $post = (int) ReportMessage::query()->sole()->message_id;
 
         $this->send($this->groupTap(TicketClose::PREFIX . $ticket->id, $post, $this->threads['tickets'], self::GROUP_MEMBER));
-        self::assertSame(['فقط مدیرهای ربات می‌توانند تیکت را ببندند؛ نقش «مدیر ربات» در صفحه کاربران پنل داده می‌شود.', TicketStatus::Open], [$this->popup(), $ticket->refresh()->status]);
+        self::assertSame(['فقط مدیرهای ربات می‌توانند تیکت را ببندند؛ نقش «مدیر ربات» از صفحه کاربران پنل یا از «⚙️ مدیریت» ربات داده می‌شود.', TicketStatus::Open], [$this->popup(), $ticket->refresh()->status]);
 
         $this->send($this->groupTap(TicketClose::PREFIX . $ticket->id, $post, $this->threads['tickets']));
 

@@ -5,17 +5,17 @@ declare(strict_types=1);
 namespace App\Modules\Auth\Exceptions;
 
 use App\Core\Exceptions\DomainRuleException;
-use App\Modules\Auth\CurrentPrincipal;
 use App\Modules\Auth\StaffGrant;
 
 /**
- * A decision this actor may not make whatever the row's state (403): a shop's admin — also its customer — deciding about
- * themselves (their payment, wallet, service, agency request, review, referral alert, an order made for them); from the
- * website, touching an admin's or an agent's account, switching «همکار» on for a group an admin is in, putting a customer
- * in a «همکار» group without the `catalog` grant (one with a `grant`: StaffMiddleware answers it as its own door does); from
- * the website or the bot's management, approving a payment with no receipt in review; from the report group, an admin's
- * own account, an agent's, banning an admin, putting one in a «همکار» group, setting one's own discount, making an admin of
- * someone with either, or their website sign-in. The owner and agents are refused none of these.
+ * A decision this actor may not make whatever the row's state (403): a shop's admin — also its customer, wherever they
+ * work it, the bot's management with the owner's or an agent's seat too — deciding about themselves (their payment,
+ * wallet, service, agency request, review, referral alert, an order made for them); from the website, touching an
+ * admin's or an agent's account, switching «همکار» on for a group an admin is in, putting a customer in a «همکار» group
+ * without the `catalog` grant (one with a `grant`: StaffMiddleware answers it as its own door does), or approving a
+ * payment with no receipt in review; from the report group, an admin's own account, an agent's, banning an admin,
+ * putting one in a «همکار» group, setting one's own discount, making an admin of someone with either, or their website
+ * sign-in. The owner and agents themselves are refused none of these.
  */
 final class ActorRefusedException extends DomainRuleException
 {
@@ -27,17 +27,23 @@ final class ActorRefusedException extends DomainRuleException
     public const OWN_ALERT = 'هشدار زیرمجموعه‌گیری خودتان را نمی‌توانید رفع کنید؛ این کار با مدیر دیگری است.';
     public const OWN_ACCOUNT = 'حساب خودتان را از گروه گزارش‌ها نمی‌توانید تغییر دهید؛ این کار با مدیر دیگری یا پنل است.';
     public const ADMIN_BANNED = 'مدیر ربات مسدود نمی‌شود؛ اول نقش مدیرش را بردارید.';
-    public const ADMIN_TO_AGENT_GROUP = 'مدیر ربات فقط از پنل در گروه «همکار» گذاشته می‌شود.';
-    public const ADMIN_DISCOUNT = 'تخفیف اختصاصی مدیر ربات فقط از پنل تغییر می‌کند.';
-    public const ADMIN_WITH_OWN_PRICES = 'این کاربر تخفیف اختصاصی دارد یا در گروه «همکار» است؛ مدیر ربات این‌ها را فقط از پنل می‌گیرد. اول تخفیف و گروه «همکار» را از کارتش بردارید، یا از پنل مدیرش کنید.';
+    public const ADMIN_TO_AGENT_GROUP = 'مدیر ربات فقط از پنل یا «⚙️ مدیریت» ربات در گروه «همکار» گذاشته می‌شود.';
+    public const ADMIN_DISCOUNT = 'تخفیف اختصاصی مدیر ربات فقط از پنل یا «⚙️ مدیریت» ربات تغییر می‌کند.';
+    public const ADMIN_WITH_OWN_PRICES = 'این کاربر تخفیف اختصاصی دارد یا در گروه «همکار» است؛ مدیر ربات این‌ها را فقط از پنل یا «⚙️ مدیریت» ربات می‌گیرد. اول تخفیف و گروه «همکار» را از کارتش بردارید، یا از پنل یا «⚙️ مدیریت» ربات مدیرش کنید.';
     public const OWN_ORDER = 'برای خودتان نمی‌توانید سفارش ثبت کنید؛ این کار با مدیر دیگری است.';
-    public const ADMIN_ACCOUNT = 'حساب مدیران فروشگاه فقط از پنل تغییر می‌کند.';
-    public const AGENT_ACCOUNT = 'حساب نماینده‌ها فقط از پنل تغییر می‌کند.';
-    public const ADMIN_IN_GROUP = 'گروه «%s» حساب یکی از مدیران فروشگاه را دارد؛ «همکار» کردن آن فقط از پنل ممکن است.';
+    public const ADMIN_ACCOUNT = 'حساب مدیران فروشگاه فقط از پنل یا «⚙️ مدیریت» ربات تغییر می‌کند.';
+    public const AGENT_ACCOUNT = 'حساب نماینده‌ها فقط از پنل یا «⚙️ مدیریت» ربات تغییر می‌کند.';
+    public const ADMIN_IN_GROUP = 'گروه «%s» حساب یکی از مدیران فروشگاه را دارد؛ «همکار» کردن آن فقط از پنل یا «⚙️ مدیریت» ربات ممکن است.';
     public const RECEIPT_FIRST = 'از وب‌سایت فقط پرداختی تایید می‌شود که رسیدش رسیده و در انتظار بررسی است.';
-    /** RECEIPT_FIRST as a shop's admin managing it from the bot reads it (Actor::$inBot). */
-    public const RECEIPT_FIRST_IN_BOT = 'مدیران ربات فقط پرداختی را تایید می‌کنند که رسیدش رسیده و در انتظار بررسی است.';
     public const AGENT_GROUP_NOT_GRANTED = 'فروشگاه گذاشتن مشتری در گروه «همکار» را به مدیران وب‌سایت نسپرده است.';
+    public const OWN_PRICES = 'قیمت‌های خودتان را نمی‌توانید عوض کنید؛ تخفیف اختصاصی و گروه «همکار» خودتان با مدیر دیگری است.';
+    public const OWNER_ONLY = 'حساب‌های تلگرام مالک را فقط خود مالک تغییر می‌دهد.';
+    public const OWN_AGENCY = 'نمایندگی خودتان را نمی‌توانید تغییر دهید؛ این کار با مدیر دیگری است.';
+    public const OWNERS_PASSWORD = 'این تغییر رمز عبور پنل را می‌خواهد و فقط کار خود مالک است.';
+    public const OWNER_BANNED = 'این حساب تلگرام مالک فروشگاه است و مسدود نمی‌شود.';
+    public const OWNER_ROLE = 'نقش حساب تلگرام مالک فروشگاه را فقط خود مالک عوض می‌کند.';
+    public const AGENT_BANNED = 'این حساب نماینده صاحب این ربات است و مسدود نمی‌شود.';
+    public const OWNERS_SECRET = 'رمز Webhook ربات اصلی را فقط خود مالک عوض می‌کند.';
 
     private function __construct(
         string $message,
@@ -100,15 +106,19 @@ final class ActorRefusedException extends DomainRuleException
         return new self(self::ADMIN_TO_AGENT_GROUP);
     }
 
-    /** A report group's admin setting one of the shop's admins' own discount: their prices are the panel's to lower. */
+    /**
+     * A report group's admin setting one of the shop's admins' own discount: their prices are lowered from the panel or
+     * the bot's management.
+     */
     public static function adminDiscount(): self
     {
         return new self(self::ADMIN_DISCOUNT);
     }
 
     /**
-     * A report group's admin making an admin of someone with their own discount or in a «همکار» group: the panel's to
-     * give an admin, so taking the role off, setting either and giving it back does not go round the two rules above.
+     * A report group's admin making an admin of someone with their own discount or in a «همکار» group: the panel's or the
+     * bot's management's to give an admin, so taking the role off, setting either and giving it back does not go round
+     * the two rules above.
      */
     public static function adminWithOwnPrices(): self
     {
@@ -131,19 +141,73 @@ final class ActorRefusedException extends DomainRuleException
         return new self(sprintf(self::ADMIN_IN_GROUP, $group));
     }
 
-    /**
-     * A shop's admin approving a payment with no receipt in review — from its website, or (`$inBot`) from the bot; left
-     * out, as the request's principal says (CurrentPrincipal).
-     */
-    public static function receiptFirst(?bool $inBot = null): self
+    /** A shop's admin on its website approving a payment with no receipt in review. */
+    public static function receiptFirst(): self
     {
-        return new self(($inBot ?? CurrentPrincipal::get()->inBot ?? false) ? self::RECEIPT_FIRST_IN_BOT : self::RECEIPT_FIRST);
+        return new self(self::RECEIPT_FIRST);
     }
 
     /** A customer put in a «همکار» group — the plans' agent prices — by a shop's admin on its website who holds no `catalog` now. */
     public static function agentGroupNotGranted(): self
     {
         return new self(self::AGENT_GROUP_NOT_GRANTED, StaffGrant::Catalog);
+    }
+
+    /** An admin's own prices — their own discount, or a «همکار» group put on their own account. */
+    public static function ownPrices(): self
+    {
+        return new self(self::OWN_PRICES);
+    }
+
+    /**
+     * What only the owner themselves decides (Principal::isTheOwner()), refused to one of the main shop's admins working
+     * the bot's management with the owner's seat: which Telegram accounts are the owner.
+     */
+    public static function ownerOnly(): self
+    {
+        return new self(self::OWNER_ONLY);
+    }
+
+    /** An admin who is an agent too changing their own agency: its level and credit, its terms, its traffic, its selling. */
+    public static function ownAgency(): self
+    {
+        return new self(self::OWN_AGENCY);
+    }
+
+    /**
+     * A change that asks the panel's password (the Bot API address moved), made by anyone but the owner themselves: one of
+     * the main shop's admins never types it — each wrong try counts against the owner's sign-in.
+     */
+    public static function ownersPassword(): self
+    {
+        return new self(self::OWNERS_PASSWORD);
+    }
+
+    /** A Telegram account linked as the owner banned by anyone but the owner: it would shut the owner out of the bot. */
+    public static function ownerBanned(): self
+    {
+        return new self(self::OWNER_BANNED);
+    }
+
+    /** The role of a Telegram account linked as the owner changed by anyone but the owner. */
+    public static function ownerRole(): self
+    {
+        return new self(self::OWNER_ROLE);
+    }
+
+    /** An agent's own account in their bot banned by anyone but the agent or the owner: it would shut them out of it. */
+    public static function agentBanned(): self
+    {
+        return new self(self::AGENT_BANNED);
+    }
+
+    /**
+     * The main bot's webhook secret changed by anyone but the owner themselves: whoever knows it can send the shop
+     * updates in anyone's name — the owner's linked account's too —, a role taken away or not.
+     */
+    public static function ownersSecret(): self
+    {
+        return new self(self::OWNERS_SECRET);
     }
 
     public function status(): int

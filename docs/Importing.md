@@ -237,6 +237,8 @@ By their Telegram account:
   when the other bot gave it and its switch is on.
 - **Anyone else** becomes a customer quietly, as though they had always been here: no newcomer report to the group, no
   referral gift, joined on the day they joined the other bot.
+- **Your own Telegram accounts** — linked from «مدیریت از ربات» — never come banned nor admins, whatever the other bot
+  says: the rest of them comes, and the report lists each under «فروشگاه آن را نپذیرفت».
 - **One who bought in the other bot is no newcomer here**: no plan's first-purchase price
   ([Plans](Plans.md#first-purchase-price)), no code «فقط برای خرید اول», no free test while «اکانت تست فقط برای کاربران
   جدید» is on, and no referral «هدیه شروع» for a first purchase — whatever they buy here. For Faoxima, a paid purchase it
@@ -273,7 +275,9 @@ below zero, down to a limit in Faoxima, and in MirzaBot without one unless it wa
 
 Only with «مدیرها», and only the other bot's full admins (Faoxima's and MirzaBot's `administrator` role) become the
 bot's admins here ([Customers](Customers.md#the-bots-admins)); the review lists them alone, and warns of its sellers
-and support staff, who become nothing.
+and support staff, who become nothing. An admin of the main bot manages the whole shop from its «⚙️ مدیریت», with your
+access ([Managing the shop from the bot](Bot-Management.md#the-shops-admins)): look at who they are before you bring
+them, and take the role from anyone who should not have it.
 
 ### Referrals
 

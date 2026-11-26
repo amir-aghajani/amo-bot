@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 namespace App\Modules\Telegram\Admin\Sections\Customers;
 
-use App\Modules\Auth\StaffGrant;
-use App\Modules\Telegram\Admin\Door\BotAdminDoor;
 use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\BaseScreen;
 use App\Modules\Telegram\Admin\Ui\Button;
@@ -19,13 +17,12 @@ use App\Modules\Telegram\Admin\Ui\Words;
 /**
  * Which of the admin's groups a customer is in (the panel's «گروه‌ها» card and dialog): a switch per group — ✅ they are
  * in it, ▫️ not —, saved at a tap as the panel saves the dialog (PUT /users/{id}/groups, every group they are in). A
- * «همکار» group sets their prices as the plans do: one they are not in yet asks the `catalog` grant, so for a seat without
- * it that switch is locked. One of the shop's admins only looks at a bot admin's or an agent's groups. Many groups go by
- * pages, the page kept while switches are tapped; the groups they are in are named over the switches then, as a page
- * shows only some.
+ * «همکار» group sets their prices as the plans do. Many groups go by pages, the page kept while switches are tapped; the
+ * groups they are in are named over the switches then, as a page shows only some. On the seat's own account
+ * (Customer::own()) a «همکار» group they are not in has no switch: their own prices are another admin's.
  *
- * Opened with the customer's id. Actions: `sw` (id, group, 1|0: in or out), `no` (id: a «همکار» switch the seat may not
- * use), `pg` (id, n: the groups' page n). State: `page`, of `user`.
+ * Opened with the customer's id. Actions: `sw` (id, group, 1|0: in or out), `pg` (id, n: the groups' page n). State:
+ * `page`, of `user`.
  */
 final class CustomerGroupsScreen extends BaseScreen
 {
@@ -46,11 +43,6 @@ final class CustomerGroupsScreen extends BaseScreen
     public function act(Admin $admin, string $action, array $args): View
     {
         $id = self::id($args);
-        if ($action === 'no') {
-            $admin->alert('گروه «همکار» قیمت‌های مشتری را عوض می‌کند. ' . BotAdminDoor::NOT_GRANTED);
-
-            return $this->show($admin, [(string) $id]);
-        }
         if ($action === 'pg') {
             $admin->remember(self::ID, ['page' => self::page($args, 1), 'user' => $id]);
 
@@ -80,8 +72,7 @@ final class CustomerGroupsScreen extends BaseScreen
     }
 
     /**
-     * The customer's groups as the panel answered them: how many groups and how many they are in, a switch per group the
-     * seat may use.
+     * The customer's groups as the panel answered them: how many groups and how many they are in, a switch per group.
      *
      * @param array<string, mixed> $detail
      */
@@ -91,8 +82,6 @@ final class CustomerGroupsScreen extends BaseScreen
         $id = Customer::int($user, 'id');
         $in = Customer::ids(Json::rows($user, 'groups'));
         $groups = Customer::groups($admin);
-        $lock = Customer::lock($admin, $detail);
-        $catalog = $admin->seat->holds(StaffGrant::Catalog);
 
         $view = View::make(self::TITLE, ...Customer::under(Customer::name($user)));
         if ($groups === []) {
@@ -103,16 +92,20 @@ final class CustomerGroupsScreen extends BaseScreen
         }
 
         // The page of switches shown — one a group, in order —: the groups they are in elsewhere are named over it, as
-        // their switches do not show (all of them, on an account only looked at).
+        // their switches do not show.
         // The page kept is this customer's: another's groups open on the first.
         if (($admin->state(self::ID)['user'] ?? null) !== $id) {
             $admin->remember(self::ID, ['user' => $id, 'page' => 1]);
         }
         $page = max(1, (int) ($admin->state(self::ID)['page'] ?? 1));
-        $shown = $lock !== null ? [] : Customer::ids(View::slice($groups, $page, View::CHOICES_MOST)[0]);
+        // On the seat's own account a «همکار» group they are not in is not offered: it would set their own prices
+        // (ActorRefusedException::ownPrices()). The switches offered are paged, the groups all counted.
+        $own = Customer::own($admin, $id);
+        $offered = $own ? array_values(array_filter($groups, static fn(array $group): bool => !Json::on($group, 'agent_pricing') || in_array(Customer::int($group, 'id'), $in, true))) : $groups;
+        $shown = Customer::ids(View::slice($offered, $page, View::CHOICES_MOST)[0]);
         $elsewhere = [];
         $switches = [];
-        foreach ($groups as $group) {
+        foreach ($offered as $group) {
             $groupId = Customer::int($group, 'id');
             $member = in_array($groupId, $in, true);
             $partner = Json::on($group, 'agent_pricing');
@@ -120,17 +113,11 @@ final class CustomerGroupsScreen extends BaseScreen
             if ($member && !in_array($groupId, $shown, true)) {
                 $elsewhere[] = Customer::text($group, 'name') ?? '';
             }
-            if ($partner && !$member && !$catalog) {
-                $switches[] = Button::to('🔒 ' . $name, self::ID, 'no', $id);
-                continue;
-            }
             $switches[] = Button::to(($member ? Words::PICKED : '▫️ ') . $name . ' · ' . Fmt::number(Customer::members($group)) . ' نفر', self::ID, 'sw', $id, $groupId, $member ? 0 : 1);
         }
-        $view->total(count($groups), 'گروه', 'عضو ' . Fmt::plain(Fmt::number(count($in))), $elsewhere === [] ? '' : ($lock === null ? 'در صفحه‌های دیگر: ' : '') . implode('، ', $elsewhere));
-        if ($lock !== null) {
-            $view->note(Fmt::e($lock));
-
-            return $view->back(CustomerScreen::ID, Nav::SHOW, $id);
+        $view->total(count($groups), 'گروه', 'عضو ' . Fmt::plain(Fmt::number(count($in))), $elsewhere === [] ? '' : 'در صفحه‌های دیگر: ' . implode('، ', $elsewhere));
+        if (count($offered) < count($groups)) {
+            $view->note('این حساب خود شماست؛ گذاشتنش در گروه «همکار» با مدیر دیگری است.');
         }
 
         return $view->help('هر گروه را بزنید تا مشتری در آن گذاشته یا از آن برداشته شود. گروه «همکار»: ' . Fmt::e(GroupsScreen::PARTNER))

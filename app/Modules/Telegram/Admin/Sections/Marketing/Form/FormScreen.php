@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Modules\Telegram\Admin\Sections\Marketing\Form;
 
-use App\Modules\Telegram\Admin\AdminSeat;
 use App\Modules\Telegram\Admin\Door\ApiRefusal;
 use App\Modules\Telegram\Admin\Sections\Marketing\Words as Marketing;
 use App\Modules\Telegram\Admin\Ui\Admin;
@@ -96,11 +95,6 @@ abstract class FormScreen extends BaseScreen
      * @throws ApiRefusal
      */
     abstract protected function done(Admin $admin, array $row, bool $created): View;
-
-    public function allows(AdminSeat $seat): bool
-    {
-        return $seat->configures();
-    }
 
     /**
      * Row `$id` as the panel has it now — read afresh, never a list's kept page: its PUT sends the whole form back —, to

@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Modules\Telegram\Admin\Sections\Panel\Website;
 
-use App\Modules\Telegram\Admin\AdminSeat;
 use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\BaseScreen;
 use App\Modules\Telegram\Admin\Ui\Button;
@@ -44,11 +43,6 @@ final class WebsiteScreen extends BaseScreen
     public static function under(string ...$more): array
     {
         return [Words::ROOT, Fmt::bare(Words::SETTINGS), Fmt::bare(self::TITLE), ...array_values($more)];
-    }
-
-    public function allows(AdminSeat $seat): bool
-    {
-        return $seat->configures();
     }
 
     public function show(Admin $admin, array $args): View

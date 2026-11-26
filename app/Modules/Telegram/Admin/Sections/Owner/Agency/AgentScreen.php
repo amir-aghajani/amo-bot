@@ -30,7 +30,8 @@ use Illuminate\Support\Carbon;
  * their terms of selling and the owner's word on them (selling stopped, an end near, a month short), and the row's menu:
  * «✏️ سطح، اعتبار و شرایط فروش» (the main one), «📦 حجم ربات», «🙈 پنهان از فروشگاهش», «🏪 باز کردن فروشگاه» and their
  * bot's link, «▶️ ادامه فروش» / «⏸ توقف فروش» and «🚫 لغو نمایندگی» (red) — the stop and the end each asked first:
- * «✍️ … با توضیح» (a note the agent reads, then done), «⏭ … بدون توضیح» (done) or «✖️ انصراف».
+ * «✍️ … با توضیح» (a note the agent reads, then done), «⏭ … بدون توضیح» (done) or «✖️ انصراف». The seat's own agency
+ * (own()) offers its shop and bot alone: the rest is another admin's.
  *
  * Actions: `sus` (id: asks), `susw` (id: asks the note), `susn` (id: stops without a note), `res` (id), `rev` (id:
  * asks), `revw` (id: asks the note), `revn` (id: ends without a note).
@@ -58,7 +59,18 @@ final class AgentScreen extends BaseScreen
     {
         $row = self::load($admin, self::id($args));
 
-        return $row === null ? $admin->open(AgentsScreen::ID) : $this->view($row);
+        return $row === null ? $admin->open(AgentsScreen::ID) : $this->view($admin, $row);
+    }
+
+    /**
+     * Whether customer `$id` of the main shop — an agent, or one asking to be one — is the seat's own account: one of the
+     * shop's admins (AdminSeat::isAdmin()) whose account in the main bot it is, whichever shop they work. Their own agency
+     * and their own request are another admin's or the owner's to decide (ActorRefusedException::ownAgency(),
+     * ownRequest()).
+     */
+    public static function own(Admin $admin, int $id): bool
+    {
+        return $admin->seat->isAdmin() && $admin->seat->user->id === $id;
     }
 
     /**
@@ -121,7 +133,7 @@ final class AgentScreen extends BaseScreen
                 $agent = (array) ($admin->api->post("/agency/agents/{$id}/resume")['agent'] ?? []);
                 $admin->notice('▶️ فروش نماینده دوباره باز شد');
 
-                return $this->view(self::keep($admin, $agent));
+                return $this->view($admin, self::keep($admin, $agent));
             case 'revw':
                 return $admin->ask(new Prompt('توضیح لغو نمایندگی', self::ID, 'rev', [$id], Words::NOTE_HINT, Button::to(UiWords::CANCEL, self::ID, 'show', $id)));
             case 'revn':
@@ -208,7 +220,7 @@ final class AgentScreen extends BaseScreen
         $agent = (array) ($admin->api->post("/agency/agents/{$id}/suspend", ['note' => $note])['agent'] ?? []);
         $admin->notice('⛔️ فروش نماینده متوقف شد');
 
-        return $this->view(self::keep($admin, $agent));
+        return $this->view($admin, self::keep($admin, $agent));
     }
 
     private function revoke(Admin $admin, int $id, string $note): View
@@ -223,9 +235,10 @@ final class AgentScreen extends BaseScreen
     }
 
     /** @param array<string, mixed> $agent */
-    private function view(array $agent): View
+    private function view(Admin $admin, array $agent): View
     {
         $id = (int) ($agent['id'] ?? 0);
+        $own = self::own($admin, $id);
         $bot = is_array($agent['bot'] ?? null) ? $agent['bot'] : null;
         $standing = is_array($agent['standing'] ?? null) ? $agent['standing'] : null;
         $counts = Json::part($agent, 'counts');
@@ -261,20 +274,28 @@ final class AgentScreen extends BaseScreen
 
         $suspension = is_array($standing['suspension'] ?? null) ? (string) ($standing['suspension']['reason'] ?? '') : null;
         $username = is_string($bot['username'] ?? null) && $bot['username'] !== '' ? $bot['username'] : null;
-        $view->row(Button::to(UiWords::edit('سطح، اعتبار و شرایط فروش'), AgentTermsScreen::ID, 'edit', $id)->primary());
+        // Their own agency (an admin who is this agent too) is changed by another admin or the owner: only its shop and
+        // bot are offered.
+        if ($own) {
+            $view->note('این نمایندگی خود شماست؛ تغییرش با مدیر دیگری است.');
+        }
+        $view->row($own ? null : Button::to(UiWords::edit('سطح، اعتبار و شرایط فروش'), AgentTermsScreen::ID, 'edit', $id)->primary());
         if ($bot !== null) {
-            $view->row(Button::to('📦 حجم ربات', AgentTrafficScreen::ID, 'show', $id), Button::to('🙈 پنهان از فروشگاهش', AgentHiddenScreen::ID, 'show', $id))
+            $view->row(
+                $own ? null : Button::to('📦 حجم ربات', AgentTrafficScreen::ID, 'show', $id),
+                $own ? null : Button::to('🙈 پنهان از فروشگاهش', AgentHiddenScreen::ID, 'show', $id),
+            )
                 ->row(
                     Button::to(Icons::SHOP_SWITCH . ' باز کردن فروشگاه', 'shop', 'pick', (int) ($bot['id'] ?? 0)),
                     $username !== null ? Button::url('🤖 ربات او', 'https://t.me/' . $username) : null,
                 );
         }
         $view->row(
-            $suspension !== null && $suspension !== 'expired' ? Button::to('▶️ ادامه فروش', self::ID, 'res', $id)->success() : null,
-            $standing !== null && $suspension !== 'manual' ? Button::to('⏸ توقف فروش', self::ID, 'sus', $id)->danger() : null,
+            !$own && $suspension !== null && $suspension !== 'expired' ? Button::to('▶️ ادامه فروش', self::ID, 'res', $id)->success() : null,
+            !$own && $standing !== null && $suspension !== 'manual' ? Button::to('⏸ توقف فروش', self::ID, 'sus', $id)->danger() : null,
         );
 
-        return $view->row(Button::to('🚫 لغو نمایندگی', self::ID, 'rev', $id)->danger())
+        return $view->row($own ? null : Button::to('🚫 لغو نمایندگی', self::ID, 'rev', $id)->danger())
             ->back(AgentsScreen::ID)
             ->refresh(self::ID, 'show', $id);
     }

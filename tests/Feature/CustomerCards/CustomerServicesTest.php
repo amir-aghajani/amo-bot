@@ -427,7 +427,7 @@ final class CustomerServicesTest extends BotTestCase
         $agent = $this->agent(overrides: ['telegram_id' => 9292, 'username' => 'agent_reza']);
         $theirs = $this->mirrored($this->subscription($agent, $this->plan, $this->server, 'reza_1'));
         $this->send($this->press("us:v:{$agent->id}:{$theirs->id}"));
-        self::assertStringEndsWith("\n\n🔒 حساب نماینده است؛ فقط از پنل تغییر می‌کند.", $this->params(0)['text']);
+        self::assertStringEndsWith("\n\n🔒 حساب نماینده است؛ فقط از پنل یا «⚙️ مدیریت» ربات تغییر می‌کند.", $this->params(0)['text']);
         $this->send($this->press("us:ds:{$agent->id}:{$theirs->id}"));
         self::assertSame(ActorRefusedException::AGENT_ACCOUNT, $this->popup());
         self::assertSame(SubscriptionStatus::Active, $theirs->refresh()->status);

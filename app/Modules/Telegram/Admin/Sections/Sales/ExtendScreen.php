@@ -4,9 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Telegram\Admin\Sections\Sales;
 
-use App\Modules\Auth\StaffGrant;
 use App\Modules\Subscriptions\DTO\Gift;
-use App\Modules\Telegram\Admin\AdminSeat;
 use App\Modules\Telegram\Admin\Door\ApiRefusal;
 use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\Answer;
@@ -20,7 +18,7 @@ use App\Modules\Telegram\Admin\Ui\Words;
 use App\Support\Unit;
 
 /**
- * «🎁 افزایش زمان و حجم» for one service (the panel's ExtendForm; the grant to extend): days and GB on top of what it
+ * «🎁 افزایش زمان و حجم» for one service (the panel's ExtendForm): days and GB on top of what it
  * has — the panel's presets at a tap, any amount typed; each off when the service cannot take it (no end date, no
  * quota) —, a note for the customer and whether to tell them, then one request. In an agent's shop the GB come out of
  * the bot's traffic, said with what is left; days cost nothing. The draft is the screen's state until sent.
@@ -39,11 +37,6 @@ final class ExtendScreen extends BaseScreen
     /** The presets offered at a tap. */
     private const DAYS = [7, 30];
     private const GB = [10, 50];
-
-    public function allows(AdminSeat $seat): bool
-    {
-        return $seat->holds(StaffGrant::Extend);
-    }
 
     public function show(Admin $admin, array $args): View
     {

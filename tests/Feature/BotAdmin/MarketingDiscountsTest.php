@@ -18,7 +18,7 @@ use Tests\BotTestCase;
  * «🏷 کدهای تخفیف» in the bot's management (Sections\Marketing\Discounts): a code made step by step — typed answers, a
  * choice, several kinds ticked, a Jalali day — then saved at once through the panel's route, its refusals marked on the
  * summary; a code switched, edited and deleted (one an order keeps refused up front); the settings card over its two
- * groups; and the section kept from the shop's admins.
+ * groups; and the section the shop's admins' as the owner's.
  */
 final class MarketingDiscountsTest extends BotTestCase
 {
@@ -280,18 +280,19 @@ final class MarketingDiscountsTest extends BotTestCase
         self::assertSame(30, $this->service(DiscountSettings::class)->holdMinutes(), 'the other group untouched');
     }
 
-    public function testAShopsAdminHasNoMarketing(): void
+    public function testAShopsAdminHasTheMarketingAsTheOwnerDoes(): void
     {
         $this->customer(['telegram_id' => 7100, 'role' => UserRole::Admin]);
         $this->code('STAFF');
 
         $this->send($this->message('/admin', chat: 7100));
-        self::assertNotContains(Nav::to('hm'), $this->buttons());
+        self::assertContains(Nav::to('hm'), $this->buttons(), 'on the home');
 
         $this->send($this->tap(Nav::to('dc'), chat: 7100));
-        self::assertStringContainsString('مدیریت فروشگاه', $this->said()[0], 'a screen it may not open is the home');
+        self::assertStringNotContainsString('مدیریت فروشگاه', $this->said()[0], 'the codes, not the home');
+        self::assertContains(Nav::to('dcf', 'new'), $this->buttons());
         $this->send($this->tap(Nav::to('dcf', 'new'), chat: 7100));
-        self::assertStringNotContainsString('✍️', $this->said()[0]);
+        self::assertStringContainsString('✍️ مشتری چه کدی بنویسد؟', $this->said()[0], 'the form');
     }
 
     public function testAnAgentManagesTheirOwnShopsCodes(): void

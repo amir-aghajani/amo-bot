@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 namespace App\Modules\Telegram\Admin\Sections\Catalog;
 
-use App\Modules\Auth\StaffGrant;
-use App\Modules\Telegram\Admin\AdminSeat;
 use App\Modules\Telegram\Admin\Door\ApiRefusal;
 use App\Modules\Telegram\Admin\Sections\Bot\Settings\ExtrasCard;
 use App\Modules\Telegram\Admin\Ui\Admin;
@@ -70,11 +68,6 @@ final class PlanExtrasScreen extends BaseScreen
 
     /** The most amounts a list offers as buttons (ExtraOptions::MOST). */
     private const MOST = 8;
-
-    public function allows(AdminSeat $seat): bool
-    {
-        return $seat->holds(StaffGrant::Catalog);
-    }
 
     public function show(Admin $admin, array $args): View
     {
@@ -374,7 +367,7 @@ final class PlanExtrasScreen extends BaseScreen
     }
 
     /**
-     * The shop's bot settings, for its extras switch and bounds; none for a seat that does not read them (an admin).
+     * The shop's bot settings, for its extras switch and bounds; none when they cannot be read.
      *
      * @return array<string, mixed>
      */

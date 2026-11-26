@@ -3,15 +3,15 @@ import { describe, expect, it } from 'vitest'
 import { UsersList } from '@/components/users/users-list'
 import type { CustomerGroupsResponse, UsersResponse } from '@/lib/api-types'
 import { UsersPage } from '@/pages/users'
-import { providers, until } from '@/test/render'
+import { AGENT_SHOP, signedIn, until } from '@/test/render'
 import { botSettingsResponse, botSettingsRow, userRow } from '@/test/rows'
 import { json, server } from '@/test/server'
 
 /*
  * The customers' list (components/users/users-list): each customer's number beside them — what «#12» in the search box
  * finds alone, as every list takes it —, «ارسال پیام» in a row's menu, one excused from the phone rule marked where
- * their number would be, the bot's admins alone by the role's pill (where the website's settings send the owner to see
- * who its admins are), a search or a filter that found nobody says what to change: the search, the filters, or both;
+ * their number would be, the bot's admin role asked about first (an agent's shop handed over with the agent's access),
+ * the bot's admins alone by the role's pill (where the website's settings send the owner to see who its admins are), a search or a filter that found nobody says what to change: the search, the filters, or both;
  * and a row's dialog goes with the list when its section goes out of sight.
  */
 
@@ -22,7 +22,7 @@ function open(at: string, users = [userRow()]) {
   server()
     .on('GET', '/api/admin/users', json({ users, meta: { ...META, total: users.length, last_page: 1 } } satisfies UsersResponse))
     .on('GET', '/api/admin/customer-groups', json({ groups: [] } satisfies CustomerGroupsResponse))
-  render(<UsersList />, { wrapper: providers({ at }).wrapper })
+  render(<UsersList />, { wrapper: signedIn({ at }).wrapper })
 }
 
 describe('the customers’ list', () => {
@@ -61,6 +61,23 @@ describe('the customers’ list', () => {
 
     expect(await screen.findByText('#11')).toBeTruthy()
     expect(screen.getAllByText('معاف').map((mark) => mark.closest('tr')?.textContent)).toEqual([expect.stringContaining('#11')])
+  })
+})
+
+describe('the bot’s admin role', () => {
+  it('hands an agent’s shop over whole with the agent’s access, asked first', async () => {
+    server()
+      .on('GET', '/api/admin/users', json({ users: [userRow()], meta: { ...META, total: 1, last_page: 1 } } satisfies UsersResponse))
+      .on('GET', '/api/admin/customer-groups', json({ groups: [] } satisfies CustomerGroupsResponse))
+    render(<UsersList />, { wrapper: signedIn({ at: '/users', session: AGENT_SHOP }).wrapper })
+
+    fireEvent.pointerDown(await screen.findByRole('button', { name: /^عملیات / }), { button: 0, ctrlKey: false, pointerType: 'mouse' })
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'مدیر ربات کردن' }))
+    const asked = await screen.findByRole('dialog', { name: 'مدیر ربات کردن' })
+
+    expect(within(asked).getByText(/کل مدیریت ربات به او سپرده می‌شود/)).toBeTruthy()
+    expect(within(asked).getByText(/کل این فروشگاه را با دسترسی نماینده مدیریت می‌کند/)).toBeTruthy()
+    expect(within(asked).queryByText(/دسترسی مالک/)).toBeNull()
   })
 })
 
@@ -106,7 +123,7 @@ describe('a list that found nobody', () => {
   it('asks for a shorter search when the search found nobody', async () => {
     open('/users', [])
 
-    fireEvent.change(screen.getByRole('searchbox', { name: 'جستجوی کاربر' }), { target: { value: 'کسی' } })
+    fireEvent.change(await screen.findByRole('searchbox', { name: 'جستجوی کاربر' }), { target: { value: 'کسی' } })
 
     expect(await screen.findByText('با این جستجو کسی نیست. عبارت را کوتاه‌تر کنید.')).toBeTruthy()
   })
@@ -130,7 +147,7 @@ describe('a row’s dialog', () => {
     server()
       .on('GET', '/api/admin/users', json({ users: [userRow()], meta: { ...META, total: 1, last_page: 1 } } satisfies UsersResponse))
       .on('GET', '/api/admin/customer-groups', json({ groups: [] } satisfies CustomerGroupsResponse))
-    render(<UsersPage />, { wrapper: providers({ at: '/users' }).wrapper })
+    render(<UsersPage />, { wrapper: signedIn({ at: '/users' }).wrapper })
     fireEvent.pointerDown(await screen.findByRole('button', { name: /^عملیات / }), { button: 0, ctrlKey: false, pointerType: 'mouse' })
     fireEvent.click(await screen.findByRole('menuitem', { name: 'گروه‌ها' }))
     const dialog = (await screen.findByRole('dialog', { name: /^گروه‌های / })) as HTMLDialogElement

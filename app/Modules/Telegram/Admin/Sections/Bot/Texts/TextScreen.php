@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Modules\Telegram\Admin\Sections\Bot\Texts;
 
-use App\Modules\Telegram\Admin\AdminSeat;
 use App\Modules\Telegram\Admin\Door\ApiRefusal;
 use App\Modules\Telegram\Admin\Sections\Bot\BotScreens;
 use App\Modules\Telegram\Admin\Ui\Admin;
@@ -52,11 +51,6 @@ final class TextScreen extends BaseScreen
         'button' => "متن روی دکمه؛ یک خط و بدون قالب‌بندی. یک ایموجی پرمیوم اول متن، آیکون دکمه می‌شود: تلگرام آن را پیش از متن دکمه نشان می‌دهد (فقط وقتی حسابی که ربات را در \u{2068}@BotFather\u{2069} ساخته تلگرام پرمیوم داشته باشد؛ وگرنه ایموجی معمولی آن اول متن دکمه می‌نشیند).",
         'part' => 'این بخش داخل متن دیگری می‌نشیند؛ قالب‌بندی مثل پیام. خط‌های خالی اول متن فعلی (فاصله آن با متن بالایی) نگه داشته می‌شود. اگر متغیر لازمی ندارد، «خالی کردن» را بزنید تا نشان داده نشود.',
     ];
-
-    public function allows(AdminSeat $seat): bool
-    {
-        return $seat->configures();
-    }
 
     public function show(Admin $admin, array $args): View
     {

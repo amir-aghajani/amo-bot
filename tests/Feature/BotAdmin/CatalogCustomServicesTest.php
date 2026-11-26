@@ -79,13 +79,12 @@ final class CatalogCustomServicesTest extends BotTestCase
         self::assertStringContainsString('مشتری بین ۱ تا ۵۰۰ گیگابایت می‌سازد', $this->said()[0], 'past what may be built: why there is no price');
     }
 
-    public function testAShopsAdminHasNoCustomServices(): void
+    public function testAShopsAdminSwitchesThemAsTheOwnerDoes(): void
     {
         $this->customer(['telegram_id' => 7100, 'role' => UserRole::Admin]);
 
         $this->send($this->tap(Nav::to('cs', 'tog', 1), chat: 7100));
-        self::assertStringContainsString('مدیریت فروشگاه', $this->said()[0]);
-        self::assertFalse($this->setting('custom_enabled'));
+        self::assertTrue($this->setting('custom_enabled'), 'switched on through the panel\'s route');
     }
 
     private function setting(string $name): mixed

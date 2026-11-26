@@ -20,7 +20,7 @@ use Tests\BotTestCase;
  * «🖥 سرورها» in the bot (Telegram\Admin\Sections\Owner\Servers): the owner's list and a server's page, a check, its
  * inbounds for sale, a new server walked through its connector's described form with «🧪 تست اتصال», its connection
  * edited with its secret kept, its test accounts, a grant to its services, a move of them, and a delete asked first —
- * every write through the panel's own routes; a shop's admin sees none of it.
+ * every write through the panel's own routes; the main shop's admins work them as the owner does.
  */
 final class OwnerServersTest extends BotTestCase
 {
@@ -393,17 +393,18 @@ final class OwnerServersTest extends BotTestCase
         self::assertNull(Server::query()->find($idle->id));
     }
 
-    public function testAShopsAdminSeesNoServers(): void
+    public function testAShopsAdminWorksTheServersAsTheOwnerDoes(): void
     {
         $this->fakePanel();
         $server = $this->fakeServer('آلمان');
         $this->customer(['telegram_id' => 7100, 'role' => UserRole::Admin]);
 
         $this->send($this->message('/admin', chat: 7100));
-        self::assertNotContains(Nav::to('sv'), $this->callbacks(0));
+        self::assertContains(Nav::to('sv'), $this->callbacks(0), 'the servers, on the home');
 
+        $this->send($this->tap(Nav::to('svv', 'del', $server->id), chat: 7100));
+        self::assertContains(Nav::to('svv', 'gone', $server->id), $this->callbacks(0), 'asked first, not the home');
         $this->send($this->tap(Nav::to('svv', 'gone', $server->id), chat: 7100));
-        self::assertStringContainsString('مدیریت فروشگاه', $this->said()[0], 'a screen it may not open is the home');
-        self::assertNotNull(Server::query()->find($server->id));
+        self::assertNull(Server::query()->find($server->id), 'deleted through the panel\'s route');
     }
 }

@@ -15,11 +15,11 @@ How the cards work:
   is held while the switch is off — unless you changed it: then it stays open, since the save still checks it.
 - **Leaving a card with unsaved changes asks first**, and a card saved elsewhere meanwhile keeps your changes and says so
   ([The panels](Panels.md#live-and-safe-to-leave)).
-- **The same cards are in the bot**, for you and an agent, each field saved as it is changed: the bot's own in
-  «⚙️ مدیریت › ⚙️ تنظیمات › 🤖 تنظیمات ربات», and a feature's with the feature — the channels and the report group in
-  «🤖 ربات», the referral rules in «🔗 زیرمجموعه‌گیری», the bot's admins in «⚙️ تنظیمات»
-  ([Managing the shop from the bot](Bot-Management.md#settings)). The bot's «🔎 جستجوی تنظیمات» finds any of them by its
-  words.
+- **The same cards are in the bot**, for you, an agent and the shop's admins, each field saved as it is changed: the
+  bot's own in «⚙️ مدیریت › ⚙️ تنظیمات › 🤖 تنظیمات ربات», and a feature's with the feature — the channels and the
+  report group in «🤖 ربات», the referral rules in «🔗 زیرمجموعه‌گیری»; the switches turned on and off most also in
+  «⚡️ کلیدهای اصلی» ([Managing the shop from the bot](Bot-Management.md#settings)). The bot's «🔎 جستجوی تنظیمات»
+  finds any of them by its words.
 
 Some programs keep their part of these settings on their own pages: discount codes ([Discounts](Discounts.md)),
 cashback and the nightly draw ([Loyalty, cashback and draws](Loyalty-Cashback-And-Draws.md)), gift codes and the lucky
@@ -33,8 +33,10 @@ wheel ([Gift codes and the lucky wheel](Gift-Codes-And-Lucky-Wheel.md)), and fre
 - **«ربات فعال باشد»** (on) — off, every customer gets «ربات خاموش» (`⛔️ ربات فعلا غیرفعال است. …`, a text you may reword)
   to whatever they send, the menu taken away, **and the shop's website and mini app take no orders** (a purchase, a
   renewal, a top-up, a receipt — «فروشگاه فعلا سفارش نمی‌گیرد؛ …»). The bot's admins still pass, to try it, and so does
-  whoever manages the shop from the bot. In the bot's management, switching it off asks first. The page says the bot is
-  off above every section. For a pause, or when the servers are down.
+  whoever manages the shop from the bot. In the bot's management — this card, or «⏸ خاموش کردن ربات» and «⚡️ کلیدهای
+  اصلی» on the home, which also says whether the bot is on —, switching it off asks first
+  ([Managing the shop from the bot](Bot-Management.md#the-home)). The page says the bot is off above every section. For
+  a pause, or when the servers are down.
 - **«تایید شماره موبایل»** (off) — on, a customer must send their own Telegram number — one tap of «📱 ارسال شماره موبایل»
   — before anything else: a number typed, or someone else's card, is refused. Asked once; the number shows on their
   customer page. The bot's admins are not asked, nor a customer you excused from it («معاف از ارسال شماره موبایل» on
@@ -440,24 +442,17 @@ payment, a renewal's own share, «فقط اولین پرداخت هر زیرمج
 
 ## The bot's admins
 
-«مدیران ربات», card «مدیریت فروشگاه از ربات» — whether the shop's admins (its customers whose role is admin, «کاربران ›
-نقش › مدیران ربات») manage it from the bot's private chat, with «⚙️ مدیریت» or `/admin`, and what beyond the daily work.
-You and an agent, each in your own bot, always have every section of your panel there, whatever these say
-([Managing the shop from the bot](Bot-Management.md)).
+«مدیران ربات», card «مدیریت فروشگاه از ربات» — nothing to set: the card explains what the bot's admins can do and links
+to them. The shop's admins are its customers whose role is admin («کاربران › نقش › مدیران ربات»), and each manages the
+shop from the bot's private chat, with «⚙️ مدیریت» or `/admin`, with your access in the main bot and the agent's in an
+agent's bot ([Managing the shop from the bot](Bot-Management.md#the-shops-admins)). The role is the switch: there are no
+grants, and taking the role away — or a ban — ends it at their next message.
 
-- **«کار مدیران از ربات»** (on) — the daily work with the bot's menus: the dashboard, receipts and payments, orders,
-  services, customers, tickets, reviews, referrals and broadcasts. The shop's settings, its payment methods, the bot,
-  and who is an admin are never theirs. Off, they have no «⚙️ مدیریت» and the bot takes no management from them but
-  `/broadcast` and `/emoji`, theirs as before; their work in the report group is as before.
-- **«کارهای بیشتر»** — a switch per grant, all off by default, the website's «مدیران سایت» list with switches of their
-  own: «پلن‌ها و دسته‌بندی‌ها» (and the customer groups, and a customer put in a «همکار» group), «کیف پول مشتری»,
-  «بازپرداخت», «رد یکجای رسیدها», «افزایش زمان و حجم سرویس», «افزودن سفارش برای مشتری», «حذف یا انتقال سرویس» and
-  «امنیت حساب مشتری» ([what each opens](Bot-Management.md#the-shops-admins)).
-
-The bot asks these on each message, so a change holds at once. Each admin is held on their own account alone — their own
-payment, wallet, service and review are another admin's, and an admin's or an agent's account is never theirs —, but two
-admins can do those things for each other: give the role only to people you trust. The same card is in the bot,
-«⚙️ تنظیمات › 🛡 مدیران ربات».
+Their decisions keep their own name, and none is about their own account — their own wallet, payment, order, prices or
+service is another admin's, or yours —, but two admins can do those things for each other: give the role only to people
+you trust. Your Telegram accounts linked as the owner, and the panel's login, are yours alone. In the bot,
+«⚙️ تنظیمات › 🛡 مدیران ربات» lists the admins and makes another. The shop's website lets them in apart, with grants of
+its own ([Website](Website.md#the-shops-admins)).
 
 ## Watch out for
 

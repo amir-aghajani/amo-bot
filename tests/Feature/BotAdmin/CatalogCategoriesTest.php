@@ -5,14 +5,13 @@ declare(strict_types=1);
 namespace Tests\Feature\BotAdmin;
 
 use App\Modules\Catalog\Models\PlanCategory;
-use App\Modules\Telegram\Admin\Door\BotAdminDoor;
 use App\Modules\Telegram\Admin\Ui\Nav;
 use App\Modules\Users\Enums\UserRole;
 use Tests\BotTestCase;
 
 /**
  * «🗂 دسته‌بندی‌ها» in the bot's management: the list, a category added by its name, renamed with a premium emoji, its
- * switch, its place, its plans, a delete asked first — and the catalogue's grant for the shop's admins.
+ * switch, its place, its plans, a delete asked first — the shop's admins as the owner.
  */
 final class CatalogCategoriesTest extends BotTestCase
 {
@@ -82,20 +81,18 @@ final class CatalogCategoriesTest extends BotTestCase
         self::assertNotNull(PlanCategory::query()->find($first->id));
     }
 
-    public function testAShopsAdminReadsTheCategoriesAndChangesThemOnlyWithTheGrant(): void
+    public function testAShopsAdminChangesTheCategoriesAsTheOwnerDoes(): void
     {
         $this->customer(['telegram_id' => self::STAFF, 'role' => UserRole::Admin]);
         $category = $this->category();
 
         $this->send($this->tap(Nav::to('ct'), chat: self::STAFF));
         self::assertContains(Nav::to('ctv', 'show', $category->id), $this->callbacks(0));
-        self::assertNotContains(Nav::to('ctv', 'new'), $this->callbacks(0));
+        self::assertContains(Nav::to('ctv', 'new'), $this->callbacks(0), 'no grant of the catalogue asked');
 
         $this->send($this->tap(Nav::to('ctv', 'tog', $category->id, 0), chat: self::STAFF));
-        self::assertSame(BotAdminDoor::NOT_GRANTED, $this->popup());
-        self::assertTrue($category->refresh()->is_active);
+        self::assertFalse($category->refresh()->is_active, 'switched through the panel\'s route');
 
-        $this->botSettings('bot_admins', ['bot_admins_grant_catalog' => true]);
         $this->send($this->tap(Nav::to('ctv', 'new'), chat: self::STAFF));
         $this->send($this->message('ماهانه', chat: self::STAFF));
         self::assertSame(2, PlanCategory::query()->count());

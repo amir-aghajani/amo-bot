@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Telegram\Admin\Sections\Customers;
 
-use App\Modules\Auth\StaffGrant;
 use App\Modules\Telegram\Admin\Door\ApiRefusal;
+use App\Modules\Telegram\Admin\Sections\Core\BotAdminsScreen;
 use App\Modules\Telegram\Admin\Sections\Support\InviteesScreen;
 use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\Answer;
@@ -28,9 +28,9 @@ use App\Modules\Telegram\Messages;
  * tier and an agent's agency. Its buttons: the quick actions first — a message, the wallet, an order by hand, their
  * services —, then their other lists (orders, payments, tickets, groups), the website sign-in, the own discount and the
  * phone rule, the links on (their referrer, invitees, the loyalty tiers, an agent's agency, their Telegram chat), and last
- * the admin's changes: the bot admin role (asked first) and the ban (asked first, red; lifted at once). The own discount
- * and the role are the owner's and an agent's alone, as on the panels; one of the shop's admins only looks at a bot
- * admin's or an agent's account (Customer::lock()).
+ * the admin's changes: the bot admin role (asked first, red: it hands over the shop's whole management) and the ban
+ * (asked first, red; lifted at once). One of the shop's admins decides nothing about their own account (Customer::own()):
+ * no order by hand nor own discount offered there.
  *
  * Opened with the customer's id (none: the one last opened). Actions: `ph` (id, 1|0: excused or not), `disc` (id: asks
  * the percent), `disc0` (id: none), `role` (id, role: asks), `rs` (id, role: given), `ban` (id: asks), `bs` (id,
@@ -40,8 +40,8 @@ final class CustomerScreen extends BaseScreen
 {
     public const ID = 'usv';
 
-    /** What a bot admin may do (the panel's mark and question), and what the bot adds to it. */
-    private const BOT_ADMIN = 'مدیر ربات دستور %s را دارد، رسیدها را در گروه گزارش‌ها تایید و رد می‌کند و از شرط‌های ربات (خاموش بودن، شماره موبایل، کانال‌ها) معاف است. تا «مدیران ربات» روشن است، با «⚙️ مدیریت» کارهای روزانه فروشگاه را هم از همین ربات انجام می‌دهد.';
+    /** The button that makes the customer a bot admin (asked first). */
+    public const MAKE_ADMIN = Icons::BOT_ADMINS . ' مدیر ربات کردن';
 
     /** What taking the role away does (the panel's words). */
     private const NO_LONGER_ADMIN = 'از این پس مثل بقیه مشتری‌هاست: دستورهای مدیر، دکمه‌های گروه گزارش‌ها و مدیریت فروشگاه از ربات برایش کار نمی‌کند.';
@@ -84,7 +84,7 @@ final class CustomerScreen extends BaseScreen
                 break;
             case 'ban':
                 $user = Customer::row(Customer::read($admin, $id));
-                $self = $id === $admin->seat->user->id ? "\n\n⚠️ این حساب خود شماست: مسدود که شود، از ربات مدیریت نمی‌کنید تا از پنل رفع مسدودی شود." : '';
+                $self = $id === $admin->seat->user->id ? "\n\n⚠️ این حساب خود شماست: مسدود که شود، از ربات مدیریت نمی‌کنید تا مدیر دیگری از «⚙️ مدیریت» ربات یا از پنل رفع مسدودی کند." : '';
 
                 return $admin->confirm(
                     'این کاربر مسدود شود؟',
@@ -114,7 +114,7 @@ final class CustomerScreen extends BaseScreen
 
     /**
      * The page as the panel answered it: a warning, the summary card, the account, then the referral program, loyalty and
-     * agency where there is any, why it is locked — and the buttons the seat may use on it, grouped.
+     * agency where there is any — and the buttons the seat may use on it, grouped.
      *
      * @param array<string, mixed> $detail
      */
@@ -123,7 +123,6 @@ final class CustomerScreen extends BaseScreen
         $user = Customer::row($detail);
         $id = Customer::int($user, 'id');
         $agency = is_array($detail['agency'] ?? null) ? $detail['agency'] : null;
-        $lock = Customer::lock($admin, $detail);
         $isAdmin = ($user['role'] ?? null) === 'admin';
         $banned = ($user['status'] ?? null) === 'banned';
 
@@ -135,17 +134,14 @@ final class CustomerScreen extends BaseScreen
         $this->summary($view, $user, $agency);
         $this->account($view, $user);
         $this->standing($view, $detail);
-        if ($lock !== null) {
-            $view->note(Fmt::e($lock));
-        }
 
         // The quick actions: a message, the wallet, an order by hand, their services.
         $view->row(
-            $lock === null ? Button::to(CustomerMessageScreen::TITLE, CustomerMessageScreen::ID, Nav::SHOW, $id)->primary() : null,
+            Button::to(CustomerMessageScreen::TITLE, CustomerMessageScreen::ID, Nav::SHOW, $id)->primary(),
             Button::to(CustomerWalletScreen::TITLE, CustomerWalletScreen::ID, Nav::SHOW, $id),
         );
         $view->row(
-            $admin->seat->holds(StaffGrant::ManualOrders) && !Customer::own($admin, $id) ? Button::to(Words::add('سفارش'), ManualOrderScreen::ID, 'new', $id) : null,
+            !Customer::own($admin, $id) ? Button::to(Words::add('سفارش'), ManualOrderScreen::ID, 'new', $id) : null,
             Button::to(CustomerServicesScreen::TITLE, CustomerServicesScreen::ID, Nav::SHOW, $id),
         );
         // Their other lists (how many the card says).
@@ -159,9 +155,9 @@ final class CustomerScreen extends BaseScreen
         // Their account's settings.
         $view->row(
             Button::to(CustomerAccountScreen::TITLE, CustomerAccountScreen::ID, Nav::SHOW, $id),
-            $admin->seat->configures() ? Button::to(Words::edit('تخفیف اختصاصی'), self::ID, 'disc', $id) : null,
+            !Customer::own($admin, $id) ? Button::to(Words::edit('تخفیف اختصاصی'), self::ID, 'disc', $id) : null,
         );
-        if ($lock === null && !$isAdmin) {
+        if (!$isAdmin) {
             $exempt = Json::on($user, 'phone_exempt');
             $view->row(Button::to(Words::turn(!$exempt, 'معافیت از شماره موبایل'), self::ID, 'ph', $id, $exempt ? 0 : 1));
         }
@@ -175,19 +171,19 @@ final class CustomerScreen extends BaseScreen
             $referrer === null ? null : Button::to(Icons::CUSTOMER . ' صفحه معرف', self::ID, Nav::SHOW, Customer::int($referrer, 'id')),
             // Their invitees, as the panel's card links them: the referrals' invitees narrowed to this referrer.
             Customer::int($referral, 'referrals') > 0 ? Button::to(Icons::REFERRALS . ' زیرمجموعه‌ها', InviteesScreen::ID, 'ref', $id) : null,
-            // The tier's name links to the loyalty tiers, as on the panel's card: theirs who set the shop up.
-            $admin->seat->configures() && (is_array($loyalty['tier'] ?? null) || is_array($loyalty['next'] ?? null)) ? Button::to(Icons::LOYALTY . ' سطوح وفاداری', 'ly') : null,
+            // The tier's name links to the loyalty tiers, as on the panel's card.
+            (is_array($loyalty['tier'] ?? null) || is_array($loyalty['next'] ?? null)) ? Button::to(Icons::LOYALTY . ' سطوح وفاداری', 'ly') : null,
             $agency !== null && $admin->seat->isOwner() ? Button::to(Icons::AGENTS . ' مدیریت نماینده', 'agv', Nav::SHOW, $id) : null,
             $handle !== null ? Button::url('💬 گفتگو در تلگرام', 'https://t.me/' . rawurlencode($handle)) : null,
         );
         // The admin's changes, what takes away last and red.
         $view->row(
-            $admin->seat->configures() && !$isAdmin ? Button::to(Icons::BOT_ADMINS . ' مدیر ربات کردن', self::ID, 'role', $id, 'admin') : null,
-            $lock === null && $banned ? Button::to('✅ رفع مسدودی', self::ID, 'bs', $id, 'active')->success() : null,
+            !$isAdmin ? Button::to(self::MAKE_ADMIN, self::ID, 'role', $id, 'admin') : null,
+            $banned ? Button::to('✅ رفع مسدودی', self::ID, 'bs', $id, 'active')->success() : null,
         );
         $view->row(
-            $admin->seat->configures() && $isAdmin ? Button::to(Icons::BOT_ADMINS . ' برداشتن مدیریت ربات', self::ID, 'role', $id, 'customer')->danger() : null,
-            $lock === null && !$banned ? Button::to(Customer::BANNED_MARK . ' مسدود کردن', self::ID, 'ban', $id)->danger() : null,
+            $isAdmin ? Button::to(Icons::BOT_ADMINS . ' برداشتن مدیریت ربات', self::ID, 'role', $id, 'customer')->danger() : null,
+            !$banned ? Button::to(Customer::BANNED_MARK . ' مسدود کردن', self::ID, 'ban', $id)->danger() : null,
         );
 
         return $view->back(UsersScreen::ID)->refresh(self::ID, Nav::SHOW, $id);
@@ -299,14 +295,14 @@ final class CustomerScreen extends BaseScreen
 
     /**
      * The panel's phone card's warning: another country's number while the bot takes Iranian ones alone — they are asked
-     * again, unless excused. Read from the bot's settings, which only the owner and an agent read.
+     * again, unless excused. Read from the bot's settings.
      *
      * @param array<string, mixed> $user
      */
     private function phoneWarning(Admin $admin, array $user): ?string
     {
         $phone = Customer::text($user, 'phone');
-        if ($phone === null || str_starts_with($phone, '+98') || ($user['role'] ?? null) === 'admin' || Json::on($user, 'phone_exempt') || !$admin->seat->configures()) {
+        if ($phone === null || str_starts_with($phone, '+98') || ($user['role'] ?? null) === 'admin' || Json::on($user, 'phone_exempt')) {
             return null;
         }
         try {
@@ -350,7 +346,9 @@ final class CustomerScreen extends BaseScreen
     }
 
     /**
-     * The role's change asked, in the panel's words — its taking away red.
+     * The role's change asked: what the role hands over — the shop's whole management, the owner's in the main shop and
+     * the agent's in theirs, in «🛡 مدیران ربات»'s words (BotAdminsScreen::handsOver()) —, red both ways; a role it
+     * already has (an older window's button) said, the page again.
      *
      * @param array<string, mixed> $user
      */
@@ -358,9 +356,20 @@ final class CustomerScreen extends BaseScreen
     {
         $id = Customer::int($user, 'id');
         $name = Customer::name($user);
+        if (($user['role'] ?? null) === $role) {
+            $admin->notice($name . ($role === 'admin' ? ' همین حالا مدیر ربات است' : ' همین حالا مدیر ربات نیست'));
+
+            return $this->show($admin, [(string) $id]);
+        }
         $no = Button::to(Words::CANCEL, self::ID, Nav::SHOW, $id);
         if ($role === 'admin') {
-            return $admin->confirm('این کاربر مدیر ربات شود؟', Button::to(Words::yes('مدیر ربات شود'), self::ID, 'rs', $id, 'admin'), $no, Fmt::e($name . ' مدیر ربات می‌شود.') . "\n" . sprintf(self::BOT_ADMIN, Fmt::ltr('/broadcast')));
+            return $admin->confirm(
+                'این کاربر مدیر ربات شود؟',
+                Button::to(Words::yes('مدیر ربات شود'), self::ID, 'rs', $id, 'admin'),
+                $no,
+                BotAdminsScreen::handsOver($user, $admin->seat->shop()->isMain()),
+                danger: true,
+            );
         }
 
         return $admin->confirm(
@@ -383,8 +392,8 @@ final class CustomerScreen extends BaseScreen
             return '';
         }
 
-        return "\n\n⚠️ این حساب خود شماست: " . ($admin->seat->configures()
-            ? '«⚙️ مدیریت» برای شما می‌ماند، چون ' . ($admin->seat->isOwner() ? 'مالک فروشگاه' : 'نماینده این ربات') . ' هستید، و خاموش بودن ربات، شماره موبایل و کانال‌ها هم شما را نگه نمی‌دارند؛ فقط دکمه‌های زیر گزارش‌ها در گروه گزارش‌ها دیگر به شما جواب نمی‌دهند.'
-            : 'مدیر ربات که نباشید، مدیریت فروشگاه از ربات برای این حساب بسته می‌شود.');
+        return "\n\n⚠️ این حساب خود شماست: " . ($admin->seat->isAdmin()
+            ? 'مدیر ربات که نباشید، مدیریت فروشگاه از ربات برای این حساب بسته می‌شود.'
+            : '«⚙️ مدیریت» برای شما می‌ماند، چون ' . ($admin->seat->isOwner() ? 'مالک فروشگاه' : 'نماینده این ربات') . ' هستید، و خاموش بودن ربات، شماره موبایل و کانال‌ها هم شما را نگه نمی‌دارند؛ فقط دکمه‌های زیر گزارش‌ها در گروه گزارش‌ها دیگر به شما جواب نمی‌دهند.');
     }
 }

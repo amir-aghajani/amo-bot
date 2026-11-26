@@ -8,7 +8,7 @@ import { DropdownMenuItem, DropdownMenuSeparator } from '@/components/ui/dropdow
 import { userLabel } from '@/components/user-identity'
 import { api } from '@/lib/api'
 import type { UserRole, UserRow, UserStatus } from '@/lib/api-types'
-import { isolate } from '@/lib/direction'
+import { useMainShop } from '@/lib/auth'
 
 /*
  * What is done to a customer's account from the panel — banning and reinstating, giving and taking the bot's admin
@@ -17,11 +17,17 @@ import { isolate } from '@/lib/direction'
  */
 
 /**
- * What a bot admin may do — said on their mark, and asked about before an account gets it (a plain string: its command
- * isolated) —, as the bot's own management says it: the shop's daily work from the bot too, while «مدیران ربات» lets
- * its admins in.
+ * What a bot admin may do — said on their mark, and asked about before an account gets it —, as the bot's own
+ * management has it: the whole management from «⚙️ مدیریت», with the owner's access in the main shop and with the
+ * agent's in an agent's, under their own name and never about their own account; the report group's buttons too, and
+ * none of the bot's conditions.
  */
-const BOT_ADMIN = `مدیر ربات دستور ${isolate('/broadcast')} را دارد، رسیدها را در گروه گزارش‌ها تایید و رد می‌کند و از شرط‌های ربات (خاموش بودن، شماره موبایل، کانال‌ها) معاف است. تا «مدیران ربات» روشن است، با «⚙️ مدیریت» کارهای روزانه فروشگاه را هم از خود ربات انجام می‌دهد.`
+function botAdminWords(mainShop: boolean): string {
+  const access = mainShop
+    ? 'کل فروشگاه را با دسترسی مالک مدیریت می‌کند: همه بخش‌ها در هر فروشگاه، تنظیمات پنل از جمله توکن ربات و دیتابیس، پشتیبان‌گیری و بازگردانی، و به‌روزرسانی'
+    : 'کل این فروشگاه را با دسترسی نماینده مدیریت می‌کند: همه بخش‌هایی که نماینده در پنل خودش دارد'
+  return `مدیر ربات با «⚙️ مدیریت» در ربات ${access}؛ کارهایش به نام خودش ثبت می‌شود و درباره حساب خودش تصمیم نمی‌گیرد. رسیدها را در گروه گزارش‌ها هم تایید و رد می‌کند و از شرط‌های ربات (خاموش بودن، شماره موبایل، کانال‌ها) معاف است.`
+}
 
 /** A change of a customer's account. */
 type AccountChange = { user: UserRow; status: UserStatus } | { user: UserRow; role: UserRole }
@@ -91,14 +97,15 @@ export function AccountMenuItems({ user, account }: { user: UserRow; account: Ac
 /** The second look before a customer is banned, or the bot's admin role changes hands. */
 export function AccountChangeConfirm({ account }: { account: AccountChanges }) {
   const { asking } = account
+  const mainShop = useMainShop()
 
-  return <ConfirmModal open={asking !== null} onClose={account.cancel} pending={account.pending} onConfirm={account.confirm} {...(asking ? question(asking) : CLOSED)} />
+  return <ConfirmModal open={asking !== null} onClose={account.cancel} pending={account.pending} onConfirm={account.confirm} {...(asking ? question(asking, mainShop) : CLOSED)} />
 }
 
 const CLOSED = { title: '' }
 
-/** What the second look says about a change: banning, or giving or taking the bot's admin role. */
-function question(change: AccountChange): { title: string; description: string; confirmLabel: string; destructive?: boolean; children: string } {
+/** What the second look says about a change: banning, or giving or taking the bot's admin role — the main shop's or an agent's. */
+function question(change: AccountChange, mainShop: boolean): { title: string; description: string; confirmLabel: string; destructive?: boolean; children: string } {
   const name = userLabel(change.user)
 
   if ('status' in change) {
@@ -112,20 +119,25 @@ function question(change: AccountChange): { title: string; description: string; 
   }
 
   return change.role === 'admin'
-    ? { title: 'مدیر ربات کردن', description: `${name} مدیر ربات می‌شود.`, confirmLabel: 'مدیر ربات کن', children: BOT_ADMIN }
+    ? {
+        title: 'مدیر ربات کردن',
+        description: `${name} مدیر ربات می‌شود و کل مدیریت ربات به او سپرده می‌شود.`,
+        confirmLabel: 'مدیر ربات کن',
+        children: `${botAdminWords(mainShop)} این نقش را فقط به کسی بدهید که در همه چیز به او اعتماد دارید.`,
+      }
     : {
         title: 'برداشتن مدیریت ربات',
         description: `${name} دیگر مدیر ربات نیست.`,
         confirmLabel: 'برداشتن مدیریت',
         destructive: true,
-        children: 'از این پس مثل بقیه مشتری‌هاست: دستورهای مدیر، دکمه‌های گروه گزارش‌ها و مدیریت فروشگاه از ربات برایش کار نمی‌کند.',
+        children: 'از پیام بعدی‌اش مثل بقیه مشتری‌هاست: دستورهای مدیر، دکمه‌های گروه گزارش‌ها و مدیریت فروشگاه از ربات برایش کار نمی‌کند.',
       }
 }
 
-/** The bot admin's mark beside the name, which says what the role allows when pressed. */
+/** The bot admin's mark beside the name, which says what the role allows — in this shop — when pressed. */
 export function AdminMark() {
   return (
-    <InfoBadge variant="info" info={BOT_ADMIN} className="h-[18px] gap-0.5 px-1">
+    <InfoBadge variant="info" info={botAdminWords(useMainShop())} className="h-[18px] gap-0.5 px-1">
       <ShieldCheck aria-hidden />
       مدیر
     </InfoBadge>

@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Modules\Telegram\Admin\Sections\Owner\Payments;
 
-use App\Modules\Telegram\Admin\AdminSeat;
 use App\Modules\Telegram\Admin\Sections\Owner\Forms\DescribedForm;
 use App\Modules\Telegram\Admin\Sections\Owner\Forms\FormScreen;
 use App\Modules\Telegram\Admin\Ui\Admin;
@@ -23,11 +22,6 @@ use App\Modules\Telegram\Admin\Ui\Words;
 final class PaymentCardFormScreen extends FormScreen
 {
     public const ID = 'pmcn';
-
-    public function allows(AdminSeat $seat): bool
-    {
-        return $seat->configures();
-    }
 
     protected function screen(): string
     {

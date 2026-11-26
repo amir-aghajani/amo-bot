@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Modules\Telegram\Admin\Sections\Customers;
 
 use App\Core\Database\Ledger;
-use App\Modules\Auth\StaffGrant;
 use App\Modules\Telegram\Admin\Door\ApiRefusal;
 use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\Answer;
@@ -27,8 +26,8 @@ use App\Support\Unit;
 /**
  * A customer's wallet (the panel's «کیف پول» card and dialog): the balance as a card, then the ledger — a page of lines,
  * each with what it was, its date, the balance after, a transfer's other customer and the admin who wrote it by hand —
- * and, for a seat the `wallet` grant opens, a credit or a debit by hand: the amount, a note the customer sees (or none),
- * then the change said once more with the balance it leaves — a debt in words when a debit goes below zero —, sent once
+ * and, except on the seat's own account (Customer::own()), a credit or a debit by hand: the amount, a note the customer
+ * sees (or none), then the change said once more with the balance it leaves — a debt in words when a debit goes below zero —, sent once
  * under its Idempotency-Key (the same change pressed twice is made once).
  *
  * Opened with the customer's id and a ledger page. Actions: `add` / `sub` (id: a credit / a debit asked), `amt` (id:
@@ -117,7 +116,7 @@ final class CustomerWalletScreen extends BaseScreen
         foreach ($shown as $line) {
             $view->line(self::ledgerLine($line));
         }
-        if ($admin->seat->holds(StaffGrant::Wallet) && !Customer::own($admin, $id)) {
+        if (!Customer::own($admin, $id)) {
             $view->note('افزایش یا کاهش دستی، با توضیحی که مشتری در تاریخچه کیف پولش می‌بیند.')
                 ->row(Button::to('➕ افزایش موجودی', self::ID, 'add', $id)->success(), Button::to('➖ کاهش موجودی', self::ID, 'sub', $id));
         }

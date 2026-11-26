@@ -153,7 +153,8 @@ A backup is the database alone. It does not hold, and a restore does not change:
 3. Run the installer ([the web installer](Installation.md#the-web-installer)): the new database's settings at «دیتابیس»,
    the new address at «سایت و ربات». The panel's login is the one `config.php` brought, unless you set another.
 4. Sign in, open «تنظیمات پنل › پشتیبان‌گیری» in the main shop, and restore the whole installation's backup on its card
-   «بازگردانی».
+   «بازگردانی». Your Telegram accounts are not linked on the new host: link them again from «تنظیمات پنل › ورود به
+   پنل», card «مدیریت از ربات» ([Managing the shop from the bot](Bot-Management.md)).
 5. Put `storage/uploads/` back with the host's File Manager.
 6. Register the webhooks again («تنظیمات پنل › ربات تلگرام», «ثبت Webhook» on the «دریافت پیام‌ها» card), and set the
    cron up with the line the panel makes ready ([Installation](Installation.md#shared-hosting), steps 5 and 6).
@@ -225,4 +226,6 @@ The files you put back must belong to the user PHP runs as: the app makes its fi
 - **Everyone in the report group gets the shop's data**: keep the group to your team.
 - **Customers' passwords and two-factor sign-ins come back as the file has them**: one who changed a leaked password
   since has the old one again, and a site admin removed since is one again. The panels' own logins are in no backup —
-  the owner's is `config.php`'s —, and an agent's «خروج از مرورگرهای دیگر» since the backup stands.
+  the owner's is `config.php`'s —, and an agent's «خروج از مرورگرهای دیگر» since the backup stands. So does who is the
+  owner in the bot («مدیریت از ربات»): a whole installation's restore links no Telegram account you let go since the
+  backup, nor makes it an admin again by its link, and one you linked since stays linked.

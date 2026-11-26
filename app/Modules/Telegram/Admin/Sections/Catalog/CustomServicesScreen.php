@@ -116,7 +116,7 @@ final class CustomServicesScreen extends BaseScreen
     /** Whether `$seat` manages «سرویس دلخواه»: the main shop's alone, as the panel's page (`mainShop`). */
     public static function opens(AdminSeat $seat): bool
     {
-        return $seat->configures() && $seat->shop()->isMain();
+        return $seat->shop()->isMain();
     }
 
     private function source(): BotGroupSource

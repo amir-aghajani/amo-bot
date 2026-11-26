@@ -13,6 +13,7 @@ use App\Modules\Agency\Models\AgencyRequest;
 use App\Modules\Agency\Services\AgencyActions;
 use App\Modules\Agency\Services\AgencyDirectory;
 use App\Modules\Agency\Services\AgencyStanding;
+use App\Modules\Auth\Exceptions\ActorRefusedException;
 use App\Modules\Auth\Principal;
 use App\Modules\Bots\Models\Bot;
 use App\Modules\Catalog\Services\AgentRestrictions;
@@ -116,6 +117,7 @@ final class AgencyController extends ApiController
     public function update(Request $request, Response $response, array $args): Response
     {
         $agent = $this->load(User::class, $args);
+        self::notOwn($request, $agent);
         $bot = $agent->ownBot;
         $delivery = $this->actions->change($agent, AgencyTerms::fromInput($this->input($request), $bot === null ? null : SellingTerms::of($bot)));
 
@@ -129,7 +131,9 @@ final class AgencyController extends ApiController
      */
     public function revoke(Request $request, Response $response, array $args): Response
     {
-        $this->actions->revoke($this->load(User::class, $args), Input::note($this->input($request), 'note'));
+        $agent = $this->load(User::class, $args);
+        self::notOwn($request, $agent);
+        $this->actions->revoke($agent, Input::note($this->input($request), 'note'));
 
         return $this->noContent($response);
     }
@@ -153,6 +157,7 @@ final class AgencyController extends ApiController
     public function adjustTraffic(Request $request, Response $response, array $args): Response
     {
         $agent = $this->load(User::class, $args);
+        self::notOwn($request, $agent);
         $this->actions->adjustTraffic($agent, Principal::of($request)->actor(), $this->input($request), IdempotencyKey::optional($request));
 
         return $this->json($response, ['agent' => $this->directory->presentAgent($this->directory->agent($agent->id))]);
@@ -167,6 +172,7 @@ final class AgencyController extends ApiController
     public function suspend(Request $request, Response $response, array $args): Response
     {
         $agent = $this->load(User::class, $args);
+        self::notOwn($request, $agent);
         $this->standing->suspendByHand($this->shopOf($agent), Input::note($this->input($request), 'note'));
 
         return $this->agent($response, $agent);
@@ -181,6 +187,7 @@ final class AgencyController extends ApiController
     public function resume(Request $request, Response $response, array $args): Response
     {
         $agent = $this->load(User::class, $args);
+        self::notOwn($request, $agent);
         $this->standing->resume($this->shopOf($agent));
 
         return $this->agent($response, $agent);
@@ -205,10 +212,24 @@ final class AgencyController extends ApiController
     public function hide(Request $request, Response $response, array $args): Response
     {
         $agent = $this->load(User::class, $args);
+        self::notOwn($request, $agent);
         $bot = $this->shopOf($agent);
         $this->restrictions->save($bot, $this->input($request));
 
         return $this->json($response, ['hidden' => $this->restrictions->present($bot), 'agent' => $this->directory->presentAgent($this->directory->agent($agent->id))]);
+    }
+
+    /**
+     * Refuses one of the shop's admins who is this agent too a change of their own agency (from the bot's management,
+     * working with the owner's seat): another admin, or the owner, makes it.
+     *
+     * @throws ActorRefusedException 403
+     */
+    private static function notOwn(Request $request, User $agent): void
+    {
+        if (Principal::of($request)->actor()->is($agent->id)) {
+            throw ActorRefusedException::ownAgency();
+        }
     }
 
     /** The request as it stands after the decision. */

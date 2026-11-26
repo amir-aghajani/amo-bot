@@ -9,6 +9,7 @@ use App\Core\Drivers\Registry;
 use App\Core\Exceptions\ValidationException;
 use App\Core\Security\Encrypter;
 use App\Core\Support\FileLock;
+use App\Modules\Auth\Services\Reviewers;
 use App\Modules\Bots\CurrentBot;
 use App\Modules\Bots\Models\Bot;
 use App\Modules\Imports\Contracts\Migrator;
@@ -68,6 +69,7 @@ final class Imports
         private readonly Importer $importer,
         private readonly Encrypter $encrypter,
         private readonly LoggerInterface $logger,
+        private readonly Reviewers $reviewers,
         /** The imports' folder (storage/imports): the Stager's per import, and the locks beside them. */
         private readonly string $folder,
     ) {}
@@ -253,7 +255,8 @@ final class Imports
 
     /**
      * The import as the panels read it (ImportState): its phase and progress, the survey with the server each panel
-     * likely is, the choices saved — or proposed while none are —, the tally, the problems by reason, and why it failed.
+     * likely is, the choices saved — or proposed while none are —, the tally, the problems by reason, why it failed, and
+     * who started it as its reader sees them (Reviewers::present()).
      *
      * @return array<string, mixed>
      */
@@ -281,7 +284,7 @@ final class Imports
             'counts' => Run::tally($import->counts),
             'problems' => self::problemsByReason($import),
             'error' => $import->error,
-            'reviewer' => $import->reviewer,
+            'reviewer' => $this->reviewers->present($import->reviewer),
             'started_at' => $import->started_at?->toIso8601String(),
             'finished_at' => $import->finished_at?->toIso8601String(),
             'created_at' => $import->created_at?->toIso8601String(),

@@ -13,8 +13,8 @@ installation's settings («تنظیمات پنل» — an agent's has «ظاهر
 another bot among them.
 
 Away from a computer, the same shop is run from the bot's private chat: link your Telegram account once, and
-«⚙️ مدیریت» opens the panel's sections as the bot's menus — for an agent in their own bot, and for the shop's admins the
-daily work you let them do ([Managing the shop from the bot](Bot-Management.md)).
+«⚙️ مدیریت» opens the panel's sections as the bot's menus — for an agent in their own bot, and for the shop's admins,
+whose role alone gives them your access in the main bot ([Managing the shop from the bot](Bot-Management.md)).
 
 ## Setting a shop up
 
@@ -80,7 +80,7 @@ live: there is no need to reload.
 | Page | What it covers |
 |---|---|
 | [The panels](Panels.md) | Signing in, the shop on screen, the menu, the dashboard, lists, live updates, failures |
-| [Managing the shop from the bot](Bot-Management.md) | «⚙️ مدیریت» in the bot's private chat: your Telegram account linked, an agent's, the shop's admins and their grants, the home and its queues, the search and the settings search, the menus, typed answers |
+| [Managing the shop from the bot](Bot-Management.md) | «⚙️ مدیریت» in the bot's private chat: your Telegram account linked, an agent's, the shop's admins and their seat, the home — its queues, the bot's switch, «⚡️ کلیدهای اصلی» —, the search and the settings search, the menus, typed answers |
 | [Servers](Servers.md) | The VPN panels the shop sells on: adding one, its inbounds, its health, days and traffic for its services, moving them all to another server |
 | [Plans](Plans.md) | Plans, the servers they are sold on, and their categories |
 | [Payment methods](Payment-Methods.md) | The wallet, card-to-card, the automatic approval of receipts, and the online gateways |

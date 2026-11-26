@@ -15,7 +15,6 @@ use App\Modules\Subscriptions\Services\ExtrasSettings;
 use App\Modules\Subscriptions\Services\RenewalSettings;
 use App\Modules\Subscriptions\Services\ServiceClaims;
 use App\Modules\Subscriptions\Services\ServiceClaimSettings;
-use App\Modules\Telegram\Admin\BotAdminSettings;
 use App\Modules\Telegram\BotSettings;
 use App\Modules\Telegram\Qr\QrBackground;
 use App\Modules\Users\Services\WalletSettings;
@@ -168,15 +167,6 @@ final class AdminBotSettingsApiTest extends HttpTestCase
             'lottery_plan_id' => null,
             'lottery_entries' => 'order',
             'lottery_exclude_agents' => true,
-            'bot_admins_enabled' => true,
-            'bot_admins_grant_catalog' => false,
-            'bot_admins_grant_wallet' => false,
-            'bot_admins_grant_refunds' => false,
-            'bot_admins_grant_payments' => false,
-            'bot_admins_grant_extend' => false,
-            'bot_admins_grant_manual_orders' => false,
-            'bot_admins_grant_delete' => false,
-            'bot_admins_grant_account_security' => false,
         ], $this->decode($response)['settings'], 'renewal: the traffic left not carried; automatic renewal two days before the deadline, off for new services; extra traffic and time, reminders, the removal of ended services, test accounts, services added by their link and referrals off until the admin turns them on (a day after its end; a test each, for good; ended tests cleaned up); every report topic wanted (no group until one is connected)');
 
         $background = $this->decode($response)['qr_background'];
@@ -629,29 +619,20 @@ final class AdminBotSettingsApiTest extends HttpTestCase
     }
 
     /**
-     * «مدیران ربات», as its card saves it in either panel: the switch and a switch per grant, read by the bot on its next
-     * message — each shop its own, every switch sent.
+     * «مدیران ربات» is no group of settings any more, in either panel: the shop's admins manage it from the bot with
+     * the owner's seat — or the agent's —, no switch to let them in and no grant to give them.
      */
-    public function testTheBotAdminsGroupTakesTheSwitchAndEachGrantShopByShop(): void
+    public function testThereIsNoBotAdminsGroup(): void
     {
-        $grants = ['bot_admins_grant_catalog' => true, 'bot_admins_grant_wallet' => false, 'bot_admins_grant_refunds' => true, 'bot_admins_grant_payments' => false, 'bot_admins_grant_extend' => false, 'bot_admins_grant_manual_orders' => false, 'bot_admins_grant_delete' => false, 'bot_admins_grant_account_security' => false];
-        $saved = $this->putJson('/api/admin/bot/settings/bot_admins', ['bot_admins_enabled' => false] + $grants);
-
-        self::assertSame(200, $saved->getStatusCode(), (string) $saved->getBody());
-        self::assertSame(['bot_admins_enabled' => false] + $grants, array_intersect_key($this->decode($saved)['settings'], ['bot_admins_enabled' => true] + $grants));
-        $bot = $this->service(BotAdminSettings::class);
-        self::assertSame([false, ['catalog', 'refunds']], [$bot->enabled(), $bot->grants()], 'what the bot reads');
-
-        $refused = $this->unchecked()->putJson('/api/admin/bot/settings/bot_admins', ['bot_admins_enabled' => true]);
-        self::assertSame(422, $refused->getStatusCode());
-        self::assertArrayHasKey('bot_admins_grant_catalog', $this->decode($refused)['errors'], 'a grant left out is not silently off');
-        self::assertFalse($bot->enabled(), 'nothing was written');
-
+        $bodies = [[], ['bot_admins_enabled' => false, 'bot_admins_grant_catalog' => true]];
         $this->loginAsAgent($this->agentBot());
-        $agent = $this->decode($this->get('/api/agent/bot/settings'))['settings'];
-        self::assertSame([true, false], [$agent['bot_admins_enabled'], $agent['bot_admins_grant_catalog']], "an agent's shop has its own, as a fresh shop has them");
-        self::assertSame(200, $this->putJson('/api/agent/bot/settings/bot_admins', ['bot_admins_enabled' => true] + $grants)->getStatusCode());
-        self::assertTrue($this->decode($this->get('/api/agent/bot/settings'))['settings']['bot_admins_grant_catalog']);
-        self::assertFalse($this->decode($this->get('/api/admin/bot/settings'))['settings']['bot_admins_enabled'], "the main shop's are its own still");
+        foreach (['admin', 'agent'] as $panel) {
+            foreach ($bodies as $body) {
+                $unknown = $this->unchecked()->putJson("/api/{$panel}/bot/settings/bot_admins", $body);
+                self::assertSame([404, (new UnknownGroupException())->getMessage()], [$unknown->getStatusCode(), $this->decode($unknown)['message']], "{$panel}: no such group");
+            }
+            $settings = $this->decode($this->get("/api/{$panel}/bot/settings"))['settings'];
+            self::assertSame([], array_filter(array_keys($settings), static fn(string $key): bool => str_starts_with($key, 'bot_admins')), "{$panel}: no switch of theirs among the settings");
+        }
     }
 }

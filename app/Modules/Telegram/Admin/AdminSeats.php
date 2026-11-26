@@ -17,42 +17,48 @@ use App\Modules\Users\Models\User;
 
 /**
  * Who of a bot's private chats may manage its shop, and as what (AdminSeat), asked on each update — a role taken away,
- * a ban, an owner unlinked or the bot admins' switch turned off ends it at once:
- * 1. in the main bot, an account linked as the owner (OwnerLinks): every section, in the shop it picked (any shop, as
- *    the owner's panel opens any);
- * 2. in an agent's bot, the agent — their own Telegram account, while their agency stands: their panel's sections, in
- *    their shop;
- * 3. the shop's admins (role admin) while «مدیران ربات» lets them in: the daily work and its grants.
- * Nobody banned manages anything.
+ * a ban, an owner unlinked or an agency ended ends it at once:
+ * 1. in the main bot, an account linked as the owner (OwnerLinks) and every admin of it (role admin): the owner's
+ *    seat — every section, in the shop it picked (any shop, as the owner's panel opens any);
+ * 2. in an agent's bot while their agency stands, the agent — their own Telegram account — and every admin of it: the
+ *    agent's seat — their panel's sections, in their shop.
+ * An admin's decisions keep their own name and none is about their own account (AdminSeat::isAdmin()). Nobody banned
+ * manages anything.
  */
 final class AdminSeats
 {
     public function __construct(
         private readonly OwnerLinks $owners,
-        private readonly BotAdminSettings $staff,
         private readonly AdminAccount $account,
     ) {}
 
-    /** `$user`'s seat in the current bot's shop — the owner in `$shop` when they picked one —, or null for none. */
+    /** `$user`'s seat in the current bot's shop — an owner's seat in `$shop` when it picked one —, or null for none. */
     public function of(User $user, ?int $shop = null): ?AdminSeat
     {
         $bot = CurrentBot::get();
         if ($user->isBanned() || $user->telegram_id === null) {
             return null;
         }
-        if ($bot->isMain() && $this->owners->isOwner($user->telegram_id)) {
+        if ($bot->isMain()) {
             $picked = $shop === null || $shop === $bot->id ? $bot : Bot::query()->find($shop) ?? $bot;
+            if ($this->owners->isOwner($user->telegram_id)) {
+                return new AdminSeat(SeatKind::Owner, new Principal(PrincipalKind::Owner, $this->account->username(), $picked, inBot: true), $user);
+            }
+            if (!$user->isAdmin()) {
+                return null;
+            }
+            $seat = new AdminSeat(SeatKind::Owner, new Principal(PrincipalKind::Owner, Reviewers::forAdmin($user), $bot, $user, inBot: true), $user);
 
-            return new AdminSeat(SeatKind::Owner, new Principal(PrincipalKind::Owner, $this->account->username(), $picked, inBot: true), $user);
+            return $picked->id === $bot->id ? $seat : $seat->in($picked);
+        }
+        if (!self::stands($bot)) {
+            return null;
         }
         if (self::isAgentOf($bot, $user)) {
             return new AdminSeat(SeatKind::Agent, new Principal(PrincipalKind::Agent, AgentAuth::name($bot), $bot, inBot: true), $user);
         }
-        if ($user->isAdmin() && $this->staff->enabled()) {
-            return new AdminSeat(SeatKind::Staff, new Principal(PrincipalKind::Staff, Reviewers::forAdmin($user), $bot, $user, $this->staff->grants(), true), $user);
-        }
 
-        return null;
+        return $user->isAdmin() ? new AdminSeat(SeatKind::Agent, new Principal(PrincipalKind::Agent, Reviewers::forAdmin($user), $bot, $user, inBot: true), $user) : null;
     }
 
     /**
@@ -70,7 +76,7 @@ final class AdminSeats
         }
         $bot = CurrentBot::get();
 
-        return $bot->isMain() ? $this->owners->isOwner($user->telegram_id) : self::isAgentOf($bot, $user);
+        return $bot->isMain() ? $this->owners->isOwner($user->telegram_id) : self::stands($bot) && self::isAgentOf($bot, $user);
     }
 
     /**
@@ -87,11 +93,17 @@ final class AdminSeats
     }
 
     /**
-     * Whether `$user` is the agent of `$bot`, an agent's bot whose agency stands — as their panel asks it
-     * (AgentAuth): an agency ended manages nothing from the bot either.
+     * Whether `$bot` is an agent's bot whose agency stands — as their panel asks it (AgentAuth): an agency ended manages
+     * nothing from the bot either, nor do its admins.
      */
+    private static function stands(Bot $bot): bool
+    {
+        return !$bot->isMain() && $bot->status() === BotStatus::Active && $bot->agent !== null;
+    }
+
+    /** Whether `$user` is the agent of `$bot` (an agent's bot whose agency stands()), by their Telegram account. */
     private static function isAgentOf(Bot $bot, User $user): bool
     {
-        return !$bot->isMain() && $bot->status() === BotStatus::Active && $bot->agent !== null && $bot->agent->telegram_id === $user->telegram_id;
+        return $bot->agent?->telegram_id === $user->telegram_id;
     }
 }

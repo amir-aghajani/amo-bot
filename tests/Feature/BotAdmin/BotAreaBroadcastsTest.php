@@ -6,7 +6,6 @@ namespace Tests\Feature\BotAdmin;
 
 use App\Modules\Subscriptions\Models\Grant;
 use App\Modules\Subscriptions\Services\Grants;
-use App\Modules\Telegram\Admin\BotAdminSettings;
 use App\Modules\Telegram\Admin\Ui\Nav;
 use App\Modules\Telegram\Admin\Ui\Words;
 use App\Modules\Telegram\Broadcasts\Audience;
@@ -14,15 +13,14 @@ use App\Modules\Telegram\Broadcasts\BroadcastMode;
 use App\Modules\Telegram\Broadcasts\BroadcastService;
 use App\Modules\Telegram\Broadcasts\BroadcastStatus;
 use App\Modules\Telegram\Messages;
-use App\Modules\Telegram\Models\Broadcast;
 use App\Modules\Users\Enums\UserRole;
 use Tests\BotTestCase;
 
 /**
  * «📣 ارسال همگانی» and «🎁 هدیه همگانی» from the bot (Sections\Bot\Broadcasts, Gifts): every seat sees the runs and their
  * controls — through the panel's routes, a cancel asked first — and starts the bot's own compose flow from the list;
- * /broadcast answers whoever manages the shop and nobody else; a mass gift is the owner's: drafted field by field, started
- * in one request, stopped asked first.
+ * /broadcast answers whoever manages the shop and nobody else; a mass gift — the owner's and the shop's admins' —
+ * drafted field by field, started in one request, stopped asked first.
  */
 final class BotAreaBroadcastsTest extends BotTestCase
 {
@@ -42,9 +40,9 @@ final class BotAreaBroadcastsTest extends BotTestCase
         $run = $this->service(BroadcastService::class)->start($staff, ['message_id' => 5, 'mode' => BroadcastMode::Copy, 'audience' => Audience::ALL, 'pin' => false, 'excerpt' => 'تخفیف پاییزی', 'content' => 'text'], null);
 
         $this->send($this->tap(Nav::to('hb'), chat: self::STAFF));
-        self::assertContains(Nav::to('br'), $this->callbacks(0), 'the daily work: every seat');
-        self::assertNotContains(Nav::to('mg'), $this->callbacks(0), 'the mass gift is the owner\'s');
-        self::assertNotContains(Nav::to('tx'), $this->callbacks(0), 'the texts are the shop\'s configuration');
+        foreach (['br', 'mg', 'tx', 'kb', 'ch', 'rg'] as $section) {
+            self::assertContains(Nav::to($section), $this->callbacks(0), "{$section}: an admin's, as the owner's");
+        }
 
         $this->send($this->tap(Nav::to('br'), chat: self::STAFF));
         self::assertContains(Nav::to('brv', 'show', $run->id), $this->callbacks(0));
@@ -102,10 +100,8 @@ final class BotAreaBroadcastsTest extends BotTestCase
         $this->send($this->message('/emoji', chat: self::OWNER));
         self::assertSame([Messages::EMOJI_ASK], $this->said());
 
-        // A shop's admin with «مدیران ربات» shut, as before it: the bot's admin.
+        // A shop's admin.
         $this->customer(['telegram_id' => self::STAFF, 'role' => UserRole::Admin]);
-        $this->botSettings('bot_admins', ['bot_admins_enabled' => false]);
-        self::assertFalse($this->service(BotAdminSettings::class)->enabled());
         $this->send($this->message('/broadcast', chat: self::STAFF));
         self::assertSame([Messages::BROADCAST_ASK], $this->said());
     }
@@ -210,14 +206,21 @@ final class BotAreaBroadcastsTest extends BotTestCase
         self::assertCount(5, array_filter($this->callbacks(0), static fn(string $data): bool => str_starts_with($data, Nav::to('mgn', 't') . ':')), 'the rest on the next');
     }
 
-    public function testAShopsAdminHasNoMassGift(): void
+    public function testAShopsAdminGivesAMassGiftUnderTheirOwnName(): void
     {
         $this->customer(['telegram_id' => self::STAFF, 'role' => UserRole::Admin]);
+        $this->subscription($this->customer(['telegram_id' => 1001]), $this->plan(), $this->fakeServer(), 'ali_1');
 
         $this->send($this->tap(Nav::to('mgn', 'new'), chat: self::STAFF));
-        self::assertStringContainsString('مدیریت فروشگاه', $this->said()[0], 'a screen it may not open is the home');
-        self::assertSame(0, Grant::query()->count());
-        self::assertSame(0, Broadcast::query()->count());
+        self::assertStringContainsString('همه سرویس‌ها (۱)', implode(' ', array_column(array_merge(...$this->inlineKeyboard(0)), 'text')), 'the draft, not the home');
+        $this->send($this->tap(Nav::to('mgn', 'a', 'all'), chat: self::STAFF));
+        $this->send($this->message('۷ روز', chat: self::STAFF));
+        $this->send($this->tap(Nav::to('mgn', 'skip', 'gb'), chat: self::STAFF));
+        $this->send($this->message('هدیه نوروز', chat: self::STAFF));
+        $this->send($this->tap(Nav::to('mgn', 'go'), chat: self::STAFF));
+
+        $grant = Grant::query()->sole();
+        self::assertSame([7, 'هدیه نوروز', 'tg:' . self::STAFF], [$grant->days, $grant->reason, $grant->reviewer], 'through the panel\'s route, under their own name');
     }
 
     /** @return list<string> The buttons of the window as the bot last drew it. */

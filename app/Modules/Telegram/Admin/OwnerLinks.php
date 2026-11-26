@@ -31,10 +31,14 @@ final class OwnerLinks
     /** The most accounts linked at once. */
     public const MOST = 5;
 
-    private const IDS = 'owner.telegram_ids';
-    private const CODE = 'owner.link_code';
-    private const EXPIRES = 'owner.link_expires_at';
-    private const RAISED = 'owner.raised_ids';
+    /** The main shop's settings: the linked accounts' Telegram ids, those whose admin role a link gave, the open link. */
+    public const IDS = 'owner.telegram_ids';
+    public const RAISED = 'owner.raised_ids';
+    public const CODE = 'owner.link_code';
+    public const EXPIRES = 'owner.link_expires_at';
+
+    /** Every setting that says who is the owner in the bot: a whole installation's restore keeps them as they are (Backups\Restorer). */
+    public const KEYS = [self::IDS, self::RAISED, self::CODE, self::EXPIRES];
 
     /** The code's length: 128 bits in base62 is 22; a few more for good measure. */
     private const CODE_LENGTH = 32;
@@ -174,7 +178,8 @@ final class OwnerLinks
     /**
      * The panel's login changed (Auth\Services\OwnerAuth::changeCredentials()): no account is the owner any more, and an
      * open link ends unopened — whoever held the old login, a session of it or a link made with it, keeps nothing in the
-     * bot. Every admin role a link gave goes, as unlink() takes one; a role the owner set by hand (chosen()) stays. The
+     * bot. Every linked account's admin role goes — one the owner set by hand (chosen()) too: an admin manages the shop
+     * from the bot with the owner's seat, so a role kept would keep it —, and every role a link gave elsewhere. The
      * accounts are linked again from the panel, under the new login. Returns the Telegram ids let go, oldest first.
      *
      * @return list<int>
@@ -188,21 +193,23 @@ final class OwnerLinks
         $this->settings->set(self::EXPIRES, null, Bot::MAIN);
         $ids = $this->ids();
         $this->settings->set(self::IDS, [], Bot::MAIN);
-        // Every role a link raised, whichever account it was on: none is linked now.
-        $this->lower([...$ids, ...$this->raisedIds()]);
+        // Every linked account's role, raised or chosen, and every role a link raised elsewhere: none is linked now.
+        $this->lower($ids, true);
+        $this->lower($this->raisedIds());
 
         return $ids;
     }
 
     /**
-     * The accounts of `$telegramIds` the link made admins, customers again in the main bot.
+     * The accounts of `$telegramIds` the link made admins — every one of them, a role chosen by hand too, when `$chosenToo`
+     * —, customers again in the main bot.
      *
      * @param list<int> $telegramIds
      */
-    private function lower(array $telegramIds): void
+    private function lower(array $telegramIds, bool $chosenToo = false): void
     {
         $raised = $this->raisedIds();
-        $back = array_values(array_intersect($raised, $telegramIds));
+        $back = $chosenToo ? array_values(array_unique($telegramIds)) : array_values(array_intersect($raised, $telegramIds));
         if ($back === []) {
             return;
         }

@@ -7,9 +7,11 @@ namespace Tests\Feature\BotAdmin;
 use App\Core\Config\ConfigFile;
 use App\Core\Database\Drivers\ProbeFailedException;
 use App\Core\Database\Drivers\ProbeResult;
+use App\Modules\Auth\Exceptions\ActorRefusedException;
 use App\Modules\Telegram\Admin\Ui\Nav;
 use App\Modules\Telegram\Admin\Ui\Words;
 use App\Modules\Telegram\BotState;
+use App\Modules\Users\Enums\UserRole;
 use Tests\BotTestCase;
 use Tests\Fakes\ProbedDriver;
 
@@ -189,6 +191,35 @@ final class PanelConfigTest extends BotTestCase
         self::assertStringContainsString('تغییرها هنوز ذخیره نشده‌اند', $this->said()[0]);
         self::assertSame('false', $this->file->get('APP_DEBUG'), 'a draft until saved');
         self::assertContains(['text' => Words::SAVE, 'callback_data' => Nav::to('ppa', 'save'), 'style' => 'success'], array_merge(...$this->inlineKeyboard(0)));
+    }
+
+    public function testAnAdminSavesNoWebhookSecretOfTheirOwn(): void
+    {
+        $this->file->setMany(['TELEGRAM_WEBHOOK_SECRET' => 'owners_secret-0123456789']);
+        $this->customer(['telegram_id' => 7100, 'role' => UserRole::Admin]);
+
+        $this->send($this->tap(Nav::to('ppt', 'e', 5), chat: 7100));
+        $this->send($this->message('admins_secret-0123456789', chat: 7100));
+        $this->send($this->tap(Nav::to('ppt', 'save'), chat: 7100));
+        self::assertSame(ActorRefusedException::OWNERS_SECRET, $this->popup(), 'the panel\'s refusal, as a popup');
+        self::assertSame('owners_secret-0123456789', $this->file->get('TELEGRAM_WEBHOOK_SECRET'), 'nothing written');
+
+        $this->send($this->tap(Nav::to('ppt', 'e', 5), chat: self::OWNER));
+        $this->send($this->message('new_secret-0123456789ab', chat: self::OWNER));
+        $this->send($this->tap(Nav::to('ppt', 'save'), chat: self::OWNER));
+        self::assertSame('new_secret-0123456789ab', $this->file->get('TELEGRAM_WEBHOOK_SECRET'), 'the owner\'s own linked account saves it');
+    }
+
+    public function testAnAdminMovesNoBotApiAddressFromTheBot(): void
+    {
+        $this->file->setMany(['TELEGRAM_API_URL' => 'https://api.telegram.org']);
+        $this->customer(['telegram_id' => 7100, 'role' => UserRole::Admin]);
+
+        $this->send($this->tap(Nav::to('ppt', 'e', 2), chat: 7100));
+        $this->send($this->message('https://botapi.example', chat: 7100));
+        $this->send($this->tap(Nav::to('ppt', 'save'), chat: 7100));
+        self::assertSame(ActorRefusedException::OWNERS_PASSWORD, $this->popup(), 'the owner\'s alone: refused, no password typed');
+        self::assertSame('https://api.telegram.org', $this->file->get('TELEGRAM_API_URL'), 'nothing written');
     }
 
     public function testAnAgentHasNoneOfTheFileButTheirBackups(): void

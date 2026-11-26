@@ -116,13 +116,10 @@ final class CustomerMessageScreen extends BaseScreen
 
     /**
      * How the message reads in Telegram — under the bot's heading «📩 پیام از طرف پشتیبانی:», or the words alone — as the
-     * bot settings' «عنوان پیام پشتیبانی» says, for a seat that reads them; '' for a seat that does not.
+     * bot settings' «عنوان پیام پشتیبانی» says; '' when they cannot be read.
      */
     private function heading(Admin $admin): string
     {
-        if (!$admin->seat->configures()) {
-            return '';
-        }
         try {
             $header = BotGroupSource::settings($admin)['support_header'] ?? null;
         } catch (ApiRefusal) {

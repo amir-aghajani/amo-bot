@@ -104,14 +104,10 @@ final class ReferralsScreen extends BaseScreen
 
     /**
      * Whether the program runs but the bot's menu («start») has no «زیرمجموعه‌گیری» button, so customers have no way to
-     * their invite screen (the panel's MenuButtonNotice) — asked only where the keyboards are the seat's to read.
+     * their invite screen (the panel's MenuButtonNotice).
      */
     private function menuLacksButton(Admin $admin): bool
     {
-        if (!$admin->seat->configures()) {
-            return false;
-        }
-
         try {
             return !KeyboardScreen::hasButton($admin, 'affiliates');
         } catch (ApiRefusal) {

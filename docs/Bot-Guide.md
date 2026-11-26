@@ -491,14 +491,15 @@ blocked — goes by email when the shop's email is set up ([Store API: notificat
 
 ## For the bot's admins
 
-A bot admin is a customer you (or the agent) made one — «کاربران», the row's menu «مدیر ربات کردن»; an agent is their
-own bot's admin by itself, and so is your own Telegram account once you link it from the panel
+A bot admin is a customer you, the agent or another admin made one — «کاربران», the row's menu «مدیر ربات کردن», or the
+bot's «⚙️ تنظیمات › 🛡 مدیران ربات»; an agent is their own bot's admin by itself, and so is your own Telegram account once
+you link it from the panel
 ([Customers](Customers.md#the-bots-admins)). They pass the bot's switch, phone and channels — not a ban —, and have what
 answers nobody else at all:
 
 - **«⚙️ مدیریت»** under the menu, or `/admin` — the shop managed from the private chat, the panel's sections as the
-  bot's menus: for you every section in any shop, for an agent their panel's, for the shop's admins the daily work and
-  what «مدیران ربات» grants them, while it lets them in ([Managing the shop from the bot](Bot-Management.md)).
+  bot's menus: for you every section in any shop, for an agent their panel's, and for the shop's admins the same as
+  you in the main bot, or as the agent in an agent's bot ([Managing the shop from the bot](Bot-Management.md#the-shops-admins)).
 - **`/broadcast`** — a message to many customers, composed in the bot: the message, then a draft card — how it goes, to
   whom, pinned or not, link buttons —, then the run's progress with its controls ([Broadcasts](Broadcasts.md)).
   «⚙️ مدیریت › 🤖 ربات › 📣 ارسال همگانی» starts the same, and follows every run.
@@ -512,7 +513,7 @@ answers nobody else at all:
   ([Website](Website.md#the-shops-admins)).
 
 An admin is a customer still: what is their own — their payment, their wallet, their service, their review, their agency
-request — another admin decides.
+request, their own discount or «همکار» group — another admin decides.
 
 ## Watch out for
 

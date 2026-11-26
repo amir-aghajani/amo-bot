@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Modules\Telegram\Admin\Sections\Bot\Keyboards;
 
-use App\Modules\Telegram\Admin\AdminSeat;
 use App\Modules\Telegram\Admin\Door\ApiRefusal;
 use App\Modules\Telegram\Admin\Sections\Bot\BotScreens;
 use App\Modules\Telegram\Admin\Ui\Admin;
@@ -35,11 +34,6 @@ final class KeyboardButtonScreen extends BaseScreen
     public const STYLES = ['primary' => ['اصلی', 'آبی', '🔵'], 'success' => ['موفقیت', 'سبز', '🟢'], 'danger' => ['خطر', 'قرمز', '🔴']];
 
     private const NONE = '_';
-
-    public function allows(AdminSeat $seat): bool
-    {
-        return $seat->configures();
-    }
 
     public function show(Admin $admin, array $args): View
     {

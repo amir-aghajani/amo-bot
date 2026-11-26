@@ -30,7 +30,7 @@ final class OwnerAccountsScreen extends BaseScreen
 
     public function allows(AdminSeat $seat): bool
     {
-        return $seat->isOwner();
+        return $seat->principal->isTheOwner();
     }
 
     public function show(Admin $admin, array $args): View
@@ -56,18 +56,18 @@ final class OwnerAccountsScreen extends BaseScreen
                     'این حساب دیگر مالک نباشد؟',
                     Button::to(Words::yes('برداشته شود'), self::ID, 'dropped', $id),
                     Button::to(Words::CANCEL, self::ID),
-                    $self ? 'این حساب خود شماست: اگر لینک آن را مدیر ربات کرده بود، بعد از آن از ربات مدیریت نمی‌کنید تا از پنل دوباره وصلش کنید؛ اگر از پیش مدیر ربات بوده‌اید، تا «مدیران ربات» روشن است کارهای روزانه برایتان می‌ماند.' : 'این حساب دیگر مالک نیست و از ربات فروشگاه را مدیریت نمی‌کند؛ با یک لینک تازه دوباره وصل می‌شود.',
+                    $self ? 'این حساب خود شماست: اگر لینک آن را مدیر ربات کرده بود، بعد از آن از ربات مدیریت نمی‌کنید تا از پنل دوباره وصلش کنید؛ اگر از پیش مدیر ربات بوده‌اید، مدیر ربات می‌مانید و مدیریت فروشگاه از «⚙️ مدیریت» برایتان می‌ماند.' : 'این حساب دیگر مالک نیست: اگر لینک آن را مدیر ربات کرده بود، دیگر از ربات مدیریت نمی‌کند؛ اگر از پیش مدیر ربات بود، مدیر ربات می‌ماند و از «⚙️ مدیریت» مدیریت می‌کند تا نقشش را در «کاربران» بردارید. با یک لینک تازه دوباره وصل می‌شود.',
                     danger: true,
                 );
             case 'dropped':
                 $admin->api->delete('/settings/owner-telegram/' . $id);
                 $admin->notice('✅ برداشته شد.');
                 if ($id === $admin->seat->user->telegram_id) {
-                    // An admin before its link stays one (OwnerLinks): the daily work, while «مدیران ربات» lets admins in.
+                    // An admin before its link stays one (OwnerLinks): the management stays theirs, as an admin.
                     $view = View::make(self::TITLE);
 
                     return $admin->seat->user->refresh()->isAdmin()
-                        ? $view->line('این حساب دیگر مالک نیست؛ مدیر ربات می‌ماند، چون پیش از وصل شدن هم مدیر ربات بود: تا «مدیران ربات» روشن است، کارهای روزانه را از «⚙️ مدیریت» دارد.')->back(Screens::HOME)
+                        ? $view->line('این حساب دیگر مالک نیست؛ مدیر ربات می‌ماند، چون پیش از وصل شدن هم مدیر ربات بود، و مدیریت فروشگاه را از «⚙️ مدیریت» دارد.')->back(Screens::HOME)
                         : $view->line('این حساب دیگر مالک نیست؛ مدیریت از ربات برایش بسته شد.');
                 }
 

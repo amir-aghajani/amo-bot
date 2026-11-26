@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Modules\Telegram\Admin\Sections\Customers;
 
-use App\Modules\Auth\StaffGrant;
 use App\Modules\Telegram\Admin\Sections\Catalog\CatalogFmt;
 use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\Answer;
@@ -23,8 +22,7 @@ use App\Support\Persian;
 /**
  * «👫 گروه‌های کاربران» (the users page's «گروه‌ها» section): the admin's customer groups in their order, how many over
  * them, each a button with its members counted and «همکار» marked (agent prices), opening the group's own screen
- * (GroupScreen); and, for a seat the `catalog` grant opens, «➕ افزودن گروه» — its name typed, «همکار» switched on the
- * form, then one POST.
+ * (GroupScreen); and «➕ افزودن گروه» — its name typed, «همکار» switched on the form, then one POST.
  *
  * The panel lists every group at once (no pages): this screen pages them itself. Actions: `page` (n), `add` (the name
  * asked; `new` for a new group, else the draft's again), `ap` (1|0: the draft's «همکار» on or off), `make` (added).
@@ -70,7 +68,6 @@ final class GroupsScreen extends BaseScreen
     {
         $groups = Customer::groups($admin);
         [$shown, $page, $pages] = View::slice($groups, (int) ($admin->state(self::ID)['page'] ?? 1));
-        $catalog = $admin->seat->holds(StaffGrant::Catalog);
 
         $view = View::make(self::TITLE, ...self::under())->total(count($groups), 'گروه');
         if ($groups === []) {
@@ -79,9 +76,7 @@ final class GroupsScreen extends BaseScreen
         foreach ($shown as $group) {
             $view->row(Button::to(self::label($group), GroupScreen::ID, Nav::SHOW, Customer::int($group, 'id')));
         }
-        if ($catalog) {
-            $view->row(Button::to(Words::add('گروه'), self::ID, 'add', 'new')->success());
-        }
+        $view->row(Button::to(Words::add('گروه'), self::ID, 'add', 'new')->success());
 
         return $view->pager($page, $pages, self::ID, 'page')
             ->help('مشتری‌ها را برای خودتان دسته کنید — ' . Fmt::ltr('VIP') . '، همکاران، یک کمپین —؛ پیام همگانی را می‌شود فقط برای یک گروه فرستاد. مشتری را از صفحه خودش، «' . Icons::GROUPS . ' گروه‌ها»، در گروه بگذارید.' . "\n" . 'گروه «همکار»: ' . self::PARTNER)

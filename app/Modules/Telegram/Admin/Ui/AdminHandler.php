@@ -16,8 +16,8 @@ use App\Modules\Telegram\Handlers\FallbackHandler;
 /**
  * The shop's management in its bot's private chat: `/admin` (or `/panel`) and the «⚙️ مدیریت» button open it, its
  * buttons (Nav::PREFIX) move through its screens, and the chat's answers to its questions (Admin::INPUT) go to the
- * screen that asked. Only a seat (AdminSeats: the owner's linked account, an agent in their own bot, the shop's admins
- * while «مدیران ربات» lets them in) gets anything: anyone else is answered as an unknown command or button is.
+ * screen that asked. Only a seat (AdminSeats: the owner's linked account and the main bot's admins, an agent in their
+ * own bot and its admins) gets anything: anyone else is answered as an unknown command or button is.
  *
  * One message is the management's window: a tap edits it in place; a command, the button or a typed answer sends it
  * anew at the bottom of the chat and takes the last one away. A typed answer is deleted once read — a token, a password

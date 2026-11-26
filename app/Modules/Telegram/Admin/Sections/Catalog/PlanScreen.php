@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Modules\Telegram\Admin\Sections\Catalog;
 
-use App\Modules\Auth\StaffGrant;
 use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\BaseScreen;
 use App\Modules\Telegram\Admin\Ui\Button;
@@ -19,7 +18,7 @@ use App\Support\Persian;
 /**
  * One plan (from the panel's plans list — it has no route for one): why the bot does not show it first, then its summary
  * card — category and place, quota, the three prices, state, sales, extras, its button and badge —, its description,
- * and the servers it is sold on with why one cannot sell now; with the catalogue's grant, what the panel's row menu does:
+ * and the servers it is sold on with why one cannot sell now; then what the panel's row menu does:
  * «✏️ ویرایش» (PlanEditScreen, the main action), the switch (on or off as its button says), «📄 ساخت کپی» (opened in
  * its form at once, switched off), a place up or down among its category's plans, and «🗑 حذف پلن» — asked first, or
  * refused up front once an order or a service points at it.
@@ -161,19 +160,17 @@ final class PlanScreen extends BaseScreen
                 : '• ' . $name . ' · ' . ((bool) ($entry['all_inbounds'] ?? false) ? 'کل سرور (الان ' . Persian::number($inbounds) . ' اینباند)' : Persian::number($inbounds) . ' اینباند انتخاب‌شده'));
         }
 
-        if ($admin->seat->holds(StaffGrant::Catalog)) {
-            // The main action first, the switch beside it; the copy and the places after; the delete last.
-            $view->row(
-                Button::to(Words::EDIT, PlanEditScreen::ID, 'edit', $id)->primary(),
-                $active ? Button::to(Words::DEACTIVATE, self::ID, 'tog', $id, 0)->danger() : Button::to(Words::ACTIVATE, self::ID, 'tog', $id, 1)->success(),
+        // The main action first, the switch beside it; the copy and the places after; the delete last.
+        $view->row(
+            Button::to(Words::EDIT, PlanEditScreen::ID, 'edit', $id)->primary(),
+            $active ? Button::to(Words::DEACTIVATE, self::ID, 'tog', $id, 0)->danger() : Button::to(Words::ACTIVATE, self::ID, 'tog', $id, 1)->success(),
+        )
+            ->row(Button::to('📄 ساخت کپی', self::ID, 'dup', $id))
+            ->row(
+                $at !== false && $at > 0 ? Button::to(Words::UP . ' بالاتر', self::ID, 'up', $id) : null,
+                $at !== false && $at < count($siblings) - 1 ? Button::to(Words::DOWN . ' پایین‌تر', self::ID, 'down', $id) : null,
             )
-                ->row(Button::to('📄 ساخت کپی', self::ID, 'dup', $id))
-                ->row(
-                    $at !== false && $at > 0 ? Button::to(Words::UP . ' بالاتر', self::ID, 'up', $id) : null,
-                    $at !== false && $at < count($siblings) - 1 ? Button::to(Words::DOWN . ' پایین‌تر', self::ID, 'down', $id) : null,
-                )
-                ->row(Button::to(Words::DELETE . ' پلن', self::ID, 'del', $id)->danger());
-        }
+            ->row(Button::to(Words::DELETE . ' پلن', self::ID, 'del', $id)->danger());
 
         return $view->back(PlansScreen::ID);
     }

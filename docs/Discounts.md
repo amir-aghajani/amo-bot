@@ -162,7 +162,10 @@ charged.
 
 On a customer's page, the card «تخفیف اختصاصی» sets their own percent (0 to 100; 0 takes it away) off everything they buy
 for good — a colleague, a reseller, a friend of the shop. Set it with «تعیین» or «تغییر»; who set it is logged. It is one of
-the automatic discounts: a sale or their loyalty tier's discount that is larger takes its place, never adds to it.
+the automatic discounts: a sale or their loyalty tier's discount that is larger takes its place, never adds to it. The
+same card is on a customer's page in the bot's management; a bot admin never sets their own there — «قیمت‌های خودتان را
+نمی‌توانید عوض کنید؛ تخفیف اختصاصی و گروه «همکار» خودتان با مدیر دیگری است.» —: another admin, or you, does
+([Managing the shop from the bot](Bot-Management.md#what-an-admin-may-not-do)).
 
 Two accounts of one customer merged keep the larger of their two percents.
 

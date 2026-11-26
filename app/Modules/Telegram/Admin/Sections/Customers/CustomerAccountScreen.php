@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Modules\Telegram\Admin\Sections\Customers;
 
-use App\Modules\Auth\StaffGrant;
 use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\BaseScreen;
 use App\Modules\Telegram\Admin\Ui\Button;
@@ -17,9 +16,8 @@ use App\Modules\Telegram\Admin\Ui\Words;
 /**
  * «🔐 ورود به وب‌سایت» (the panel's card of that name): how the customer signs in on the shop's website — Telegram,
  * Google, email and password, two-factor — and the devices signed in, as a summary card, then the accounts merged into
- * theirs. For a seat the `account_security` grant opens: two-factor sign-in turned off (a lost phone) and a sign-out on
- * every device, each asked first in the panel's words, red. One of the shop's admins only looks at a bot admin's or an
- * agent's.
+ * theirs; then two-factor sign-in turned off (a lost phone) and a sign-out on every device, each asked first in the
+ * panel's words, red.
  *
  * Opened with the customer's id. Actions: `tf` (id: asks), `tfy` (id: turned off), `so` (id: asks), `soy` (id: signed out).
  */
@@ -98,7 +96,6 @@ final class CustomerAccountScreen extends BaseScreen
         $email = Customer::text($account, 'email');
         $twoFactor = Json::on($account, 'two_factor');
         $sessions = Customer::int($account, 'sessions');
-        $lock = Customer::lock($admin, $detail);
 
         $view = View::make(self::TITLE, ...Customer::under(Customer::name($user)))
             ->card([
@@ -124,12 +121,8 @@ final class CustomerAccountScreen extends BaseScreen
                 ])));
             }
         }
-        if ($lock !== null) {
-            $view->note(Fmt::e($lock));
-        } elseif ($admin->seat->holds(StaffGrant::AccountSecurity)) {
-            $view->row($twoFactor ? Button::to('🔓 خاموش کردن ورود دو مرحله‌ای', self::ID, 'tf', $id)->danger() : null)
-                ->row($sessions > 0 ? Button::to('🚪 خروج از همه دستگاه‌ها', self::ID, 'so', $id)->danger() : null);
-        }
+        $view->row($twoFactor ? Button::to('🔓 خاموش کردن ورود دو مرحله‌ای', self::ID, 'tf', $id)->danger() : null)
+            ->row($sessions > 0 ? Button::to('🚪 خروج از همه دستگاه‌ها', self::ID, 'so', $id)->danger() : null);
 
         return $view->help('راه‌های ورود مشتری به وب‌سایت فروشگاه و دستگاه‌هایی که با آن وارد شده است.' . ($merges === [] ? '' : ' حساب‌های ادغام‌شده را خود مشتری با حسابش یکی کرده است.'))
             ->back(CustomerScreen::ID, Nav::SHOW, $id)

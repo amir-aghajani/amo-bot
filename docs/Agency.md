@@ -76,8 +76,8 @@ their account and their dashboard's «نیازمند توجه» say so, and why 
 leads to the account.
 
 The same shop is theirs to run from their own bot's private chat: «⚙️ مدیریت» (or `/admin`) under their menu opens their
-panel's sections as the bot's menus, from the Telegram account the agency is theirs by, with nothing to set up — and
-they decide there, as in their panel, whether their bot's admins may too
+panel's sections as the bot's menus, from the Telegram account the agency is theirs by, with nothing to set up. Their
+bot's admins — the customers they give the role — manage it there with the agent's access while the agency stands
 ([Managing the shop from the bot](Bot-Management.md#an-agent)).
 
 ## Their traffic
@@ -214,6 +214,11 @@ customer page while the main shop is open. The row's menu:
 
 **Giving an agency back**: switch the program on; the customer asks again («🤝 نمایندگی»), and an approval brings their
 shop and bot back as they were.
+
+**An agent who is also an admin of the main bot** has these screens in its «⚙️ مدیریت», but not for their own agency:
+its level, credit and terms, traffic, hidden servers and plans, suspension and end are another admin's, or yours
+(«نمایندگی خودتان را نمی‌توانید تغییر دهید؛ این کار با مدیر دیگری است.») — as their own agency request is
+([Managing the shop from the bot](Bot-Management.md#what-an-admin-may-not-do)).
 
 ## What an agent's shop has not
 

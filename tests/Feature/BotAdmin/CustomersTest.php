@@ -5,22 +5,23 @@ declare(strict_types=1);
 namespace Tests\Feature\BotAdmin;
 
 use App\Modules\Accounts\Services\CustomerSessions;
+use App\Modules\Auth\Services\Reviewers;
 use App\Modules\Subscriptions\Enums\SubscriptionStatus;
-use App\Modules\Telegram\Admin\Door\BotAdminDoor;
 use App\Modules\Telegram\Admin\Sections\Customers\Customer;
 use App\Modules\Telegram\Admin\Ui\Nav;
 use App\Modules\Telegram\Admin\Ui\Words;
 use App\Modules\Users\Enums\UserRole;
 use App\Modules\Users\Enums\UserStatus;
 use App\Modules\Users\Models\User;
+use App\Modules\Users\Models\WalletTransaction;
 use App\Support\Persian;
 use Tests\BotTestCase;
 
 /**
  * «👥 کاربران» in the bot's management (Telegram\Admin\Sections\Customers): the list with the panel's pills, search, group
  * and order, a customer's page with every card of the panel's — wallet, groups, website sign-in, a message —, its ban,
- * role, own discount and phone rule, each through the panel's own route; and what a shop's admin sees there: the daily
- * work, the grants the owner gives, and a bot admin's or an agent's account only to look at.
+ * role, own discount and phone rule, each through the panel's own route; and a shop's admin there with the owner's
+ * seat: every card and button the owner has, another admin's account too, their decisions under their own name.
  */
 final class CustomersTest extends BotTestCase
 {
@@ -212,60 +213,49 @@ final class CustomersTest extends BotTestCase
         self::assertStringContainsString('بدهی کاربر از ۱٬۰۰۰٬۰۰۰٬۰۰۰ تومان بیشتر نمی‌شود', (string) $this->popup());
     }
 
-    public function testAShopsAdminAdjustsAWalletOnlyWithTheGrant(): void
+    public function testAShopsAdminHasEveryButtonOfACustomersPageAndCreditsUnderTheirOwnName(): void
     {
-        $this->staff();
+        $staff = $this->staff();
         $ali = $this->customer(['telegram_id' => 1111, 'first_name' => 'Ali']);
 
         $this->send($this->tap(Nav::to('usv', 'show', $ali->id), chat: self::STAFF));
-        self::assertContains(Nav::to('usw', 'show', $ali->id), $this->window(), 'the wallet reads');
-        self::assertNotContains(Nav::to('uso', 'new', $ali->id), $this->window(), 'no order by hand without its grant');
-        self::assertNotContains(Nav::to('usv', 'disc', $ali->id), $this->window(), 'the own discount is the owner\'s');
-        self::assertNotContains(Nav::to('usv', 'role', $ali->id, 'admin'), $this->window(), 'and the role');
-        self::assertContains(Nav::to('usv', 'ban', $ali->id), $this->window(), 'the daily work');
+        foreach ([Nav::to('usw', 'show', $ali->id), Nav::to('uso', 'new', $ali->id), Nav::to('usv', 'disc', $ali->id), Nav::to('usv', 'role', $ali->id, 'admin'), Nav::to('usv', 'ban', $ali->id)] as $button) {
+            self::assertContains($button, $this->window(), "{$button}: as the owner's page has it");
+        }
 
         $this->send($this->tap(Nav::to('usw', 'show', $ali->id), chat: self::STAFF));
-        self::assertNotContains(Nav::to('usw', 'add', $ali->id), $this->window());
-
-        // A button of an older screen: the door says no when the change is sent.
+        self::assertContains(Nav::to('usw', 'add', $ali->id), $this->window());
         $this->send($this->tap(Nav::to('usw', 'add', $ali->id), chat: self::STAFF));
         $this->send($this->message('20000', chat: self::STAFF));
         $this->send($this->tap(Nav::to('usw', 'skip', $ali->id), chat: self::STAFF));
         $this->send($this->tap(Nav::to('usw', 'do', $ali->id), chat: self::STAFF));
-        self::assertSame(BotAdminDoor::NOT_GRANTED, $this->popup());
-        self::assertSame('0.00', $ali->balance());
-
-        $this->botSettings('bot_admins', ['bot_admins_grant_wallet' => true]);
-        $this->send($this->tap(Nav::to('usw', 'show', $ali->id), chat: self::STAFF));
-        self::assertContains(Nav::to('usw', 'add', $ali->id), $this->window(), 'granted');
+        self::assertSame('20000.00', $ali->balance(), 'through the panel\'s route, no grant asked');
+        self::assertSame(Reviewers::forAdmin($staff), WalletTransaction::query()->where('user_id', $ali->id)->latest('id')->value('reviewer'), 'under their own name');
     }
 
-    public function testAShopsAdminOnlyLooksAtABotAdminsAccount(): void
+    public function testAShopsAdminChangesAnotherAdminsAccountAsTheOwnerDoes(): void
     {
         $this->staff();
         $boss = $this->customer(['telegram_id' => 3333, 'first_name' => 'Boss', 'role' => UserRole::Admin]);
-        $this->customerGroup('VIP');
+        $vip = $this->customerGroup('VIP');
 
         $this->send($this->tap(Nav::to('usv', 'show', $boss->id), chat: self::STAFF));
-        self::assertStringContainsString(Customer::ADMIN_LOCK, $this->screen());
+        self::assertStringNotContainsString('🔒', $this->screen(), 'not only to look at');
         foreach ([Nav::to('usv', 'ban', $boss->id), Nav::to('usm', 'show', $boss->id)] as $button) {
-            self::assertNotContains($button, $this->window(), $button);
+            self::assertContains($button, $this->window(), $button);
         }
 
         $this->send($this->tap(Nav::to('usg', 'show', $boss->id), chat: self::STAFF));
-        self::assertStringContainsString(Customer::ADMIN_LOCK, $this->screen());
-        self::assertSame([], array_filter($this->window(), static fn(string $data): bool => str_starts_with($data, Nav::to('usg', 'sw'))), 'no switch');
+        self::assertContains(Nav::to('usg', 'sw', $boss->id, $vip->id, 1), $this->window(), 'their groups switch');
 
-        // Forged taps (an old window's, hand-made data): the panel's rules refuse each, nothing changes.
         $this->send($this->tap(Nav::to('usv', 'bs', $boss->id, 'banned'), chat: self::STAFF));
-        self::assertSame(UserStatus::Active, $boss->refresh()->status, 'a bot admin\'s account is the owner\'s to ban');
-        self::assertNotNull($this->popup());
+        self::assertSame(UserStatus::Banned, $boss->refresh()->status, 'another admin\'s account, banned as the owner bans it');
         $ali = $this->customer(['telegram_id' => 1111, 'first_name' => 'Ali']);
-        $this->send($this->tap(Nav::to('usv', 'rs', $ali->id, 'admin'), chat: self::STAFF));
-        self::assertSame(UserRole::Customer, $ali->refresh()->role, 'the role is the owner\'s');
         $this->send($this->tap(Nav::to('usv', 'disc', $ali->id), chat: self::STAFF));
         $this->send($this->message('۲۰', chat: self::STAFF));
-        self::assertSame(0, $ali->refresh()->discount_percent, 'and the own discount');
+        self::assertSame(20, $ali->refresh()->discount_percent, 'the own discount');
+        $this->send($this->tap(Nav::to('usv', 'rs', $ali->id, 'admin'), chat: self::STAFF));
+        self::assertSame(UserRole::Admin, $ali->refresh()->role, 'and the role');
     }
 
     public function testABanIsAskedFirstAndLiftedAtOnce(): void
@@ -326,7 +316,7 @@ final class CustomersTest extends BotTestCase
         self::assertSame(UserRole::Customer, $own->refresh()->role);
     }
 
-    public function testACustomersGroupsSwitchAtATapAndAPartnerGroupAsksTheCatalogue(): void
+    public function testACustomersGroupsSwitchAtATapThePartnerGroupToo(): void
     {
         $this->staff();
         $ali = $this->customer(['telegram_id' => 1111, 'first_name' => 'Ali']);
@@ -335,16 +325,13 @@ final class CustomersTest extends BotTestCase
 
         $this->send($this->tap(Nav::to('usg', 'show', $ali->id), chat: self::STAFF));
         self::assertContains(Nav::to('usg', 'sw', $ali->id, $vip->id, 1), $this->window());
-        self::assertContains(Nav::to('usg', 'no', $ali->id), $this->window(), 'the «همکار» group locked without the catalogue');
+        self::assertContains(Nav::to('usg', 'sw', $ali->id, $partners->id, 1), $this->window(), 'the «همکار» group a switch as the others, no grant asked');
+        self::assertNotContains(Nav::to('usg', 'no', $ali->id), $this->window());
 
         $this->send($this->tap(Nav::to('usg', 'sw', $ali->id, $vip->id, 1), chat: self::STAFF));
         self::assertSame([$vip->id], $ali->groups()->get()->modelKeys());
         self::assertContains(Nav::to('usg', 'sw', $ali->id, $vip->id, 0), $this->window(), 'its switch takes them out now');
 
-        $this->send($this->tap(Nav::to('usg', 'sw', $ali->id, $partners->id, 1), chat: self::STAFF));
-        self::assertSame([$vip->id], $ali->groups()->get()->modelKeys(), 'the panel refuses it');
-
-        $this->botSettings('bot_admins', ['bot_admins_grant_catalog' => true]);
         $this->send($this->tap(Nav::to('usg', 'sw', $ali->id, $partners->id, 1), chat: self::STAFF));
         self::assertEqualsCanonicalizing([$vip->id, $partners->id], $ali->groups()->get()->modelKeys());
     }
@@ -365,7 +352,7 @@ final class CustomersTest extends BotTestCase
         self::assertStringContainsString('پیام در تلگرام به کاربر رسید', (string) $this->popup());
     }
 
-    public function testTheWebsiteSignOutAsksTheAccountSecurityGrant(): void
+    public function testAShopsAdminSignsACustomerOutOfTheWebsite(): void
     {
         $this->staff();
         $this->website();
@@ -374,11 +361,7 @@ final class CustomersTest extends BotTestCase
 
         $this->send($this->tap(Nav::to('usa', 'show', $ali->id), chat: self::STAFF));
         self::assertStringContainsString('۱ دستگاه', $this->screen());
-        self::assertNotContains(Nav::to('usa', 'so', $ali->id), $this->window());
-
-        $this->botSettings('bot_admins', ['bot_admins_grant_account_security' => true]);
-        $this->send($this->tap(Nav::to('usa', 'show', $ali->id), chat: self::STAFF));
-        self::assertContains(Nav::to('usa', 'so', $ali->id), $this->window());
+        self::assertContains(Nav::to('usa', 'so', $ali->id), $this->window(), 'no grant asked');
         $this->send($this->tap(Nav::to('usa', 'so', $ali->id), chat: self::STAFF));
         self::assertContains(Nav::to('usa', 'soy', $ali->id), $this->window(), 'asked first');
         $this->send($this->tap(Nav::to('usa', 'soy', $ali->id), chat: self::STAFF));
@@ -453,7 +436,7 @@ final class CustomersTest extends BotTestCase
         self::assertNotContains(Nav::to('uslp'), $this->window());
     }
 
-    /** One of the shop's admins (STAFF), who manage it from the bot while «مدیران ربات» lets them in. */
+    /** One of the shop's admins (STAFF), who manage it from the bot with the owner's seat. */
     private function staff(): User
     {
         return $this->customer(['telegram_id' => self::STAFF, 'first_name' => 'Staff', 'role' => UserRole::Admin]);

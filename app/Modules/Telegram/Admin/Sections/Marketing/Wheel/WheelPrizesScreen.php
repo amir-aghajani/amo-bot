@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Modules\Telegram\Admin\Sections\Marketing\Wheel;
 
-use App\Modules\Telegram\Admin\AdminSeat;
 use App\Modules\Telegram\Admin\Door\ApiRefusal;
 use App\Modules\Telegram\Admin\Sections\Marketing\Links;
 use App\Modules\Telegram\Admin\Sections\Marketing\Words as Marketing;
@@ -50,11 +49,6 @@ final class WheelPrizesScreen extends ListScreen
 
     /** @var array{0: string, 1: ?Button}|null The menu's warning, as summary() read it for extra() */
     private ?array $notice = null;
-
-    public function allows(AdminSeat $seat): bool
-    {
-        return $seat->configures();
-    }
 
     public function show(Admin $admin, array $args): View
     {

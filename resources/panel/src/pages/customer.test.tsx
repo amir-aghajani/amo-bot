@@ -283,8 +283,10 @@ describe('a customer’s page', () => {
     fireEvent.pointerDown(account, { button: 0, ctrlKey: false, pointerType: 'mouse' })
     fireEvent.click(await screen.findByRole('menuitem', { name: 'مدیر ربات کردن' }))
     const asked = await screen.findByRole('dialog', { name: 'مدیر ربات کردن' })
-    // What the role gives now: the shop's daily work from the bot too, while «مدیران ربات» lets its admins in.
-    expect(within(asked).getByText(/تا «مدیران ربات» روشن است، با «⚙️ مدیریت» کارهای روزانه فروشگاه را هم از خود ربات انجام می‌دهد/)).toBeTruthy()
+    // What the role hands over: the whole management from the bot, with the owner's access in the main shop.
+    expect(within(asked).getByText(/کل مدیریت ربات به او سپرده می‌شود/)).toBeTruthy()
+    expect(within(asked).getByText(/با «⚙️ مدیریت» در ربات کل فروشگاه را با دسترسی مالک مدیریت می‌کند/)).toBeTruthy()
+    expect(within(asked).getByText(/فقط به کسی بدهید که در همه چیز به او اعتماد دارید/)).toBeTruthy()
     fireEvent.click(within(asked).getByRole('button', { name: 'مدیر ربات کن' }))
 
     await until(() => expect(screen.getByRole('button', { name: 'مدیر' })).toBeTruthy())

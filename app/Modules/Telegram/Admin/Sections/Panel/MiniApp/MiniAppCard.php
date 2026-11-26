@@ -12,11 +12,6 @@ use App\Modules\Telegram\Admin\Ui\Settings\SettingsSource;
 /** A card of «📱 مینی‌اپ تلگرام» (the owner's and an agent's), over the mini app's own fields (MiniAppSource). */
 abstract class MiniAppCard extends Card
 {
-    public function allows(AdminSeat $seat): bool
-    {
-        return $seat->configures();
-    }
-
     protected function path(): array
     {
         return MiniAppScreen::under();

@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Modules\Telegram\Admin\Sections\Catalog;
 
-use App\Modules\Auth\StaffGrant;
 use App\Modules\Telegram\Admin\Door\ApiRefusal;
 use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\Answer;
@@ -20,7 +19,7 @@ use App\Support\Persian;
 
 /**
  * One plan category (from the panel's list — it has no route for one): its name, plans and whether customers see it,
- * its plans in the plans list, and with the catalogue's grant what the panel's form and row menu do — a new name (a
+ * its plans in the plans list, and what the panel's form and row menu do — a new name (a
  * premium emoji at its start is kept as the name's), the name's premium emoji, the «فعال» switch (on or off as its
  * button says), a place up or down, and «🗑 حذف دسته», asked first with what becomes of its plans. «➕ افزودن دسته» asks
  * the name and adds it switched on. Each change starts from the category as the panel lists it now.
@@ -169,21 +168,17 @@ final class CategoryScreen extends BaseScreen
         if (!$active) {
             $view->note('دسته غیرفعال از لیست خرید کنار می‌رود؛ پلن‌هایش زیر «سایر پلن‌ها» می‌مانند.');
         }
-        if ($admin->seat->holds(StaffGrant::Catalog)) {
-            $view->row(Button::to(Words::edit('نام دسته'), self::ID, 'name', $id)->primary(), $active ? Button::to(Words::DEACTIVATE, self::ID, 'tog', $id, 0)->danger() : Button::to(Words::ACTIVATE, self::ID, 'tog', $id, 1)->success());
-        }
+        $view->row(Button::to(Words::edit('نام دسته'), self::ID, 'name', $id)->primary(), $active ? Button::to(Words::DEACTIVATE, self::ID, 'tog', $id, 0)->danger() : Button::to(Words::ACTIVATE, self::ID, 'tog', $id, 1)->success());
         $view->row(Button::to(Icons::PLANS . ' پلن‌های این دسته', self::ID, 'plans', $id));
-        if ($admin->seat->holds(StaffGrant::Catalog)) {
-            $view->row(
-                Button::to(Words::edit('ایموجی پرمیوم'), self::ID, 'emo', $id),
-                $premium ? Button::to('🚫 برداشتن ایموجی پرمیوم', self::ID, 'emx', $id) : null,
+        $view->row(
+            Button::to(Words::edit('ایموجی پرمیوم'), self::ID, 'emo', $id),
+            $premium ? Button::to('🚫 برداشتن ایموجی پرمیوم', self::ID, 'emx', $id) : null,
+        )
+            ->row(
+                $at !== false && $at > 0 ? Button::to(Words::UP . ' بالاتر', self::ID, 'up', $id) : null,
+                $at !== false && $at < count($categories) - 1 ? Button::to(Words::DOWN . ' پایین‌تر', self::ID, 'down', $id) : null,
             )
-                ->row(
-                    $at !== false && $at > 0 ? Button::to(Words::UP . ' بالاتر', self::ID, 'up', $id) : null,
-                    $at !== false && $at < count($categories) - 1 ? Button::to(Words::DOWN . ' پایین‌تر', self::ID, 'down', $id) : null,
-                )
-                ->row(Button::to(Words::DELETE . ' دسته', self::ID, 'del', $id)->danger());
-        }
+            ->row(Button::to(Words::DELETE . ' دسته', self::ID, 'del', $id)->danger());
 
         return $view->back(CategoriesScreen::ID);
     }

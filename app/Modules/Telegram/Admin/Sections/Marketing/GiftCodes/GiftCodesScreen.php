@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Modules\Telegram\Admin\Sections\Marketing\GiftCodes;
 
-use App\Modules\Telegram\Admin\AdminSeat;
 use App\Modules\Telegram\Admin\Door\ApiRefusal;
 use App\Modules\Telegram\Admin\Sections\Marketing\Links;
 use App\Modules\Telegram\Admin\Sections\Marketing\Words as Marketing;
@@ -37,11 +36,6 @@ final class GiftCodesScreen extends BaseScreen
 
     /** The program in a paragraph: the panel's ⓘ. */
     private const PROGRAM = 'هر کد هدیه یک بار استفاده می‌شود: مبلغی به کیف پول مشتری اضافه می‌کند یا یک سرویس رایگان از یک پلن به او می‌دهد. مشتری کد را در ربات از دکمه «کد هدیه» یا در وب‌سایت فروشگاه می‌فرستد؛ بزرگ و کوچکی حروف و خط تیره و فاصله مهم نیست. کسی که پشت سر هم کد اشتباه بفرستد مدتی باید صبر کند، پس کدها حدس زده نمی‌شوند.';
-
-    public function allows(AdminSeat $seat): bool
-    {
-        return $seat->configures();
-    }
 
     public function show(Admin $admin, array $args): View
     {

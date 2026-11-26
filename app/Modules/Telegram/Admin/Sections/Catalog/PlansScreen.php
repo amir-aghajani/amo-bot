@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Modules\Telegram\Admin\Sections\Catalog;
 
-use App\Modules\Auth\StaffGrant;
 use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\Answer;
 use App\Modules\Telegram\Admin\Ui\BaseScreen;
@@ -20,10 +19,10 @@ use App\Modules\Telegram\Admin\Ui\Words;
 /**
  * «📦 پلن‌ها» (the panel's «پلن‌ها»): the catalogue in the order customers see it, each plan a button that is its row —
  * its chip (🟢 sold, ⏸ inactive, ⚠️ active but not seen in the bot), its name and its price — to its page (PlanScreen);
- * over them only how many there are, what narrows them and how many active plans the bot does not show. With the
- * catalogue's grant: «➕ افزودن پلن» (PlanEditScreen), «💹 تغییر گروهی قیمت» (PlanPricesScreen), and a draft left half
- * made, to go on with. Narrowed to a category by its chips, or searched by name. The panel's route answers every plan at
- * once: the pages are cut here.
+ * over them only how many there are, what narrows them and how many active plans the bot does not show. Then
+ * «➕ افزودن پلن» (PlanEditScreen), «💹 تغییر گروهی قیمت» (PlanPricesScreen), and a draft left half made, to go on with.
+ * Narrowed to a category by its chips, or searched by name. The panel's route answers every plan at once: the pages are
+ * cut here.
  *
  * Actions: `page` (n), `cat` (category id, `none` for none, `_` for every one), `cp` (page of the category chips: many
  * categories go by pages), `search` (asks), `clear` (the search off).
@@ -79,16 +78,14 @@ final class PlansScreen extends BaseScreen
         foreach ($rows as $plan) {
             $view->row(Button::to(self::label($plan), PlanScreen::ID, Nav::SHOW, (int) $plan['id']));
         }
-        if ($admin->seat->holds(StaffGrant::Catalog)) {
-            $draft = $admin->state(PlanEditScreen::ID);
-            if (is_array($draft['d'] ?? null) && (int) ($draft['id'] ?? 0) === 0 && (string) ($draft['d']['name'] ?? '') !== '') {
-                $view->row(Button::to('📝 ادامه پیش‌نویس: ' . $draft['d']['name'], PlanEditScreen::ID, 'sum'));
-            }
-            $view->row(
-                Button::to(Words::add('پلن'), PlanEditScreen::ID, 'new')->success(),
-                $plans !== [] ? Button::to(PlanPricesScreen::TITLE, PlanPricesScreen::ID, 'new') : null,
-            );
+        $draft = $admin->state(PlanEditScreen::ID);
+        if (is_array($draft['d'] ?? null) && (int) ($draft['id'] ?? 0) === 0 && (string) ($draft['d']['name'] ?? '') !== '') {
+            $view->row(Button::to('📝 ادامه پیش‌نویس: ' . $draft['d']['name'], PlanEditScreen::ID, 'sum'));
         }
+        $view->row(
+            Button::to(Words::add('پلن'), PlanEditScreen::ID, 'new')->success(),
+            $plans !== [] ? Button::to(PlanPricesScreen::TITLE, PlanPricesScreen::ID, 'new') : null,
+        );
         if ($categories !== []) {
             $chips = [Button::to(($filter === self::ANY ? Words::CHIP : '') . 'همه', self::ID, 'cat', self::ANY)];
             foreach ($categories as $id => $name) {

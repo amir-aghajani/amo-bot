@@ -16,7 +16,7 @@ use App\Modules\Payments\Models\Deposit;
 use App\Modules\Payments\Models\PaymentMethod;
 use App\Modules\Payments\Services\Checkout;
 use App\Modules\Payments\Services\PaymentService;
-use App\Modules\Telegram\Admin\Door\BotAdminDoor;
+use App\Modules\Telegram\Admin\Sections\Owner\Payments\DepositSettingsScreen;
 use App\Modules\Telegram\Admin\Sections\Sales\Sales;
 use App\Modules\Telegram\Admin\Ui\Fmt;
 use App\Modules\Telegram\Admin\Ui\Nav;
@@ -29,9 +29,9 @@ use Tests\BotTestCase;
 
 /**
  * «💳 پرداخت‌ها» and «📩 واریزهای پیامکی» in the bot's management (Telegram\Admin\Sections\Sales): a receipt reviewed
- * from its picture and approved, refunded only with the grant, rejected with a reason typed for the customer; a payment
- * reminded and cancelled; receipts dismissed together only with the grant; and the bank SMS with what came of each —
- * each through the panel's own routes.
+ * from its picture and approved, refunded, rejected with a reason typed for the customer; a payment reminded and
+ * cancelled; receipts dismissed together; and the bank SMS with what came of each — each through the panel's own
+ * routes, a shop's admin's as the owner's, never about their own payment.
  */
 final class SalesPaymentsTest extends BotTestCase
 {
@@ -47,7 +47,7 @@ final class SalesPaymentsTest extends BotTestCase
         $this->card = $this->cardMethod();
     }
 
-    public function testAReceiptIsApprovedFromItsPictureAndRefundedOnlyWithTheGrant(): void
+    public function testAReceiptIsApprovedFromItsPictureAndRefunded(): void
     {
         $this->staff();
         $payment = $this->receipt($this->cardPayment($this->topUpOrder($this->ali, '50000.00'), $this->card), 'واریز از ملت');
@@ -68,15 +68,7 @@ final class SalesPaymentsTest extends BotTestCase
         $this->send($this->tap(Nav::to('pyv', 'ok', $payment->id), chat: 7100));
         self::assertSame(PaymentStatus::Paid, $payment->refresh()->status, 'approved through the panel\'s route');
         self::assertStringContainsString('کیف پول شارژ شد', (string) $this->popup());
-        self::assertNotContains(Nav::to('pyv', 'rf', $payment->id), $this->callbacks($this->windowCall()), 'no refund without the grant');
-
-        $this->send($this->tap(Nav::to('pyv', 'rfg', $payment->id), chat: 7100));
-        self::assertSame(BotAdminDoor::NOT_GRANTED, $this->popup(), 'the door refuses it');
-        self::assertSame(PaymentStatus::Paid, $payment->refresh()->status);
-
-        $this->botSettings('bot_admins', ['bot_admins_grant_refunds' => true]);
-        $this->send($this->tap(Nav::to('pyv', 'show', $payment->id), chat: 7100));
-        self::assertContains(Nav::to('pyv', 'rf', $payment->id), $this->callbacks($this->windowCall()));
+        self::assertContains(Nav::to('pyv', 'rf', $payment->id), $this->callbacks($this->windowCall()), 'the refund, no grant asked');
         $this->send($this->tap(Nav::to('pyv', 'rf', $payment->id), chat: 7100));
         self::assertStringContainsString('بیرون از فروشگاه', $this->said()[0], 'a top-up\'s refund, in the panel\'s words');
         $this->send($this->tap(Nav::to('pyv', 'rfg', $payment->id), chat: 7100));
@@ -297,7 +289,7 @@ final class SalesPaymentsTest extends BotTestCase
         self::assertSame(PaymentStatus::Paid, $payment->refresh()->status, 'settled on the gateway\'s word');
     }
 
-    public function testReceiptsAreDismissedTogetherOnlyWithTheGrant(): void
+    public function testReceiptsAreDismissedTogether(): void
     {
         $this->staff();
         $first = $this->receipt($this->cardPayment($this->topUpOrder($this->ali, '50000.00'), $this->card));
@@ -305,13 +297,7 @@ final class SalesPaymentsTest extends BotTestCase
         $third = $this->receipt($this->cardPayment($this->topUpOrder($this->ali, '90000.00'), $this->card), messageId: 779);
 
         $this->send($this->tap(Nav::to('py', 'f', 'status', 'awaiting_review'), chat: 7100));
-        self::assertNotContains(Nav::to('pyx'), $this->callbacks(0), 'dismissing in bulk is a grant');
-        $this->send($this->tap(Nav::to('pyx', 'all'), chat: 7100));
-        self::assertStringContainsString('مدیریت فروشگاه', $this->said()[0], 'a screen it may not open is the home');
-
-        $this->botSettings('bot_admins', ['bot_admins_grant_payments' => true]);
-        $this->send($this->tap(Nav::to('py', 'f', 'status', 'awaiting_review'), chat: 7100));
-        self::assertContains(Nav::to('pyx'), $this->callbacks(0));
+        self::assertContains(Nav::to('pyx'), $this->callbacks(0), 'a shop\'s admin, no grant asked');
         self::assertContains(Nav::to('pyx', 'all'), $this->callbacks(0));
 
         $this->send($this->tap(Nav::to('pyx'), chat: 7100));
@@ -352,7 +338,7 @@ final class SalesPaymentsTest extends BotTestCase
         self::assertContains(Nav::to('py'), $buttons, 'the way back to the payments');
     }
 
-    public function testAnAdminApprovesAReceiptInReviewButNothingByHand(): void
+    public function testAnAdminApprovesAPaymentByHandAsTheOwnerDoes(): void
     {
         $this->staff();
         $this->owner();
@@ -361,11 +347,20 @@ final class SalesPaymentsTest extends BotTestCase
         $this->send($this->tap(Nav::to('pyv', 'show', $pending->id), chat: 7001));
         self::assertContains(Nav::to('pyv', 'ok', $pending->id), $this->callbacks($this->windowCall()), 'the owner approves one by hand');
         $this->send($this->tap(Nav::to('pyv', 'show', $pending->id), chat: 7100));
-        self::assertNotContains(Nav::to('pyv', 'ok', $pending->id), $this->callbacks($this->windowCall()), 'an admin only a receipt in review');
+        self::assertContains(Nav::to('pyv', 'ok', $pending->id), $this->callbacks($this->windowCall()), 'an admin too: no receipt asked first');
 
         $this->send($this->tap(Nav::to('pyv', 'ok', $pending->id), chat: 7100));
-        self::assertSame(ActorRefusedException::RECEIPT_FIRST_IN_BOT, $this->popup(), 'refused in the bot\'s words');
-        self::assertSame(PaymentStatus::Pending, $pending->refresh()->status);
+        self::assertSame([PaymentStatus::Paid, 'tg:7100'], [$pending->refresh()->status, $pending->reviewer], 'approved under their own name');
+    }
+
+    public function testAnAdminNeverApprovesTheirOwnPayment(): void
+    {
+        $admin = $this->customer(['telegram_id' => 7100, 'first_name' => 'Boss', 'role' => UserRole::Admin]);
+        $own = $this->receipt($this->cardPayment($this->topUpOrder($admin, '50000.00'), $this->card));
+
+        $this->send($this->tap(Nav::to('pyv', 'ok', $own->id), chat: 7100));
+        self::assertSame(ActorRefusedException::OWN_PAYMENT, $this->popup(), 'another admin\'s to approve');
+        self::assertSame(PaymentStatus::AwaitingReview, $own->refresh()->status);
     }
 
     public function testTheBankSmsAreListedWithWhatCameOfEach(): void
@@ -397,7 +392,7 @@ final class SalesPaymentsTest extends BotTestCase
         self::assertStringNotContainsString('متن پیامک', $this->said()[0]);
     }
 
-    public function testAnAdminSeesTheListsButNoDepositSettings(): void
+    public function testAnAdminReadsTheDepositsWithTheWayToTheirSwitch(): void
     {
         $this->staff();
         Deposit::query()->create(['source' => 'forapp', 'external_id' => 'sms-1', 'status' => DepositStatus::Unmatched, 'amount_rial' => 120000, 'received_at' => now()]);
@@ -405,7 +400,102 @@ final class SalesPaymentsTest extends BotTestCase
         $this->send($this->tap(Nav::to('hl'), chat: 7100));
         self::assertContains(Nav::to('dp'), $this->callbacks(0));
         $this->send($this->tap(Nav::to('dp'), chat: 7100));
-        self::assertStringNotContainsString('تایید خودکار واریز خاموش است', $this->said()[0], 'the settings are the owner\'s and an agent\'s');
+        self::assertStringContainsString('تایید خودکار واریز خاموش است', $this->said()[0], 'said while it is off, as to the owner');
+        self::assertContains(Nav::to(DepositSettingsScreen::ID), $this->callbacks(0), 'with the way to its switch');
+    }
+
+    public function testAnAdminsOwnPaymentOffersNoApprovalNorRefundAndAnotherAdminBoth(): void
+    {
+        $boss = $this->customer(['telegram_id' => 7100, 'first_name' => 'Boss', 'role' => UserRole::Admin]);
+        $this->customer(['telegram_id' => 7200, 'first_name' => 'Reza', 'role' => UserRole::Admin]);
+        $this->receiptPicture();
+        $inReview = $this->receipt($this->cardPayment($this->topUpOrder($boss, '50000.00'), $this->card));
+        $pending = $this->cardPayment($this->topUpOrder($boss, '30000.00'), $this->card);
+        $note = 'این پرداخت خود شماست؛ تایید یا بازپرداختش با مدیر دیگری است.';
+
+        // Their receipt in review, in the shop's queue: drawn as its picture, the approvals under it another admin's.
+        $this->send($this->tap(Nav::to('pyv', 'show', $inReview->id), chat: 7100));
+        self::assertContains('editMessageMedia', $this->calls(), 'the receipt\'s picture, its facts the caption');
+        $buttons = $this->callbacks($this->windowCall());
+        self::assertNotContains(Nav::to('pyv', 'okn', $inReview->id), $buttons, '«تایید و …، بعدی»');
+        self::assertNotContains(Nav::to('pyv', 'ok', $inReview->id, 'r'), $buttons);
+        self::assertContains(Nav::to('pyv', 'no', $inReview->id, 'q'), $buttons, 'rejecting stays');
+        self::assertContains(Nav::to('pyv', 'nx', $inReview->id), $buttons, 'and the next receipt');
+        self::assertContains(Nav::to('pyv', 'cx', $inReview->id), $buttons, 'and cancelling');
+        self::assertStringContainsString($note, implode("\n", $this->said()), 'said in the caption');
+
+        // Opened from a customer's list: the plain approval none either.
+        $this->send($this->tap(Nav::to('pyv', 'show', $inReview->id, 'from.uslp'), chat: 7100));
+        $buttons = $this->callbacks($this->windowCall());
+        self::assertNotContains(Nav::to('pyv', 'ok', $inReview->id, 'r'), $buttons);
+        self::assertContains(Nav::to('pyv', 'no', $inReview->id), $buttons);
+
+        // An open card payment without a receipt: no approval by hand; the reminder and the cancel stay.
+        $this->send($this->tap(Nav::to('pyv', 'show', $pending->id), chat: 7100));
+        $buttons = $this->callbacks($this->windowCall());
+        self::assertNotContains(Nav::to('pyv', 'ok', $pending->id), $buttons);
+        self::assertContains(Nav::to('pyv', 'rm', $pending->id), $buttons);
+        self::assertContains(Nav::to('pyv', 'cx', $pending->id), $buttons);
+        self::assertStringContainsString($note, implode("\n", $this->said()));
+
+        // Another admin sees every one of them, and approves it.
+        $this->send($this->tap(Nav::to('pyv', 'show', $inReview->id), chat: 7200));
+        self::assertContains(Nav::to('pyv', 'okn', $inReview->id), $this->callbacks($this->windowCall()));
+        self::assertStringNotContainsString('خود شماست', implode("\n", $this->said()));
+        $this->send($this->tap(Nav::to('pyv', 'show', $pending->id), chat: 7200));
+        self::assertContains(Nav::to('pyv', 'ok', $pending->id), $this->callbacks($this->windowCall()));
+        $this->send($this->tap(Nav::to('pyv', 'ok', $pending->id), chat: 7200));
+        self::assertSame(PaymentStatus::Paid, $pending->refresh()->status);
+
+        // Paid: its refund another admin's too.
+        $this->send($this->tap(Nav::to('pyv', 'show', $pending->id), chat: 7100));
+        self::assertNotContains(Nav::to('pyv', 'rf', $pending->id), $this->callbacks($this->windowCall()));
+        self::assertStringContainsString($note, implode("\n", $this->said()));
+        $this->send($this->tap(Nav::to('pyv', 'show', $pending->id), chat: 7200));
+        self::assertContains(Nav::to('pyv', 'rf', $pending->id), $this->callbacks($this->windowCall()));
+
+        // A button kept is one the server takes from them.
+        $this->send($this->tap(Nav::to('pyv', 'nog', $inReview->id), chat: 7100));
+        self::assertSame([PaymentStatus::Failed, 'tg:7100'], [$inReview->refresh()->status, $inReview->reviewer], 'their own receipt rejected');
+    }
+
+    public function testAnAdminsOwnPaymentKeepsItsRetryAndItsGatewaysCheck(): void
+    {
+        $boss = $this->customer(['telegram_id' => 7100, 'first_name' => 'Boss', 'role' => UserRole::Admin]);
+        $this->customer(['telegram_id' => 7200, 'first_name' => 'Reza', 'role' => UserRole::Admin]);
+        $this->withoutQr();
+        $server = $this->sellingServer('Berlin');
+        $plan = $this->plan(['name' => 'Basic', 'price' => '50000.00'], $server);
+        $server->forceFill(['is_active' => false])->save();
+        $stuck = $this->cardPayment($this->purchaseOrder($boss, $plan, $server), $this->card);
+
+        $this->send($this->tap(Nav::to('pyv', 'ok', $stuck->id), chat: 7200));
+        self::assertSame(PaymentStatus::Paid, $stuck->refresh()->status, 'approved by another admin');
+        self::assertStringContainsString('تحویل انجام نشد', (string) $this->popup());
+
+        $this->send($this->tap(Nav::to('pyv', 'show', $stuck->id), chat: 7100));
+        $buttons = $this->callbacks($this->windowCall());
+        self::assertContains(Nav::to('pyv', 'rt', $stuck->id), $buttons, 'the delivery\'s retry stays');
+        self::assertNotContains(Nav::to('pyv', 'rf', $stuck->id), $buttons);
+        self::assertStringContainsString('این پرداخت خود شماست', implode("\n", $this->said()));
+        $this->send($this->tap(Nav::to('pyv', 'show', $stuck->id), chat: 7200));
+        self::assertContains(Nav::to('pyv', 'rf', $stuck->id), $this->callbacks($this->windowCall()));
+
+        $this->send($this->tap(Nav::to('pyv', 'rt', $stuck->id), chat: 7100));
+        self::assertStringContainsString('باز هم تحویل نشد', (string) $this->popup(), 'their retry taken, its server still down');
+
+        // An online payment of theirs: asked of its gateway as anyone's; nothing hidden, nothing said.
+        $this->config(['app.url' => 'https://shop.example']);
+        $this->cubePay();
+        $method = $this->cubePayMethod();
+        $orders = $this->service(OrderService::class);
+        $online = $this->service(Checkout::class)->pay($boss, $method, OrderType::WalletTopUp, '50000', fn(?OrderKey $key): Order => $orders->openTopUp($boss, 50000, $key))->payment()->refresh();
+        $this->send($this->tap(Nav::to('pyv', 'show', $online->id), chat: 7100));
+        self::assertContains(Nav::to('pyv', 'ck', $online->id), $this->callbacks($this->windowCall()));
+        self::assertContains(Nav::to('pyv', 'cx', $online->id), $this->callbacks($this->windowCall()));
+        self::assertStringNotContainsString('خود شماست', implode("\n", $this->said()));
+        $this->send($this->tap(Nav::to('pyv', 'ck', $online->id), chat: 7100));
+        self::assertStringContainsString('هنوز در درگاه پرداخت نشده است', (string) $this->popup());
     }
 
     /** Telegram hands the receipt's picture over: a JPEG. */

@@ -27,14 +27,15 @@ use App\Support\Persian;
 use App\Support\Unit;
 
 /**
- * «➕ افزودن سفارش» (the panel's dialog of that name, the `manual_orders` grant): a service made for the customer by hand
- * — one of the shop's plans, or a service of support's own numbers (GB, days, devices; 0 for no limit) — on a server
- * that can take it now, free, from the customer's wallet or paid outside the shop at the amount typed. A short guided
- * flow: what (a plan, or the numbers), where — the plan's only open server picked by itself, as the panel picks it —,
- * how it is paid and the amount; then the order as a card, its amount the total, with the optional name (the shop's
- * pattern unless typed) and note offered there beside «✏️» for each field, and «✔️ ثبت و تحویل سفارش»: one POST
- * /users/{id}/orders under an Idempotency-Key the draft keeps for these very values (pressed twice, one order). What came
- * of it — delivered, waiting for a retry, cancelled — links to the order's and the service's screens.
+ * «➕ افزودن سفارش» (the panel's dialog of that name; an admin's own account refused, ActorRefusedException::ownOrder()):
+ * a service made for the customer by hand — one of the shop's plans, or a service of support's own numbers (GB, days,
+ * devices; 0 for no limit) — on a server that can take it now, free, from the customer's wallet or paid outside the
+ * shop at the amount typed. A short guided flow: what (a plan, or the numbers), where — the plan's only open server
+ * picked by itself, as the panel picks it —, how it is paid and the amount; then the order as a card, its amount the
+ * total, with the optional name (the shop's pattern unless typed) and note offered there beside «✏️» for each field,
+ * and «✔️ ثبت و تحویل سفارش»: one POST /users/{id}/orders under an Idempotency-Key the draft keeps for these very
+ * values (pressed twice, one order). What came of it — delivered, waiting for a retry, cancelled — links to the order's
+ * and the service's screens.
  *
  * Its draft is the screen's state (`user`, `kind`, `plan`, `server`, `gb`, `days`, `devices`, `payment`, `amount`,
  * `name`, `note`, `nonce`). Actions, each with the customer's id first: `new`, `k` (kind; `_`: the kinds asked again),

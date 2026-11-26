@@ -120,18 +120,6 @@ final class SettingsIndex
             'agency_monthly_minimum' => ['f' => 'monthly_minimum'],
             'agency_warn_days' => ['f' => 'warn_days'],
         ],
-        '/bot-settings/bot-admins' => [
-            'کار-مدیران-از-ربات' => ['f' => 'bot_admins_enabled'],
-            'کارهای-بیشتر' => ['p' => 0],
-            'پلن-ها-و-دسته-بندی-ها' => ['f' => 'bot_admins_grant_catalog'],
-            'کیف-پول-مشتری' => ['f' => 'bot_admins_grant_wallet'],
-            'بازپرداخت' => ['f' => 'bot_admins_grant_refunds'],
-            'رد-یکجای-رسیدها' => ['f' => 'bot_admins_grant_payments'],
-            'افزایش-زمان-و-حجم-سرویس' => ['f' => 'bot_admins_grant_extend'],
-            'افزودن-سفارش-برای-مشتری' => ['f' => 'bot_admins_grant_manual_orders'],
-            'حذف-یا-انتقال-سرویس' => ['f' => 'bot_admins_grant_delete'],
-            'امنیت-حساب-مشتری' => ['f' => 'bot_admins_grant_account_security'],
-        ],
         '/bot-settings/client-names' => [
             'bot_name_pattern' => ['f' => 'name_pattern'],
             'bot_test_name_pattern' => ['f' => 'test_name_pattern'],

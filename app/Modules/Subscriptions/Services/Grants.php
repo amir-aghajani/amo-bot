@@ -301,7 +301,7 @@ final class Grants
                 'id' => $part->id,
                 'server' => ['id' => $part->server_id, 'name' => $part->server->name ?? ''],
             ] + self::progress($part))->values()->all(),
-            'reviewer' => $grant->reviewer,
+            'reviewer' => $this->reviewers->present($grant->reviewer),
             'reviewer_name' => $names[$grant->reviewer ?? ''] ?? null,
             'created_at' => $grant->created_at?->toIso8601String(),
             'finished_at' => $grant->finishedAt()?->toIso8601String(),
@@ -325,7 +325,7 @@ final class Grants
             'mass_grant_id' => $grant->audience === GrantAudience::Server ? null : $grant->id,
             'agents_only' => $grant->audience === GrantAudience::Agents,
         ] + self::terms($grant) + self::progress($part) + [
-            'reviewer' => $grant->reviewer,
+            'reviewer' => $this->reviewers->present($grant->reviewer),
             'reviewer_name' => $names[$grant->reviewer ?? ''] ?? null,
             'created_at' => $grant->created_at?->toIso8601String(),
             'finished_at' => $part->finished_at?->toIso8601String(),

@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Modules\Telegram\Admin\Sections\Bot\Texts;
 
 use App\Modules\Bots\CurrentBot;
-use App\Modules\Telegram\Admin\AdminSeat;
 use App\Modules\Telegram\Admin\Sections\Bot\BotScreens;
 use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\BaseScreen;
@@ -39,11 +38,6 @@ final class PremiumEmojisScreen extends BaseScreen
     public const OWN_BOT = '<i>ایموجی تازه را از ربات همین فروشگاه اضافه کنید: هر ربات ایموجی‌های خودش را دارد.</i>';
 
     private const PER_PAGE = 24;
-
-    public function allows(AdminSeat $seat): bool
-    {
-        return $seat->configures();
-    }
 
     public function show(Admin $admin, array $args): View
     {

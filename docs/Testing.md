@@ -99,8 +99,9 @@ counts its runs, a leased table).
 - **Routes**: `tests/Feature/RouteGuardsTest` walks every route through every guard in order, and with another shop's
   row; `tests/Feature/Store/MiniAppDoorTest` asks every Store API route under a website's key and the mini app's, and
   finds missing exactly what the description marks `x-door` for the other. `tests/Feature/BotAdmin/BotAdminDoorTest`
-  holds the bot's management to its door: nothing from outside gets in, a seat never takes another's door, an admin has
-  the daily work and its grants alone ([Internals: Telegram bot](Internals-Telegram-Bot.md#the-shops-management)).
+  holds the bot's management to its door: nothing from outside gets in, a seat never takes another's door, an admin
+  works with the seat of the bot they write to, and the owner's linked Telegram accounts are the owner's alone
+  ([Internals: Telegram bot](Internals-Telegram-Bot.md#the-shops-management)).
 - **The bot has every setting**: `tests/Feature/BotAdmin/SettingsParityTest` holds the bot's copy of the panel's
   settings index to the panel's, and every section of it to a place in the bot's management — a screen it has, a field
   or a part of that card —, or to why the panel alone sets it ([Extending](Extending.md#a-setting)).

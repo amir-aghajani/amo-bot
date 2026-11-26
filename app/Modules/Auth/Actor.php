@@ -20,12 +20,14 @@ final class Actor
         public readonly ActorKind $kind,
         /** The name a decision keeps (`reviewer`); null for the shop itself. */
         public readonly ?string $reviewer,
-        /** The acting admin's customer account (website or report group); null for the panels and the shop itself. */
+        /** The acting admin's customer account (website, report group, bot's management); null for panels and the shop. */
         public readonly ?int $userId,
         /** @var list<string>|null What a shop's admin on its website may use beyond the daily work (Principal::$grants); null: every grant. */
         private readonly ?array $grants = null,
         /** Whether the decision is made from the bot's private chat (Principal::$inBot). */
         public readonly bool $inBot = false,
+        /** Another account of the same admin's that is theirs too (Principal::$home): null for none. */
+        private readonly ?int $homeId = null,
     ) {}
 
     public static function of(Principal $principal): self
@@ -36,7 +38,7 @@ final class Actor
             PrincipalKind::Staff => ActorKind::Staff,
         };
 
-        return new self($kind, $principal->name, $principal->customer?->id, $principal->grants, $principal->inBot);
+        return new self($kind, $principal->name, $principal->customer?->id, $principal->grants, $principal->inBot, $principal->home?->id);
     }
 
     /** One of the shop's admins deciding in its report group, by their account. */
@@ -109,10 +111,25 @@ final class Actor
         return $this->kind === ActorKind::Owner;
     }
 
+    /**
+     * The owner themselves (Principal::isTheOwner()): an owner's decision with no customer account beside it — not one of
+     * the main shop's admins working the bot's management with the owner's seat.
+     */
+    public function isTheOwner(): bool
+    {
+        return $this->kind === ActorKind::Owner && $this->userId === null;
+    }
+
+    /** The agent themselves: an agent's decision with no customer account beside it — not one of their bot's admins. */
+    public function isTheAgent(): bool
+    {
+        return $this->kind === ActorKind::Agent && $this->userId === null;
+    }
+
     /** Whether the actor is this customer: a decision about their own payment, wallet, service or request. */
     public function is(int $customer): bool
     {
-        return $this->userId === $customer;
+        return $this->userId === $customer || ($this->homeId !== null && $this->homeId === $customer);
     }
 
     /** The actor as a log line names them: kind, name and customer number. */

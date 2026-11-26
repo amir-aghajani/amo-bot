@@ -359,7 +359,7 @@ final class StaffApiTest extends HttpTestCase
         // Nor does a group she is in — the owner put her there — become «همکار» from the website.
         $vip = $this->customerGroup('VIP', [$this->sara, $this->ali]);
         $this->assertRefused(sprintf(ActorRefusedException::ADMIN_IN_GROUP, 'VIP'), $this->putJson($this->staffApi("/customer-groups/{$vip->id}"), ['name' => 'VIP', 'agent_pricing' => true]));
-        self::assertSame('گروه «VIP» حساب یکی از مدیران فروشگاه را دارد؛ «همکار» کردن آن فقط از پنل ممکن است.', sprintf(ActorRefusedException::ADMIN_IN_GROUP, 'VIP'), 'its own words, naming the group');
+        self::assertSame('گروه «VIP» حساب یکی از مدیران فروشگاه را دارد؛ «همکار» کردن آن فقط از پنل یا «⚙️ مدیریت» ربات ممکن است.', sprintf(ActorRefusedException::ADMIN_IN_GROUP, 'VIP'), 'its own words, naming the group');
         self::assertFalse($vip->refresh()->agent_pricing);
         self::assertFalse($this->sara->paysAgentPrices());
         self::assertSame('ویژه', $this->decode($this->putJson($this->staffApi("/customer-groups/{$vip->id}"), ['name' => 'ویژه']))['group']['name'], 'renamed, its pricing as it was');

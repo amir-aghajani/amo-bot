@@ -76,10 +76,11 @@ hub's — when a menu opens it.
    service for a change, nor write a rule again: let an `ApiRefusal` out of `act()` and `input()`, and the handler shows
    it. What the panels have no route for is a panel feature first ([above](#a-panel-screen-and-its-api)), and reaches
    the bot through its route group.
-2. **Permissions mirror the route**: `allows()` is every seat over `$operations`, `$seat->configures()` over
-   `$configuration`, `$seat->isOwner()` over the owner's own groups (and `$seat->shop()->isMain()` where the panel's page
-   is the main shop's); a button whose route names a grant shows only while `$seat->holds(StaffGrant::…)`. The door
-   refuses the rest anyway.
+2. **Permissions mirror the route**: `allows()` is every seat over the routes both panels have (`$operations`,
+   `$configuration`: `BaseScreen`'s own), `$seat->isOwner()` over the owner's own groups (and `$seat->shop()->isMain()`
+   where the panel's page is the main shop's), `$seat->principal->isTheOwner()` where the owner themselves alone may — not
+   one of the admins working with the owner's seat. No grant is asked in the bot. The door refuses the rest anyway, and the
+   services refuse an admin what is about their own account.
 3. **The panel's words, the management's look**: the labels, hints, choices and warnings of the panel's page, copied —
    plain Persian, no diacritics —; whatever came from a person or the panel through `Fmt::e()`, Latin in a Persian line
    through `Fmt::ltr()` or `Fmt::code()`. The words every screen shares come from `Ui\Words` and each thing's emoji from
@@ -105,7 +106,8 @@ hub's — when a menu opens it.
    field (a wizard's step offers `->ways()`: «⬅️ گام قبل», «⏭ رد شدن»), sums up in a card with «✏️» per field, and saves
    once. A switch's button is `Words::turn()` and carries the value it sets, so a second tap changes nothing.
 7. **Tests**: `tests/Feature/BotAdmin/<Area>*Test.php` on `BotTestCase` — the main path (list, row, action, the API's
-   effect), a seat without the grant (no button, and the door refusing a forged tap), a typed answer.
+   effect), an admin's seat where it differs (their own account: no button, and the service refusing a forged tap), a
+   typed answer.
 
 ## A Store API endpoint
 

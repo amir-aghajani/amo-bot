@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Modules\Telegram\Admin\Sections\Marketing\GiftCodes;
 
-use App\Modules\Telegram\Admin\AdminSeat;
 use App\Modules\Telegram\Admin\Door\ApiFile;
 use App\Modules\Telegram\Admin\Door\ApiRefusal;
 use App\Modules\Telegram\Admin\Sections\Marketing\Words as Marketing;
@@ -32,11 +31,6 @@ final class GiftBatchScreen extends BaseScreen
 
     /** The most unused codes read for the copy button: more never fit one copy (Button::COPY_MOST). */
     private const COPY_FEW = 20;
-
-    public function allows(AdminSeat $seat): bool
-    {
-        return $seat->configures();
-    }
 
     public function show(Admin $admin, array $args): View
     {

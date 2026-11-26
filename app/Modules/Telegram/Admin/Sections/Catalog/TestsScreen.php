@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Modules\Telegram\Admin\Sections\Catalog;
 
-use App\Modules\Telegram\Admin\AdminSeat;
 use App\Modules\Telegram\Admin\Door\ApiRefusal;
 use App\Modules\Telegram\Admin\Sections\Bot\Keyboards\KeyboardScreen;
 use App\Modules\Telegram\Admin\Sections\Bot\Keyboards\KeyboardsScreen;
@@ -47,11 +46,6 @@ final class TestsScreen extends ListScreen
 
     /** The customer the list is narrowed to (0: every one), read from the chat's state with each showing. */
     private int $user = 0;
-
-    public function allows(AdminSeat $seat): bool
-    {
-        return $seat->configures();
-    }
 
     public function show(Admin $admin, array $args): View
     {

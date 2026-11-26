@@ -18,7 +18,7 @@ use App\Modules\Telegram\Handlers\BroadcastHandler;
 use App\Modules\Telegram\Messages;
 
 /**
- * «📣 ارسال همگانی» (the daily work: every seat): every broadcast run, newest first — a button each, the row: its state
+ * «📣 ارسال همگانی» (every seat): every broadcast run, newest first — a button each, the row: its state
  * as a chip (🟢 sending, ⏸ paused, ✅ done, 🔴 cancelled), its number, what went and how far it got —, each opening its
  * own screen (BroadcastScreen) with the controls its state allows; and «➕ پیام همگانی تازه», which starts the bot's own
  * compose flow (BroadcastHandler: the message sent here — its own preview —, then its draft card: audience, copy or

@@ -37,7 +37,7 @@ final class CustomerDiscount implements GroupHandler, AnswersPrompts
     private const PRESETS = [0, 5, 10, 15, 20, 25, 30, 50];
 
     private const ABOUT = 'ℹ️ از هر خریدش کم می‌شود؛ اگر فروش ویژه یا تخفیف سطح وفاداری‌اش بیشتر باشد همان جایش را می‌گیرد و با هم جمع نمی‌شوند.';
-    private const ADMIN_LOCK = '🔒 حساب مدیر ربات است؛ تخفیف اختصاصی‌اش فقط از پنل تغییر می‌کند.';
+    private const ADMIN_LOCK = '🔒 حساب مدیر ربات است؛ تخفیف اختصاصی‌اش فقط از پنل یا «⚙️ مدیریت» ربات تغییر می‌کند.';
     private const QUESTION = 'تخفیف اختصاصی چند درصد باشد؟ عددی از ۰ تا ۱۰۰ بنویسید؛ ۰ یعنی بدون تخفیف.';
     private const PLACEHOLDER = 'درصد، از ۰ تا ۱۰۰';
     private const NO_PERCENT = 'درصد را با رقم بنویسید: عددی از ۰ تا ۱۰۰؛ ۰ یعنی بدون تخفیف.';

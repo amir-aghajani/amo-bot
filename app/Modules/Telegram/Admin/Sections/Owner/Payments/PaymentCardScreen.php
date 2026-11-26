@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Modules\Telegram\Admin\Sections\Owner\Payments;
 
 use App\Core\Security\Encrypter;
-use App\Modules\Telegram\Admin\AdminSeat;
 use App\Modules\Telegram\Admin\Sections\Catalog\CatalogFmt;
 use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\BaseScreen;
@@ -29,11 +28,6 @@ final class PaymentCardScreen extends BaseScreen
     public const ID = 'pmcv';
 
     public function __construct(private readonly Encrypter $crypt) {}
-
-    public function allows(AdminSeat $seat): bool
-    {
-        return $seat->configures();
-    }
 
     public function show(Admin $admin, array $args): View
     {

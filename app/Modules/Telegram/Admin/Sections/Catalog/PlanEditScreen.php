@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 namespace App\Modules\Telegram\Admin\Sections\Catalog;
 
-use App\Modules\Auth\StaffGrant;
-use App\Modules\Telegram\Admin\AdminSeat;
 use App\Modules\Telegram\Admin\Door\ApiRefusal;
 use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\Answer;
@@ -90,11 +88,6 @@ final class PlanEditScreen extends BaseScreen
         'duration_hours' => '۰ یعنی نامحدود',
         'ip_limit' => '۰ یعنی نامحدود',
     ];
-
-    public function allows(AdminSeat $seat): bool
-    {
-        return $seat->holds(StaffGrant::Catalog);
-    }
 
     public function show(Admin $admin, array $args): View
     {

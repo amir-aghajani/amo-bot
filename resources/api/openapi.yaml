@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: AmoBot API
-  version: 0.10.3
+  version: 0.10.4
   description: |
     AmoBot's HTTP API. Every answer is JSON; the panels are static files that render their own pages.
 
@@ -267,7 +267,7 @@ paths:
   /api/admin/auth/credentials:
     parameters: [{ $ref: '#/components/parameters/Shop' }]
     put:
-      summary: "Change the panel's login. Every other session ends; this one stays signed in. Every Telegram account linked as the owner (`/settings/owner-telegram`) is let go too, with the bot admin role its link gave it, and an open link ends: they are linked again afterwards. A 422 under the field refused (a wrong current password counts as a failed sign-in), or on `file` while the server may not write config.php; a 429 while this address or the account must wait after failures."
+      summary: "Change the panel's login. Every other session ends; this one stays signed in. Every Telegram account linked as the owner (`/settings/owner-telegram`) is let go too, with its bot admin role — one set by hand too, since an admin of the main bot has the owner's seat in its management —, and an open link ends: they are linked again afterwards. A 422 under the field refused (a wrong current password counts as a failed sign-in), or on `file` while the server may not write config.php; a 429 while this address or the account must wait after failures."
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/CredentialsRequest' } } } }
       responses:
         '200':
@@ -1104,7 +1104,7 @@ paths:
         default: { $ref: '#/components/responses/Error' }
     patch:
       x-staff: true
-      summary: "Ban or unban a customer. On the website's admin API, an admin's account (their own included) or an agent's can only be changed from a panel (403)."
+      summary: "Ban or unban a customer. On the website's admin API, an admin's account (their own included) or an agent's can only be changed from a panel (403). A Telegram account linked as the owner in the main bot (`/settings/owner-telegram`) is banned by the owner alone: anyone else — one of the main bot's admins working its management with the owner's seat among them — is refused (403 `این حساب تلگرام مالک فروشگاه است و مسدود نمی‌شود.`). An agent's own account in their bot is banned by the agent or the owner alone: that bot's admins are refused (403 `این حساب نماینده صاحب این ربات است و مسدود نمی‌شود.`)."
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/UserStatusRequest' } } } }
       responses:
         '200':
@@ -1116,7 +1116,7 @@ paths:
   /api/{panel}/users/{id}/role:
     parameters: [{ $ref: '#/components/parameters/Panel' }, { $ref: '#/components/parameters/Id' }, { $ref: '#/components/parameters/Shop' }]
     put:
-      summary: "Make a customer a bot admin, or take the role back. An admin can use /broadcast, the report group's buttons and, while the website lets admins in, its admin API."
+      summary: "Make a customer a bot admin, or take the role back. An admin manages the shop from the bot's private chat («⚙️ مدیریت», /admin) with the owner's access in the main bot and the agent's in an agent's bot while the agency stands, can use /broadcast and the report group's buttons and, while the website lets admins in, its admin API. Taking the role (or a ban) ends their management at their next message. The role of a Telegram account linked as the owner in the main bot (`/settings/owner-telegram`) is changed by the owner alone: anyone else — one of the main bot's admins among them — is refused (403 `نقش حساب تلگرام مالک فروشگاه را فقط خود مالک عوض می‌کند.`)."
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/UserRoleRequest' } } } }
       responses:
         '200':
@@ -1128,7 +1128,7 @@ paths:
   /api/{panel}/users/{id}/discount:
     parameters: [{ $ref: '#/components/parameters/Panel' }, { $ref: '#/components/parameters/Id' }, { $ref: '#/components/parameters/Shop' }]
     put:
-      summary: "Set a customer's personal discount («تخفیف اختصاصی»). It lasts until changed; 0 removes it. Logged with who set it. Panels only."
+      summary: "Set a customer's personal discount («تخفیف اختصاصی»). It lasts until changed; 0 removes it. Logged with who set it. Panels only. An admin setting their own from the bot's management is a 403 (`قیمت‌های خودتان را نمی‌توانید عوض کنید؛ تخفیف اختصاصی و گروه «همکار» خودتان با مدیر دیگری است.`): another admin, or the owner, does it."
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/UserDiscountRequest' } } } }
       responses:
         '200':
@@ -1213,7 +1213,7 @@ paths:
     parameters: [{ $ref: '#/components/parameters/Panel' }, { $ref: '#/components/parameters/Id' }, { $ref: '#/components/parameters/Shop' }]
     put:
       x-staff: true
-      summary: "Set a customer's groups. Replaces their groups with the ones listed. On the website's admin API, an admin's account (their own included) or an agent's can only be changed from a panel (403): a «همکار» group (`agent_pricing`) would set their prices. There, a «همکار» group the customer is not in yet asks the `catalog` grant and a recent sign-in, as a granted operation does (403 `فروشگاه گذاشتن مشتری در گروه «همکار» را به مدیران وب‌سایت نسپرده است.`, or the recent sign-in's refusal); the plain groups, and a «همکار» group they are in already, ask neither. A 422 on `group_ids` when one is not a group of the shop."
+      summary: "Set a customer's groups. Replaces their groups with the ones listed. On the website's admin API, an admin's account (their own included) or an agent's can only be changed from a panel (403): a «همکار» group (`agent_pricing`) would set their prices. There, a «همکار» group the customer is not in yet asks the `catalog` grant and a recent sign-in, as a granted operation does (403 `فروشگاه گذاشتن مشتری در گروه «همکار» را به مدیران وب‌سایت نسپرده است.`, or the recent sign-in's refusal); the plain groups, and a «همکار» group they are in already, ask neither. An admin putting their own account in a «همکار» group it is not in — from the bot's management, where no rule above stops it — is a 403 (`قیمت‌های خودتان را نمی‌توانید عوض کنید؛ تخفیف اختصاصی و گروه «همکار» خودتان با مدیر دیگری است.`). A 422 on `group_ids` when one is not a group of the shop."
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/UserGroupsRequest' } } } }
       responses:
         '200':
@@ -1311,7 +1311,7 @@ paths:
     parameters: [{ $ref: '#/components/parameters/Panel' }, { $ref: '#/components/parameters/Id' }, { $ref: '#/components/parameters/Shop' }]
     put:
       x-staff: catalog
-      summary: "Update a customer group. A switch left out keeps its value. On the website's admin API, «همکار» (`agent_pricing`) is not switched on for a group one of the shop's admins is in (403): it would set an admin's prices. A panel can."
+      summary: "Update a customer group. A switch left out keeps its value. On the website's admin API, «همکار» (`agent_pricing`) is not switched on for a group one of the shop's admins is in (403): it would set an admin's prices. A panel can — but never for a group the admin asking is in themselves, from the bot's management with the owner's or the agent's seat (403 `قیمت‌های خودتان را نمی‌توانید عوض کنید؛ تخفیف اختصاصی و گروه «همکار» خودتان با مدیر دیگری است.`)."
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/CustomerGroupRequest' } } } }
       responses:
         '200':
@@ -2537,7 +2537,7 @@ paths:
   /api/admin/agency/agents/{id}:
     parameters: [{ $ref: '#/components/parameters/Id' }, { $ref: '#/components/parameters/Shop' }]
     put:
-      summary: "Change an agent's level and credit, and their terms of selling — `expires_at` and `monthly_minimum`, each kept while left out. The id is the agent's customer id. An end that lies ahead (or none) lifts a suspension for an end passed; no minimum lifts one for the minimum; an end passed suspends at once. The agent is notified of a change, and the answer says whether the notice reached them."
+      summary: "Change an agent's level and credit, and their terms of selling — `expires_at` and `monthly_minimum`, each kept while left out. The id is the agent's customer id. An end that lies ahead (or none) lifts a suspension for an end passed; no minimum lifts one for the minimum; an end passed suspends at once. The agent is notified of a change, and the answer says whether the notice reached them. One of the main bot's admins who is this agent is refused it, as every change of their own agency here (403 `نمایندگی خودتان را نمی‌توانید تغییر دهید؛ این کار با مدیر دیگری است.`): another admin, or the owner, makes it."
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/AgencyTermsRequest' } } } }
       responses:
         '200':
@@ -2549,7 +2549,7 @@ paths:
   /api/admin/agency/agents/{id}/revoke:
     parameters: [{ $ref: '#/components/parameters/Id' }, { $ref: '#/components/parameters/Shop' }]
     post:
-      summary: "End an agency. The agent's bot stops; the agent is notified, with the note."
+      summary: "End an agency. The agent's bot stops; the agent is notified, with the note. An admin who is this agent is refused it (403 `نمایندگی خودتان را نمی‌توانید تغییر دهید؛ این کار با مدیر دیگری است.`)."
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/NoteRequest' } } } }
       responses:
         '204': { $ref: '#/components/responses/NoContent' }
@@ -2567,7 +2567,7 @@ paths:
               schema: { $ref: '#/components/schemas/TrafficLinesResponse' }
         default: { $ref: '#/components/responses/Error' }
     post:
-      summary: "Adjust an agent's traffic. A negative `gb` takes traffic away."
+      summary: "Adjust an agent's traffic. A negative `gb` takes traffic away. An admin who is this agent is refused it (403 `نمایندگی خودتان را نمی‌توانید تغییر دهید؛ این کار با مدیر دیگری است.`)."
       parameters: [{ $ref: '#/components/parameters/TrafficAdjustmentKey' }]
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/TrafficAdjustmentRequest' } } } }
       responses:
@@ -2580,7 +2580,7 @@ paths:
   /api/admin/agency/agents/{id}/suspend:
     parameters: [{ $ref: '#/components/parameters/Id' }, { $ref: '#/components/parameters/Shop' }]
     post:
-      summary: "Suspend an agent's selling by hand: their shop takes no purchase, renewal, extra traffic, time or devices, wallet top-up or free test until it is resumed (`/resume`), while their bot, panel and existing services keep working. Over a suspension for another reason. The agent is notified, with the note. A 422 on `status` while it is suspended by hand already, or for a customer who is no agent."
+      summary: "Suspend an agent's selling by hand: their shop takes no purchase, renewal, extra traffic, time or devices, wallet top-up or free test until it is resumed (`/resume`), while their bot, panel and existing services keep working. Over a suspension for another reason. The agent is notified, with the note. A 422 on `status` while it is suspended by hand already, or for a customer who is no agent. An admin who is this agent is refused it (403 `نمایندگی خودتان را نمی‌توانید تغییر دهید؛ این کار با مدیر دیگری است.`)."
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/NoteRequest' } } } }
       responses:
         '200':
@@ -2592,7 +2592,7 @@ paths:
   /api/admin/agency/agents/{id}/resume:
     parameters: [{ $ref: '#/components/parameters/Id' }, { $ref: '#/components/parameters/Shop' }]
     post:
-      summary: "Resume an agent's selling, whatever suspended it. The agent is notified. A 422 on `status` while their agency's end has passed (extend it with `PUT /agency/agents/{id}` instead), while it is not suspended, or for a customer who is no agent."
+      summary: "Resume an agent's selling, whatever suspended it. The agent is notified. A 422 on `status` while their agency's end has passed (extend it with `PUT /agency/agents/{id}` instead), while it is not suspended, or for a customer who is no agent. An admin who is this agent is refused it (403 `نمایندگی خودتان را نمی‌توانید تغییر دهید؛ این کار با مدیر دیگری است.`)."
       x-no-body: true
       responses:
         '200':
@@ -2613,7 +2613,7 @@ paths:
               schema: { $ref: '#/components/schemas/AgentHiddenResponse' }
         default: { $ref: '#/components/responses/Error' }
     put:
-      summary: "Keep exactly these servers and plans from an agent's shop. A hidden server sells none of their plans, gives no free test and takes no service they move to it — the services they have there keep working, renewed and given extras, and the owner's own moves (a server's services, or one service from their shop) still carry theirs; a hidden plan is not sold («پنهان‌شده توسط پشتیبانی» in their panel, which calls the owner «پشتیبانی فروشگاه اصلی»), and they cannot show it again. Both lists are sent every time, an empty one for none. A 422 on `server_ids` or `plan_ids` for a list left out or longer than 1000, or for one that is not there (or not the agent's plan)."
+      summary: "Keep exactly these servers and plans from an agent's shop. A hidden server sells none of their plans, gives no free test and takes no service they move to it — the services they have there keep working, renewed and given extras, and the owner's own moves (a server's services, or one service from their shop) still carry theirs; a hidden plan is not sold («پنهان‌شده توسط پشتیبانی» in their panel, which calls the owner «پشتیبانی فروشگاه اصلی»), and they cannot show it again. Both lists are sent every time, an empty one for none. A 422 on `server_ids` or `plan_ids` for a list left out or longer than 1000, or for one that is not there (or not the agent's plan). An admin who is this agent is refused it (403 `نمایندگی خودتان را نمی‌توانید تغییر دهید؛ این کار با مدیر دیگری است.`)."
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/AgentHiddenRequest' } } } }
       responses:
         '200':
@@ -3336,7 +3336,7 @@ paths:
   /api/admin/settings/config/{group}:
     parameters: [{ name: group, in: path, required: true, description: 'The group to save, as `ConfigSettingsResponse.groups` has it', schema: { $ref: '#/components/schemas/ConfigGroup' } }, { $ref: '#/components/parameters/Shop' }]
     put:
-      summary: Save one group of the config.php settings.
+      summary: "Save one group of the config.php settings. Two changes of `telegram` are the owner's themselves alone — one of the main bot's admins, working its management with the owner's seat, is refused them: the Bot API's address moved to another origin (403 `این تغییر رمز عبور پنل را می‌خواهد و فقط کار خود مالک است.`, before the password is judged), and a new webhook secret (403 `رمز Webhook ربات اصلی را فقط خود مالک عوض می‌کند.`)."
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ConfigSettingsRequest' } } } }
       responses:
         '200':
@@ -3348,7 +3348,7 @@ paths:
   /api/admin/settings/owner-telegram:
     parameters: [{ $ref: '#/components/parameters/Shop' }]
     get:
-      summary: "«مدیریت از ربات» (the owner's, «تنظیمات پنل › ورود به پنل»): the Telegram accounts that are the owner in the main bot's private chat — every section of every shop from «⚙️ مدیریت» (/admin), as this login has in the panel —, oldest first, and until when the one-time link made last may be opened."
+      summary: "«مدیریت از ربات» (the owner's, «تنظیمات پنل › ورود به پنل»): the Telegram accounts that are the owner in the main bot's private chat — every section of every shop from «⚙️ مدیریت» (/admin), as this login has in the panel —, oldest first, and until when the one-time link made last may be opened. These accounts are the owner's own: one of the main bot's admins, though they work its management with the owner's seat, is refused this route, the link and the unlink alike (403 `حساب‌های تلگرام مالک را فقط خود مالک تغییر می‌دهد.`)."
       responses:
         '200':
           description: OK
@@ -3359,7 +3359,7 @@ paths:
   /api/admin/settings/owner-telegram/link:
     parameters: [{ $ref: '#/components/parameters/Shop' }]
     post:
-      summary: "A new one-time link (`t.me/<main bot>?start=owner-<code>`): the Telegram account that opens it within ten minutes becomes the owner in the main bot — and its bot admin, unless it was one already. It works once; a new link ends the last. At most five accounts are linked, a sixth letting the oldest go with the admin role its link gave it. The panel's current password comes first (`current_password`): blank or wrong is a 422 on it, and a wrong one counts as a failed sign-in (a 429 while this address or the account must wait). Then a 422 on `link` while the main bot's username is not known yet (check its token in «تنظیمات پنل › ربات تلگرام»). The bot's own screen («👑 حساب تلگرام مالک»), asked by an account linked already, sends no password. A new panel login (`PUT /auth/credentials`, or a recovery) lets every linked account go and ends an open link."
+      summary: "A new one-time link (`t.me/<main bot>?start=owner-<code>`): the Telegram account that opens it within ten minutes becomes the owner in the main bot — and its bot admin, unless it was one already. It works once; a new link ends the last. At most five accounts are linked, a sixth letting the oldest go with the admin role its link gave it. The panel's current password comes first (`current_password`): blank or wrong is a 422 on it, and a wrong one counts as a failed sign-in (a 429 while this address or the account must wait). Then a 422 on `link` while the main bot's username is not known yet (check its token in «تنظیمات پنل › ربات تلگرام»). The bot's own screen («👑 حساب تلگرام مالک»), asked by an account linked already, sends no password; one of the main bot's admins is refused (403 `حساب‌های تلگرام مالک را فقط خود مالک تغییر می‌دهد.`). A new panel login (`PUT /auth/credentials`, or a recovery) lets every linked account go and ends an open link."
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/OwnerTelegramLinkRequest' } } } }
       responses:
         '200':
@@ -3371,7 +3371,7 @@ paths:
   /api/admin/settings/owner-telegram/{telegram_id}:
     parameters: [{ name: telegram_id, in: path, required: true, description: "The account's numeric Telegram id.", schema: { type: integer } }, { $ref: '#/components/parameters/Shop' }]
     delete:
-      summary: "The account is the owner no more, and the bot admin role its link gave it goes too: from its next message the bot's management is closed to it. An account that was a bot admin before its link stays one — with the daily work while «مدیران ربات» lets admins in. One not linked changes nothing. Answers the accounts left."
+      summary: "The account is the owner no more, and the bot admin role its link gave it goes too: from its next message the bot's management is closed to it — unless it was a bot admin before its link: it stays one, and manages as every admin of the main bot does, with the owner's access and its decisions under its own name. One not linked changes nothing; one of the main bot's admins is refused (403 `حساب‌های تلگرام مالک را فقط خود مالک تغییر می‌دهد.`). Answers the accounts left."
       responses:
         '200':
           description: Let go
@@ -5391,7 +5391,7 @@ components:
       enum: [active, banned]
 
     UserRole:
-      description: "`admin`: a bot admin. They can use /broadcast, are exempt from the bot's gates, and can use the website's admin API while the website lets admins in. Unrelated to the panel login."
+      description: "`admin`: a bot admin. They manage the shop from its bot's private chat («⚙️ مدیریت», /admin) — the owner's access in the main bot, the agent's in an agent's bot while the agency stands; their decisions under their own name, none about their own account —, can use /broadcast, are exempt from the bot's gates, and can use the website's admin API while the website lets admins in. Unrelated to the panel login."
       type: string
       enum: [customer, admin]
 
@@ -7507,10 +7507,10 @@ components:
         token: { type: string, description: "Left out or blank: the stored token stays, as long as the Bot API address (`api_url`) stays on the same host." }
         clear_token: { type: boolean }
         username: { type: string, description: "The bot's username, with or without the @; blank for none." }
-        api_url: { type: string, description: "The Bot API's address: http(s) with a host, without credentials, ? or #. Moving it to another origin (scheme, host or port) sends every bot's token there, agents' included, so the save then needs `current_password`." }
+        api_url: { type: string, description: "The Bot API's address: http(s) with a host, without credentials, ? or #. Moving it to another origin (scheme, host or port) sends every bot's token there, agents' included, so the save then needs `current_password` — and the owner themselves: an admin of the main bot is refused it (403)." }
         current_password: { type: string, description: "The owner's current panel password. Read only when `api_url` moves to another origin: blank or wrong (a wrong one counts as a failed sign-in) is a 422 on it, and nothing is saved." }
         poll_timeout: { allOf: [{ $ref: '#/components/schemas/WholeNumberInput' }], description: 'Seconds, 1 to 60.' }
-        webhook_secret: { type: string }
+        webhook_secret: { type: string, description: "The secret part of the main bot's webhook address. A new one is the owner's themselves alone: an admin of the main bot is refused it (403)." }
         clear_webhook_secret: { type: boolean }
 
     ConfigMailRequest:
@@ -9531,7 +9531,7 @@ components:
     BotSettingsData:
       type: object
       additionalProperties: false
-      required: [enabled, phone_required, phone_scope, phone_on_purchase, phone_on_renewal, phone_on_test, phone_on_card, phone_iran_only, join_required, support_contact, support_header, topup_min, topup_presets, topup_random_count, topup_random_min, topup_random_max, topup_random_round, topup_unique_max, wallet_transfer_enabled, wallet_transfer_min, wallet_transfer_max, wallet_transfer_daily, card_protect, card_to_support, receipt_single, qr_enabled, carry_traffic, auto_renew_days, auto_renew_default, extras_enabled, extra_traffic_price, extra_traffic_options, extra_traffic_min, extra_traffic_max, extra_time_price, extra_time_options, extra_time_min, extra_time_max, extra_devices_price, extra_devices_options, extra_devices_min, extra_devices_max, expiry_reminder, expiry_reminder_days, traffic_reminder, traffic_reminder_percent, expired_cleanup, expired_cleanup_hours, test_enabled, test_per_user, test_period_days, test_daily_limit, test_newcomers_only, test_cleanup, test_cleanup_hours, test_unused_days, renew_window_days, renew_window_percent, renew_extend, renew_reset_traffic, renew_reset_time, renew_default_method, transfer_enabled, name_pattern, test_name_pattern, name_random, name_custom, referral_enabled, referral_rate, referral_renewal_rate, referral_first_only, referral_start_referrer, referral_start_invitee, referral_start_when, referral_reward_every, referral_reward_plan_id, referral_alert_burst, referral_alert_minutes, referral_alert_idle, report_purchases, report_renewals, report_tests, report_deletions, report_wallet, report_receipts, report_users, report_errors, report_tickets, report_reviews, report_backups, gift_codes_enabled, wheel_enabled, wheel_cooldown_hours, wheel_buyers_only, wheel_cost, cashback_enabled, lottery_enabled, lottery_hour, lottery_winners, lottery_prize, lottery_wallet, lottery_traffic_gb, lottery_days, lottery_plan_id, lottery_entries, lottery_exclude_agents, hold_minutes, agents_without_perks, bot_admins_enabled, bot_admins_grant_catalog, bot_admins_grant_wallet, bot_admins_grant_refunds, bot_admins_grant_payments, bot_admins_grant_extend, bot_admins_grant_manual_orders, bot_admins_grant_delete, bot_admins_grant_account_security]
+      required: [enabled, phone_required, phone_scope, phone_on_purchase, phone_on_renewal, phone_on_test, phone_on_card, phone_iran_only, join_required, support_contact, support_header, topup_min, topup_presets, topup_random_count, topup_random_min, topup_random_max, topup_random_round, topup_unique_max, wallet_transfer_enabled, wallet_transfer_min, wallet_transfer_max, wallet_transfer_daily, card_protect, card_to_support, receipt_single, qr_enabled, carry_traffic, auto_renew_days, auto_renew_default, extras_enabled, extra_traffic_price, extra_traffic_options, extra_traffic_min, extra_traffic_max, extra_time_price, extra_time_options, extra_time_min, extra_time_max, extra_devices_price, extra_devices_options, extra_devices_min, extra_devices_max, expiry_reminder, expiry_reminder_days, traffic_reminder, traffic_reminder_percent, expired_cleanup, expired_cleanup_hours, test_enabled, test_per_user, test_period_days, test_daily_limit, test_newcomers_only, test_cleanup, test_cleanup_hours, test_unused_days, renew_window_days, renew_window_percent, renew_extend, renew_reset_traffic, renew_reset_time, renew_default_method, transfer_enabled, name_pattern, test_name_pattern, name_random, name_custom, referral_enabled, referral_rate, referral_renewal_rate, referral_first_only, referral_start_referrer, referral_start_invitee, referral_start_when, referral_reward_every, referral_reward_plan_id, referral_alert_burst, referral_alert_minutes, referral_alert_idle, report_purchases, report_renewals, report_tests, report_deletions, report_wallet, report_receipts, report_users, report_errors, report_tickets, report_reviews, report_backups, gift_codes_enabled, wheel_enabled, wheel_cooldown_hours, wheel_buyers_only, wheel_cost, cashback_enabled, lottery_enabled, lottery_hour, lottery_winners, lottery_prize, lottery_wallet, lottery_traffic_gb, lottery_days, lottery_plan_id, lottery_entries, lottery_exclude_agents, hold_minutes, agents_without_perks]
       properties:
         hold_minutes: { type: integer, description: "«کدهای تخفیف»: how many minutes an order made with a discount code may stay unpaid. After that, if untouched and no receipt is with support, it is cancelled and the code's use is freed. 0: as long as any unpaid order (two days by default)." }
         agents_without_perks: { type: boolean, description: "«همکارها فقط با قیمت همکاری»: whoever pays agent prices (an agent, or in a «همکار» group) goes without the customers' perks, whatever they buy — no sale, loyalty tier, discount code, first-purchase price, cashback, lucky wheel or nightly draw; a plan's agent price where it has one, the regular price elsewhere (a plan without one, extras, a built service); their own discount stays." }
@@ -9654,15 +9654,6 @@ components:
         lottery_plan_id: { type: integer, nullable: true, description: "For a plan prize: the plan whose service it gives; null while none is chosen." }
         lottery_entries: { type: string, enum: [order, buyer], description: 'One entry per paid order, or one per buyer.' }
         lottery_exclude_agents: { type: boolean, description: "Leave agents out of the draw (bot admins and banned customers are always left out)." }
-        bot_admins_enabled: { type: boolean, description: "«مدیران ربات»: the shop's admins (customers whose role is admin) manage it from its bot's private chat («⚙️ مدیریت», /admin): the daily work — payments, orders, services, customers, tickets, reviews, broadcasts, the dashboard and referrals — and what the grants below add. On by default. The owner's linked Telegram accounts (`/settings/owner-telegram`) and an agent in their own bot need none of it." }
-        bot_admins_grant_catalog: { type: boolean, description: "«مدیران ربات» may also make, edit, reorder, switch and delete plans and categories, and the customer groups (a customer put in a «همکار» group too): StaffGrant `catalog`. Off by default." }
-        bot_admins_grant_wallet: { type: boolean, description: "…credit or debit a customer's wallet: StaffGrant `wallet`. Off by default." }
-        bot_admins_grant_refunds: { type: boolean, description: "…refund a payment: StaffGrant `refunds`. Off by default." }
-        bot_admins_grant_payments: { type: boolean, description: "…reject the receipts waiting for review in bulk (one by one is always theirs): StaffGrant `payments`. Off by default." }
-        bot_admins_grant_extend: { type: boolean, description: "…add days and traffic to a customer's service: StaffGrant `extend`. Off by default." }
-        bot_admins_grant_manual_orders: { type: boolean, description: "…make an order for a customer by hand — free, from their wallet or paid outside the shop: StaffGrant `manual_orders`. Off by default." }
-        bot_admins_grant_delete: { type: boolean, description: "…delete a customer's service for good, or hand it to another customer: StaffGrant `delete`. Off by default." }
-        bot_admins_grant_account_security: { type: boolean, description: "…turn off a customer's two-factor sign-in on the website and sign them out of every device: StaffGrant `account_security`. Off by default." }
 
     QrBackgroundInfo:
       description: The background picture QR cards are drawn on.
@@ -9680,7 +9671,7 @@ components:
 
     BotSettingsGroup:
       type: string
-      enum: [general, channels, wallet, wallet_transfers, payments, renewal, auto_renew, extras, reminders, expired_services, test_accounts, service_claims, service_transfers, client_names, custom_services, referral, reports, qr, gift_codes, wheel, cashback, lottery, discounts, agent_perks, bot_admins]
+      enum: [general, channels, wallet, wallet_transfers, payments, renewal, auto_renew, extras, reminders, expired_services, test_accounts, service_claims, service_transfers, client_names, custom_services, referral, reports, qr, gift_codes, wheel, cashback, lottery, discounts, agent_perks]
 
     BotSettingsResponse:
       type: object
@@ -9894,23 +9885,6 @@ components:
         - $ref: '#/components/schemas/BotLotterySettingsRequest'
         - $ref: '#/components/schemas/BotDiscountsSettingsRequest'
         - $ref: '#/components/schemas/BotAgentPerksSettingsRequest'
-        - $ref: '#/components/schemas/BotBotAdminsSettingsRequest'
-
-    BotBotAdminsSettingsRequest:
-      description: '«مدیران ربات»: whether the shop''s admins manage it from the bot, and a switch per grant beyond the daily work (`BotSettingsData.bot_admins_*`).'
-      type: object
-      additionalProperties: false
-      required: [bot_admins_enabled, bot_admins_grant_catalog, bot_admins_grant_wallet, bot_admins_grant_refunds, bot_admins_grant_payments, bot_admins_grant_extend, bot_admins_grant_manual_orders, bot_admins_grant_delete, bot_admins_grant_account_security]
-      properties:
-        bot_admins_enabled: { type: boolean }
-        bot_admins_grant_catalog: { type: boolean }
-        bot_admins_grant_wallet: { type: boolean }
-        bot_admins_grant_refunds: { type: boolean }
-        bot_admins_grant_payments: { type: boolean }
-        bot_admins_grant_extend: { type: boolean }
-        bot_admins_grant_manual_orders: { type: boolean }
-        bot_admins_grant_delete: { type: boolean }
-        bot_admins_grant_account_security: { type: boolean }
 
     BotDiscountsSettingsRequest:
       type: object

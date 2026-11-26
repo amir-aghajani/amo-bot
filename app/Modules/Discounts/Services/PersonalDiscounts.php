@@ -26,7 +26,8 @@ final class PersonalDiscounts
      * Sets the percent and logs who set it.
      *
      * @param array<string, mixed> $input {percent}
-     * @throws ActorRefusedException 403 from the report group, the admin's own account, an agent's or an admin's
+     * @throws ActorRefusedException 403 the admin's own account (from anywhere); from the report group, an agent's or an
+     *                               admin's too
      * @throws ValidationException 422 on `percent`
      */
     public function set(User $user, Actor $actor, array $input): User
@@ -42,6 +43,10 @@ final class PersonalDiscounts
                 $user->isAdmin() => throw ActorRefusedException::adminDiscount(),
                 default => null,
             };
+        }
+        // An admin gives themselves no prices of their own — one working the bot's management with the owner's seat too.
+        if ($actor->is($user->id)) {
+            throw ActorRefusedException::ownPrices();
         }
 
         $user->forceFill(['discount_percent' => $percent])->save();

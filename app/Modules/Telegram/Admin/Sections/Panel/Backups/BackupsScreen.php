@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Modules\Telegram\Admin\Sections\Panel\Backups;
 
-use App\Modules\Telegram\Admin\AdminSeat;
 use App\Modules\Telegram\Admin\Door\ApiFile;
 use App\Modules\Telegram\Admin\Sections\Bot\ReportGroupScreen;
 use App\Modules\Telegram\Admin\Sections\Panel\Access;
@@ -32,11 +31,6 @@ final class BackupsScreen extends BaseScreen
     public const ID = 'ppb';
 
     public const TITLE = '💾 پشتیبان‌گیری';
-
-    public function allows(AdminSeat $seat): bool
-    {
-        return $seat->configures();
-    }
 
     public function show(Admin $admin, array $args): View
     {

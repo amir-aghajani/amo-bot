@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Modules\Telegram\Admin\Sections\Owner\Payments;
 
-use App\Modules\Telegram\Admin\AdminSeat;
 use App\Modules\Telegram\Admin\Door\ApiRefusal;
 use App\Modules\Telegram\Admin\Sections\Catalog\CatalogFmt;
 use App\Modules\Telegram\Admin\Ui\Admin;
@@ -44,11 +43,6 @@ final class PaymentMethodScreen extends BaseScreen
 
     /** The button that replaces another site's address. */
     private const SWAP = '🔁 جایگزین کردن با آدرس فروشگاه';
-
-    public function allows(AdminSeat $seat): bool
-    {
-        return $seat->configures();
-    }
 
     /**
      * The webhook `$webhook` (the API's GatewayWebhookState, or null for a method that registers none) as a save of

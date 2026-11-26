@@ -29,7 +29,7 @@ final class GroupButtons
     /** To anyone but a bot admin who pressed or wrote: who may (`$may`: «تیکت را ببندند»), and where that role is given. */
     public static function onlyAdmins(string $may): string
     {
-        return "فقط مدیرهای ربات می‌توانند {$may}؛ نقش «مدیر ربات» در صفحه کاربران پنل داده می‌شود.";
+        return "فقط مدیرهای ربات می‌توانند {$may}؛ نقش «مدیر ربات» از صفحه کاربران پنل یا از «⚙️ مدیریت» ربات داده می‌شود.";
     }
 
     /**

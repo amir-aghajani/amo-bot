@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Modules\Telegram\Admin\Sections\Sales;
 
-use App\Modules\Auth\StaffGrant;
 use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\Button;
 use App\Modules\Telegram\Admin\Ui\Icons;
@@ -14,9 +13,8 @@ use App\Modules\Telegram\Admin\Ui\View;
  * «💳 پرداخت‌ها» (the panel's «پرداخت‌ها»): every payment, the receipts waiting for review and the online payments held
  * for support tabs of their own with their counts, searched by payment, order or customer and narrowed by days and order
  * (PaymentFilters), with what the paid ones add up to. A row opens its payment (PaymentScreen) with its receipt. The
- * review tab starts the review one receipt after another (PaymentScreen's queue: «تایید و بعدی»); with the grant to
- * dismiss receipts in bulk, it offers picking receipts to reject at once, and — the list not narrowed — rejecting every
- * one waiting (ReceiptsScreen).
+ * review tab starts the review one receipt after another (PaymentScreen's queue: «تایید و بعدی»), offers picking
+ * receipts to reject at once, and — the list not narrowed — rejecting every one waiting (ReceiptsScreen).
  */
 final class PaymentsScreen extends SalesList
 {
@@ -108,9 +106,6 @@ final class PaymentsScreen extends SalesList
             return;
         }
         $view->row(Button::to(self::START_REVIEW, PaymentScreen::ID, 'nx', 0)->primary());
-        if (!$admin->seat->holds(StaffGrant::Payments)) {
-            return;
-        }
         $view->row(
             Button::to(ReceiptsScreen::TITLE, ReceiptsScreen::ID),
             // Every receipt of the shop: offered only while no search or filter makes the list look like fewer.

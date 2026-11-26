@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Telegram\Admin\Sections\Support;
 
+use App\Modules\Telegram\Admin\Sections\Customers\Customer;
 use App\Modules\Telegram\Admin\Sections\Sales\Sales;
 use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\Button;
@@ -19,7 +20,7 @@ use App\Modules\Telegram\Admin\Ui\Words as UiWords;
  * signature, writer, where and when, its standing in one card, its words under it; what its status allows at a tap —
  * «✅ تایید» green, «🚫 رد» red (the panel's `actions`) —, the next one waiting on the page a tap away (the moderation
  * queue, one review after another), the writer's page, and «🗑 حذف» asked first. A decision answers the review as the
- * panel then has it.
+ * panel then has it. A review the seat wrote itself (Customer::own()) offers none of the three: another admin decides it.
  *
  * Actions: `ok` (id), `no` (id), `del` (id: asks), `gone` (id: deletes).
  */
@@ -85,8 +86,13 @@ final class ReviewScreen extends KeptRowScreen
             ])
             ->section('💬 متن نظر')
             ->line('<blockquote>' . Fmt::e((string) ($row['body'] ?? '')) . '</blockquote>');
-        $actions = Json::part($row, 'actions');
+        // One of the shop's admins decides nothing about a review they wrote (Reviews: ActorRefusedException::ownReview()).
+        $own = $customer !== null && Customer::own($admin, is_int($customer['id'] ?? null) ? $customer['id'] : 0);
+        $actions = $own ? [] : Json::part($row, 'actions');
         $next = $this->next($admin, $id);
+        if ($own) {
+            $view->note('این نظر خود شماست؛ تایید، رد یا حذفش با مدیر دیگری است.');
+        }
 
         return $view
             ->row(
@@ -95,7 +101,7 @@ final class ReviewScreen extends KeptRowScreen
             )
             ->row($next !== null ? Button::to('⏭ نظر بعدی در انتظار', self::ID, Nav::SHOW, $next) : null)
             ->row(Links::customer($admin, $customer, 'صفحه نویسنده'))
-            ->row(Button::to(UiWords::DELETE, self::ID, 'del', $id)->danger())
+            ->row($own ? null : Button::to(UiWords::DELETE, self::ID, 'del', $id)->danger())
             ->back(ReviewsScreen::ID);
     }
 

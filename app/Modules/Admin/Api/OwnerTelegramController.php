@@ -7,6 +7,8 @@ namespace App\Modules\Admin\Api;
 use App\Core\Exceptions\TooManyAttemptsException;
 use App\Core\Exceptions\ValidationException;
 use App\Core\Http\ApiController;
+use App\Modules\Auth\Exceptions\ActorRefusedException;
+use App\Modules\Auth\Principal;
 use App\Modules\Auth\Services\AdminAccount;
 use App\Modules\Bots\Models\Bot;
 use App\Modules\Telegram\Admin\AdminSeat;
@@ -20,7 +22,8 @@ use Psr\Http\Message\ServerRequestInterface as Request;
 /**
  * «مدیریت از ربات» (the owner's, «تنظیمات پنل › ورود به پنل»): the Telegram accounts that are the owner in the main bot's
  * private chat (OwnerLinks), a one-time link that makes one more — the panel's password asked first —, and an account
- * let go.
+ * let go. The owner's alone: one of the main shop's admins, working the bot's management with the owner's seat, is
+ * refused all of it (an account they linked would be the owner, past their role and its limits).
  */
 final class OwnerTelegramController extends ApiController
 {
@@ -34,6 +37,8 @@ final class OwnerTelegramController extends ApiController
     /** GET /settings/owner-telegram */
     public function index(Request $request, Response $response): Response
     {
+        self::theOwner($request);
+
         return $this->json($response, $this->present());
     }
 
@@ -45,9 +50,11 @@ final class OwnerTelegramController extends ApiController
      * @throws ValidationException 422: the password blank or wrong (`current_password`), or the main bot's username not
      *                             known yet (`link`)
      * @throws TooManyAttemptsException 429 while this address, or the account, must wait
+     * @throws ActorRefusedException 403 to one of the shop's admins
      */
     public function link(Request $request, Response $response): Response
     {
+        self::theOwner($request);
         if (!$request->getAttribute(BotAdminDoor::SEAT) instanceof AdminSeat) {
             $unproven = $this->account->confirm($request, Input::password($this->input($request), 'current_password'));
             if ($unproven !== null) {
@@ -63,12 +70,27 @@ final class OwnerTelegramController extends ApiController
      * DELETE /settings/owner-telegram/{telegram_id}
      *
      * @param array<string, string> $args
+     * @throws ActorRefusedException 403 to one of the shop's admins
      */
     public function unlink(Request $request, Response $response, array $args): Response
     {
+        self::theOwner($request);
         $this->links->unlink((int) $args['telegram_id']);
 
         return $this->json($response, $this->present());
+    }
+
+    /**
+     * Refuses anyone but the owner themselves: one of the main shop's admins working the bot's management with the
+     * owner's seat.
+     *
+     * @throws ActorRefusedException 403
+     */
+    private static function theOwner(Request $request): void
+    {
+        if (!Principal::of($request)->isTheOwner()) {
+            throw ActorRefusedException::ownerOnly();
+        }
     }
 
     /** @return array{accounts: list<array<string, mixed>>, link_open_until: string|null} */

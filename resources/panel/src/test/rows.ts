@@ -180,15 +180,6 @@ export function botSettingsRow(overrides: Partial<BotSettingsData> = {}): BotSet
     lottery_exclude_agents: true,
     hold_minutes: 60,
     agents_without_perks: false,
-    bot_admins_enabled: true,
-    bot_admins_grant_catalog: false,
-    bot_admins_grant_wallet: false,
-    bot_admins_grant_refunds: false,
-    bot_admins_grant_payments: false,
-    bot_admins_grant_extend: false,
-    bot_admins_grant_manual_orders: false,
-    bot_admins_grant_delete: false,
-    bot_admins_grant_account_security: false,
     ...overrides,
   }
 }

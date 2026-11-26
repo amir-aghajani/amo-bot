@@ -771,7 +771,7 @@ One customer, as their page shows them. Their row, referral numbers and, for an 
 
 ### PATCH /users/{id}
 
-Ban or unban a customer. On the website's admin API, an admin's account (their own included) or an agent's can only be changed from a panel (403).
+Ban or unban a customer. On the website's admin API, an admin's account (their own included) or an agent's can only be changed from a panel (403). A Telegram account linked as the owner in the main bot (`/settings/owner-telegram`) is banned by the owner alone: anyone else — one of the main bot's admins working its management with the owner's seat among them — is refused (403 `این حساب تلگرام مالک فروشگاه است و مسدود نمی‌شود.`). An agent's own account in their bot is banned by the agent or the owner alone: that bot's admins are refused (403 `این حساب نماینده صاحب این ربات است و مسدود نمی‌شود.`).
 
 - **Who:** an admin of the shop, signed in on its website.
 - **In the panels:** [`PATCH /api/{panel}/users/{id}`](Panels-API-Reference.md#patch-apipanelusersid).
@@ -897,7 +897,7 @@ An order support makes for a customer by hand: a plan (`plan_id`), or — withou
 
 ### PUT /users/{id}/groups
 
-Set a customer's groups. Replaces their groups with the ones listed. On the website's admin API, an admin's account (their own included) or an agent's can only be changed from a panel (403): a «همکار» group (`agent_pricing`) would set their prices. There, a «همکار» group the customer is not in yet asks the `catalog` grant and a recent sign-in, as a granted operation does (403 `فروشگاه گذاشتن مشتری در گروه «همکار» را به مدیران وب‌سایت نسپرده است.`, or the recent sign-in's refusal); the plain groups, and a «همکار» group they are in already, ask neither. A 422 on `group_ids` when one is not a group of the shop.
+Set a customer's groups. Replaces their groups with the ones listed. On the website's admin API, an admin's account (their own included) or an agent's can only be changed from a panel (403): a «همکار» group (`agent_pricing`) would set their prices. There, a «همکار» group the customer is not in yet asks the `catalog` grant and a recent sign-in, as a granted operation does (403 `فروشگاه گذاشتن مشتری در گروه «همکار» را به مدیران وب‌سایت نسپرده است.`, or the recent sign-in's refusal); the plain groups, and a «همکار» group they are in already, ask neither. An admin putting their own account in a «همکار» group it is not in — from the bot's management, where no rule above stops it — is a 403 (`قیمت‌های خودتان را نمی‌توانید عوض کنید؛ تخفیف اختصاصی و گروه «همکار» خودتان با مدیر دیگری است.`). A 422 on `group_ids` when one is not a group of the shop.
 
 - **Who:** an admin of the shop, signed in on its website.
 - **In the panels:** [`PUT /api/{panel}/users/{id}/groups`](Panels-API-Reference.md#put-apipanelusersidgroups).
@@ -1096,7 +1096,7 @@ The rows of an admin-ordered list in their new order, by id: 1 to 1000. A 422 on
 
 ### PUT /customer-groups/{id}
 
-Update a customer group. A switch left out keeps its value. On the website's admin API, «همکار» (`agent_pricing`) is not switched on for a group one of the shop's admins is in (403): it would set an admin's prices. A panel can.
+Update a customer group. A switch left out keeps its value. On the website's admin API, «همکار» (`agent_pricing`) is not switched on for a group one of the shop's admins is in (403): it would set an admin's prices. A panel can — but never for a group the admin asking is in themselves, from the bot's management with the owner's or the agent's seat (403 `قیمت‌های خودتان را نمی‌توانید عوض کنید؛ تخفیف اختصاصی و گروه «همکار» خودتان با مدیر دیگری است.`).
 
 - **Who:** an admin of the shop, signed in on its website, when the website grants `catalog` ([grants](#grants)) and the sign-in is at most 15 minutes old.
 - **In the panels:** [`PUT /api/{panel}/customer-groups/{id}`](Panels-API-Reference.md#put-apipanelcustomer-groupsid).

@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Modules\Telegram\Admin\Sections\Bot\Channels;
 
 use App\Modules\Settings\Services\BotSettingsScreen;
-use App\Modules\Telegram\Admin\AdminSeat;
 use App\Modules\Telegram\Admin\Door\ApiRefusal;
 use App\Modules\Telegram\Admin\Sections\Bot\BotScreens;
 use App\Modules\Telegram\Admin\Ui\Admin;
@@ -40,11 +39,6 @@ final class ChannelsScreen extends BaseScreen
     public const VIEW = 'v';
 
     public function __construct(private readonly BotSettingsScreen $settings) {}
-
-    public function allows(AdminSeat $seat): bool
-    {
-        return $seat->configures();
-    }
 
     public function show(Admin $admin, array $args): View
     {

@@ -147,8 +147,8 @@ final class CustomerAccountTest extends BotTestCase
 
         $cases = [
             [$boss, '🔒 حساب خودتان است؛ با مدیر دیگری یا از پنل تغییر می‌کند.', ActorRefusedException::OWN_ACCOUNT],
-            [$agent, '🔒 حساب نماینده است؛ فقط از پنل تغییر می‌کند.', ActorRefusedException::AGENT_ACCOUNT],
-            [$admin, '🔒 حساب مدیر ربات است؛ ورودش به سایت فقط از پنل تغییر می‌کند.', ActorRefusedException::ADMIN_ACCOUNT],
+            [$agent, '🔒 حساب نماینده است؛ فقط از پنل یا «⚙️ مدیریت» ربات تغییر می‌کند.', ActorRefusedException::AGENT_ACCOUNT],
+            [$admin, '🔒 حساب مدیر ربات است؛ ورودش به سایت فقط از پنل یا «⚙️ مدیریت» ربات تغییر می‌کند.', ActorRefusedException::ADMIN_ACCOUNT],
         ];
         foreach ($cases as [$user, $lock, $refusal]) {
             $this->send($this->press("ua:o:{$user->id}"));

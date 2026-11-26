@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Modules\Telegram\Admin\Sections\Owner\Payments;
 
-use App\Modules\Telegram\Admin\AdminSeat;
 use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\BaseScreen;
 use App\Modules\Telegram\Admin\Ui\Button;
@@ -26,11 +25,6 @@ final class PaymentDriversScreen extends BaseScreen
 
     /** Each way of settling's emoji over its drivers. */
     private const ICONS = ['manual' => Icons::CARD_TO_CARD, 'online' => Icons::PAYMENTS, 'instant' => Icons::WALLET];
-
-    public function allows(AdminSeat $seat): bool
-    {
-        return $seat->configures();
-    }
 
     public function show(Admin $admin, array $args): View
     {

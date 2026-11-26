@@ -8,11 +8,17 @@ use App\Core\Config\ConfigFile;
 use App\Core\Config\Repository as Config;
 use App\Core\Database\Drivers\ProbeFailedException;
 use App\Core\Database\Drivers\ProbeResult;
+use App\Modules\Auth\Exceptions\ActorRefusedException;
 use App\Modules\Auth\Services\AdminAccount;
 use App\Modules\Auth\Services\SignInThrottle;
 use App\Modules\Settings\Exceptions\UnknownGroupException;
 use App\Modules\Settings\Services\ConfigSettings;
+use App\Modules\Telegram\Admin\AdminSeats;
+use App\Modules\Telegram\Admin\Door\ApiRefusal;
+use App\Modules\Telegram\Admin\Door\PanelBridge;
+use App\Modules\Telegram\Admin\OwnerLinks;
 use App\Modules\Telegram\Api\BotToken;
+use App\Modules\Users\Models\User;
 use Slim\Psr7\Factory\ServerRequestFactory;
 use Tests\Fakes\ProbedDriver;
 use Tests\HttpTestCase;
@@ -361,6 +367,78 @@ final class AdminConfigSettingsApiTest extends HttpTestCase
         self::assertSame('', $this->file->get('TELEGRAM_WEBHOOK_SECRET'));
     }
 
+    /**
+     * Moving the Bot API's address asks the panel's password, which one of the main shop's admins working the bot's
+     * management never types: refused before it is judged — no failed sign-in counted against the owner's login, which
+     * moves it still —, the same origin saved for them as for the owner, and the owner's own linked account asked it.
+     */
+    public function testAnAdminMovesNoBotApiAddressAndSpendsNoneOfTheOwnersSignIns(): void
+    {
+        $this->file->setMany(['TELEGRAM_BOT_TOKEN' => '', 'TELEGRAM_API_URL' => 'https://api.telegram.org']);
+        $moving = ['username' => '', 'poll_timeout' => '30', 'api_url' => 'https://botapi.example'];
+        $throttle = $this->service(SignInThrottle::class);
+        // The owner's login one failure short of its limit, from another network: a single try counted would lock it.
+        $elsewhere = (new ServerRequestFactory())->createServerRequest('PUT', 'http://localhost/', ['REMOTE_ADDR' => '203.0.113.9']);
+        for ($failed = 1; $failed < SignInThrottle::MAX_ACCOUNT_ATTEMPTS; $failed++) {
+            $throttle->failed(AdminAccount::WAY, $elsewhere, self::ADMIN_USERNAME);
+        }
+        $fresh = (new ServerRequestFactory())->createServerRequest('PUT', 'http://localhost/', ['REMOTE_ADDR' => '198.51.100.7']);
+        $admin = $this->bridgeOf($this->admin(['telegram_id' => 5151]));
+
+        foreach (['the right password' => self::ADMIN_PASSWORD, 'a wrong one' => 'not it', 'none' => ''] as $what => $password) {
+            $refused = self::refusal(static fn() => $admin->put('/settings/config/telegram', $moving + ['current_password' => $password]));
+            self::assertSame([403, ActorRefusedException::OWNERS_PASSWORD], [$refused->status, $refused->getMessage()], "{$what}: an admin on the owner's seat is not the owner");
+        }
+        self::assertSame('https://api.telegram.org', $this->file->get('TELEGRAM_API_URL'), 'nothing written');
+        self::assertSame(0, $throttle->wait(AdminAccount::WAY, $fresh, self::ADMIN_USERNAME), 'no try counted against the owner\'s login');
+
+        $admin->put('/settings/config/telegram', ['api_url' => 'https://api.telegram.org/v2'] + $moving);
+        self::assertSame('https://api.telegram.org/v2', $this->file->get('TELEGRAM_API_URL'), 'the same origin: the group saved for them, no password asked');
+
+        $linked = self::refusal(fn() => $this->bridgeOf($this->linkedOwner())->put('/settings/config/telegram', $moving));
+        self::assertSame([422, ['current_password']], [$linked->status, array_keys($linked->errors)], 'the owner\'s own linked account: asked the password, as the panel asks it');
+
+        self::assertSame(200, $this->putJson('/api/admin/settings/config/telegram', $moving + ['current_password' => self::ADMIN_PASSWORD])->getStatusCode(), 'the owner moves it: the login\'s last try still theirs');
+        self::assertSame('https://botapi.example', $this->file->get('TELEGRAM_API_URL'));
+        $throttle->failed(AdminAccount::WAY, $elsewhere, self::ADMIN_USERNAME);
+        self::assertGreaterThan(0, $throttle->wait(AdminAccount::WAY, $fresh, self::ADMIN_USERNAME), 'one failure more and the login waits: it was one short all along');
+    }
+
+    /**
+     * Whoever knows the webhook's secret sends the shop updates in anyone's name: one of the main shop's admins sets,
+     * replaces or clears none of it from the bot, and saves the rest of the group with it left as it is — left out, or
+     * sent as it stands —; the owner changes it, from the panel or their linked account.
+     */
+    public function testTheWebhookSecretIsTheOwnersAlone(): void
+    {
+        $telegram = ['token' => '', 'username' => '', 'api_url' => 'https://api.telegram.org', 'poll_timeout' => '30'];
+        $admin = $this->bridgeOf($this->admin(['telegram_id' => 5151]));
+        $refused = static function (array $input) use ($admin, $telegram): void {
+            $refusal = self::refusal(static fn() => $admin->put('/settings/config/telegram', $input + $telegram));
+            self::assertSame([403, ActorRefusedException::OWNERS_SECRET], [$refusal->status, $refusal->getMessage()], (string) json_encode($input));
+        };
+
+        // config.php names none yet.
+        $refused(['webhook_secret' => 'admins_secret-0123456789']);
+        self::assertSame('', (string) $this->file->get('TELEGRAM_WEBHOOK_SECRET'), 'none set');
+        $admin->put('/settings/config/telegram', ['poll_timeout' => '25'] + $telegram);
+        self::assertSame([25, ''], [$this->file->get('TELEGRAM_POLL_TIMEOUT'), (string) $this->file->get('TELEGRAM_WEBHOOK_SECRET')], 'the rest saved, the secret left out');
+
+        // One is set.
+        $this->file->set('TELEGRAM_WEBHOOK_SECRET', 'owners_secret-0123456789');
+        $refused(['webhook_secret' => 'admins_secret-0123456789']);
+        $refused(['clear_webhook_secret' => true]);
+        self::assertSame('owners_secret-0123456789', $this->file->get('TELEGRAM_WEBHOOK_SECRET'), 'neither replaced nor cleared');
+        $admin->put('/settings/config/telegram', ['poll_timeout' => '20'] + $telegram);
+        $admin->put('/settings/config/telegram', ['poll_timeout' => '15', 'webhook_secret' => 'owners_secret-0123456789'] + $telegram);
+        self::assertSame([15, 'owners_secret-0123456789'], [$this->file->get('TELEGRAM_POLL_TIMEOUT'), $this->file->get('TELEGRAM_WEBHOOK_SECRET')], 'left out, or sent as it stands: the rest saved');
+
+        $this->bridgeOf($this->linkedOwner())->put('/settings/config/telegram', ['webhook_secret' => 'linked_secret-0123456789'] + $telegram);
+        self::assertSame('linked_secret-0123456789', $this->file->get('TELEGRAM_WEBHOOK_SECRET'), 'the owner\'s own linked account changes it');
+        self::assertSame(200, $this->putJson('/api/admin/settings/config/telegram', $telegram + ['webhook_secret' => 'panels_secret-0123456789'])->getStatusCode());
+        self::assertSame('panels_secret-0123456789', $this->file->get('TELEGRAM_WEBHOOK_SECRET'), 'and the panel');
+    }
+
     public function testAdvancedGroupIsValidatedFieldByField(): void
     {
         $response = $this->putJson('/api/admin/settings/config/advanced', ['log_level' => 'verbose', 'session_lifetime' => '4', 'session_secure_cookie' => false, 'http_timeout' => '121', 'cron_token' => 'short']);
@@ -411,5 +489,38 @@ final class AdminConfigSettingsApiTest extends HttpTestCase
         self::assertSame([ConfigFile::UNWRITABLE], $error['errors']['file']);
         self::assertSame($error['errors']['file'][0], $error['message'], 'in the admin\'s words, never the server\'s path');
         self::assertTrue($logs->hasErrorThatContains('could not be written'), 'the path is the log\'s');
+    }
+
+    /** The owner's linked Telegram account in the main bot (OwnerLinks), as opening the panel's one-time link makes it. */
+    private function linkedOwner(): User
+    {
+        $this->config(['telegram.username' => 'amo_shop_bot']);
+        $owner = $this->customer(['telegram_id' => 7001, 'first_name' => 'Amir']);
+        $links = $this->service(OwnerLinks::class);
+        $link = $links->link();
+        self::assertNotNull($link);
+        self::assertTrue($links->redeem(substr($link['url'], (int) strpos($link['url'], '=') + 1), 7001));
+
+        return $owner;
+    }
+
+    /** The panels' API as `$user`'s seat in the main bot's management asks it (AdminSeats::of(), PanelBridge). */
+    private function bridgeOf(User $user): PanelBridge
+    {
+        $seat = $this->service(AdminSeats::class)->of($user);
+        self::assertNotNull($seat, 'a seat');
+
+        return $this->service(PanelBridge::class)->for($seat);
+    }
+
+    private static function refusal(\Closure $call): ApiRefusal
+    {
+        try {
+            $call();
+        } catch (ApiRefusal $refusal) {
+            return $refusal;
+        }
+
+        self::fail('the API answered');
     }
 }

@@ -114,7 +114,8 @@ refuses says so there. Setting IPPanel up: [SMS](Sms.md).
 «ورود به پنل» — your username (2 to 64 characters: Latin letters, digits, `. _ @ -`) and password (8 characters at least,
 72 bytes at most — 36 Persian letters), with **«رمز عبور فعلی»** asked first; a new password left empty keeps the old
 one. Saving signs every other browser out; this one stays. It also lets go of every Telegram account linked in
-«مدیریت از ربات» below — link them again afterwards. A wrong current password counts as a failed sign-in. Lost it: the
+«مدیریت از ربات» below, with its bot admin role (one you set by hand too, since an admin of the main bot has your
+access in its «⚙️ مدیریت») — link them again afterwards. A wrong current password counts as a failed sign-in. Lost it: the
 sign-in page's «رمز را فراموش کرده‌اید؟» ([the panel's login](Running-In-Production.md#the-panels-login)), which lets
 the linked accounts go too.
 

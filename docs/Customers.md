@@ -40,7 +40,8 @@ The row's menu (⋮):
 - **«ارسال پیام»** — a message from support, sent by the shop's bot ([Writing to a customer](#writing-to-a-customer)).
 - **«کیف پول»** — [the wallet](#the-wallet).
 - **«گروه‌ها»** — tick the groups they are in ([groups](#groups)).
-- **«مدیر ربات کردن» / «برداشتن مدیریت ربات»** — the bot's admin role, asked first ([the bot's admins](#the-bots-admins)).
+- **«مدیر ربات کردن» / «برداشتن مدیریت ربات»** — the bot's admin role, asked first; making an admin says what the role
+  hands over in this shop, as the «مدیر» mark beside an admin's name does ([the bot's admins](#the-bots-admins)).
 - **«مسدود کردن» / «رفع مسدودی»** — a ban, asked first; lifting it is at once.
 
 ## Banning
@@ -52,7 +53,11 @@ bring no referral. **They are not told** they were banned, nor when it is lifted
 an agent's own bot or panel: to end an agency, see [Agency](Agency.md).
 
 The shop's admins may ban and unban from its website too — a customer, never an admin nor an agent: their accounts —
-a ban, the groups, two-factor sign-in, the devices — are changed from the panel alone.
+a ban, the groups, two-factor sign-in, the devices — are changed from the panel or the bot's management alone. A
+Telegram account linked as the owner ([Managing the shop from the bot](Bot-Management.md#your-own-telegram-account)) is
+banned by you alone, since a banned account manages nothing: anyone else, a bot admin among them, is refused with «این
+حساب تلگرام مالک فروشگاه است و مسدود نمی‌شود.» So is an agent's own account in their bot, banned by the agent or you
+alone: «این حساب نماینده صاحب این ربات است و مسدود نمی‌شود.»
 
 ## Excused from the phone number
 
@@ -98,23 +103,25 @@ open a ticket.
   and, in the main bot's group, decides agency requests
   ([Report group](Telegram-Group.md));
 - works the shop's daily work on its website, while the website lets its admins in ([Website](Website.md#the-shops-admins));
-- manages the shop from the bot's private chat — «⚙️ مدیریت» or `/admin` —, the daily work and what you grant, while
-  «تنظیمات ربات › مدیران ربات» lets them in ([Managing the shop from the bot](Bot-Management.md#the-shops-admins)).
+- manages the shop from the bot's private chat — «⚙️ مدیریت» or `/admin` — with your access in the main bot, or the
+  agent's in an agent's bot while the agency stands: no switch and no grants, the role is enough
+  ([Managing the shop from the bot](Bot-Management.md#the-shops-admins)).
 
-The role is given and taken here, by you or the agent from a customer's page in the bot's management («🛡 مدیر ربات
-کردن»), or by another bot admin from a customer's card in the report group
-([A customer's card](Telegram-Group.md#a-customers-card)) — never from the website, and never by an admin in the bot's
-management. Your own Telegram account is made one when you link it from «تنظیمات پنل › ورود به پنل › مدیریت از ربات»,
-and is one no more when you let it go there — unless it was an admin before. The card never makes an admin of a
-customer with their own discount or in a «همکار» group: an admin's prices are yours to lower, so that is done here. To
-make yourself one, start the bot from your own Telegram account first, then find yourself in the list; «نقش › مدیران
-ربات» lists the admins. An agent is made the admin of their own bot by itself, the first time they write to it. The
-customer is not told.
+The role is given and taken here, or in the bot's management — a customer's page («🛡 مدیر ربات کردن») or «⚙️ تنظیمات ›
+🛡 مدیران ربات» —, by you, the agent or one of the bot's admins, or by another bot admin from a customer's card in the
+report group ([A customer's card](Telegram-Group.md#a-customers-card)) — never from the website. Your own Telegram
+account is made one when you link it from «تنظیمات پنل › ورود به پنل › مدیریت از ربات», and is one no more when you let
+it go there — unless it was an admin before —, or when the panel's login changes, a role set by hand too. Nobody but you
+changes a linked account's role: «نقش حساب تلگرام مالک فروشگاه را فقط خود مالک عوض می‌کند.» The card never makes an
+admin of a customer with their own discount or in a «همکار» group: an admin's prices are set here or in the bot's
+management, so that is done there. To make yourself one, start the bot from your own Telegram account first, then find
+yourself in the list; «نقش › مدیران ربات» lists the admins. An agent is made the admin of their own bot by itself, the
+first time they write to it. The customer is not told.
 
 An admin is still a customer: **another admin decides what is theirs** — their own payment approved or refunded, their
-wallet, their service changed, their review decided —, in the report group and on the website alike; your panel is held
-to none of it. That rule is about each admin's own account: two admins can do those things for each other, so make
-admins only of people you trust.
+wallet, their service changed, their review decided, their own prices (an own discount, a «همکار» group) —, in the
+report group, the bot's management and on the website alike; your panel is held to none of it. That rule is about each
+admin's own account: two admins can do those things for each other, so make admins only of people you trust.
 
 ## The wallet
 
@@ -158,10 +165,10 @@ reach:
   ([Website](Website.md#the-shops-admins)), since a «همکار» group sets prices as plans do;
 - putting a customer in a «همکار» group needs that grant too: «فروشگاه گذاشتن مشتری در گروه «همکار» را به مدیران
   وب‌سایت نسپرده است.» A plain group needs none, and taking a customer out of any group needs none;
-- they cannot put an admin's or an agent's account in a group (or take one out): «حساب مدیران فروشگاه فقط از پنل تغییر
-  می‌کند.» (or, for an agent, «حساب نماینده‌ها فقط از پنل تغییر می‌کند.»);
+- they cannot put an admin's or an agent's account in a group (or take one out): «حساب مدیران فروشگاه فقط از پنل یا «⚙️ مدیریت» ربات تغییر
+  می‌کند.» (or, for an agent, «حساب نماینده‌ها فقط از پنل یا «⚙️ مدیریت» ربات تغییر می‌کند.»);
 - they cannot switch «همکار» on for a group an admin is in: «گروه «همکاران» حساب یکی از مدیران فروشگاه را دارد؛ «همکار»
-  کردن آن فقط از پنل ممکن است.», naming the group.
+  کردن آن فقط از پنل یا «⚙️ مدیریت» ربات ممکن است.», naming the group.
 
 Two accounts merged on the website never bring a «همکار» group into an admin's or an agent's account: when one side is
 an admin or an agent and the other is neither, the other side's «همکار» groups are left before the two are joined (its

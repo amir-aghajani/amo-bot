@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Modules\Telegram\Admin\Sections\Marketing\Sales;
 
-use App\Modules\Telegram\Admin\AdminSeat;
 use App\Modules\Telegram\Admin\Sections\Marketing\Words as Marketing;
 use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\Button;
@@ -29,11 +28,6 @@ final class SalesScreen extends ListScreen
 
     /** The program in a paragraph: the panel's ⓘ. */
     private const PROGRAM = 'فروش ویژه درصدی از قیمت پلن‌هایی که انتخاب می‌کنید کم می‌کند، از زمان شروع تا زمان پایانش. اگر مشتری تخفیف اختصاصی یا تخفیف سطح وفاداری هم داشته باشد، فقط بزرگ‌ترین آن‌ها اعمال می‌شود و کد تخفیف روی مبلغ باقی‌مانده می‌آید. قیمت تخفیف‌خورده همه‌جا دیده می‌شود: دکمه پلن‌ها و جزئیات پلن در ربات، صفحه پرداخت و قیمت پلن در وب‌سایت.';
-
-    public function allows(AdminSeat $seat): bool
-    {
-        return $seat->configures();
-    }
 
     protected function screen(): string
     {

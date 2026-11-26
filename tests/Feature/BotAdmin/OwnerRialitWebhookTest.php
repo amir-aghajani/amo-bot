@@ -19,7 +19,7 @@ use Tests\Support\FakeRialit;
  * shown and replaced only after a question that says that site stops getting Rialit's webhooks and Rialit tells the
  * account's owner —, a change Rialit refuses (20 an hour) said with why and nothing changed, a Rialit out of reach said
  * as unknown with the screen still whole and read again at a tap, the address registered at a tap; no line, and no word
- * to Rialit, for any other method; the owner's and an agent's, an admin's tap changing nothing.
+ * to Rialit, for any other method; the owner's, an agent's and the shop's admins'.
  */
 final class OwnerRialitWebhookTest extends BotTestCase
 {
@@ -173,7 +173,7 @@ final class OwnerRialitWebhookTest extends BotTestCase
         self::assertSame([], $this->rialit->calls);
     }
 
-    public function testAnAgentWorksTheirOwnRialitMethodsWebhookAndAnAdminNone(): void
+    public function testAnAgentWorksTheirOwnRialitMethodsWebhookAndTheMainShopsAdminTheMainOnes(): void
     {
         $bot = $this->agentBot();
         $agentMethod = CurrentBot::run($bot, fn(): PaymentMethod => $this->rialitMethod('ریالیت نماینده'));
@@ -185,8 +185,8 @@ final class OwnerRialitWebhookTest extends BotTestCase
         $method = $this->rialitMethod();
         $this->customer(['telegram_id' => 7100, 'role' => UserRole::Admin]);
         $this->send($this->tap(Nav::to('pmv', 'swapped', $method->id), chat: 7100));
-        self::assertSame(self::OTHER, $this->rialit->webhookUrl, 'an admin\'s tap changes nothing');
-        self::assertSame([], $this->rialit->webhookCalls('POST'));
+        self::assertSame(self::OURS, $this->rialit->webhookUrl, 'replaced as the owner replaces it');
+        self::assertStringStartsWith('<b>✅ ' . GatewayWebhooks::REPLACED . '</b>', $this->said()[0]);
     }
 
     /** The method's screen offers no webhook change: the address is the shop's. */

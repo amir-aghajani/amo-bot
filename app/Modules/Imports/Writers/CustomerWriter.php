@@ -8,6 +8,7 @@ use App\Core\Database\Ledger;
 use App\Modules\Imports\Enums\ProblemReason;
 use App\Modules\Imports\Links;
 use App\Modules\Imports\Records\ImportedCustomer;
+use App\Modules\Telegram\Admin\OwnerLinks;
 use App\Modules\Users\Enums\UserRole;
 use App\Modules\Users\Enums\UserStatus;
 use App\Modules\Users\Models\CustomerGroup;
@@ -26,12 +27,17 @@ use Illuminate\Support\Carbon;
  * linked, gaining only what they lack —, or a new one written as though they had always been here: no newcomer report,
  * no referral gift, joined on the day they joined the other bot (never Users\Services\Customers, which registers a
  * newcomer). Then their group, and their balance as one wallet line — a debt as a debit their credit covers —, credited
- * once however many imports bring it. One transaction a customer, tried again on a deadlock as every money write is.
+ * once however many imports bring it. One transaction a customer, tried again on a deadlock as every money write is. An
+ * account linked as the owner in the bot (OwnerLinks) is never banned nor made an admin by an import — only the owner
+ * decides those of their own accounts —: the rest of it comes, and the report says so (ProblemReason::Refused).
  */
 final class CustomerWriter
 {
     /** The wallet line a balance comes as: «موجودی منتقل‌شده از Faoxima». */
     public const LINE = 'موجودی منتقل‌شده از %s';
+
+    /** Why an account linked as the owner came without the other bot's ban or admin's role (its problem's detail). */
+    public const OWNERS_ACCOUNT = 'حساب تلگرام مالک در ربات است: مسدودی یا مدیر شدنش از ربات قبلی آورده نشد و بقیه اطلاعاتش آمد.';
 
     private const KIND = 'customers';
     private const BALANCES = 'balances';
@@ -46,6 +52,7 @@ final class CustomerWriter
         private readonly WalletService $wallet,
         private readonly Links $links,
         private readonly ConnectionInterface $db,
+        private readonly OwnerLinks $owners,
     ) {}
 
     public function write(Run $run, ImportedCustomer $customer): void
@@ -62,14 +69,14 @@ final class CustomerWriter
         }
 
         // What the transaction did is counted once it is committed: a try the database took back counts nothing.
-        [$outcome, $credited] = $this->db->transaction(function () use ($run, $customer): array {
+        [$outcome, $credited, $spared] = $this->db->transaction(function () use ($run, $customer): array {
             if ($this->links->brought($run->import, Links::CUSTOMER, $customer->key)) {
                 // Merged into another account since: that one (Links::customer()).
                 $id = $this->links->customer($run->import, $customer->key);
                 $user = $id === null ? null : User::query()->find($id);
                 if ($user === null) {
                     // Deleted by the owner since: theirs to remove — never brought back, nor their balance.
-                    return ['removed', false];
+                    return ['removed', false, false];
                 }
                 // Brought before: nothing of theirs is written again, but what came to be known since — that they bought
                 // there, their group, a balance that did not come then — comes now.
@@ -78,14 +85,14 @@ final class CustomerWriter
                 }
                 $this->join($run, $user, $customer);
 
-                return ['linked', $this->balance($run, $user, $customer)];
+                return ['linked', $this->balance($run, $user, $customer), false];
             }
 
-            [$user, $outcome] = $this->find($run, $customer);
+            [$user, $outcome, $spared] = $this->find($run, $customer);
             $this->join($run, $user, $customer);
             $this->links->add($run->import, Links::CUSTOMER, $customer->key, $user->id);
 
-            return [$outcome, $this->balance($run, $user, $customer)];
+            return [$outcome, $this->balance($run, $user, $customer), $spared];
         }, Ledger::ATTEMPTS);
 
         match ($outcome) {
@@ -96,34 +103,48 @@ final class CustomerWriter
         if ($credited) {
             $run->created(self::BALANCES);
         }
+        if ($spared) {
+            $run->problem(self::KIND, $customer->key, ProblemReason::Refused, self::OWNERS_ACCOUNT);
+        }
     }
 
     /**
      * The shop's customer of their Telegram account, given what they lack (linked), or a new one (created) — the one the
-     * bot made of them a moment ago, should they arrive meanwhile: the row is the unique index's to decide.
+     * bot made of them a moment ago, should they arrive meanwhile: the row is the unique index's to decide. And whether a
+     * ban or an admin's role was left out for an account linked as the owner (spared()).
      *
-     * @return array{User, 'created'|'linked'}
+     * @return array{User, 'created'|'linked', bool}
      */
     private function find(Run $run, ImportedCustomer $customer): array
     {
         $user = User::query()->where('telegram_id', $customer->telegramId)->first();
         if ($user === null) {
             try {
-                return [$this->db->transaction(fn(): User => $this->make($run, $customer)), 'created'];
+                [$user, $spared] = $this->db->transaction(fn(): array => $this->make($run, $customer));
+
+                return [$user, 'created', $spared];
             } catch (UniqueConstraintViolationException) {
                 // A locking read: MySQL's snapshot of this transaction would not show the row the bot just committed.
                 $user = User::query()->where('telegram_id', $customer->telegramId)->lockForUpdate()->firstOrFail();
             }
         }
+        [$user, $spared] = $this->fill($run, $user, $customer);
 
-        return [$this->fill($run, $user, $customer), 'linked'];
+        return [$user, 'linked', $spared];
     }
 
-    /** A customer the shop does not have: their row as a newcomer's, but the day they joined the other bot. */
-    private function make(Run $run, ImportedCustomer $customer): User
+    /**
+     * A customer the shop does not have: their row as a newcomer's, but the day they joined the other bot.
+     *
+     * @return array{User, bool} The row, and whether a ban or an admin's role was left out (spared())
+     */
+    private function make(Run $run, ImportedCustomer $customer): array
     {
         $profile = Customers::profile($customer->username, $customer->firstName, $customer->lastName);
         $joined = $customer->joinedAt === null ? null : Carbon::instance($customer->joinedAt)->utc();
+        $banned = $customer->banned && $run->choices->on('banned');
+        $admin = $customer->admin && $run->choices->on('admins');
+        $spared = $this->spared($customer, $banned, $admin);
         $user = new User();
         $user->forceFill([
             'telegram_id' => $customer->telegramId,
@@ -132,25 +153,30 @@ final class CustomerWriter
             'last_name' => $profile['last_name'],
             'phone' => $run->choices->on('phones') ? self::mobile($customer->phone) : null,
             'phone_exempt' => $customer->phoneExempt && $run->choices->on('phones'),
-            'status' => $customer->banned && $run->choices->on('banned') ? UserStatus::Banned : UserStatus::Active,
-            'role' => $customer->admin && $run->choices->on('admins') ? UserRole::Admin : UserRole::Customer,
+            'status' => $banned && !$spared ? UserStatus::Banned : UserStatus::Active,
+            'role' => $admin && !$spared ? UserRole::Admin : UserRole::Customer,
             'discount_percent' => $run->choices->on('discounts') ? self::percent($customer->discountPercent) : 0,
             // Bought there: no newcomer here (User::boughtElsewhere()).
             'bought_elsewhere_at' => $customer->boughtBefore ? now() : null,
             'created_at' => $joined !== null && $joined->gte(self::FIRST_DAY) && $joined->lte(now()) ? $joined : now(),
         ])->save();
 
-        return $user;
+        return [$user, $spared];
     }
 
     /**
      * A customer the shop has already: only what their row lacks — a username, a name, a mobile or an excuse from giving
      * one, a discount of their own, that they bought there — and what the owner chose to bring over it: a ban, an admin's
      * role.
+     *
+     * @return array{User, bool} The row, and whether a ban or an admin's role was left out (spared())
      */
-    private function fill(Run $run, User $user, ImportedCustomer $customer): User
+    private function fill(Run $run, User $user, ImportedCustomer $customer): array
     {
         $profile = Customers::profile($customer->username, $customer->firstName, $customer->lastName);
+        $banned = $customer->banned && $run->choices->on('banned') && !$user->isBanned();
+        $admin = $customer->admin && $run->choices->on('admins') && !$user->isAdmin();
+        $spared = $this->spared($customer, $banned, $admin);
         $fill = array_filter([
             'username' => $user->username === null && $profile['username'] !== null ? Text::fit($profile['username'], self::USERNAME_MAX) : null,
             'first_name' => $user->first_name === null ? $profile['first_name'] : null,
@@ -158,15 +184,25 @@ final class CustomerWriter
             'phone' => $user->phone === null && $run->choices->on('phones') ? self::mobile($customer->phone) : null,
             'phone_exempt' => $customer->phoneExempt && $run->choices->on('phones') && !$user->phone_exempt ? true : null,
             'discount_percent' => $user->discount_percent === 0 && $run->choices->on('discounts') && self::percent($customer->discountPercent) > 0 ? self::percent($customer->discountPercent) : null,
-            'status' => $customer->banned && $run->choices->on('banned') && !$user->isBanned() ? UserStatus::Banned : null,
-            'role' => $customer->admin && $run->choices->on('admins') && !$user->isAdmin() ? UserRole::Admin : null,
+            'status' => $banned && !$spared ? UserStatus::Banned : null,
+            'role' => $admin && !$spared ? UserRole::Admin : null,
             'bought_elsewhere_at' => $customer->boughtBefore && !$user->boughtElsewhere() ? now() : null,
         ], static fn(mixed $value): bool => $value !== null);
         if ($fill !== []) {
             $user->forceFill($fill)->save();
         }
 
-        return $user;
+        return [$user, $spared];
+    }
+
+    /**
+     * Whether the ban or the admin's role the import would write (`$banned`, `$admin`) is left out: the account is linked
+     * as the owner in the bot (OwnerLinks), whose standing only the owner decides — UserActions refuses anyone else a ban
+     * of it, and an admin's role there would outlive the link.
+     */
+    private function spared(ImportedCustomer $customer, bool $banned, bool $admin): bool
+    {
+        return ($banned || $admin) && $this->owners->isOwner($customer->telegramId);
     }
 
     /**

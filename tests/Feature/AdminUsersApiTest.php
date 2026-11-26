@@ -9,6 +9,8 @@ use App\Modules\Bots\CurrentBot;
 use App\Modules\Notifications\Models\Notification;
 use App\Modules\Orders\Enums\OrderStatus;
 use App\Modules\Subscriptions\Enums\SubscriptionStatus;
+use App\Modules\Telegram\Admin\OwnerLinks;
+use App\Modules\Users\Enums\UserRole;
 use App\Modules\Users\Enums\UserStatus;
 use App\Modules\Users\Models\User;
 use App\Modules\Users\Models\WalletTransaction;
@@ -215,6 +217,33 @@ final class AdminUsersApiTest extends HttpTestCase
         $this->loginAsAgent($bot);
         self::assertSame('admin', $this->decode($this->putJson("/api/agent/users/{$customer->id}/role", ['role' => 'admin']))['user']['role']);
         self::assertSame(404, $this->putJson("/api/agent/users/{$ali->id}/role", ['role' => 'admin'])->getStatusCode(), "the main shop's customer is not theirs");
+    }
+
+    /**
+     * What one of the shop's admins may not decide from the bot's management the owner decides on the panel: the role of
+     * a Telegram account linked as the owner, and a ban on it or on an agent's own account in their bot.
+     */
+    public function testThePanelDecidesTheOwnersAccountsAndAnAgentsOwnAccount(): void
+    {
+        $this->config(['telegram.username' => 'amo_shop_bot']);
+        $linked = $this->customer(['telegram_id' => 7001, 'first_name' => 'Amir']);
+        $links = $this->service(OwnerLinks::class);
+        $link = $links->link();
+        self::assertNotNull($link);
+        self::assertTrue($links->redeem(substr($link['url'], (int) strpos($link['url'], '=') + 1), 7001));
+
+        $set = $this->putJson("/api/admin/users/{$linked->id}/role", ['role' => 'admin']);
+        self::assertSame([200, 'admin'], [$set->getStatusCode(), $this->decode($set)['user']['role']], 'the role of the owner\'s linked account');
+        $taken = $this->putJson("/api/admin/users/{$linked->id}/role", ['role' => 'customer']);
+        self::assertSame([200, UserRole::Customer], [$taken->getStatusCode(), $linked->refresh()->role]);
+        self::assertSame(200, $this->patchJson("/api/admin/users/{$linked->id}", ['status' => 'banned'])->getStatusCode());
+        self::assertSame(UserStatus::Banned, $linked->refresh()->status, 'and a ban on it');
+
+        $bot = $this->agentBot();
+        $agents = CurrentBot::run($bot, fn(): User => $this->customer(['telegram_id' => self::AGENT_TELEGRAM_ID]));
+        $this->openShop($bot);
+        self::assertSame(200, $this->patchJson("/api/admin/users/{$agents->id}", ['status' => 'banned'])->getStatusCode());
+        self::assertSame(UserStatus::Banned, CurrentBot::run($bot, static fn(): UserStatus => $agents->refresh()->status), 'an agent\'s own account in their bot, the owner working that shop');
     }
 
     public function testTheTableNarrowsToTheBotsAdmins(): void

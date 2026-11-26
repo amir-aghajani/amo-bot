@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Modules\Telegram\Admin\Sections\Bot\Texts;
 
-use App\Modules\Telegram\Admin\AdminSeat;
 use App\Modules\Telegram\Admin\Door\ApiRefusal;
 use App\Modules\Telegram\Admin\Sections\Bot\BotScreens;
 use App\Modules\Telegram\Admin\Ui\Admin;
@@ -37,11 +36,6 @@ final class TextsScreen extends BaseScreen
 
     /** The kinds' names (the panel's KIND_LABELS). */
     public const KINDS = ['message' => 'پیام', 'caption' => 'کپشن عکس', 'popup' => 'اعلان', 'button' => 'دکمه', 'part' => 'بخشی از پیام'];
-
-    public function allows(AdminSeat $seat): bool
-    {
-        return $seat->configures();
-    }
 
     public function show(Admin $admin, array $args): View
     {

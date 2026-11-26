@@ -111,8 +111,8 @@ No review shows on the website until you approve it.
 
 «مدیران سایت», card «مدیریت فروشگاه از وب‌سایت» — the bot's admins work the shop's daily work from the website, with
 their own accounts there: receipts and payments, orders, services, tickets, reviews, customers and the groups they are
-in, referrals and broadcasts. The payment methods, the bot, the report group, the website and who is an admin change
-from the panel alone.
+in, referrals and broadcasts. The payment methods, the bot, the report group, the website and who is an admin are not
+here: they change from the panel, or the bot's management.
 
 - **«کار مدیران از وب‌سایت»** (off) — off, the website takes no admin's work at all.
 - **«ورود امن مدیران»** (on) — an admin's work is taken only from a sign-in with Telegram, Google, or a password or a
@@ -133,9 +133,9 @@ as the extra work does.
 
 **Who the admins are** is the users list's: the customers with the bot's admin role («لیست کاربران» on the card opens
 them; [Customers](Customers.md#the-bots-admins)). An admin signs in to the website with that same account — their
-Telegram, or a way in added to it. The same admins may manage the shop from the bot's private chat too, under switches
-and grants of its own in «تنظیمات ربات › مدیران ربات»: neither card opens anything for the other
-([Managing the shop from the bot](Bot-Management.md#the-shops-admins)). Whatever is granted:
+Telegram, or a way in added to it. The same admins manage the shop from the bot's private chat too, where the role
+alone gives them the owner's access (the agent's, in an agent's bot) and nothing here applies; this card limits the
+website alone ([Managing the shop from the bot](Bot-Management.md#the-shops-admins)). Whatever is granted here:
 
 - an admin never decides about themselves — their own payment, wallet, service or review;
 - an admin never touches an admin's or an agent's account — their groups included —, nor marks a group that holds an

@@ -228,9 +228,9 @@ approved by itself. Attach their deposit to the payment:
 - here: a card payment waiting for its transfer or its receipt offers **«پیوست واریز ریختم»** in its review («فروش ›
   پرداخت‌ها») while Rikhtam is connected — the deposits of the last 20 days no payment took (40 at most), the sum closest
   to the payment's first, each one's difference said («همین مبلغ» on the exact sum); one short of the order's own price
-  is marked «کمتر از مبلغ سفارش» and cannot be picked. Pick one and «پیوست و تایید». It asks for a recent sign-in, as an
-  approval does, and the shop's admins attach only to a payment whose receipt is in review. The bot's management has it
-  as «📎 پیوست واریز ریختم».
+  is marked «کمتر از مبلغ سفارش» and cannot be picked. Pick one and «پیوست و تایید». On the website it asks for a recent
+  sign-in, as an approval does, and the shop's admins attach there only to a payment whose receipt is in review. The
+  bot's management has it as «📎 پیوست واریز ریختم», for its admins too, as for you.
 
 Either way Rikhtam sends that deposit to the shop again, named for the payment, and the shop approves the payment as
 support would — even while «تایید خودکار واریز» is off, since you chose the deposit — when it is one of the shop's card

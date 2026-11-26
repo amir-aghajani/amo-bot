@@ -55,10 +55,12 @@ final class CustomerGroups
 
     /**
      * From the website, a group a shop's admin is in is not switched to «همکار»: their prices would be the agents'
-     * (UserActions::assignGroups() keeps them out of one the same way).
+     * (UserActions::assignGroups() keeps them out of one the same way); from anywhere, an admin does not switch on one
+     * they are in themselves — their own prices (one working the bot's management with the owner's seat too).
      *
      * @param array<string, mixed> $input {name, agent_pricing?}
-     * @throws ActorRefusedException 403 from the website, «همکار» switched on with an admin in the group
+     * @throws ActorRefusedException 403 from the website, «همکار» switched on with an admin in the group; from anywhere,
+     *                               with the admin themselves in it
      * @throws ValidationException
      */
     public function update(CustomerGroup $group, Actor $actor, array $input): CustomerGroup
@@ -66,6 +68,9 @@ final class CustomerGroups
         $fields = self::validate($input, $group);
         if ($actor->isStaff() && $fields['agent_pricing'] && !$group->agent_pricing && $group->users()->where('role', UserRole::Admin)->exists()) {
             throw ActorRefusedException::adminInGroup($group->name);
+        }
+        if ($actor->userId !== null && $fields['agent_pricing'] && !$group->agent_pricing && $group->users()->whereKey($actor->userId)->exists()) {
+            throw ActorRefusedException::ownPrices();
         }
         UniqueName::save($group->fill($fields), self::TAKEN);
 

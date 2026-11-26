@@ -380,7 +380,7 @@ final class ServerMigrations
             'waiting_on' => self::waitingOn($job),
             'reason' => $job->reason,
             'last_failure' => $job->last_failure,
-            'reviewer' => $job->reviewer,
+            'reviewer' => $this->reviewers->present($job->reviewer),
             'reviewer_name' => $names[$job->reviewer ?? ''] ?? null,
             'created_at' => $job->created_at?->toIso8601String(),
             'started_at' => $job->started_at?->toIso8601String(),

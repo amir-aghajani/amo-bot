@@ -35,7 +35,7 @@ use Tests\Support\FakeTelegram;
  * where it is, its premium emoji picked from the library, changed, taken off (asked first) —, an older window's tap
  * acting on that emoji or saying it is gone, and 0.10.2's buttons showing the list; «➕ ایموجی دیگر», a premium emoji
  * picked first — a later page of the library —, its own plain emoji kept or another typed, a refused one asking again;
- * an agent's own shop from their own bot; and a seat that does not set the shop up kept out.
+ * an agent's own shop from their own bot; and a shop's admin setting it up as the owner does.
  */
 final class BotAreaPremiumTextsTest extends BotTestCase
 {
@@ -590,23 +590,21 @@ final class BotAreaPremiumTextsTest extends BotTestCase
         self::assertSame(['enabled' => false, 'items' => []], $this->stored(), 'the main shop\'s map untouched');
     }
 
-    public function testASeatThatDoesNotSetTheShopUpIsKeptOut(): void
+    public function testAShopsAdminSetsItUpAsTheOwnerDoes(): void
     {
         $this->service(PremiumEmojiStatus::class)->record(true);
         $this->customer(['telegram_id' => 7100, 'role' => UserRole::Admin]);
 
         $this->send($this->tap(Nav::to('tx'), chat: 7100));
-        self::assertNotContains(Nav::to('txp'), $this->offered());
+        self::assertContains(Nav::to('txp'), $this->offered());
 
         $this->send($this->tap(Nav::to('txp'), chat: 7100));
-        self::assertStringContainsString(Words::OLD_BUTTON, $this->said()[0], 'the home, as an older window\'s button');
-        self::assertStringNotContainsString(PremiumTextsScreen::TITLE, $this->said()[0]);
+        self::assertStringContainsString(PremiumTextsScreen::TITLE, $this->said()[0], 'its screen, not the home');
 
         $this->send($this->tap(Nav::to('txp', 'on', 1), chat: 7100));
+        self::assertTrue($this->stored()['enabled'], 'switched on through the panel\'s route');
         $this->send($this->tap(Nav::to('txp', 'chk'), chat: 7100));
-        $this->send($this->tap(Nav::to('txp', 'to', PremiumTextsScreen::token('✅'), '111'), chat: 7100));
-        self::assertSame(['enabled' => false, 'items' => []], $this->stored(), 'a forged tap changes nothing');
-        self::assertNull($this->probe());
+        self::assertNotNull($this->probe(), 'the check, sent to their own chat');
     }
 
     /**

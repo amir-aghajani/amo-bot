@@ -135,7 +135,8 @@ final class UserManagementTest extends BotTestCase
     {
         $this->send($this->press("um:r:{$this->ali->id}"));
         self::assertSame(['editMessageText', 'answerCallbackQuery'], $this->calls());
-        self::assertStringEndsWith('❓ <b>مدیر ربات شود؟</b> مدیرها دکمه‌های این گروه را دارند — رسیدها، تیکت‌ها، نمایندگی و همین کارت — و دستورهای مدیریتی ربات را.', $this->params(0)['text']);
+        self::assertStringContainsString('❓ <b>مدیر ربات شود؟</b> مدیر ربات با «⚙️ مدیریت» در ربات', $this->params(0)['text']);
+        self::assertStringContainsString('با دسترسی مالک', $this->params(0)['text'], 'what it hands over: the owner\'s seat in the bot\'s management');
         self::assertSame(["um:o:{$this->ali->id}", "um:rs:{$this->ali->id}:admin"], $this->callbacks(0), '«انصراف», then «بله» on the right');
         self::assertSame(UserRole::Customer, $this->ali->refresh()->role, 'asked, not made');
 
@@ -284,7 +285,7 @@ final class UserManagementTest extends BotTestCase
         $agent = $this->agent(overrides: ['telegram_id' => 9292, 'username' => 'agent_reza']);
         $this->send($this->groupText('/manage @agent_reza'));
         self::assertStringContainsString("\n🎖 نقش: مشتری · نماینده\n", $this->params(0)['text']);
-        self::assertStringEndsWith('🔒 حساب نماینده است؛ فقط از پنل تغییر می‌کند.', $this->params(0)['text']);
+        self::assertStringEndsWith('🔒 حساب نماینده است؛ فقط از پنل یا «⚙️ مدیریت» ربات تغییر می‌کند.', $this->params(0)['text']);
 
         $this->send($this->press("um:bs:{$agent->id}:banned"));
         self::assertSame(ActorRefusedException::AGENT_ACCOUNT, $this->popup());

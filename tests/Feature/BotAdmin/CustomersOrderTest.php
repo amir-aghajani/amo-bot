@@ -4,12 +4,12 @@ declare(strict_types=1);
 
 namespace Tests\Feature\BotAdmin;
 
+use App\Modules\Auth\Services\Reviewers;
 use App\Modules\Catalog\Models\Plan;
 use App\Modules\Orders\Enums\OrderStatus;
 use App\Modules\Orders\Models\Order;
 use App\Modules\Providers\Models\Server;
 use App\Modules\Subscriptions\Models\Subscription;
-use App\Modules\Telegram\Admin\Door\BotAdminDoor;
 use App\Modules\Telegram\Admin\Ui\Icons;
 use App\Modules\Telegram\Admin\Ui\Nav;
 use App\Modules\Users\Enums\UserRole;
@@ -20,8 +20,8 @@ use Tests\BotTestCase;
 /**
  * «➕ افزودن سفارش» from a customer's page in the bot: the panel's dialog as a wizard — a plan (its only open server picked
  * by itself) or support's own numbers, the payment and its amount —, the summary with the optional name and note offered
- * on it and the wallet as the order leaves it, and one order made under its key however often «✔️» is pressed; the
- * `manual_orders` grant for a shop's admin.
+ * on it and the wallet as the order leaves it, and one order made under its key however often «✔️» is pressed — by a
+ * shop's admin too, under their own name.
  */
 final class CustomersOrderTest extends BotTestCase
 {
@@ -161,15 +161,14 @@ final class CustomersOrderTest extends BotTestCase
         self::assertSame('20000.00', $this->ali->balance());
     }
 
-    public function testAShopsAdminOrdersByHandOnlyWithTheGrant(): void
+    public function testAShopsAdminOrdersByHandUnderTheirOwnName(): void
     {
-        $this->customer(['telegram_id' => self::STAFF, 'first_name' => 'Staff', 'role' => UserRole::Admin]);
+        $staff = $this->customer(['telegram_id' => self::STAFF, 'first_name' => 'Staff', 'role' => UserRole::Admin]);
         $id = $this->ali->id;
 
         $this->send($this->tap(Nav::to('usv', 'show', $id), chat: self::STAFF));
-        self::assertNotContains(Nav::to('uso', 'new', $id), $this->window());
+        self::assertContains(Nav::to('uso', 'new', $id), $this->window(), 'no grant asked');
 
-        // A forged way in: the door says no when the order is sent.
         $this->send($this->tap(Nav::to('uso', 'new', $id), chat: self::STAFF));
         $this->send($this->tap(Nav::to('uso', 'k', $id, 'plan'), chat: self::STAFF));
         $this->send($this->tap(Nav::to('uso', 'p', $id, $this->plan->id), chat: self::STAFF));
@@ -177,14 +176,8 @@ final class CustomersOrderTest extends BotTestCase
         $this->send($this->tap(Nav::to('uso', 'nskip', $id), chat: self::STAFF));
         $this->send($this->tap(Nav::to('uso', 'ntskip', $id), chat: self::STAFF));
         $this->send($this->tap(Nav::to('uso', 'make', $id), chat: self::STAFF));
-        self::assertSame(BotAdminDoor::NOT_GRANTED, $this->popup());
-        self::assertSame(0, Order::query()->count());
-
-        $this->botSettings('bot_admins', ['bot_admins_grant_manual_orders' => true]);
-        $this->send($this->tap(Nav::to('usv', 'show', $id), chat: self::STAFF));
-        self::assertContains(Nav::to('uso', 'new', $id), $this->window(), 'granted');
-        $this->send($this->tap(Nav::to('uso', 'make', $id), chat: self::STAFF));
-        self::assertSame(1, Order::query()->count(), 'the draft kept, sent once granted');
+        $order = Order::query()->sole();
+        self::assertSame([$id, Reviewers::forAdmin($staff)], [$order->user_id, $order->created_by], 'made through the panel\'s route, under their own name');
     }
 
     /** @return list<string> The window's buttons, as the last screen drew them. */

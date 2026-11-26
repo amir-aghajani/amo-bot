@@ -62,9 +62,9 @@ services, asked a gateway about a payment that was then held («🎧 استعل�
 The buttons and replies work for **the bot's admins** alone — customers given the role on «کاربران», recognised by the
 Telegram account that pressed; being in the group is not enough ([Customers](Customers.md#the-bots-admins)). Anyone else
 is told so in a popup. They do what the panel does — the same rules, the customer told the same way, whoever decided
-first standing; a decision made elsewhere takes the buttons off. The group's buttons work for them whatever
-«مدیران ربات» says; that switch is about the bot's private chat, where they may manage much more
-([Managing the shop from the bot](Bot-Management.md)).
+first standing; a decision made elsewhere takes the buttons off. The group keeps its own rules for them, below; in the
+bot's private chat the same admins manage much more, with the owner's access in the main bot
+([Managing the shop from the bot](Bot-Management.md#the-shops-admins)).
 
 - **A receipt** — «✅ تایید» approves it and delivers the order; a delivery that fails says why in a popup, and «خطاها»
   hears it with its retry. «❌ رد» offers «❌ رد بدون توضیح», «✍️ رد با نوشتن دلیل» and «⬅️ بازگشت»: with a reason, the bot
@@ -128,7 +128,8 @@ back to the front:
   signed in. «🔓 خاموش کردن ورود دو مرحله‌ای» (they are told) and «🚪 خروج از همه دستگاه‌ها» (nobody is told), each asked
   first.
 - **«🎖 مدیر ربات شود» / «🎖 برداشتن نقش مدیر»** — the bot's admin role, and **«⛔️ مسدود شود» / «✅ رفع مسدودی»** — a
-  ban, each asked again first ([the bot's admins](Customers.md#the-bots-admins), [Banning](Customers.md#banning)).
+  ban, each asked again first — making an admin says what the role hands over (the shop's management from the bot),
+  its yes red ([the bot's admins](Customers.md#the-bots-admins), [Banning](Customers.md#banning)).
 - **«✉️ ارسال پیام»** — the bot asks for the message; your reply to it is sent to the customer from support, as the
   panel's «ارسال پیام» sends it ([Writing to a customer](Customers.md#writing-to-a-customer)), the front comes back,
   and what came of it is said under your reply — «✅ پیام در تلگرام به او رسید.», sent by email instead, or that they
@@ -150,8 +151,9 @@ change as well, and the log keeps who made it. From the group an admin never cha
 agent's** — the card shows them with «🔒» and why, and only what reads: services, wallet, history, website sign-in —,
 never bans an admin (take the role first), puts one in a «همکار» group, changes an admin's own discount or website
 sign-in, or makes an admin of someone with their own discount or in a «همکار» group (take those off first, or make
-them an admin from the panel): those are the panel's. `/manage` works in the connected report group alone — written in another group it does
-nothing — and, like the buttons, for the bot's admins alone. An agent's group manages that shop's customers only.
+them an admin from the panel or the bot's management): those are the panel's, and the bot's management's
+([Managing the shop from the bot](Bot-Management.md#the-shops-admins)). `/manage` works in the connected report group
+alone — written in another group it does nothing — and, like the buttons, for the bot's admins alone. An agent's group manages that shop's customers only.
 
 **Write as yourself**: a message sent anonymously, as the group ("Remain anonymous"), is refused — the bot cannot tell
 who wrote it.

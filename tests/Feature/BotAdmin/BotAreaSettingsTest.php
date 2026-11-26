@@ -18,7 +18,7 @@ use Tests\BotTestCase;
  * «🤖 تنظیمات ربات» from the bot (Sections\Bot\Settings): every card of the panel's page on its menu, a switch flipped at a
  * tap and a value typed, each saved through the panel's own route and refused by its rules; the cards' own ways — the
  * amounts with prices, a method switched off taking automatic renewal's with it, a plan picked, the QR picture sent —;
- * and none of it for a shop's admin.
+ * and all of it for a shop's admin, as for the owner.
  */
 final class BotAreaSettingsTest extends BotTestCase
 {
@@ -39,7 +39,7 @@ final class BotAreaSettingsTest extends BotTestCase
         foreach (['bsg', 'bsn', 'bsw', 'bst', 'bsp', 'bsq', 'bsr', 'bsx', 'bsm', 'bse', 'bsv', 'bsc'] as $card) {
             self::assertContains(Nav::to($card), $this->callbacks(0), $card);
         }
-        foreach (['ch', 'rg', 'ba', 'bsf', 'dcs', 'gcs', 'whs', 'cbs', 'lts', 'tss', 'css'] as $elsewhere) {
+        foreach (['ch', 'rg', 'bsf', 'dcs', 'gcs', 'whs', 'cbs', 'lts', 'tss', 'css'] as $elsewhere) {
             self::assertNotContains(Nav::to($elsewhere, 'show', 'from.bs'), $this->callbacks(0), "{$elsewhere}: reached from its own feature alone");
         }
         self::assertStringContainsString('کانال‌های اجباری و گروه گزارش‌ها', $this->said()[0], 'the folded help says where they went');
@@ -109,10 +109,6 @@ final class BotAreaSettingsTest extends BotTestCase
         $this->send($this->tap(Nav::to('rgt'), chat: self::OWNER));
         self::assertContains(Nav::to('rg', 'v'), $this->callbacks(0));
         $this->send($this->tap(Nav::to('rg', 'v'), chat: self::OWNER));
-        self::assertContains(Nav::to('bs'), $this->callbacks(0));
-
-        $this->send($this->tap(Nav::to('ba', 'show', 'from.bs'), chat: self::OWNER));
-        self::assertStringContainsString('مدیران ربات', $this->said()[0]);
         self::assertContains(Nav::to('bs'), $this->callbacks(0));
     }
 
@@ -290,14 +286,17 @@ final class BotAreaSettingsTest extends BotTestCase
         self::assertNull($this->service(Settings::class)->get(QrBackground::KEY));
     }
 
-    public function testAShopsAdminHasNoneOfIt(): void
+    public function testAShopsAdminTurnsTheBotOffAndOnAsTheOwnerDoes(): void
     {
         $this->customer(['telegram_id' => 7100, 'role' => UserRole::Admin]);
 
         $this->send($this->tap(Nav::to('bs'), chat: 7100));
-        self::assertStringContainsString('مدیریت فروشگاه', $this->said()[0], 'a screen it may not open is the home');
+        self::assertStringContainsString('تنظیمات ربات', $this->said()[0], 'the menu, not the home');
+        self::assertContains(Nav::to('bsg'), $this->callbacks(0));
         $this->send($this->tap(Nav::to('bsg', 'e', 0, 0, 'y'), chat: 7100));
-        self::assertTrue($this->service(BotSettings::class)->enabled(), 'nothing changed');
+        self::assertFalse($this->service(BotSettings::class)->enabled(), 'off, through the panel\'s route');
+        $this->send($this->tap(Nav::to('bsg', 'e', 0, 1), chat: 7100));
+        self::assertTrue($this->service(BotSettings::class)->enabled(), 'and on again');
     }
 
     /** @return list<string> The buttons of the window as the bot last drew it. */

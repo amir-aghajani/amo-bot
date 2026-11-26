@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Modules\Telegram\Admin\Sections\Catalog;
 
 use App\Modules\Settings\Services\BotSettingsScreen;
-use App\Modules\Telegram\Admin\AdminSeat;
 use App\Modules\Telegram\Admin\Ui\Fmt;
 use App\Modules\Telegram\Admin\Ui\Icons;
 use App\Modules\Telegram\Admin\Ui\Settings\BotGroupSource;
@@ -26,11 +25,6 @@ final class TestSettingsScreen extends SettingsScreen
     public const TITLE = Icons::SETTINGS . ' قوانین اکانت تست';
 
     public function __construct(private readonly BotSettingsScreen $settings) {}
-
-    public function allows(AdminSeat $seat): bool
-    {
-        return $seat->configures();
-    }
 
     protected function screen(): string
     {
