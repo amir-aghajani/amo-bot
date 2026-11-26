@@ -25,7 +25,9 @@ use Illuminate\Support\Carbon;
  * @property string|null $max_discount The most Toman a percent takes off; null no cap
  * @property string|null $min_amount The least an order must come to after the automatic discount; null none
  * @property list<string>|null $order_types OrderType values; null every kind a customer buys for themselves
- * @property list<int>|null $plan_ids
+ * @property list<int>|null $plan_ids The plans it names one by one
+ * @property list<int>|null $category_ids The plan categories it names: every plan filed under one, those filed there later
+ *                                        too (takesPlan()); with `plan_ids`, null for every plan
  * @property list<int>|null $server_ids
  * @property bool $first_purchase_only Only for a customer who has bought nothing yet (Order::boughtBy()) — asked again as its order is delivered
  * @property Carbon|null $starts_at
@@ -54,6 +56,7 @@ class DiscountCode extends Model
         'min_amount',
         'order_types',
         'plan_ids',
+        'category_ids',
         'server_ids',
         'first_purchase_only',
         'starts_at',
@@ -71,6 +74,7 @@ class DiscountCode extends Model
         'min_amount' => 'decimal:2',
         'order_types' => 'array',
         'plan_ids' => 'array',
+        'category_ids' => 'array',
         'server_ids' => 'array',
         'first_purchase_only' => 'boolean',
         'starts_at' => 'datetime',

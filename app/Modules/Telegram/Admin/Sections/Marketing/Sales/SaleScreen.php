@@ -69,7 +69,7 @@ final class SaleScreen extends BaseScreen
                 'وضعیت' => Fmt::e(Marketing::state($row['state'] ?? null)),
                 'تخفیف' => Fmt::percent((int) ($row['percent'] ?? 0)),
                 'سفارش‌ها' => Fmt::e(Marketing::kinds($row['order_types'] ?? null)),
-                'پلن‌ها' => Fmt::e(is_array($row['plans'] ?? null) ? Marketing::named('پلن', $row['plans']) : 'همه پلن‌ها'),
+                'پلن‌ها' => Fmt::e(Marketing::reach($row['plans'] ?? null, $row['categories'] ?? null) ?? 'همه پلن‌ها'),
                 'زمان' => Fmt::e(Marketing::window($row['starts_at'] ?? null, $row['ends_at'] ?? null)),
             ])
             ->row($enabled ? null : Button::to(Words::ACTIVATE, self::ID, 'on', $id)->success(), Button::to(Words::EDIT, SaleForm::ID, 'edit', $id)->primary())

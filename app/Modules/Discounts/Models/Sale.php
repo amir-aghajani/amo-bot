@@ -18,7 +18,9 @@ use Illuminate\Support\Carbon;
  * @property string $name What the customer reads: «فروش ویژه نوروز»
  * @property int $percent 1–100
  * @property list<string>|null $order_types
- * @property list<int>|null $plan_ids
+ * @property list<int>|null $plan_ids The plans it names one by one
+ * @property list<int>|null $category_ids The plan categories it names: every plan filed under one, those filed there later
+ *                                        too (takesPlan()); with `plan_ids`, null for every plan
  * @property Carbon|null $starts_at
  * @property Carbon|null $ends_at
  * @property bool $enabled
@@ -32,13 +34,14 @@ class Sale extends Model
 
     protected $table = 'sales';
 
-    protected $fillable = ['name', 'percent', 'order_types', 'plan_ids', 'starts_at', 'ends_at', 'enabled'];
+    protected $fillable = ['name', 'percent', 'order_types', 'plan_ids', 'category_ids', 'starts_at', 'ends_at', 'enabled'];
 
     /** @var array<string, string> */
     protected $casts = [
         'percent' => 'integer',
         'order_types' => 'array',
         'plan_ids' => 'array',
+        'category_ids' => 'array',
         'starts_at' => 'datetime',
         'ends_at' => 'datetime',
         'enabled' => 'boolean',

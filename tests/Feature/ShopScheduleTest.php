@@ -22,6 +22,7 @@ use App\Modules\Subscriptions\Tasks\NextPeriodTask;
 use App\Modules\Subscriptions\Tasks\SendRemindersTask;
 use App\Modules\Subscriptions\Tasks\SyncSubscriptionsTask;
 use App\Modules\Support\Tasks\PruneTicketsTask;
+use App\Modules\Telegram\Tasks\DailyReportTask;
 use App\Modules\Telegram\Tasks\PruneUpdatesTask;
 use App\Modules\Telegram\Tasks\SendBroadcastsTask;
 use App\Modules\Telegram\Tasks\SendReportsTask;
@@ -29,8 +30,8 @@ use App\Modules\Updates\Tasks\CheckReleasesTask;
 use Tests\DatabaseTestCase;
 
 /**
- * The schedule (bootstrap/schedule.php) as the container builds it: every task at its interval, in the order a run takes
- * them — a shop's work in every bot's shop, the servers' work once across them, the reminders and the clean-up of
+ * The schedule (bootstrap/schedule.php) as the container builds it: every task at its interval and from its start, in the
+ * order a run takes them — a shop's work in every bot's shop, the servers' work once across them, the reminders and the clean-up of
  * ended services right after the sync they read, the report groups last — and the whole of it run together on a shop
  * with something in it, no task failing.
  */
@@ -38,30 +39,31 @@ final class ShopScheduleTest extends DatabaseTestCase
 {
     public function testTheShopRunsEachTaskAtItsIntervalInTheOrderARunTakesThem(): void
     {
-        $tasks = array_map(static fn(array $task): array => [$task['interval'] / 60, $task['eachBot'] ? 'each shop' : 'across shops'], $this->service(Scheduler::class)->tasks());
+        $tasks = array_map(static fn(array $task): array => [$task['interval'] / 60, $task['eachBot'] ? 'each shop' : 'across shops', Scheduler::clock($task['start'])], $this->service(Scheduler::class)->tasks());
 
         self::assertSame([
-            AutoApproveReceiptsTask::class => [1, 'each shop'],
-            OnlinePaymentsTask::class => [1, 'each shop'],
-            ResumeDeliveriesTask::class => [1, 'each shop'],
-            ExpireOrdersTask::class => [10, 'each shop'],
-            SendBroadcastsTask::class => [1, 'each shop'],
-            AutoRenewTask::class => [30, 'each shop'],
-            NextPeriodTask::class => [10, 'each shop'],
-            GrantsTask::class => [1, 'across shops'],
-            MigrationsTask::class => [1, 'across shops'],
-            SyncSubscriptionsTask::class => [15, 'across shops'],
-            SendRemindersTask::class => [15, 'each shop'],
-            CleanupServicesTask::class => [15, 'across shops'],
-            AgencyStandingTask::class => [60, 'across shops'],
-            PruneUpdatesTask::class => [60, 'across shops'],
-            PruneAccountsTask::class => [60, 'across shops'],
-            PruneTicketsTask::class => [60, 'each shop'],
-            NightlyDrawTask::class => [10, 'each shop'],
-            SendBackupsTask::class => [24 * 60, 'each shop'],
-            PruneImportsTask::class => [24 * 60, 'across shops'],
-            CheckReleasesTask::class => [24 * 60, 'across shops'],
-            SendReportsTask::class => [1, 'each shop'],
+            AutoApproveReceiptsTask::class => [1, 'each shop', '00:00'],
+            OnlinePaymentsTask::class => [1, 'each shop', '00:00'],
+            ResumeDeliveriesTask::class => [1, 'each shop', '00:00'],
+            ExpireOrdersTask::class => [10, 'each shop', '00:00'],
+            SendBroadcastsTask::class => [1, 'each shop', '00:00'],
+            AutoRenewTask::class => [30, 'each shop', '00:00'],
+            NextPeriodTask::class => [10, 'each shop', '00:00'],
+            GrantsTask::class => [1, 'across shops', '00:00'],
+            MigrationsTask::class => [1, 'across shops', '00:00'],
+            SyncSubscriptionsTask::class => [15, 'across shops', '00:05'],
+            SendRemindersTask::class => [15, 'each shop', '00:05'],
+            CleanupServicesTask::class => [15, 'across shops', '00:05'],
+            AgencyStandingTask::class => [60, 'across shops', '00:10'],
+            PruneUpdatesTask::class => [60, 'across shops', '00:25'],
+            PruneAccountsTask::class => [60, 'across shops', '00:40'],
+            PruneTicketsTask::class => [60, 'each shop', '00:55'],
+            NightlyDrawTask::class => [10, 'each shop', '00:00'],
+            SendBackupsTask::class => [24 * 60, 'each shop', '00:00'],
+            PruneImportsTask::class => [24 * 60, 'across shops', '03:00'],
+            DailyReportTask::class => [10, 'each shop', '00:00'],
+            CheckReleasesTask::class => [24 * 60, 'across shops', '03:30'],
+            SendReportsTask::class => [1, 'each shop', '00:00'],
         ], $tasks);
     }
 

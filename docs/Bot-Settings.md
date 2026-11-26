@@ -413,8 +413,9 @@ payment, a renewal's own share, «فقط اولین پرداخت هر زیرمج
 
 ## The report group
 
-«گروه گزارش‌ها» — connecting the shop's Telegram group, and «بخش‌های گزارش», a switch per topic, all on by default
-([Report group](Telegram-Group.md)).
+«گروه گزارش‌ها» — connecting the shop's Telegram group, and «بخش‌های گزارش», a switch per topic, all on by default, with
+«ساعت گزارش روزانه» (0 to 23, 0 by default) under «گزارش روزانه»'s switch, held while it is off
+([Report group](Telegram-Group.md#the-daily-report)).
 
 ## The QR card
 
@@ -450,7 +451,11 @@ grants, and taking the role away — or a ban — ends it at their next message.
 
 Their decisions keep their own name, and none is about their own account — their own wallet, payment, order, prices or
 service is another admin's, or yours —, but two admins can do those things for each other: give the role only to people
-you trust. Your Telegram accounts linked as the owner, and the panel's login, are yours alone. In the bot,
+you trust. Your Telegram accounts linked as the owner, the panel's login, and what would hand over the main bot or your
+seat — the site's address, the main bot's token, username and webhook secret, the Bot API's address, the database —
+are yours alone, and so are the panels' session settings and rolling an update back; a backup made before 0.11.0 is
+yours, or an agent's in their own shop
+([Managing the shop from the bot](Bot-Management.md#what-an-admin-may-not-do)). In the bot,
 «⚙️ تنظیمات › 🛡 مدیران ربات» lists the admins and makes another. The shop's website lets them in apart, with grants of
 its own ([Website](Website.md#the-shops-admins)).
 

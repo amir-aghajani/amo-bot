@@ -49,7 +49,7 @@ final class SettingsIndex
         '/bot-settings/referral' => ['bsf', 'قوانین زیرمجموعه‌گیری', ['فروش', 'زیرمجموعه‌گیری'], ['referral', 'invite', 'affiliate', 'commission', 'زیرمجموعه', 'رفرال', 'معرف', 'دعوت', 'لینک دعوت', 'پورسانت', 'کمیسیون']],
         '/bot-settings/reminders' => ['bsm', 'یادآوری به مشتری', [...self::SETTINGS_MENU, 'تنظیمات ربات'], ['reminder', 'notification', 'expire', 'یادآوری', 'اعلان', 'هشدار', 'انقضا', 'اتمام حجم', 'پایان سرویس']],
         '/bot-settings/renewal' => ['bsr', 'تمدید سرویس', [...self::SETTINGS_MENU, 'تنظیمات ربات'], ['renew', 'renewal', 'auto renew', 'تمدید', 'تمدید خودکار', 'reset', 'ریست']],
-        '/bot-settings/reports' => ['rg', 'گروه گزارش‌ها', ['ربات'], ['report', 'reports', 'group', 'topic', 'topics', 'log', 'گزارش', 'گروه', 'تاپیک', 'لاگ', 'گروه ادمین', 'خریدها', 'تمدیدها', 'اکانت‌های تست', 'حذف سرویس‌ها', 'شارژ کیف پول', 'رسیدها', 'کاربران جدید', 'خطاها', 'تیکت‌ها', 'نظرات', 'پشتیبان‌گیری']],
+        '/bot-settings/reports' => ['rg', 'گروه گزارش‌ها', ['ربات'], ['report', 'reports', 'group', 'topic', 'topics', 'log', 'گزارش', 'گروه', 'تاپیک', 'لاگ', 'گروه ادمین', 'خریدها', 'تمدیدها', 'اکانت‌های تست', 'حذف سرویس‌ها', 'شارژ کیف پول', 'رسیدها', 'کاربران جدید', 'خطاها', 'تیکت‌ها', 'نظرات', 'پشتیبان‌گیری', 'daily report', 'گزارش روزانه']],
         '/bot-settings/service-claims' => ['bsc', 'افزودن سرویس با لینک', [...self::SETTINGS_MENU, 'تنظیمات ربات'], ['claim', 'subscription link', 'config', 'لینک', 'لینک اشتراک', 'کانفیگ', 'افزودن سرویس', 'سرویس قدیمی']],
         '/bot-settings/service-transfers' => ['bsv', 'انتقال سرویس', [...self::SETTINGS_MENU, 'تنظیمات ربات'], ['transfer', 'انتقال', 'انتقال سرویس', 'دادن سرویس']],
         '/bot-settings/wallet' => ['bsw', 'کیف پول', [...self::SETTINGS_MENU, 'تنظیمات ربات'], ['wallet', 'balance', 'top up', 'topup', 'charge', 'کیف پول', 'موجودی', 'شارژ', 'افزایش موجودی', 'حداقل شارژ']],
@@ -78,7 +78,7 @@ final class SettingsIndex
         '/settings/import' => ['ppi', 'انتقال از ربات دیگر', [...self::SETTINGS_MENU, 'تنظیمات پنل'], ['import', 'migrate', 'migration', 'faoxima', 'mirza', 'mirzabot', 'ایمپورت', 'وارد کردن', 'مهاجرت', 'انتقال ربات', 'انتقال از ربات', 'ربات قبلی', 'ربات دیگر', 'ربات میرزا', 'میرزا', 'فاکسیما']],
         '/settings/login' => ['ppl', 'ورود به پنل', [...self::SETTINGS_MENU, 'تنظیمات پنل'], ['login', 'password', 'username', 'admin', 'change password', 'رمز', 'رمز عبور', 'پسورد', 'نام کاربری', 'ورود', 'لاگین', 'تغییر رمز', 'telegram owner', 'manage from bot', 'مدیریت از ربات', 'حساب تلگرام مالک', 'تلگرام مالک', 'وصل کردن تلگرام']],
         '/settings/mail' => ['ppm', 'ایمیل', [...self::SETTINGS_MENU, 'تنظیمات پنل'], ['mail', 'email', 'e-mail', 'smtp', 'resend', 'sendmail', 'ایمیل', 'میل', 'ارسال ایمیل']],
-        '/settings/schedule' => ['ppj', 'زمان‌بندی کارها', [...self::SETTINGS_MENU, 'تنظیمات پنل'], ['cron', 'cron job', 'crontab', 'schedule', 'scheduler', 'timer', 'task', 'tasks', 'job', 'کرون', 'کرون جاب', 'زمان‌بند', 'زمان‌بندی', 'تایمر', 'کارها', 'تایید خودکار رسیدها', 'تمدید خودکار', 'همگام‌سازی سرویس‌ها', 'یادآوری‌ها', 'ارسال پشتیبان به گروه', 'بررسی نسخه تازه', 'ارسال گزارش‌ها', 'مهلت سفارش پرداخت‌نشده']],
+        '/settings/schedule' => ['ppj', 'زمان‌بندی کارها', [...self::SETTINGS_MENU, 'تنظیمات پنل'], ['cron', 'cron job', 'crontab', 'schedule', 'scheduler', 'timer', 'task', 'tasks', 'job', 'کرون', 'کرون جاب', 'زمان‌بند', 'زمان‌بندی', 'تایمر', 'کارها', 'تایید خودکار رسیدها', 'تمدید خودکار', 'همگام‌سازی سرویس‌ها', 'یادآوری‌ها', 'ارسال پشتیبان به گروه', 'پاک‌سازی انتقال‌ها', 'بررسی نسخه تازه', 'ارسال گزارش‌ها', 'مهلت سفارش پرداخت‌نشده', 'ساعت شروع', 'گزارش روزانه']],
         '/settings/sms' => ['ppn', 'پیامک', [...self::SETTINGS_MENU, 'تنظیمات پنل'], ['sms', 'otp', 'ippanel', 'pattern', 'پیامک', 'اس ام اس', 'ای پی پنل', 'آی پی پنل', 'کد ورود', 'کد یکبار مصرف', 'پترن', 'الگو', 'سامانه پیامک', 'شماره موبایل', 'اعتبار', 'credit']],
         '/settings/telegram' => ['ppt', 'ربات تلگرام', [...self::SETTINGS_MENU, 'تنظیمات پنل'], ['token', 'bot token', 'botfather', 'webhook', 'polling', 'bot', 'telegram', 'توکن', 'بات فادر', 'وبهوک', 'وب هوک', 'پولینگ', 'بات', 'تلگرام']],
         '/settings/update' => ['ppu', 'به‌روزرسانی', [...self::SETTINGS_MENU, 'تنظیمات پنل'], ['update', 'upgrade', 'version', 'release', 'github', 'rollback', 'آپدیت', 'ورژن', 'نسخه', 'ارتقا', 'گیت هاب', 'نسخه جدید']],
@@ -207,6 +207,7 @@ final class SettingsIndex
         ],
         '/bot-settings/reports' => [
             'بخش-های-گزارش' => ['s' => 'rgt'],
+            'daily_report_hour' => ['s' => 'rgt', 'f' => 'daily_report_hour'],
         ],
         '/bot-settings/service-claims' => [
             'مشتری-ها-بتوانند-سرویس-را-با-لینکش-اضافه-کنند' => ['f' => 'claim_enabled'],

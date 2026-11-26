@@ -10,8 +10,10 @@ use App\Modules\Discounts\Enums\DiscountSource;
 use App\Modules\Discounts\Exceptions\DiscountInUseException;
 use App\Modules\Discounts\Models\DiscountCode;
 use App\Modules\Discounts\Models\Sale;
+use App\Modules\Discounts\Services\DiscountForm;
 use App\Modules\Orders\Enums\OrderStatus;
 use App\Modules\Orders\Models\Order;
+use App\Modules\Orders\Services\Pricing;
 use App\Support\LocalTime;
 use Illuminate\Support\Carbon;
 use Tests\HttpTestCase;
@@ -73,6 +75,7 @@ final class AdminDiscountsApiTest extends HttpTestCase
             'min_amount' => '100000.00',
             'order_types' => ['purchase', 'renewal'],
             'plans' => [['id' => $plan->id, 'name' => 'یک‌ماهه']],
+            'categories' => null,
             'servers' => [['id' => $server->id, 'name' => 'آلمان']],
             'first_purchase_only' => true,
             'starts_at' => '2026-10-08T08:30:00+00:00',
@@ -132,6 +135,7 @@ final class AdminDiscountsApiTest extends HttpTestCase
             'min_amount' => '1.5',
             'order_types' => ['wallet_topup'],
             'plan_ids' => [999],
+            'category_ids' => ['monthly'],
             'first_purchase_only' => 'maybe',
             'starts_at' => '2026-10-10T12:00',
             'ends_at' => '2026-10-09T12:00',
@@ -140,13 +144,42 @@ final class AdminDiscountsApiTest extends HttpTestCase
         ]);
 
         self::assertSame(422, $refused->getStatusCode());
-        self::assertSame(['code', 'value', 'min_amount', 'order_types', 'plan_ids', 'first_purchase_only', 'ends_at', 'max_uses'], array_keys($this->decode($refused)['errors']));
+        self::assertSame(['code', 'value', 'min_amount', 'order_types', 'plan_ids', 'category_ids', 'first_purchase_only', 'ends_at', 'max_uses'], array_keys($this->decode($refused)['errors']));
         self::assertSame(1, DiscountCode::query()->count());
 
         $fixed = $this->postJson('/api/admin/discount-codes', ['code' => 'FIX', 'type' => 'fixed', 'value' => null, 'first_purchase_only' => false, 'enabled' => true]);
         self::assertSame(['value'], array_keys($this->decode($fixed)['errors']), "a fixed code's Toman");
         $free = $this->decode($this->postJson('/api/admin/discount-codes', ['code' => 'FREE', 'type' => 'free', 'first_purchase_only' => false, 'enabled' => true, 'order_types' => ['purchase', 'renewal', 'extra_traffic', 'extra_time', 'extra_devices']]))['code'];
         self::assertSame([null, null], [$free['value'], $free['order_types']], 'every kind named is every kind');
+    }
+
+    public function testACodeNamesCategoriesOfItsShopBesidePlansAndListsThemByName(): void
+    {
+        $monthly = $this->category(['name' => 'ماهانه']);
+        $weekly = $this->category(['name' => 'هفتگی']);
+        $plan = $this->plan(['name' => 'ویژه']);
+        $form = ['code' => 'CATS', 'type' => 'percent', 'value' => 10, 'first_purchase_only' => false, 'enabled' => true];
+
+        $made = $this->decode($this->postJson('/api/admin/discount-codes', $form + ['category_ids' => [$weekly->id, $monthly->id, $weekly->id], 'plan_ids' => [$plan->id]]))['code'];
+
+        self::assertSame([['id' => $monthly->id, 'name' => 'ماهانه'], ['id' => $weekly->id, 'name' => 'هفتگی']], $made['categories'], 'each once, in id order');
+        self::assertSame([['id' => $plan->id, 'name' => 'ویژه']], $made['plans']);
+        self::assertSame([$monthly->id, $weekly->id], DiscountCode::query()->findOrFail($made['id'])->category_ids);
+
+        $alone = $this->decode($this->putJson("/api/admin/discount-codes/{$made['id']}", $form + ['category_ids' => [$monthly->id], 'plan_ids' => []]))['code'];
+        self::assertSame([[['id' => $monthly->id, 'name' => 'ماهانه']], null], [$alone['categories'], $alone['plans']], 'a category alone: no plan named one by one');
+        $every = $this->decode($this->putJson("/api/admin/discount-codes/{$made['id']}", $form + ['category_ids' => [], 'plan_ids' => null]))['code'];
+        self::assertSame([null, null], [$every['categories'], $every['plans']], 'neither: every plan');
+        $nothing = $this->putJson("/api/admin/discount-codes/{$made['id']}", $form + ['category_ids' => [], 'plan_ids' => []]);
+        self::assertSame([422, [DiscountForm::NO_PLAN_CHOSEN]], [$nothing->getStatusCode(), $this->decode($nothing)['errors']['plan_ids'] ?? null], 'both lists sent empty: a choice of nothing, never every plan');
+        self::assertSame(['plan_ids' => null, 'category_ids' => null], array_intersect_key(DiscountCode::query()->findOrFail($made['id'])->toArray(), ['plan_ids' => 0, 'category_ids' => 0]), 'nothing saved');
+        $legacy = $this->decode($this->putJson("/api/admin/discount-codes/{$made['id']}", $form + ['plan_ids' => []]))['code'];
+        self::assertSame([null, null], [$legacy['categories'], $legacy['plans']], 'an empty plan list alone, as before categories: every plan');
+
+        $bot = $this->agentBot($this->agent(overrides: ['telegram_id' => 6001]));
+        $theirs = CurrentBot::run($bot, fn() => $this->category(['name' => 'نماینده']));
+        $refused = $this->postJson('/api/admin/discount-codes', $form + ['code' => 'OTHER', 'category_ids' => [$theirs->id]]);
+        self::assertSame([422, ['یکی از دسته‌های انتخاب‌شده دیگر وجود ندارد.']], [$refused->getStatusCode(), $this->decode($refused)['errors']['category_ids'] ?? null], "another shop's category is none of this one's");
     }
 
     public function testACodesAndASalesStateFollowTheSwitchTheWindowAndTheUses(): void
@@ -209,6 +242,43 @@ final class AdminDiscountsApiTest extends HttpTestCase
         self::assertSame([['name' => 'حراج']], array_map(static fn(array $row): array => ['name' => $row['name']], $this->decode($this->get('/api/admin/sales'))['sales']));
         self::assertSame(204, $this->deleteJson("/api/admin/sales/{$sale['id']}")->getStatusCode());
         self::assertSame(0, Sale::query()->count());
+    }
+
+    public function testASaleNamesCategoriesBesidePlansAndNothingChosenIsRefused(): void
+    {
+        $monthly = $this->category(['name' => 'ماهانه']);
+        $plan = $this->plan(['name' => 'ویژه']);
+        $form = ['name' => 'فروش ماهانه', 'percent' => 20, 'enabled' => true];
+
+        $sale = $this->decode($this->postJson('/api/admin/sales', $form + ['category_ids' => [$monthly->id], 'plan_ids' => [$plan->id]]))['sale'];
+
+        self::assertSame([[['id' => $monthly->id, 'name' => 'ماهانه']], [['id' => $plan->id, 'name' => 'ویژه']]], [$sale['categories'], $sale['plans']]);
+        self::assertSame([$monthly->id], Sale::query()->findOrFail($sale['id'])->category_ids);
+        $nothing = $this->putJson("/api/admin/sales/{$sale['id']}", $form + ['category_ids' => [], 'plan_ids' => []]);
+        self::assertSame([422, [DiscountForm::NO_PLAN_CHOSEN]], [$nothing->getStatusCode(), $this->decode($nothing)['errors']['plan_ids'] ?? null], 'a choice of nothing, never every plan');
+        $every = $this->decode($this->putJson("/api/admin/sales/{$sale['id']}", $form + ['category_ids' => null, 'plan_ids' => null]))['sale'];
+        self::assertSame([null, null], [$every['categories'], $every['plans']], 'neither: every plan');
+    }
+
+    public function testASaleWithAnEmptyPlanListAloneIsOnEveryPlan(): void
+    {
+        $monthly = $this->category(['name' => 'ماهانه']);
+        $plan = $this->plan(['name' => 'بی‌دسته', 'price' => '100000.00']);
+        $form = ['name' => 'فروش همه', 'percent' => 20, 'enabled' => true];
+        $stored = static fn(int $id): array => array_intersect_key(Sale::query()->findOrFail($id)->toArray(), ['plan_ids' => 0, 'category_ids' => 0]);
+
+        $made = $this->postJson('/api/admin/sales', $form + ['plan_ids' => []]);
+
+        self::assertSame(201, $made->getStatusCode(), (string) $made->getBody());
+        $sale = $this->decode($made)['sale'];
+        self::assertSame([null, null], [$sale['categories'], $sale['plans']], 'an empty plan list alone, as before categories: every plan');
+        self::assertSame(['plan_ids' => null, 'category_ids' => null], $stored($sale['id']));
+        self::assertSame('80000.00', $this->service(Pricing::class)->purchase(null, $plan)->amount(), 'on a plan it never named, in no category');
+
+        $narrow = $this->decode($this->postJson('/api/admin/sales', $form + ['category_ids' => [$monthly->id]]))['sale'];
+        $widened = $this->decode($this->putJson("/api/admin/sales/{$narrow['id']}", $form + ['plan_ids' => []]))['sale'];
+        self::assertSame([null, null], [$widened['categories'], $widened['plans']], 'saved again with an empty plan list alone: every plan, as a code is');
+        self::assertSame(['plan_ids' => null, 'category_ids' => null], $stored($narrow['id']));
     }
 
     public function testACustomersOwnDiscountIsSetFromTheirPage(): void

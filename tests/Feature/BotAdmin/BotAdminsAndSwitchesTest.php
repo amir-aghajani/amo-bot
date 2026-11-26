@@ -70,7 +70,7 @@ final class BotAdminsAndSwitchesTest extends BotTestCase
         self::assertStringContainsString('مدیران ربات', $screen);
         self::assertStringContainsString('۲ مدیر ربات', $screen);
         self::assertStringContainsString('با دسترسی مالک', $screen, 'what an admin of the main shop has');
-        self::assertStringContainsString('توکن ربات و دیتابیس', $screen);
+        self::assertStringContainsString('ورود به پنل، حساب‌های تلگرام مالک، آدرس سایت، توکن و نام کاربری ربات اصلی، آدرس Bot API، رمز Webhook، دیتابیس، تنظیمات Session پنل‌ها، پشتیبان‌های ساخته‌شده پیش از نسخه 0.11.0 و برگرداندن به نسخه قبلی که با خود مالک می‌ماند', $screen, 'what stays the owner\'s alone');
         self::assertStringContainsString('به نام خودش ثبت می‌شود', $screen, 'their decisions under their own name');
         self::assertContains(Nav::to('usv', 'show', $owner->id), $this->window());
         self::assertContains(Nav::to('usv', 'show', $staff->id), $this->window());

@@ -15,9 +15,11 @@ import { cn } from '@/lib/utils'
 
 /*
  * The home screen's banners, one at a time in a row that moves on by itself (parts/carousel): the shop's word to every
- * customer, the timed sales running now with the time each has left (`GET /sales`: none for one no sale reaches), and the
- * wheel and the nightly draw — while the perks reach the customer — and invitations while the shop runs them. A tap leads to what the banner speaks of; under the row, a dot for each, 24px apart and
- * tapped over 44px.
+ * customer, the timed sales running now with the time each has left (`GET /sales`: none for one no sale reaches, nor a
+ * sale on purchases alone none of whose plans is on sale now), and the wheel and the nightly draw — while the perks
+ * reach the customer — and invitations while the shop runs them. A tap leads to what the banner speaks of — a sale none
+ * of whose plans is on sale, to the services its renewals and extras are bought for —; under the row, a dot for each,
+ * 24px apart and tapped over 44px.
  */
 
 interface Banner {
@@ -36,16 +38,33 @@ interface Banner {
   href?: string
 }
 
-/** What a sale is on, in words: «روی همه خریدها», «روی خرید و تمدید». */
+/**
+ * What a sale is on, in words: «روی همه خریدها», «روی خرید سرویس و تمدید» — and, limited to some plans,
+ * «روی برخی پلن‌ها», «روی تمدید، برای برخی پلن‌ها»; with none of its plans on sale now, purchases left out of the words.
+ */
 function saleScope(sale: StoreSale): string {
-  if (sale.order_types === null) return 'روی همه خریدها'
-  const words = new Set(sale.order_types.map((type) => (type === 'purchase' ? 'خرید سرویس' : type === 'renewal' ? 'تمدید' : 'حجم و زمان اضافه')))
+  const some = sale.plan_ids !== null
+  if (sale.order_types === null) return some ? 'روی برخی پلن‌ها' : 'روی همه خریدها'
+  const types = noPlanOnSale(sale) ? sale.order_types.filter((type) => type !== 'purchase') : sale.order_types
+  const words = new Set(types.map((type) => (type === 'purchase' ? 'خرید سرویس' : type === 'renewal' ? 'تمدید' : 'حجم و زمان اضافه')))
+  const kinds = `روی ${[...words].join(' و ')}`
 
-  return `روی ${[...words].join(' و ')}`
+  return some ? `${kinds}، برای برخی پلن‌ها` : kinds
+}
+
+/** Whether none of the plans a sale is limited to is on sale now (`plan_ids` empty): only services already bought take it. */
+function noPlanOnSale(sale: StoreSale): boolean {
+  return sale.plan_ids !== null && sale.plan_ids.length === 0
+}
+
+/** Whether a sale reaches anything now: not one on purchases alone none of whose plans is on sale. */
+function reachesAny(sale: StoreSale): boolean {
+  return !noPlanOnSale(sale) || sale.order_types === null || sale.order_types.some((type) => type !== 'purchase')
 }
 
 function saleBanner(sale: StoreSale): Banner {
-  const buys = sale.order_types === null || sale.order_types.includes('purchase')
+  // With no plan of it on sale, only a renewal or an extra of a service takes it: never the plans to buy.
+  const buys = !noPlanOnSale(sale) && (sale.order_types === null || sale.order_types.includes('purchase'))
 
   return {
     key: `sale-${sale.id}`,
@@ -79,7 +98,7 @@ function bannersOf(shop: StoreResponse, sales: StoreSale[], perks: boolean): Ban
       ...(announcement.url === null ? {} : { href: announcement.url }),
     })
   }
-  banners.push(...sales.map(saleBanner))
+  banners.push(...sales.filter(reachesAny).map(saleBanner))
   if (perks && programs.wheel) {
     banners.push({ key: 'wheel', icon: FerrisWheel, colors: ['#7c4dff', '#d63ad8'], kicker: 'گردونه شانس', title: 'گردونه را بچرخانید و جایزه ببرید', to: '/club/wheel' })
   }

@@ -148,7 +148,7 @@ const PERSIAN_DIGITS = '۰۱۲۳۴۵۶۷۸۹'
 const ARABIC_DIGITS = '٠١٢٣٤٥٦٧٨٩'
 
 /** Latin digits as Persian ones, one by one — no grouping, no zeroes dropped (a clock's "۰:۰۵"). */
-function toPersianDigits(text: string): string {
+export function toPersianDigits(text: string): string {
   return text.replace(/[0-9]/g, (digit) => PERSIAN_DIGITS.charAt(Number(digit)))
 }
 

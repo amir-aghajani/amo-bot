@@ -9,6 +9,117 @@ screen shows it to every shop before it updates ([Releasing](Releasing.md#publis
 While a version is being made its changes collect under **Unreleased**; releasing it renames that heading to
 `## Version <version>`. The versions follow [Semantic Versioning](https://semver.org/).
 
+## Version 0.11.0
+
+### Added
+
+- **«💬 باز کردن پیوی» on the report group's customer card** — beside «✉️ ارسال پیام», a button that opens your own
+  private chat with the customer in Telegram: by their Telegram username, else by their Telegram id. When Telegram
+  refuses the id link — a customer whose privacy settings forbid it, or one Telegram does not know —, the card comes
+  without it. Not on your own card, nor for a customer without Telegram
+  ([Report group](Telegram-Group.md#a-customers-card)).
+- **A start time for every scheduled task** — «زمان‌بندی کارها» now sets, beside how often each task runs, «ساعت شروع»:
+  the time of day on the shop's clock its runs are counted from. A task runs at it every day and then every interval
+  after it — every 10 minutes from 00:03 is 00:03, 00:13, 00:23… The backup goes at 00:00 by default; the heavier
+  tasks start apart — the services' sync, the reminders and the clean-up of ended services at 00:05 (:05, :20, :35,
+  :50), the agents' terms at 00:10, the bot updates' clean-up at 00:25, the websites' accounts' at 00:40, the tickets'
+  at 00:55, the imports' at 03:00 and the release check at 03:30 —, every other at 00:00. A time is typed as `HH:MM`,
+  Persian digits, a bare hour or «،» for the colon too, any space left out. In the panel and in the bot's «⚙️ مدیریت»
+  ([Running in production](Running-In-Production.md#the-task-schedule)).
+- **The daily report** — a new report group topic, «گزارش روزانه»: once a day, from the hour you set under its switch
+  (00:00 by default), the day that ended in figures — income (as the dashboard counts it) against the day before and by
+  payment method, sales by kind of order, the five plans and three servers sold most, new customers, buyers and tests,
+  the services running and what waits on you; in the main bot's group also what each agent's bot sold. A service given
+  free — a prize, a referral's gift, support's free order — is no sale, and a day with nothing sold says «💤 در این روز
+  فروشی ثبت نشد.», its income still shown. Like every new topic it is on in every shop, an agent's too; switch it off,
+  or set its hour, in «بخش‌های گزارش», in the panel or the bot ([Report group](Telegram-Group.md#the-daily-report)).
+- **Discount codes and timed sales for plan categories** — the «پلن‌ها» of a discount code (under «محدودیت‌های
+  بیشتر») and of a sale («فروش ویژه»), in the panel and in the bot's «⚙️ مدیریت», now list the shop's categories beside
+  its plans. A category ticked covers every plan filed under it when the order is made — a plan moved there later too,
+  and one in a category switched off —, and categories and plans ticked together add up; a renewal's or an extra's plan
+  is their service's, as before. The lists say it («دسته «ماهانه» و پلن «ویژه»»). Deleting a category takes its plans
+  out of the codes and sales held to it ([Discounts](Discounts.md#a-codes-fields)). The website's `GET /sales` lists in
+  a sale's `plan_ids` the plans on sale now that it holds for — those it names and its categories' —, `[]` when none
+  is, with `category_ids` beside them ([Store API: the shop](Store-API-Shop.md#timed-sales)).
+
+### Changed
+
+- **The main bot's admins no longer change what would hand them the main bot or your seat** — yours alone now, beside
+  the webhook secret: the site's address (any change, its path too: every bot's webhook is under it), the main bot's
+  token and its username (the link that makes a Telegram account yours opens in that bot), the Bot API's address (any
+  change, its path on the same server too: every bot's token goes there), the database, saved or tested, and the
+  panels' session settings («طول Session پنل‌ها», «کوکی Session همیشه امن»). Nor do they roll an update back: the
+  version before lacks the guards that came since. In the bot those fields show with a «🔒» line and no edit button,
+  «🗄 دیتابیس» is not shown to them, and «🧪 بررسی توکن» fills no username in for them; the panels' API tells them
+  neither the database's settings nor the webhook secret's hint, and a change asked anyway is refused in the panel's
+  words («آدرس سایت را فقط خود مالک عوض می‌کند؛ …»). Still open to them: the mail and SMS settings, the rest of the
+  advanced group (the log level, the outgoing timeout, the cron token) and running an update. Since 0.10.4 they had the
+  token and the database too ([Managing the shop from the bot](Bot-Management.md#what-an-admin-may-not-do)).
+- **«بازگرداندن نسخه قبلی» is no longer offered once the app's files were replaced by hand** since the update — it
+  would put an older version back over a newer one —, and is refused if asked ([Upgrading](Upgrading.md)).
+- **A bot's webhook address is kept without its secret** (`…/webhooks/telegram/***`), so a backup made from now on
+  carries no webhook secret in the clear; the backups made before still do — below, under Upgrading. So an admin
+  working a bot's «⚙️ مدیریت», with your seat or an agent's, no longer sees the states kept before a restore by an
+  earlier version, and cannot download or restore any file made before 0.11.0 («… دریافت و بازگردانی‌اش فقط با خود
+  مالک یا خود نماینده است.»); you, and an agent for their own shop, still can. A whole installation's restore keeps
+  each bot's webhook secret as it is now (a bot deleted since comes back with none), so it no longer undoes new
+  secrets, and every restore masks the webhook addresses it brings back ([Backups](Backups.md#restoring)).
+- **«همه پلن‌ها» unticked with nothing ticked is refused** on a discount code's and a sale's «پلن‌ها» — in the panel,
+  and in the bot, whose «✔️ تایید» asks for a category or a plan, or «همه پلن‌ها» —; it was saved as every plan.
+- **Scheduled tasks no longer drift**: a run that comes a little late — Cron missed a minute, a task before it took
+  long — does not move the next one; a task that missed its moment (Cron stopped, or its start moved to a time already
+  past today) runs once at the next tick. At a daylight-saving change the schedule follows the shop's clock: a time the
+  clock skips in spring runs once, at the first minute after it, and in the hour a fall-back repeats a task every hour
+  or more often keeps running, while a daily one runs once. Keep the nightly draw's and the daily report's intervals at
+  an hour or less, or no run may fall between their hour and midnight.
+- Tools of your own that write through the panels' API send the new fields, since each of these is saved whole: every
+  task's `<task>_start` (a missing one is refused) and `daily_report_minutes` in `PUT /schedule`, whose tasks gain
+  `start` (`ScheduleStart`); `report_daily` and `daily_report_hour` in `PUT /bot/settings/reports`; and a discount
+  code's and a sale's `category_ids` — a form sent without it takes its categories away; both lists sent empty is a
+  `422` under `plan_ids`, every plan is null. Their rows gain `categories`, and the report group's topics
+  (`ReportTopicKey`) `daily`.
+
+### Fixed
+
+- **An order whose online payment has money in at its gateway, not settled yet, no longer expires** — a part paid, a
+  receipt in the gateway's review, confirmations awaited —, not by a discount code's hold nor by the unpaid limit:
+  settled, it is delivered. It was cancelled, the code given back, and the money went to the wallet later with nothing
+  delivered. Still unsettled past the review hours, it is held for you as before.
+- **AqayePardakht verified a payment opened on its live gateway against the sandbox** once the method's pin was
+  switched to `sandbox` (and the other way round): such a payment now waits until the pin is switched back, and is
+  closed after its late hours.
+- **Zarinpal, AqayePardakht and AbanGateway showed again a page opened in the other mode** after «حالت آزمایشی», the
+  pin or the key (test or live) was switched; a new page opens.
+- **A free plan could not be taken in the bot** when a card-to-card method with all its cards off came first among the
+  ways to pay (or the wallet was off): «🎁 دریافت رایگان» drew the same checkout again at every tap. It now goes through
+  a way to pay that takes it.
+- **The mini app priced a typed extra («مقدار دلخواه») that is also one of the offered amounts** at the unit price, not
+  at that amount's own, so every «پرداخت» was refused as repriced (and extra devices were ordered without the price
+  check). It is priced as the shop prices it, and taken even outside the typed amount's bounds, as the shop takes it.
+- **An apostrophe in a wallet line's description broke «👛 کیف پول»** on the report group's customer card.
+- **A name could turn its line around in the report group**: a customer's or an agent's name with Unicode direction
+  controls in it moved the figures after it. Every report drops them now.
+- **A timed sale none of whose plans is on sale now showed its banner in the mini app**, leading to the plans to buy,
+  where nothing was discounted. On purchases alone it shows none now; one on renewals or extras too leads to «سرویس‌های
+  من», its words naming no purchase («روی تمدید، برای برخی پلن‌ها»). A sale held to some plans reads «روی برخی پلن‌ها».
+
+### Upgrading
+
+- **Update from «تنظیمات پنل › به‌روزرسانی»**: nothing else to do. The update gives discount codes and sales a column
+  for the categories they name — every one before names none, so it holds as it did. The daily report starts in every
+  shop with a connected group: its first report comes at the first run after the update, for the day before. The tasks
+  move onto clock times — the backup goes at 00:00 shop time —, and every task whose moment came since its last run
+  runs once at the first tick.
+- **Make new webhook secrets if anyone else could reach your earlier backups** — an admin of the main bot, or anyone
+  else in your report group, among them. The update takes the secret out of the webhook addresses the shop kept, but a
+  backup made before — downloaded, kept from a restore, or sent to a report group — still holds the main bot's and
+  every agent's. Make the main bot's new secret: in the panel «تنظیمات پنل › ربات تلگرام», «تنظیمات پیشرفته», «رمز
+  Webhook» › «تولید رمز تازه» › «ذخیره»; in the bot, from your linked account, «🧰 تنظیمات پنل» › «🤖 ربات تلگرام» › «✏️ رمز Webhook» › «🎲 ساختن رمز تازه» › «💾 ذخیره».
+  Then take the webhooks off and register them again — «برداشتن Webhook», then «ثبت Webhook» in «دریافت پیام‌ها» (the
+  bot's «🛰 دریافت پیام‌ها», «⛓ برداشتن Webhook», «🔗 ثبت Webhook»): that now gives every agent's bot a new secret too
+  — one that is off, at its next registration —, and puts the main bot's in place. While the webhooks are off the bots
+  get no messages; Telegram keeps them and delivers them once the webhooks are registered again.
+
 ## Version 0.10.4
 
 ### Added

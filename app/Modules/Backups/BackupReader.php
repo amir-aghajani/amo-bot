@@ -40,6 +40,27 @@ final class BackupReader
     }
 
     /**
+     * The version a file's header names, read from its first line alone and unchecked — for a file this installation
+     * wrote itself (a state kept before a restore), where checking it whole would read it all; null for one naming none.
+     */
+    public function version(string $path): ?string
+    {
+        $file = @gzopen($path, 'rb');
+        if ($file === false) {
+            return null;
+        }
+        try {
+            $first = gzgets($file);
+        } finally {
+            gzclose($file);
+        }
+        $header = is_string($first) ? json_decode($first, true) : null;
+        $version = is_array($header) ? $header['app_version'] ?? null : null;
+
+        return is_string($version) && $version !== '' ? $version : null;
+    }
+
+    /**
      * Each row of the file, with its table and columns, in the file's order — of a file read() took.
      *
      * @return \Generator<int, array{string, list<string>, list<mixed>}>

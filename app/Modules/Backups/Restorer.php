@@ -18,7 +18,7 @@ use Illuminate\Database\Query\Builder;
  * Puts a checked backup file (BackupReader::read()) back, in one transaction — all of it or nothing:
  * - the whole installation: every table it holds emptied and filled from the file; the sign-ins, the chats half-way and
  *   the queued reports emptied (BackupTables::TRANSIENT): every customer signs in again (the panels stay signed in);
- *   who is the owner in the bot stays as it is now (keepOwnerLinks());
+ *   who is the owner in the bot stays as it is now (keepOwnerLinks()), and each bot's webhook secret (keepSignOuts());
  * - one shop: its own rows deleted and filled from the file, its sign-ins, chats half-way and queued reports emptied —
  *   its customers sign in again —, and nothing else touched — never the owner's (the shop's terms, traffic and
  *   servers; a plan the owner keeps from sale stays kept: OWNERS_COLUMNS; what only the owner reads, which the file
@@ -26,6 +26,7 @@ use Illuminate\Database\Query\Builder;
  *   gone now goes as its key would have it (SHOP_REFERENCES); an owner's row naming a shop's row keeps it when the
  *   file brings it back, and names none when it does not (OWNERS_REFERENCES). All of it in statements over sets of
  *   rows, never one a row: a shop with many orders restores as a small one does.
+ * Either way the bots' webhook addresses the restored settings keep lose their secret (maskWebhookAddresses()).
  * Columns a later version dropped are left out, columns it added take their default; a file of an older version (no
  * older than BackupTables::OLDEST_RESTORABLE) then goes through the upgrades since (each safe to repeat), as a
  * database of that version would — after the restore's commit, not in it: an upgrade's own changes to a table commit
@@ -101,7 +102,7 @@ final class Restorer
 
         $restored = ForeignKeys::without($this->db, fn(): array => $this->db->transaction(function () use ($path, $scope, $tables, $analysis, $deleteActs): array {
             $owners = $scope->isShop() ? $this->ownersRows($scope, $deleteActs) : null;
-            $epochs = $scope->isShop() ? [] : $this->db->table('bots')->pluck('panel_epoch', 'id')->all();
+            $bots = $scope->isShop() ? [] : $this->db->table('bots')->get(['id', 'panel_epoch', 'webhook_secret'])->all();
             $links = $scope->isShop() ? null : $this->ownerLinks();
             foreach (array_diff(BackupTables::TRANSIENT, BackupTables::KEPT_ON_RESTORE, $scope->isShop() ? BackupTables::OWNERS_TRANSIENT : []) as $table) {
                 $this->db->table($table)->when($scope->shop !== null, static fn(Builder $query) => $query->where('bot_id', $scope->shop))->delete();
@@ -114,9 +115,10 @@ final class Restorer
             if ($owners !== null) {
                 $this->putBack($owners);
             } elseif ($links !== null) {
-                $this->keepSignOuts($epochs);
+                $this->keepSignOuts($bots);
                 $this->keepOwnerLinks($links);
             }
+            $this->maskWebhookAddresses($scope);
 
             return $restored;
         }));
@@ -132,16 +134,36 @@ final class Restorer
     /**
      * The whole installation's restore brings no agent's panel session back: each bot keeps the higher of its epoch now and
      * the file's — a sign-out since the backup («خروج از مرورگرهای دیگر», the agency taken away) stands —, and no one-time
-     * login link the file held opens a panel.
+     * login link the file held opens a panel. Nor any webhook secret the file held: each bot keeps its own now (renewed
+     * since by «برداشتن Webhook» and «ثبت Webhook», or none), as it is stored (encrypted), and a bot that is not there now
+     * comes back with none — Telegram calls each bot's webhook with the secret it was last given.
      *
-     * @param array<int|string, mixed> $epochs The bots' `panel_epoch` before the restore, by id
+     * @param list<object> $bots The bots' `id`, `panel_epoch` and `webhook_secret` before the restore
      */
-    private function keepSignOuts(array $epochs): void
+    private function keepSignOuts(array $bots): void
     {
-        foreach ($epochs as $id => $epoch) {
-            $this->db->table('bots')->where('id', $id)->where('panel_epoch', '<', (int) $epoch)->update(['panel_epoch' => (int) $epoch]);
+        $this->db->table('bots')->whereNotNull('webhook_secret')->update(['webhook_secret' => null]);
+        foreach ($bots as $bot) {
+            $this->db->table('bots')->where('id', $bot->id)->where('panel_epoch', '<', (int) $bot->panel_epoch)->update(['panel_epoch' => (int) $bot->panel_epoch]);
+            if ($bot->webhook_secret !== null) {
+                $this->db->table('bots')->where('id', $bot->id)->update(['webhook_secret' => $bot->webhook_secret]);
+            }
         }
         $this->db->table('bots')->whereNotNull('login_code')->update(['login_code' => null, 'login_code_expires_at' => null]);
+    }
+
+    /**
+     * Each bot's webhook address the restored settings keep (BotState) without its secret, as BotState::webhookSet() keeps
+     * it since 0.11.0: a file made before held it whole, and a backup made after the restore would carry it again. Done
+     * in the restore itself, never left to the upgrades after it.
+     */
+    private function maskWebhookAddresses(BackupScope $scope): void
+    {
+        foreach ($this->rowsOf('settings', $scope)->where('key', BackupWriter::WEBHOOK_URL)->get(['id', 'value']) as $row) {
+            if (($masked = BackupWriter::withoutSecret($row->value)) !== $row->value) {
+                $this->db->table('settings')->where('id', $row->id)->update(['value' => $masked]);
+            }
+        }
     }
 
     /**

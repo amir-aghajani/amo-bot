@@ -19,9 +19,9 @@ use App\Modules\Telegram\Admin\Ui\Words;
 
 /**
  * «زمان‌بندی کارها» (the owner's, in the main shop): every scheduled task in the order a run takes them — how often it
- * runs, each opening its own screen with the times it decides by (ScheduleTaskScreen) —, when Cron last ran (a warning
- * while it never did), and every default put back at once, asked first. The schedule is saved whole (PUT /schedule),
- * as the panel's one form is.
+ * runs and from what time, each opening its own screen with the times it decides by (ScheduleTaskScreen) —, when Cron
+ * last ran (a warning while it never did), and every default put back at once, asked first. The schedule is saved whole
+ * (PUT /schedule), every task's start with it, as the panel's one form is.
  *
  * Actions: `reset` (asks), `defaults` (every field back to its default).
  */
@@ -54,14 +54,16 @@ final class ScheduleScreen extends BaseScreen
         $buttons = [];
         foreach ($tasks as $index => $task) {
             $interval = self::fields($task)[0] ?? null;
-            $every = $interval === null ? '' : ' · هر ' . Fmt::number((int) ($interval['value'] ?? 0)) . ' ' . (string) ($interval['unit'] ?? '');
+            $minutes = (int) ($interval['value'] ?? 0);
+            // From its start, unless it runs every minute: its start makes no difference then.
+            $every = $interval === null ? '' : ' · هر ' . Fmt::number($minutes) . ' ' . (string) ($interval['unit'] ?? '') . ($minutes === 1 ? '' : ' از ' . Fmt::digits(self::start($task)['value']));
             $buttons[] = Button::to((Json::on($task, 'each_shop') ? '🏪 ' : '⚙️ ') . (string) ($task['title'] ?? '') . $every . (self::atDefault($task) ? '' : ' ✏️'), ScheduleTaskScreen::ID, 'show', $index);
         }
 
         return $view->grid(1, ...$buttons)
             ->row($ran === null ? Button::to(Icons::ADVANCED . " راه‌اندازی \u{2068}Cron\u{2069}", AdvancedScreen::ID)->primary() : null)
             ->row($changed > 0 ? Button::to('↩️ بازگشت به همه پیش‌فرض‌ها', self::ID, 'reset')->danger() : null)
-            ->help('هر کار زمان‌بندی‌شده هر چند وقت یک بار اجرا شود، و زمان‌هایی که بر اساسشان تصمیم می‌گیرد. برای همه فروشگاه‌ها یکی است و در دیتابیس ذخیره می‌شود؛ پیش‌فرض‌ها همان‌هایی هستند که فروشگاه تا امروز با آن‌ها کار می‌کرد.'
+            ->help('هر کار زمان‌بندی‌شده هر چند وقت یک بار اجرا شود، از چه ساعتی («ساعت شروع»: اجراها از این ساعت شمرده می‌شوند)، و زمان‌هایی که بر اساسشان تصمیم می‌گیرد. برای همه فروشگاه‌ها یکی است و در دیتابیس ذخیره می‌شود؛ پیش‌فرض‌ها همان‌هایی هستند که فروشگاه تا امروز با آن‌ها کار می‌کرد.'
                 . "\n\nکارها به ترتیبی آمده‌اند که اجرا می‌شوند: \u{2068}Cron\u{2069} هر دقیقه اجرا می‌شود و هر کاری را که موعدش رسیده، به همین ترتیب انجام می‌دهد. کاری که نشان «🏪» دارد، در فروشگاه اصلی و فروشگاه هر نماینده یکی پس از دیگری اجرا می‌شود؛ بقیه («⚙️») یک بار برای همه. «✏️» یعنی زمانی از آن کار با پیش‌فرض فرق دارد.")
             ->back(PanelSettingsScreen::ID);
     }
@@ -84,6 +86,8 @@ final class ScheduleScreen extends BaseScreen
                     foreach (self::fields($task) as $field) {
                         $body[(string) ($field['name'] ?? '')] = (int) ($field['default'] ?? 0);
                     }
+                    $start = self::start($task);
+                    $body[$start['name']] = $start['default'];
                 }
                 $admin->api->put('/schedule', $body);
                 $admin->notice('✅ زمان‌بندی ذخیره شد.');
@@ -126,10 +130,29 @@ final class ScheduleScreen extends BaseScreen
     }
 
     /**
-     * Every field of every task, by its name: what PUT /schedule takes whole.
+     * A task's start: its field's name, its words and "HH:MM" now and by default.
+     *
+     * @param array<string, mixed> $task
+     * @return array{name: string, label: string, hint: string, value: string, default: string}
+     */
+    public static function start(array $task): array
+    {
+        $start = Json::part($task, 'start');
+
+        return [
+            'name' => (string) ($start['name'] ?? ''),
+            'label' => (string) ($start['label'] ?? 'ساعت شروع'),
+            'hint' => (string) ($start['hint'] ?? ''),
+            'value' => (string) ($start['value'] ?? '00:00'),
+            'default' => (string) ($start['default'] ?? '00:00'),
+        ];
+    }
+
+    /**
+     * Every field and start of every task, by its name: what PUT /schedule takes whole.
      *
      * @param list<array<string, mixed>> $tasks
-     * @return array<string, int>
+     * @return array<string, int|string>
      */
     public static function body(array $tasks): array
     {
@@ -138,6 +161,8 @@ final class ScheduleScreen extends BaseScreen
             foreach (self::fields($task) as $field) {
                 $body[(string) ($field['name'] ?? '')] = (int) ($field['value'] ?? 0);
             }
+            $start = self::start($task);
+            $body[$start['name']] = $start['value'];
         }
 
         return $body;
@@ -150,6 +175,9 @@ final class ScheduleScreen extends BaseScreen
      */
     private static function atDefault(array $task): bool
     {
+        if (self::start($task)['value'] !== self::start($task)['default']) {
+            return false;
+        }
         foreach (self::fields($task) as $field) {
             if ((int) ($field['value'] ?? 0) !== (int) ($field['default'] ?? 0)) {
                 return false;

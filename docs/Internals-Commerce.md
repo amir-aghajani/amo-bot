@@ -72,7 +72,7 @@ traffic, days — one set of methods for both: `tiers()`, `bounds()`, `options()
 bounds — the least never below the first tier, so whatever is in bounds is priced — at `DTO\PriceTiers::priceOf()`, the
 whole quantity at its tier's rate (`quote()` → `DTO\CustomPrice`). `Pricing::custom()` takes that as the base and treats
 it as an extra of a plan-less service is treated: `AutomaticDiscounts::best(null, Purchase, …)` (a sale of every plan
-only) and a code judged for `CodeTarget(Purchase, null, server)`. `OrderService::openCustomPurchase()` makes the order —
+only) and a code judged for `CodeTarget(Purchase, null, null, server)`. `OrderService::openCustomPurchase()` makes the order —
 `plan_id` null, `server_id`, `traffic_bytes`, `days`, `client_name` in its shape, so the open one of the same is found
 and a key's order must match; `devices` (the builder's) beside it, a setting rather than what the customer asked for, so
 an admin changing it neither turns a request made again into another one nor leaves the open order behind (it takes the
@@ -86,7 +86,7 @@ plan's is (`CheckoutScreen::requestedName()`, `CustomerCheckout::clientName()`).
 A service without a plan (`CustomerRenewal::picksPlan()`: built, or added by its link) renews on a plan its customer
 picks or, while `CustomerRenewal::buildable()`, with a package built. `Pricing::renewal()` takes either what it renews
 with — a `Plan` (its renewal price: an agent's, never a first purchase's) or a `CustomPrice` — and prices a package as
-`custom()` does, but as a `Renewal`: `best(null, Renewal, …)` and `CodeTarget(Renewal, null, the service's server)`
+`custom()` does, but as a `Renewal`: `best(null, Renewal, …)` and `CodeTarget(Renewal, null, null, the service's server)`
 (`Pricing::built()` is the path both share). `OrderService::openCustomRenewal()` is `openRenewal()`'s twin — `plan_id`
 null, `traffic_bytes`, `days`, `renewal_method` in its shape, `devices` beside it —, both through `openRenewalOf()`: the
 service's row locked and `renewalUnderWay()` asked in the order's transaction (its owner's renewals only: one a previous
@@ -123,7 +123,9 @@ code there, and its payment time running out frees it. A code may be deleted whi
 made with it; one whose orders were all refunded is kept for their history, with a refusal of its own
 (`DiscountInUseException::refunded()`). Wrong codes are rate-limited per customer (`DiscountCodes::tried()`). Codes and
 sales share `Models\Concerns\DiscountScope` (kinds, plans, window) and `Services\DiscountForm` (their forms' common
-fields).
+fields, `plans()` among them: both lists sent empty is refused). Their plans are `plan_ids` and `category_ids` together
+(`takesPlan()`: a plan named, or one filed under a category named as the plan is now — the category `DTO\CodeTarget`
+carries for a code, and `AutomaticDiscounts::best()` is given for a sale; neither named is every plan).
 
 ## Orders and the checkout
 

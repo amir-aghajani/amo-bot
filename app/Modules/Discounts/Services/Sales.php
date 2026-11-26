@@ -6,6 +6,7 @@ namespace App\Modules\Discounts\Services;
 
 use App\Core\Exceptions\ValidationException;
 use App\Modules\Catalog\Models\Plan;
+use App\Modules\Catalog\Models\PlanCategory;
 use App\Modules\Discounts\Models\Sale;
 use App\Support\Input;
 use App\Support\Validation;
@@ -71,7 +72,7 @@ final class Sales
     }
 
     /**
-     * Sales as the panels show them, the plans they name read once for the whole list.
+     * Sales as the panels show them, the plans and categories they name read once for the whole list.
      *
      * @param Collection<int, Sale> $sales
      * @return list<array<string, mixed>>
@@ -80,6 +81,8 @@ final class Sales
     {
         $ids = $sales->flatMap(static fn(Sale $sale): array => $sale->plan_ids ?? [])->unique()->values()->all();
         $names = $ids === [] ? [] : Plan::query()->whereIn('id', $ids)->pluck('name', 'id')->all();
+        $categoryIds = $sales->flatMap(static fn(Sale $sale): array => $sale->category_ids ?? [])->unique()->values()->all();
+        $categories = $categoryIds === [] ? [] : PlanCategory::query()->whereIn('id', $categoryIds)->pluck('name', 'id')->all();
 
         return array_values($sales->map(static fn(Sale $sale): array => [
             'id' => $sale->id,
@@ -87,6 +90,7 @@ final class Sales
             'percent' => $sale->percent,
             'order_types' => $sale->order_types,
             'plans' => DiscountForm::named($sale->plan_ids, $names),
+            'categories' => DiscountForm::named($sale->category_ids, $categories),
             'starts_at' => DiscountForm::moment($sale->starts_at),
             'ends_at' => DiscountForm::moment($sale->ends_at),
             'enabled' => $sale->enabled,
@@ -113,7 +117,7 @@ final class Sales
             $errors['percent'][] = 'درصد تخفیف باید عددی بین 1 تا 100 باشد.';
         }
         $orderTypes = DiscountForm::kinds($input['order_types'] ?? null, $errors);
-        $planIds = DiscountForm::ids($input['plan_ids'] ?? null, 'plan_ids', Plan::query(), 'پلن', $errors);
+        [$planIds, $categoryIds] = DiscountForm::plans($input, $errors);
         if (!Input::isBoolean($input['enabled'] ?? null)) {
             $errors['enabled'][] = Validation::NOT_A_SWITCH;
         }
@@ -125,6 +129,7 @@ final class Sales
             'percent' => $percent,
             'order_types' => $orderTypes,
             'plan_ids' => $planIds,
+            'category_ids' => $categoryIds,
             'starts_at' => $window['starts_at'],
             'ends_at' => $window['ends_at'],
             'enabled' => Input::truthy($input['enabled']),

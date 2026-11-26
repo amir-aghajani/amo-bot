@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { api } from '@/lib/api'
 import type { BotMode, ConfigSettingsResponse, ConfigTelegramRequest, ConfigTelegramSettings } from '@/lib/api-types'
+import { toLatinDigits } from '@/lib/format'
 import { systemQuery } from '@/lib/queries'
 import { randomToken } from '@/lib/random'
 import { trimmed } from '@/lib/use-form'
@@ -33,13 +34,29 @@ const TOKEN_MOVED = 'آدرس API تلگرام عوض شده است؛ توکن �
 /** The group as its form holds it: the request whole, the timeout as typed, the secrets and the owner's password blank until one is typed. */
 type Draft = Required<ConfigTelegramRequest> & { poll_timeout: string }
 
-/** An address's origin — what a token is bound to, and every bot's token goes to —; null while it is no address. */
+/** An address as the server saves it: Persian and Arabic digits Latin, «٫» a dot, «٬» dropped (Persian::latinDigits). */
+function asSaved(address: string): string {
+  return toLatinDigits(address).replace(/٫/g, '.').replace(/٬/g, '').trim()
+}
+
+/**
+ * An address's origin — what a token is bound to, and every bot's token goes to —, read as the server saves it (a port
+ * typed in Persian digits is that port); null while it is no address.
+ */
 function originOrNull(address: string): string | null {
   try {
-    return new URL(address.trim()).origin
+    return new URL(asSaved(address)).origin
   } catch {
     return null
   }
+}
+
+/**
+ * Whether an address's scheme, host or port holds a character beyond ASCII: the browser folds such a host (fullwidth
+ * letters) where the server compares it as typed, so it is taken as a move.
+ */
+function foldedOrigin(address: string): boolean {
+  return /[^ -~]/.test(asSaved(address).replace(/^([^:/?#]*:\/\/[^/?#]*).*$/s, '$1'))
 }
 
 /**
@@ -80,7 +97,7 @@ export function TelegramSection({ settings, meta, disabled }: { settings: Config
   // Every bot's token goes to the Bot API's address: moved to another origin, the owner's password is asked with the save.
   function movesBotApi(address: string): boolean {
     const to = originOrNull(address)
-    return to !== null && to !== originOrNull(settings.api_url)
+    return to !== null && (to !== originOrNull(settings.api_url) || foldedOrigin(address))
   }
   const moving = movesBotApi(values.api_url)
   // A kept token goes only to the Bot API address it was saved for: one moved to another origin is typed again or cleared.

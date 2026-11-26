@@ -308,7 +308,8 @@ final class CustomerWallet implements GroupHandler, AnswersPrompts
      */
     private function line(WalletTransaction $line, array $names): string
     {
-        $description = $line->description === null || trim($line->description) === '' ? '—' : Messages::rowNumbers(htmlspecialchars(Limits::fit(trim($line->description), self::DESCRIPTION_MAX)));
+        // Its row numbers marked before it is escaped: an entity's own «#039» is no row's number.
+        $description = $line->description === null || trim($line->description) === '' ? '—' : htmlspecialchars(Messages::rowNumbers(Limits::fit(trim($line->description), self::DESCRIPTION_MAX)));
 
         return implode(' · ', array_filter([
             ($line->type === WalletTransactionType::Credit ? '➕ ' : '➖ ') . Money::format($line->amount),

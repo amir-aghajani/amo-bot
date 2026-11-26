@@ -95,15 +95,17 @@ final class DiscountCodeScreen extends BaseScreen
     }
 
     /**
-     * What a code holds for, in a short line (the panel's codeTargets): «خرید، تمدید · ۲ پلن · ۱ سرور · خرید اول · دست‌کم …».
+     * What a code holds for, in a short line (the panel's codeTargets): «خرید، تمدید · دسته «ماهانه» و ۲ پلن · ۱ سرور ·
+     * خرید اول · دست‌کم …».
      *
      * @param array<string, mixed> $code
      */
     private static function targets(array $code): string
     {
         $parts = [Marketing::kinds($code['order_types'] ?? null)];
-        if (is_array($code['plans'] ?? null)) {
-            $parts[] = Marketing::named('پلن', $code['plans']);
+        $plans = Marketing::reach($code['plans'] ?? null, $code['categories'] ?? null);
+        if ($plans !== null) {
+            $parts[] = $plans;
         }
         if (is_array($code['servers'] ?? null)) {
             $parts[] = Marketing::named('سرور', $code['servers']);

@@ -7,6 +7,8 @@ namespace App\Modules\Updates\Controllers;
 use App\Core\Http\ApiController;
 use App\Core\Http\LongRunning;
 use App\Core\Session\Session;
+use App\Modules\Auth\Exceptions\ActorRefusedException;
+use App\Modules\Auth\Principal;
 use App\Modules\Updates\Updater;
 use App\Support\Input;
 use Psr\Http\Message\ResponseInterface as Response;
@@ -14,7 +16,8 @@ use Psr\Http\Message\ServerRequestInterface as Request;
 
 /**
  * /api/admin/system/update (the owner's panel only): the update screen, check, start, step, cancel and rollback. Each
- * answers the screen as it then stands; a refusal tells the owner the way out.
+ * answers the screen as it then stands; a refusal tells the owner the way out. The rollback is the owner's themselves
+ * alone; one of the main shop's admins in the bot runs the rest.
  */
 final class UpdateController extends ApiController
 {
@@ -60,8 +63,17 @@ final class UpdateController extends ApiController
         return $this->json($response, ['update' => $this->updater->cancel()]);
     }
 
+    /**
+     * POST /system/update/rollback — the owner themselves alone: the version before lacks the guards that came since, so
+     * one of the main shop's admins, working the bot's management with the owner's seat, is refused it.
+     *
+     * @throws ActorRefusedException 403
+     */
     public function rollback(Request $request, Response $response): Response
     {
+        if (!Principal::of($request)->isTheOwner()) {
+            throw ActorRefusedException::ownersRollback();
+        }
         $this->settle();
 
         return $this->json($response, ['update' => $this->updater->rollback()]);

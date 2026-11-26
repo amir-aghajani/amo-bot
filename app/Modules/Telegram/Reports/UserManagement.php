@@ -45,7 +45,8 @@ use App\Support\Persian;
  * card in place with «⬅️ بازگشت» back here — «🛍 سرویس‌ها» (CustomerServices), «👛 کیف پول» (CustomerWallet), «➕ سرویس
  * دستی» (CustomerOrder), «🏷 تخفیف» (CustomerDiscount), «🧾 سوابق» (CustomerHistory), «🔐 ورود به سایت»
  * (CustomerAccount) —, «✉️ ارسال پیام» asks for a message support sends them (CustomerMessage; on every card but the
- * admin's own), and the rest is done here: «👥 گروه‌ها» (a switch per group, naming the state it asks for: pressed
+ * admin's own), «💬 باز کردن پیوی» opens their private chat in the admin's Telegram (privateChat()), and the rest is done
+ * here: «👥 گروه‌ها» (a switch per group, naming the state it asks for: pressed
  * twice, or by two admins at once, it stands), «📱 معاف از شماره» / «📱 لغو معافیت شماره» (the phone rule's excuse,
  * naming the state it asks for too; no admin's card has it), «🎖 مدیر ربات شود» / «🎖 برداشتن نقش مدیر» and «⛔️ مسدود
  * شود» / «✅ رفع مسدودی» (each asked again first), «🔄 تازه‌سازی».
@@ -224,10 +225,11 @@ final class UserManagement implements GroupHandler
         $refresh = CustomerCards::button('🔄 تازه‌سازی', CustomerCards::data(self::PREFIX, self::OPEN, $id));
         // «✉️ ارسال پیام» on every card but the admin's own: a message changes nothing of the account (CustomerMessage).
         $message = $user->id === $admin->id ? [] : [CustomerMessage::button($id)];
+        $chat = self::privateChat($user, $admin);
         if (CustomerCards::lockOf($user, $admin) !== null) {
             return InlineKeyboard::make()
                 ->grid([$open('🛍 سرویس‌ها', CustomerServices::PREFIX), $open('👛 کیف پول', CustomerWallet::PREFIX), $open('🧾 سوابق', CustomerHistory::PREFIX), $open('🔐 ورود به سایت', CustomerAccount::PREFIX)], 2)
-                ->row(...$message)
+                ->row(...$chat, ...$message)
                 ->row($refresh)
                 ->build()['inline_keyboard'];
         }
@@ -258,9 +260,29 @@ final class UserManagement implements GroupHandler
                 $role,
                 $open('🔐 ورود به سایت', CustomerAccount::PREFIX),
             ], 2)
-            ->row(...$message, ...$phone)
+            ->row(...$chat, ...$message)
+            ->row(...$phone)
             ->row($refresh, ...$ban)
             ->build()['inline_keyboard'];
+    }
+
+    /**
+     * «💬 باز کردن پیوی»: the customer's private chat, opened in the admin's own Telegram — by their @username (t.me), else
+     * by their Telegram id (tg://user?id=; for one whose privacy forbids that link, or whom Telegram does not know,
+     * Telegram refuses the card as a bad request and it goes again without the button, once:
+     * GroupButtons::withoutUserLinks()). None for a customer without Telegram (a website or SMS sign-up), nor on the
+     * admin's own card; on a card locked to reading (an agent's) it stays, since it changes nothing.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public static function privateChat(User $user, User $admin): array
+    {
+        if ($user->telegram_id === null || $user->id === $admin->id) {
+            return [];
+        }
+        $handle = $user->handle();
+
+        return [InlineKeyboard::url('💬 باز کردن پیوی', $handle !== null ? 'https://t.me/' . rawurlencode($handle) : 'tg://user?id=' . $user->telegram_id)];
     }
 
     /** `/manage <who>`: the card, under the command; a word when nobody answers to `<who>`, or nothing was named. */

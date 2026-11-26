@@ -57,13 +57,15 @@ final class BotAdminsScreen extends ListScreen
 
     /**
      * What a bot admin has now (plain text): in the main shop, the whole management with the owner's access — but the
-     * panel login, the owner's linked Telegram accounts (their role and ban too), moving the Bot API address and the main
-     * bot's webhook secret, the owner's alone —; in an agent's shop, everything the agent has in their bot.
+     * panel login, the owner's linked Telegram accounts (their role and ban too), the site's address, the main bot's token
+     * and @username, the Bot API address, its webhook secret, the database, the panels' session settings, backups made
+     * before 0.11.0 and rolling an update back, the owner's alone —; in an agent's shop, everything the agent has in their
+     * bot. The panel's two cards (bot-admins-section, account-actions) name the same.
      */
     public static function powers(bool $main): string
     {
         return $main
-            ? 'مدیر ربات با «⚙️ مدیریت» در ربات، همه مدیریت فروشگاه را با دسترسی مالک دارد: همه بخش‌ها و تنظیمات، روش‌های پرداخت، سرورها، نماینده‌ها، تنظیمات پنل (توکن ربات و دیتابیس هم)، پشتیبان‌گیری و بازگردانی، به‌روزرسانی و فروشگاه هر نماینده؛ جز ورود به پنل، حساب‌های تلگرام مالک، آدرس Bot API و رمز Webhook که با خود مالک می‌ماند.'
+            ? 'مدیر ربات با «⚙️ مدیریت» در ربات، همه مدیریت فروشگاه را با دسترسی مالک دارد: همه بخش‌ها و تنظیمات، روش‌های پرداخت، سرورها، نماینده‌ها، بیشتر تنظیمات پنل، پشتیبان‌گیری و بازگردانی، به‌روزرسانی و فروشگاه هر نماینده؛ جز ورود به پنل، حساب‌های تلگرام مالک، آدرس سایت، توکن و نام کاربری ربات اصلی، آدرس Bot API، رمز Webhook، دیتابیس، تنظیمات Session پنل‌ها، پشتیبان‌های ساخته‌شده پیش از نسخه 0.11.0 و برگرداندن به نسخه قبلی که با خود مالک می‌ماند.'
             : 'مدیر این ربات با «⚙️ مدیریت» در همین ربات، به هر چه نماینده در ربات خودش دارد دسترسی دارد: همه بخش‌ها و تنظیمات فروشگاه او.';
     }
 
@@ -71,7 +73,7 @@ final class BotAdminsScreen extends ListScreen
     public static function warning(bool $main): string
     {
         return 'فقط کسی را مدیر کنید که کاملا به او اعتماد دارید: ' . ($main
-            ? 'به پول‌ها، سرورها، توکن ربات و دیتابیس فروشگاه دسترسی پیدا می‌کند.'
+            ? 'به پول‌ها، سرورها، روش‌های پرداخت و پشتیبان‌های فروشگاه دسترسی پیدا می‌کند.'
             : 'به همه فروشگاه این ربات دسترسی پیدا می‌کند.');
     }
 

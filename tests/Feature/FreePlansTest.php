@@ -79,6 +79,22 @@ final class FreePlansTest extends BotTestCase
         self::assertSame($this->walletMethod()->id, Payment::query()->sole()->payment_method_id, 'settled by the shop\'s own wallet');
     }
 
+    public function testAFreeButtonGoesThroughAWayThatTakesItNeverACardMethodWithNoCardOn(): void
+    {
+        $this->walletMethod()->forceFill(['enabled' => false])->save();
+        $cardless = $this->cardMethod();
+        $cardless->cards()->update(['enabled' => false]);
+        $card = $this->cardMethod('کارت به کارت (تجارت)', overrides: ['config' => ['card_number' => '5892101012345670']]);
+
+        $take = $this->checkout($this->test);
+        self::assertSame($this->payButton($this->test, $this->server, $card), $take, 'the first way that takes it, the cardless one first');
+        $this->send($this->tap($take));
+
+        self::assertSame(OrderStatus::Fulfilled, Order::query()->sole()->status, 'claimed on the first tap');
+        self::assertSame($this->walletMethod()->id, Payment::query()->sole()->payment_method_id);
+        self::assertCount(1, FakeProvider::$created);
+    }
+
     public function testAFreeButtonWhosePlanIsPricedSinceShowsThePriceWhicheverWayItGoesThrough(): void
     {
         $this->walletMethod()->forceFill(['enabled' => false])->save();

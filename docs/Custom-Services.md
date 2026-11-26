@@ -43,7 +43,7 @@ customer who notices builds the larger one. The days are priced the same way, an
 for 30 days at «از ۳۰: ۱٬۵۰۰» a day costs 125,000 + 45,000 = 170,000 Toman.
 
 Then the customer's discounts come off it, as for a purchase of no plan: their own percent, their loyalty tier's or a
-sale's — only a sale of every plan reaches it —, and a discount code that is not limited to certain plans (one limited to
+sale's — only a sale of every plan reaches it —, and a discount code that is not limited to certain plans or categories (one limited to
 servers holds on those servers). A first-purchase price or an agent price is a plan's: a built service has none.
 
 ## What the customer does
@@ -78,7 +78,7 @@ server to pick: a renewal makes no new client — to the renewal's checkout: «�
 discount code and the ways to pay.
 
 The price is the builder's tiers, discounted as a renewal of no plan: a sale for renewals of every plan, the customer's
-own percent or tier, and a code not limited to certain plans (one limited to servers holds on the service's own server).
+own percent or tier, and a code not limited to certain plans or categories (one limited to servers holds on the service's own server).
 Paid, the renewal adds the GB and the days by the method picked and gives the builder's devices (as a plan's, from the
 end of the period in use: [Plans](Plans.md#devices-and-renewals)); the service **still has no plan**, so its next
 renewal is picked again — a plan picked then becomes its own — and **«تمدید خودکار» is never offered for it**, in the

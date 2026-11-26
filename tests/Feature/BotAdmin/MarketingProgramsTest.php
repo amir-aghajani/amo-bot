@@ -8,7 +8,10 @@ use App\Modules\Discounts\Models\LoyaltyTier;
 use App\Modules\Discounts\Models\Sale;
 use App\Modules\Rewards\Models\CashbackRule;
 use App\Modules\Rewards\Services\CashbackSettings;
+use App\Modules\Telegram\Admin\Sections\Marketing\Words as Marketing;
+use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\Nav;
+use App\Modules\Telegram\Models\TelegramSession;
 use Tests\BotTestCase;
 
 /**
@@ -62,6 +65,67 @@ final class MarketingProgramsTest extends BotTestCase
         $this->tapAs(Nav::to('slv', 'gone', $sale->id));
         self::assertSame(0, Sale::query()->count());
         self::assertContains(Nav::to('slf', 'new'), $this->buttons(), 'the list again');
+    }
+
+    public function testASaleIsMadeForACategoryAndAPlanFromOneList(): void
+    {
+        $monthly = $this->category(['name' => 'ماهانه']);
+        $plan = $this->plan(['name' => 'یک ماهه']);
+
+        $this->tapAs(Nav::to('slf', 'new'));
+        $this->send($this->message('فروش ماهانه', chat: self::OWNER));
+        $this->tapAs(Nav::to('slf', 'q', 1, 1));
+        $this->tapAs(Nav::to('slf', 'done', 2));
+        self::assertStringContainsString('روی کدام دسته‌ها و پلن‌ها باشد؟', $this->said()[0]);
+        self::assertMatchesRegularExpression('/🗂 ماهانه.*یک ماهه/u', json_encode($this->inlineKeyboard($this->buttonsCall()), JSON_UNESCAPED_UNICODE) ?: '', 'the categories first, then the plans');
+        $this->tapAs(Nav::to('slf', 'mt', 3, 0));
+        $this->tapAs(Nav::to('slf', 'mt', 3, 1));
+        $this->tapAs(Nav::to('slf', 'done', 3));
+        $this->tapAs(Nav::to('slf', 'skip', 4));
+        $this->tapAs(Nav::to('slf', 'skip', 5));
+        $this->tapAs(Nav::to('slf', 'save'));
+
+        $sale = Sale::query()->sole();
+        self::assertSame([[$monthly->id], [$plan->id]], [$sale->category_ids, $sale->plan_ids]);
+        $this->tapAs(Nav::to('slv', 'show', $sale->id));
+        self::assertStringContainsString('دسته «ماهانه» و پلن «یک ماهه»', $this->said()[0]);
+    }
+
+    public function testASalesPlansWithNothingTickedAreRefusedOnTheWayThrough(): void
+    {
+        $plan = $this->plan(['name' => 'یک ماهه']);
+
+        $this->tapAs(Nav::to('slf', 'new'));
+        $this->send($this->message('فروش آزمایشی', chat: self::OWNER));
+        $this->tapAs(Nav::to('slf', 'q', 1, 1));
+        $this->tapAs(Nav::to('slf', 'done', 2));
+        $this->tapAs(Nav::to('slf', 'mt', 3, 0, 1));
+        $this->tapAs(Nav::to('slf', 'mt', 3, 0, 0));
+        $this->tapAs(Nav::to('slf', 'done', 3));
+        self::assertSame(Marketing::REACH_NONE, $this->popup(), 'nothing ticked: refused');
+        self::assertStringContainsString('روی کدام دسته‌ها و پلن‌ها باشد؟', $this->said()[0], 'the same step');
+
+        $this->tapAs(Nav::to('slf', 'all', 3));
+        $this->tapAs(Nav::to('slf', 'done', 3));
+        self::assertStringContainsString('از کی شروع شود؟', $this->said()[0], '«همه پلن‌ها»: on to the next');
+        $this->tapAs(Nav::to('slf', 'skip', 4));
+        $this->tapAs(Nav::to('slf', 'skip', 5));
+        $this->tapAs(Nav::to('slf', 'save'));
+        $sale = Sale::query()->sole();
+        self::assertSame([null, null], [$sale->category_ids, $sale->plan_ids], 'every plan');
+
+        // A draft as 0.10 left it — its plans under `plan_ids` — keeps them, never every plan.
+        $this->tapAs(Nav::to('slf', 'edit', $sale->id));
+        $session = TelegramSession::of(self::OWNER) ?? self::fail('no chat');
+        $data = $session->data ?? [];
+        $draft = $data[Admin::FACT]['screens']['slf']['draft'] ?? self::fail('no form open');
+        unset($draft['plans']);
+        $data[Admin::FACT]['screens']['slf']['draft'] = ['plan_ids' => [$plan->id]] + $draft;
+        $session->forceFill(['data' => $data])->save();
+        $this->tapAs(Nav::to('slf', 'sum'));
+        self::assertStringContainsString('پلن‌ها: <b>یک ماهه</b>', $this->said()[0]);
+        $this->tapAs(Nav::to('slf', 'save'));
+        self::assertSame([null, [$plan->id]], [$sale->refresh()->category_ids, $sale->plan_ids]);
     }
 
     public function testALoyaltyTierIsAddedEditedAndDeleted(): void

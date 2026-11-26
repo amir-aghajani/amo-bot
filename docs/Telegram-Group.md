@@ -48,9 +48,43 @@ without the right to manage topics.
 | «تیکت‌ها» | A ticket opened, then every later message, its closing, opening again and rating — [Support tickets](Support-Tickets.md#from-the-report-group) |
 | «نظرات» | A review written on the website: its number, name, stars, where they use the service from, who wrote it, the words — no buttons: it is decided on the panel's «نظرات» ([Reviews](Reviews.md)) |
 | «پشتیبان‌گیری» | The shop's backup, as a file, once a day by default: in the main bot's group the whole installation's — every shop, the servers, the agents —, in an agent's group its own shop's; with what it is of, the date, its size and rows, and where it is restored. One larger than Telegram takes from a bot (50 MB) is said in a line instead, to download from the panel. It is sent at its time, apart from the queue below ([Backups](Backups.md#in-the-report-group)) |
+| «گزارش روزانه» | The shop's day before in figures, once a day from the hour you set ([below](#the-daily-report)) |
 
 «بخش‌های گزارش», on the same screen, has a switch for each (all on) — «پشتیبان‌گیری»'s is on «تنظیمات پنل ›
 پشتیبان‌گیری» too. A topic switched off sends nothing, and its topic stays in the group.
+
+### The daily report
+
+Once a day, from «ساعت گزارش روزانه» (under its switch; 00:00, just after midnight, unless you set another hour), the
+«گزارش روزانه» topic gets the day that ended — its calendar day on the shop's clock, midnight to midnight even on a day
+the clock moves; its figures are the dashboard's for that day (whose chart, on such a day, may put an hour around the
+change on the next):
+
+- **«درآمد»** — money that came in: card and online payments, top-ups among them, as the dashboard counts it; against
+  the day before («📈 ۱۸٪ بیشتر از روز قبل (…)», «کمتر از ۱٪» for a change that rounds to none, «➖ هم‌اندازه روز قبل»
+  for the same amount alone), and by payment method (the four largest, then «سایر»). A purchase paid from the wallet
+  is no income — its money came in with the top-up —, so it is in the sales and not here: the two never add up.
+- **«فروش»** — the orders paid that day, by kind: purchases, renewals, extra traffic, time and devices, top-ups and, in
+  the main bot's group, agents' traffic — how many and their amount. An order counts the day its payment was accepted
+  (a receipt approved the next morning, on that morning); one refunded since counts for nothing, and a service given
+  free — a prize, a referral's gift, support's free order — is no sale, here or below.
+- **«پرفروش‌ترین پلن‌ها»** — the five plans sold most in purchases and renewals, with their amount («سرویس دلخواه یا پلن
+  حذف‌شده» for services customers built and plans deleted since), and the three servers sold on most.
+- New customers, buyers and free tests of the day; the services running now; what waits on you now — receipts to
+  review, stuck orders, open tickets, reviews.
+- **«فروش نماینده‌ها»** — in the main bot's group alone: what each agent's bot sold its own customers that day, its
+  orders and their amount, the most money first (up to ten named — fewer when long names would pass what Telegram takes
+  in a message —, then how many more). An agent's group gets its own shop's day alone, with its traffic left.
+
+Should the report still be too long for one message, the plans, the servers and the payment methods are cut short too;
+the income and the sales lines never are.
+
+A day with nothing sold says «💤 در این روز فروشی ثبت نشد.» — even when money came in, which «درآمد» still shows. The
+report goes once: after a stop it comes at the next run, for the last day that ended — never the days missed. Its task,
+«گزارش روزانه» in «زمان‌بندی کارها», looks every 10 minutes by default whether the hour has come; keep its interval at
+an hour or less, or no look may fall between the hour and midnight, and that report is not sent
+([the task schedule](Running-In-Production.md#the-task-schedule)). In the bot the hour is set on «🧵 بخش‌های گزارش»
+while the topic is on.
 
 Who of support did something — handed a service on, dismissed receipts, made an order by hand, began moving a server's
 services, asked a gateway about a payment that was then held («🎧 استعلام توسط پشتیبانی») — is said as «🎧 توسط
@@ -134,6 +168,12 @@ back to the front:
   panel's «ارسال پیام» sends it ([Writing to a customer](Customers.md#writing-to-a-customer)), the front comes back,
   and what came of it is said under your reply — «✅ پیام در تلگرام به او رسید.», sent by email instead, or that they
   blocked the bot. On every card but your own.
+- **«💬 باز کردن پیوی»** — opens your own private chat with them in Telegram, to write to them yourself: by their
+  @username, else by their Telegram id. Telegram may refuse the id link as a plain bad request — a customer whose
+  privacy settings forbid it, or one Telegram does not know —; the card then comes once more, without the button — their
+  name on the card still opens their profile where Telegram allows it. On an agent's card too, which you only read, as
+  it changes nothing; not for a customer without Telegram (one who signed up on the website or by SMS alone), nor on
+  your own card.
 - **«📱 معاف از شماره» / «📱 لغو معافیت شماره»** — excuses them from the phone number the bot asks for, or ends that,
   at a press: as the button named it, so a double tap leaves it so. The front's mobile line says «بدون نیاز به شماره»
   while it holds. No admin's card has it: the rule never asks them

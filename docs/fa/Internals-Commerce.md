@@ -81,7 +81,7 @@ deliver() ── claim (paid → processing) → ProvisioningService → fulfill
 می‌خورد، کل مقدار با نرخ پله خودش (<code dir="ltr">quote()</code>، که `DTO\CustomPrice` می‌دهد).
 <code dir="ltr">Pricing::custom()</code> همین را قیمت پایه می‌گیرد و با آن همان‌طور رفتار می‌کند که با خرید اضافه یک
 سرویس بی‌پلن: <code dir="ltr">AutomaticDiscounts::best(null, Purchase, …)</code> (فقط فروش ویژه‌ای که روی همه پلن‌هاست)
-و کدی که برای <code dir="ltr">CodeTarget(Purchase, null, server)</code> سنجیده می‌شود.
+و کدی که برای <code dir="ltr">CodeTarget(Purchase, null, null, server)</code> سنجیده می‌شود.
 <code dir="ltr">OrderService::openCustomPurchase()</code> سفارش را می‌سازد — `plan_id` خالی (null)، و
 ستون‌های `server_id`، `traffic_bytes`، `days` و `client_name` در شکل آن، تا سفارش باز همان شکل پیدا شود و سفارش یک کلید باید با آن جور باشد؛
 `devices` (مال سازنده سرویس دلخواه) کنار آن، که یک تنظیم است نه چیزی که کاربر خواسته، تا اگر ادمین آن را تغییر دهد نه
@@ -100,7 +100,7 @@ deliver() ── claim (paid → processing) → ProvisioningService → fulfill
 می‌شود. <code dir="ltr">Pricing::renewal()</code> هر کدام از چیزهایی را که سرویس با آن تمدید می‌شود می‌گیرد — یک `Plan`
 (قیمت تمدیدش: قیمت نماینده، هرگز قیمت خرید اول) یا یک `CustomPrice` — و بسته را همان‌طور قیمت می‌گذارد که
 <code dir="ltr">custom()</code>، ولی به‌عنوان یک `Renewal`: <code dir="ltr">best(null, Renewal, …)</code> و
-<code dir="ltr">CodeTarget(Renewal, null, the service's server)</code> (مسیر مشترک هر دو
+<code dir="ltr">CodeTarget(Renewal, null, null, the service's server)</code> (مسیر مشترک هر دو
 <code dir="ltr">Pricing::built()</code> است). <code dir="ltr">OrderService::openCustomRenewal()</code> همزاد
 <code dir="ltr">openRenewal()</code> است — `plan_id` خالی، و `traffic_bytes`، `days` و `renewal_method` در
 شکلش، و `devices` کنار آن —، و هر دو از <code dir="ltr">openRenewalOf()</code> می‌گذرند: ردیف سرویس قفل می‌شود و
@@ -140,8 +140,12 @@ deliver() ── claim (paid → processing) → ProvisioningService → fulfill
 تمام شدن مهلت پرداختش کد را آزاد می‌کند. کد را تا وقتی می‌شود حذف کرد که جز سفارش لغوشده هیچ سفارشی با آن ساخته نشده
 باشد؛ کدی که همه سفارش‌هایش بازپرداخت شده‌اند برای سابقه آن‌ها نگه داشته می‌شود، با متن رد خودش
 (<code dir="ltr">DiscountInUseException::refunded()</code>). کدهای اشتباه برای هر کاربر محدودیت تعداد تلاش دارند
-(<code dir="ltr">DiscountCodes::tried()</code>). کدها و فروش‌های ویژه `Models\Concerns\DiscountScope` (نوع‌ها، پلن‌ها،
-بازه زمانی) و `Services\DiscountForm` (فیلدهای مشترک فرم‌هایشان) را با هم شریک‌اند.
+(<code dir="ltr">DiscountCodes::tried()</code>). کدها و فروش‌های ویژه `Models\Concerns\DiscountScope` (نوع‌ها،
+پلن‌ها، بازه زمانی) و `Services\DiscountForm` (فیلدهای مشترک فرم‌هایشان، از جمله <code dir="ltr">plans()</code>: هر دو
+فهرست خالی پذیرفته نمی‌شود) را با هم شریک‌اند. پلن‌هایشان `plan_ids` و `category_ids` با هم است
+(<code dir="ltr">takesPlan()</code>: پلنی که نامش آمده، یا پلنی که همین حالا در دسته‌ای است که نامش آمده — دسته‌ای که
+برای کد `DTO\CodeTarget` همراه دارد و برای فروش ویژه به <code dir="ltr">AutomaticDiscounts::best()</code> داده می‌شود؛
+هیچ‌کدام یعنی همه پلن‌ها).
 
 ## سفارش‌ها و پیش‌فاکتور
 

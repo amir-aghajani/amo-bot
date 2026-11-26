@@ -50,7 +50,10 @@ When something fails:
 - **An install a crash cut short** is finished by the next «ادامه به‌روزرسانی».
 
 An installed update is taken back with «بازگرداندن نسخه قبلی» while the version it replaced is kept, until the next
-update — unless the update changed the database: then only your backup takes it back. A backup the version before
+update — unless the update changed the database: then only your backup takes it back. Nor is it offered once the app's
+files were put in place by hand since the update: it would put an older version back over them. Taking an update back
+is yours alone — an admin of the main bot runs an update from the bot, but never rolls one back, since the version
+before lacks the guards that came since. A backup the version before
 made restores on the new one too: it is brought along by the upgrades since ([restoring](Backups.md#restoring)).
 
 What the panel's update needs, and says it needs where it is missing:

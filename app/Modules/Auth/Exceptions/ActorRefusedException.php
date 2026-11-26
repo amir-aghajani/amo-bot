@@ -15,7 +15,11 @@ use App\Modules\Auth\StaffGrant;
  * without the `catalog` grant (one with a `grant`: StaffMiddleware answers it as its own door does), or approving a
  * payment with no receipt in review; from the report group, an admin's own account, an agent's, banning an admin,
  * putting one in a «همکار» group, setting one's own discount, making an admin of someone with either, or their website
- * sign-in. The owner and agents themselves are refused none of these.
+ * sign-in; from the bot's management with the owner's seat, what hands over the main bot or the owner's seat (the owner's
+ * Telegram accounts, the webhook's secret, the site's address, the main bot's token and @username, the Bot API's address,
+ * the database, the panels' session settings) or
+ * puts back a version without these guards (the update's rollback). The owner and agents themselves are refused none of
+ * these.
  */
 final class ActorRefusedException extends DomainRuleException
 {
@@ -39,11 +43,17 @@ final class ActorRefusedException extends DomainRuleException
     public const OWN_PRICES = 'قیمت‌های خودتان را نمی‌توانید عوض کنید؛ تخفیف اختصاصی و گروه «همکار» خودتان با مدیر دیگری است.';
     public const OWNER_ONLY = 'حساب‌های تلگرام مالک را فقط خود مالک تغییر می‌دهد.';
     public const OWN_AGENCY = 'نمایندگی خودتان را نمی‌توانید تغییر دهید؛ این کار با مدیر دیگری است.';
-    public const OWNERS_PASSWORD = 'این تغییر رمز عبور پنل را می‌خواهد و فقط کار خود مالک است.';
     public const OWNER_BANNED = 'این حساب تلگرام مالک فروشگاه است و مسدود نمی‌شود.';
     public const OWNER_ROLE = 'نقش حساب تلگرام مالک فروشگاه را فقط خود مالک عوض می‌کند.';
     public const AGENT_BANNED = 'این حساب نماینده صاحب این ربات است و مسدود نمی‌شود.';
     public const OWNERS_SECRET = 'رمز Webhook ربات اصلی را فقط خود مالک عوض می‌کند.';
+    public const OWNERS_ADDRESS = 'آدرس سایت را فقط خود مالک عوض می‌کند؛ پیام‌های تلگرام همه ربات‌ها به همین آدرس فرستاده می‌شود.';
+    public const OWNERS_BOT = 'توکن و نام کاربری ربات اصلی را فقط خود مالک عوض می‌کند.';
+    public const OWNERS_DATABASE = 'دیتابیس فروشگاه را فقط خود مالک عوض یا تست می‌کند.';
+    public const OWNERS_ROLLBACK = 'برگشت به نسخه قبلی برنامه فقط با خود مالک است.';
+    public const OWNERS_API = 'آدرس API تلگرام را فقط خود مالک عوض می‌کند؛ توکن همه ربات‌ها به همین آدرس فرستاده می‌شود.';
+    public const OWNERS_SESSION = 'طول Session و کوکی Session پنل‌ها را فقط خود مالک عوض می‌کند.';
+    public const OWNERS_BACKUP = 'این فایل پشتیبان پیش از نسخه 0.11.0 ساخته شده و رمز Webhook ربات‌ها در آن است؛ دریافت و بازگردانی‌اش فقط با خود مالک یا خود نماینده است.';
 
     private function __construct(
         string $message,
@@ -174,15 +184,6 @@ final class ActorRefusedException extends DomainRuleException
         return new self(self::OWN_AGENCY);
     }
 
-    /**
-     * A change that asks the panel's password (the Bot API address moved), made by anyone but the owner themselves: one of
-     * the main shop's admins never types it — each wrong try counts against the owner's sign-in.
-     */
-    public static function ownersPassword(): self
-    {
-        return new self(self::OWNERS_PASSWORD);
-    }
-
     /** A Telegram account linked as the owner banned by anyone but the owner: it would shut the owner out of the bot. */
     public static function ownerBanned(): self
     {
@@ -208,6 +209,70 @@ final class ActorRefusedException extends DomainRuleException
     public static function ownersSecret(): self
     {
         return new self(self::OWNERS_SECRET);
+    }
+
+    /**
+     * The site's address (APP_URL) changed by anyone but the owner themselves: every bot's webhook is registered under it,
+     * so whoever moves it to a host of theirs is sent each update with its secret.
+     */
+    public static function ownersAddress(): self
+    {
+        return new self(self::OWNERS_ADDRESS);
+    }
+
+    /**
+     * The main bot's token or @username changed by anyone but the owner themselves: another bot's token shows its webhook's
+     * address, secret and all, to whoever holds it; another @username sends the owner's one-time link (OwnerLinks) there.
+     */
+    public static function ownersBot(): self
+    {
+        return new self(self::OWNERS_BOT);
+    }
+
+    /**
+     * The database saved or tried by anyone but the owner themselves: whoever picks it picks who the owner is in the bot
+     * (its main shop's settings, OwnerLinks).
+     */
+    public static function ownersDatabase(): self
+    {
+        return new self(self::OWNERS_DATABASE);
+    }
+
+    /**
+     * The last update rolled back by anyone but the owner themselves: the version before lacks the guards that came since
+     * — these among them.
+     */
+    public static function ownersRollback(): self
+    {
+        return new self(self::OWNERS_ROLLBACK);
+    }
+
+    /**
+     * The Bot API's address changed by anyone but the owner themselves — its path on the same server too: every bot's token
+     * goes there, agents' too.
+     */
+    public static function ownersApi(): self
+    {
+        return new self(self::OWNERS_API);
+    }
+
+    /**
+     * The panels' session settings changed by anyone but the owner themselves: a longer session, or a cookie the host
+     * cannot keep, is the owner's own sign-in made weaker or shut.
+     */
+    public static function ownersSession(): self
+    {
+        return new self(self::OWNERS_SESSION);
+    }
+
+    /**
+     * A backup file made before 0.11.0 (Backups::MASKED_SINCE) downloaded or restored by an admin working a bot's
+     * management with its owner's or agent's seat, not the owner or the agent themselves: it holds each bot's webhook
+     * address whole, its secret with it — the main bot's lets an update in under the owner's Telegram account.
+     */
+    public static function ownersBackup(): self
+    {
+        return new self(self::OWNERS_BACKUP);
     }
 
     public function status(): int

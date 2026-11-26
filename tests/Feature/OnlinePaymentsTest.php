@@ -52,8 +52,8 @@ use Tests\Support\FakeCubePay;
  * An online gateway, through CubePay: a checkout opens the payment on the gateway once and shows its page; what came of
  * it is only ever the gateway's word — asked when it calls back, when the customer or support asks, and now and then by
  * the task —, settled once and told once; money taken after its order closed goes to the wallet; a page whose time is
- * over gives way to a new payment, and is given up on long after — unless the gateway holds money on it, then support's
- * in the end (at once, should the gateway close it); an answer that does not fit holds it for support, told once, its order paid no other way; the callback
+ * over gives way to a new payment, and is given up on long after — unless the gateway holds money on it, its order kept
+ * for it, then support's in the end (at once, should the gateway close it); an answer that does not fit holds it for support, told once, its order paid no other way; the callback
  * asks a few times a minute at most; the return page says what came of it, and where to look.
  */
 final class OnlinePaymentsTest extends HttpTestCase
@@ -76,7 +76,7 @@ final class OnlinePaymentsTest extends HttpTestCase
     public function testTheTaskAsksEveryMinuteInEveryShop(): void
     {
         self::assertSame(
-            ['task' => OnlinePaymentsTask::class, 'key' => 'online_payments', 'interval' => 60, 'eachBot' => true],
+            ['task' => OnlinePaymentsTask::class, 'key' => 'online_payments', 'interval' => 60, 'start' => 0, 'eachBot' => true],
             $this->service(Scheduler::class)->tasks()[OnlinePaymentsTask::class],
         );
     }
@@ -614,10 +614,10 @@ final class OnlinePaymentsTest extends HttpTestCase
         self::assertSame($asked + 1, $verifies());
         self::assertSame(PaymentStatus::Pending, $payment->refresh()->status);
 
-        // Its order expires as any idle one does; the payment, cancelled with it, is asked on all the same.
+        // Its order never expires meanwhile, however idle: what the gateway settles pays it. Asked on all the same.
         Carbon::setTestNow($payment->updated_at->copy()->addHours(ScheduleSettings::ORDER_HOURS)->addMinute());
         $this->service(ExpireOrdersTask::class)->run();
-        self::assertSame([PaymentStatus::Cancelled, OrderStatus::Cancelled], [$payment->refresh()->status, $payment->order->status]);
+        self::assertSame([PaymentStatus::Pending, OrderStatus::Pending], [$payment->refresh()->status, $payment->order->status]);
         $asked = $verifies();
         $task->run();
         self::assertSame($asked + 1, $verifies());
@@ -634,6 +634,11 @@ final class OnlinePaymentsTest extends HttpTestCase
         Carbon::setTestNow(now()->addHour());
         $task->run();
         self::assertSame($asked, $verifies());
+
+        // Held, its order waits for support however idle it stays: support settles it with the customer, or cancels it.
+        Carbon::setTestNow(now()->addHours(ScheduleSettings::ORDER_HOURS));
+        $this->service(ExpireOrdersTask::class)->run();
+        self::assertSame([PaymentStatus::Pending, OrderStatus::Pending], [$payment->refresh()->status, $payment->order->refresh()->status]);
     }
 
     public function testMoneyInThatTheGatewayThenClosesIsHeldForSupportAtOnce(): void
@@ -655,6 +660,63 @@ final class OnlinePaymentsTest extends HttpTestCase
         self::assertStringContainsString(PaymentService::NOTE_CLOSED_WITH_MONEY, (string) ReportMessage::query()->where('topic', Topic::Errors->value)->value('text'));
         self::assertSame(PaymentService::NOTE_CLOSED_WITH_MONEY . '.', $this->service(PaymentActions::class)->refusal($payment, 'check'));
         self::assertTrue($payment->order->refresh()->status === OrderStatus::Pending && Order::expirable()->whereKey($payment->order_id)->doesntExist(), 'its order waits for support');
+    }
+
+    public function testAnOrderWithMoneyInAtTheGatewayNeverExpiresAndIsDeliveredOnceTheGatewaySettlesIt(): void
+    {
+        $payment = $this->topUp('50000')->payment()->refresh();
+        // As an order made with a discount code: its hold (60 minutes by default) is the soonest an order expires.
+        Order::query()->whereKey($payment->order_id)->toBase()->update(['discount_code_id' => $this->discountCode()->id]);
+        $payment->forceFill(['invoice' => ['money_in' => true] + $payment->invoice])->save();
+        $task = $this->service(ExpireOrdersTask::class);
+        $start = now()->copy();
+
+        // Its page closed, past the code's hold, then past the idle hours: never dropped, not even a candidate.
+        foreach ([61, ScheduleSettings::ORDER_HOURS * 60 + 1] as $minutes) {
+            Carbon::setTestNow($start->copy()->addMinutes($minutes));
+            $task->run();
+            self::assertSame([PaymentStatus::Pending, OrderStatus::Pending], [$payment->refresh()->status, $payment->order->refresh()->status], "{$minutes} minutes on");
+            self::assertTrue(Order::expirable()->whereKey($payment->order_id)->doesntExist());
+        }
+
+        // The gateway settles it: it pays this order, which is delivered — nothing goes to the wallet instead.
+        $this->cubePay->pay((string) $payment->reference);
+        self::assertSame(OnlineState::Paid, $this->service(OnlinePayments::class)->check($payment));
+        $payment->refresh();
+        self::assertSame([PaymentStatus::Paid, OrderStatus::Fulfilled, false], [$payment->status, $payment->order->refresh()->status, $payment->wentToWallet()]);
+        self::assertSame('50000.00', $this->customer->balance());
+    }
+
+    public function testALateReceiptOnAClosedPageKeepsItsOrderUntilItIsHeldForSupport(): void
+    {
+        $this->reportGroup();
+        $payment = $this->topUp('50000')->payment()->refresh();
+        // As an order made with a discount code: its hold (60 minutes by default) is the soonest an order expires.
+        Order::query()->whereKey($payment->order_id)->toBase()->update(['discount_code_id' => $this->discountCode()->id]);
+        $closed = $payment->link_expires_at->copy();
+
+        // Its page closed unpaid: failed, the customer free to pay again. An hour on, the gateway says money came in late.
+        Carbon::setTestNow($closed->copy()->addMinute());
+        self::assertTrue($this->service(OnlinePayments::class)->close($payment));
+        Carbon::setTestNow($closed->copy()->addHour());
+        $payment->refresh()->forceFill(['invoice' => ['money_in' => true] + $payment->invoice])->save();
+        self::assertSame(PaymentStatus::Failed, $payment->status);
+
+        // Past the code's hold: never dropped, not even a candidate — what the gateway settles still pays this order.
+        Carbon::setTestNow($closed->copy()->addHour()->addMinutes(61));
+        $this->service(ExpireOrdersTask::class)->run();
+        self::assertSame([PaymentStatus::Failed, OrderStatus::Pending], [$payment->refresh()->status, $payment->order->refresh()->status]);
+        self::assertTrue(Order::expirable()->whereKey($payment->order_id)->doesntExist());
+        self::assertFalse($this->service(PaymentService::class)->expire($payment->order, now()), 'nor does the expiry itself drop it');
+
+        // REVIEW_HOURS after its page closed, the task (still asking it) leaves it to support; its order waits for them.
+        Carbon::setTestNow($closed->copy()->addHours(ScheduleSettings::REVIEW_HOURS)->addMinute());
+        $this->service(OnlinePaymentsTask::class)->run();
+        $payment->refresh();
+        self::assertSame([PaymentStatus::Failed, PaymentService::NOTE_UNSETTLED, true], [$payment->status, $payment->note, OnlinePayments::awaitsSupport($payment)]);
+        Carbon::setTestNow(now()->addHours(ScheduleSettings::ORDER_HOURS));
+        $this->service(ExpireOrdersTask::class)->run();
+        self::assertSame(OrderStatus::Pending, $payment->order->refresh()->status);
     }
 
     public function testTheCallbackAsksTheGatewayAFewTimesAMinuteAtMost(): void

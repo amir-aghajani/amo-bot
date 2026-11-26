@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace App\Modules\Telegram\Admin\Sections\Panel\Config;
 
+use App\Modules\Telegram\Admin\AdminSeat;
 use App\Modules\Telegram\Admin\Door\ApiRefusal;
+use App\Modules\Telegram\Admin\Sections\Panel\Access;
 use App\Modules\Telegram\Admin\Sections\Panel\Forms\DraftForm;
 use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\Button;
@@ -14,7 +16,8 @@ use App\Modules\Telegram\Admin\Ui\View;
 
 /**
  * «دیتابیس» of config.php: the database's driver and its form (another driver to switch to when one is offered), tried
- * with «🧪 تست اتصال» — and by the save itself, which keeps nothing a database does not answer to.
+ * with «🧪 تست اتصال» — and by the save itself, which keeps nothing a database does not answer to. The owner's themselves
+ * alone: one of the main shop's admins is not offered it.
  *
  * Actions besides the form's: `test`.
  */
@@ -23,6 +26,12 @@ final class DatabaseScreen extends ConfigScreen
     public const ID = 'ppd';
 
     public const TITLE = '🗄 دیتابیس';
+
+    /** The owner themselves: whoever picks the database picks who the owner is in the bot. */
+    public function allows(AdminSeat $seat): bool
+    {
+        return Access::theOwner($seat);
+    }
 
     protected function screen(): string
     {

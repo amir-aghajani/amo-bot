@@ -43,7 +43,7 @@ final class SendBackupsTaskTest extends DatabaseTestCase
         self::assertSame('installation', $this->header($this->telegram()->files(0)['document'])['scope']);
         self::assertStringEndsWith('.json.gz', $params['document']);
 
-        $auto = $this->service(Backups::class)->status(BackupScope::installation())['auto'];
+        $auto = $this->service(Backups::class)->status(BackupScope::installation(), true)['auto'];
         self::assertNotNull($auto['last_sent_at']);
         self::assertNull($auto['last_problem']);
         self::assertSame([], glob(sys_get_temp_dir() . '/amobot-tests-' . getmypid() . '-*/backups/made/*') ?: [], 'the made file is gone');
@@ -78,7 +78,7 @@ final class SendBackupsTaskTest extends DatabaseTestCase
         $this->service(Backups::class)->sendToGroup(false);
         $this->service(SendBackupsTask::class)->run();
         self::assertSame([], $this->telegram()->calls(), 'the topic is off');
-        self::assertNull($this->service(Backups::class)->status(BackupScope::installation())['auto']['last_sent_at']);
+        self::assertNull($this->service(Backups::class)->status(BackupScope::installation(), true)['auto']['last_sent_at']);
     }
 
     public function testARefusedFileIsSaidInThePanel(): void
@@ -88,13 +88,13 @@ final class SendBackupsTaskTest extends DatabaseTestCase
 
         $this->service(SendBackupsTask::class)->run();
 
-        $auto = $this->service(Backups::class)->status(BackupScope::installation())['auto'];
+        $auto = $this->service(Backups::class)->status(BackupScope::installation(), true)['auto'];
         self::assertNotNull($auto['last_sent_at']);
         self::assertStringContainsString('file is too big', (string) $auto['last_problem']);
 
         $this->telegram()->on('sendDocument', static fn(): mixed => ['message_id' => 900]);
         $this->service(SendBackupsTask::class)->run();
-        self::assertNull($this->service(Backups::class)->status(BackupScope::installation())['auto']['last_problem'], 'the next one went');
+        self::assertNull($this->service(Backups::class)->status(BackupScope::installation(), true)['auto']['last_problem'], 'the next one went');
     }
 
     /** A run whose time is over begins no backup: the shop waits for its turn, and its backup goes at the next run. */

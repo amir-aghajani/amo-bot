@@ -45,6 +45,9 @@ final class ReportSender
     /** Rows looked at for one nobody holds. */
     private const CANDIDATES = 5;
 
+    /** The least a daily report's row is kept (prune()): longer than any day of a clock that moves. */
+    private const DAILY_KEEP_DAYS = 2;
+
     /** Under a report whose picture could not be copied (the customer deleted their message, or blocked the bot). */
     private const NO_PICTURE = '🖼 تصویر کپی نشد؛ در پنل مدیریت دیده می‌شود.';
 
@@ -112,11 +115,15 @@ final class ReportSender
     /**
      * Forget rows sent or given up on `$keepDays` ago (but tickets' reports: pruneTickets()) and give up on rows waiting
      * longer than `$waitHours`. Both halves are ranges of the pruning index under a null ticket, so a run with nothing
-     * old reads nothing.
+     * old reads nothing. A daily report's row stays DAILY_KEEP_DAYS at least: it marks its day as reported
+     * (DailyReport), and a day of 25 hours would see it go at one day's keeping while still the day it was sent on —
+     * and the day reported again.
      */
     public function prune(int $keepDays, int $waitHours): void
     {
-        self::old(ReportMessage::query()->whereNull('ticket_id'), $keepDays)->delete();
+        self::old(ReportMessage::query()->whereNull('ticket_id'), $keepDays)
+            ->where(static fn(Builder $rows) => $rows->whereNull('ref')->orWhere('ref', 'not like', DailyReport::REF . '%')->orWhere('created_at', '<', now()->subDays(self::DAILY_KEEP_DAYS)))
+            ->delete();
         ReportMessage::waiting()->where('created_at', '<', now()->subHours($waitHours))->update(['failed_at' => now(), 'error' => 'Waited too long to be sent.'] + Lease::FREE);
     }
 

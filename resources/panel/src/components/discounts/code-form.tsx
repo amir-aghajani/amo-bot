@@ -4,7 +4,7 @@ import { Shuffle } from 'lucide-react'
 import { toast } from 'sonner'
 import { CheckList, optionsRead } from '@/components/check-list'
 import { Disclosure } from '@/components/disclosure'
-import { OrderKindsField, PlansField, targetsRead } from '@/components/discounts/targets'
+import { OrderKindsField, PlanReachField, targetsRead } from '@/components/discounts/targets'
 import { windowEnd, windowRequest, type WindowEnd } from '@/components/discounts/window'
 import { WindowField } from '@/components/discounts/window-field'
 import { Field } from '@/components/field'
@@ -38,7 +38,9 @@ interface Draft {
   max_discount: string
   min_amount: string
   order_types: OwnOrderType[] | null
+  /** With `category_ids`: both null for every plan, else both lists (either may be empty). */
   plan_ids: number[] | null
+  category_ids: number[] | null
   server_ids: number[] | null
   first_purchase_only: boolean
   starts: WindowEnd
@@ -73,6 +75,7 @@ function requestOf(draft: Draft): DiscountCodeRequest {
     min_amount: draft.min_amount,
     order_types: draft.order_types,
     plan_ids: draft.plan_ids,
+    category_ids: draft.category_ids,
     server_ids: draft.server_ids,
     first_purchase_only: draft.first_purchase_only,
     starts_at: windowRequest(draft.starts),
@@ -95,6 +98,7 @@ function readOf(draft: Draft): unknown {
     min_amount: asAmount(draft.min_amount),
     order_types: targetsRead(draft.order_types),
     plan_ids: targetsRead(draft.plan_ids),
+    category_ids: targetsRead(draft.category_ids),
     server_ids: targetsRead(draft.server_ids),
     max_uses: asWhole(draft.max_uses),
     per_user: asWhole(draft.per_user),
@@ -103,11 +107,13 @@ function readOf(draft: Draft): unknown {
 
 /**
  * A discount code created or edited: its text, what it takes off (a percent with an optional cap, Toman, or everything),
- * what it applies to (order kinds, plans, servers, first purchases, a minimum amount), its window and its use limits.
+ * what it applies to (order kinds, plans and plan categories, servers, first purchases, a minimum amount), its window and
+ * its use limits.
  */
 export function CodeForm({ code, invalidates, onSaved, onCancel }: CodeFormProps) {
   const options = useQuery(planOptionsQuery)
-  const { values, set, revert, error, formError, busy, dirty, submit, handleSubmit } = useForm<Draft>(
+  const everyPlan = code === null || (code.plans === null && code.categories === null)
+  const { values, set, patch, revert, error, formError, busy, dirty, submit, handleSubmit } = useForm<Draft>(
     {
       code: code?.code ?? '',
       note: code?.note ?? '',
@@ -116,7 +122,8 @@ export function CodeForm({ code, invalidates, onSaved, onCancel }: CodeFormProps
       max_discount: typed(code?.max_discount ?? null),
       min_amount: typed(code?.min_amount ?? null),
       order_types: code ? code.order_types : null,
-      plan_ids: code?.plans ? code.plans.map((plan) => plan.id) : null,
+      plan_ids: everyPlan ? null : (code.plans ?? []).map((plan) => plan.id),
+      category_ids: everyPlan ? null : (code.categories ?? []).map((category) => category.id),
       server_ids: code?.servers ? code.servers.map((server) => server.id) : null,
       first_purchase_only: code?.first_purchase_only ?? false,
       starts: windowEnd(code?.starts_at ?? null),
@@ -209,9 +216,13 @@ export function CodeForm({ code, invalidates, onSaved, onCancel }: CodeFormProps
         </Field>
       </div>
 
-      <Disclosure label="محدودیت‌های بیشتر" defaultOpen={code !== null && (code.plans !== null || code.servers !== null || code.min_amount !== null || code.first_purchase_only || code.note !== null)}>
+      <Disclosure label="محدودیت‌های بیشتر" defaultOpen={code !== null && (!everyPlan || code.servers !== null || code.min_amount !== null || code.first_purchase_only || code.note !== null)}>
         <div className="grid gap-5">
-          <PlansField value={values.plan_ids} onChange={(ids) => set('plan_ids', ids)} error={error('plan_ids')} />
+          <PlanReachField
+            value={{ plan_ids: values.plan_ids, category_ids: values.category_ids }}
+            onChange={patch}
+            error={[error('plan_ids'), error('category_ids')].filter((message) => message !== undefined)}
+          />
           <CheckList
             label="سرورها"
             all="همه سرورها"

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Telegram\Reports;
 
 use App\Modules\Telegram\Api\BotApi;
+use App\Modules\Telegram\Api\Refusal;
 use App\Modules\Telegram\Api\TelegramApiException;
 use App\Modules\Telegram\Models\ReportMessage;
 use App\Modules\Telegram\Update\Update;
@@ -176,8 +177,41 @@ final class GroupButtons
         try {
             $this->api->editMessageText($chatId, $messageId, $html, ['reply_markup' => ['inline_keyboard' => $rows]]);
         } catch (TelegramApiException $e) {
+            $kept = self::withoutUserLinks($e, $rows);
+            if ($kept !== null) {
+                $this->rewriteMessage($chatId, $messageId, $html, $kept);
+
+                return;
+            }
             $this->logger->info('Message {message} in chat {chat} was not rewritten: {error}', ['message' => $messageId, 'chat' => $chatId, 'error' => $e->getMessage()]);
         }
+    }
+
+    /**
+     * The rows without their buttons that link a Telegram user by id (tg://user?id= — a card's «💬 باز کردن پیوی» for a
+     * customer without a @username), when Telegram refused the message as a plain bad request (`$e`: Refusal::BadRequest,
+     * which is how it turns down such a link — a user whose privacy forbids it, BUTTON_USER_PRIVACY_RESTRICTED, or one it
+     * does not know, BUTTON_USER_INVALID); null for any other refusal (nothing to change, a flood wait, the bot shut out)
+     * or rows with no such button — so a message is sent again without them once, never twice.
+     *
+     * @param list<list<array<string, mixed>>> $rows
+     * @return list<list<array<string, mixed>>>|null
+     */
+    public static function withoutUserLinks(TelegramApiException $e, array $rows): ?array
+    {
+        if ($e->refusal() !== Refusal::BadRequest) {
+            return null;
+        }
+        $linksUser = static fn(array $button): bool => str_starts_with((string) ($button['url'] ?? ''), 'tg://user');
+        $kept = [];
+        foreach ($rows as $row) {
+            $left = array_values(array_filter($row, static fn(array $button): bool => !$linksUser($button)));
+            if ($left !== []) {
+                $kept[] = $left;
+            }
+        }
+
+        return $kept === $rows ? null : $kept;
     }
 
     /**
@@ -215,6 +249,10 @@ final class GroupButtons
 
             return (int) ($sent['message_id'] ?? 0);
         } catch (TelegramApiException $e) {
+            $kept = is_array($markup['inline_keyboard'] ?? null) ? self::withoutUserLinks($e, $markup['inline_keyboard']) : null;
+            if ($kept !== null) {
+                return $this->say($chatId, $replyTo, $thread, $text, ['inline_keyboard' => $kept], $html);
+            }
             $this->logger->warning('Could not write in group {chat}: {message}', ['chat' => $chatId, 'message' => $e->getMessage()]);
 
             return null;

@@ -74,6 +74,15 @@ final class CustomerWalletTest extends BotTestCase
         self::assertSame(["uw:d:{$this->ali->id}", "uw:c:{$this->ali->id}", "um:o:{$this->ali->id}"], $this->callbacks(0));
     }
 
+    public function testALineWithAnApostropheKeepsItsEntityWholeAndItsRowNumberMarked(): void
+    {
+        $this->service(WalletService::class)->credit($this->ali, 1000, "Ali's refund for #4", 'root');
+
+        $this->send($this->press("uw:o:{$this->ali->id}"));
+
+        self::assertStringContainsString("➕ ۱٬۰۰۰ تومان · Ali&#039;s refund for \u{200E}#4 · 🎧 پشتیبانی · ", $this->params(0)['text'], 'no mark inside the entity');
+    }
+
     public function testAnEmptyWalletAnAgentsCreditAndTheLockedCards(): void
     {
         $this->send($this->press("uw:o:{$this->ali->id}"));

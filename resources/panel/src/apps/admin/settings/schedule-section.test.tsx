@@ -67,6 +67,7 @@ const TASKS: [key: string, title: string, minutes: number][] = [
   ['nightly_draw', 'قرعه‌کشی شبانه', 10],
   ['send_backups', 'ارسال پشتیبان به گروه', 1440],
   ['prune_imports', 'پاک‌سازی انتقال‌ها', 1440],
+  ['daily_report', 'گزارش روزانه', 10],
   ['check_releases', 'بررسی نسخه تازه', 1440],
   ['send_reports', 'ارسال گزارش‌ها', 1],
 ]
@@ -80,6 +81,7 @@ function task(key: string, title: string, minutes: number): ScheduleTask {
     each_shop: false,
     last_ran_at: at(-1),
     next_run_at: at(minutes - 1),
+    start: { name: `${key}_start`, label: 'ساعت شروع', hint: 'اجراها از این ساعت شمرده می‌شوند.', value: '00:00', default: '00:00' },
     fields: [{ name: `${key}_minutes`, label: 'فاصله اجرا', hint: null, unit: 'دقیقه', value: minutes, default: minutes, min: 1, max: 10080 }, ...(TIMINGS[key] ?? [])],
   }
 }
@@ -109,9 +111,12 @@ const SET = scheduleWith(
   { sync_subscriptions_minutes: 30 },
 )
 
-/** Every field's value of a schedule, by its name: the request a save of it sends. */
+/** The backups sent from `value` (03:30 by default), the rest at their defaults. */
+const backupsFrom = (value: string) => scheduleWith({ send_backups: { start: { ...task('send_backups', 'ارسال پشتیبان به گروه', 1440).start, value, default: '03:30' } } })
+
+/** Every field's value and every start of a schedule, by its name: the request a save of it sends. */
 function requestOf(schedule: Schedule): ScheduleRequest {
-  return Object.fromEntries(schedule.tasks.flatMap((each) => each.fields.map((field) => [field.name, field.value]))) as unknown as ScheduleRequest
+  return Object.fromEntries(schedule.tasks.flatMap((each) => [...each.fields.map((field) => [field.name, field.value]), [each.start.name, each.start.value]])) as unknown as ScheduleRequest
 }
 
 /** The section on its own, the schedule read as `schedule`. */
@@ -177,6 +182,7 @@ describe('the schedule', () => {
         .map((box) => box.id),
     ).toEqual([
       'schedule_online_payments_minutes',
+      'schedule_online_payments_start',
       'schedule_online_payments_check_minutes',
       'schedule_online_payments_late_hours',
       'schedule_online_payments_late_check_minutes',
@@ -189,8 +195,8 @@ describe('the schedule', () => {
 
     // Every input on the page has an id of its own.
     const ids = screen.getAllByRole('textbox').map((box) => box.id)
-    expect(ids).toHaveLength(30)
-    expect(new Set(ids).size).toBe(30)
+    expect(ids).toHaveLength(53)
+    expect(new Set(ids).size).toBe(53)
   })
 
   it('warns while Cron never ran, pointing to where it is set up', async () => {
@@ -214,10 +220,29 @@ describe('saving the schedule', () => {
 
     await until(() => expect(toast.success).toHaveBeenCalledWith('زمان‌بندی ذخیره شد'))
     expect(server().sent('PUT', URL)[0]?.body).toEqual(requestOf(saved))
-    expect(Object.keys(server().sent('PUT', URL)[0]?.body as object)).toHaveLength(30)
+    expect(Object.keys(server().sent('PUT', URL)[0]?.body as object)).toHaveLength(53)
     await until(() => expect(input('همگام‌سازی سرویس‌ها').value).toBe('20'))
     expect(input('کنار گذاشتن سفارش‌های رهاشده', 'مهلت سفارش پرداخت‌نشده').value).toBe('72')
     expect(screen.queryByText('تغییرات ذخیره نشده')).toBeNull()
+  })
+
+  it('sends a start as the time of day typed — Persian digits, one digit for the hour —, its default beside it and a press away', async () => {
+    const saved = scheduleWith({ send_backups: { start: { ...task('send_backups', 'ارسال پشتیبان به گروه', 1440).start, value: '02:30' } } })
+    server().on('PUT', URL, json({ schedule: saved } satisfies ScheduleResponse))
+    await show()
+
+    const backups = taskOf('ارسال پشتیبان به گروه')
+    expect(input('ارسال پشتیبان به گروه', 'ساعت شروع').value).toBe('00:00')
+    // A colon to type: no keyboard of digits alone (iOS's has none).
+    expect(input('ارسال پشتیبان به گروه', 'ساعت شروع').getAttribute('inputmode')).toBeNull()
+    expect(within(backups).getByText('پیش‌فرض: ۰۰:۰۰')).toBeTruthy()
+    type('ارسال پشتیبان به گروه', 'ساعت شروع', '۲:۳۰')
+    expect(within(backups).getByRole('button', { name: 'بازگرداندن ساعت شروع به پیش‌فرض' })).toBeTruthy()
+    save()
+
+    await until(() => expect(server().sent('PUT', URL)).toHaveLength(1))
+    expect(server().sent('PUT', URL)[0]?.body).toMatchObject({ send_backups_start: '02:30', send_backups_minutes: 1440 })
+    await until(() => expect(input('ارسال پشتیبان به گروه', 'ساعت شروع').value).toBe('02:30'))
   })
 
   it('keeps the form as typed, with the server’s refusal under the field it is about', async () => {
@@ -283,6 +308,36 @@ describe('the defaults', () => {
     expect(server().sent('PUT', URL)[0]?.body).toEqual(requestOf(DEFAULTS))
   })
 
+  it('put a start back by its own press, the focus left on its input — and send it', async () => {
+    server().on('PUT', URL, json({ schedule: backupsFrom('03:30') } satisfies ScheduleResponse))
+    await show(backupsFrom('02:30'))
+    const backups = taskOf('ارسال پشتیبان به گروه')
+    expect(within(backups).getByText('پیش‌فرض: ۰۳:۳۰')).toBeTruthy()
+
+    fireEvent.click(within(backups).getByRole('button', { name: 'بازگرداندن ساعت شروع به پیش‌فرض' }))
+
+    expect(input('ارسال پشتیبان به گروه', 'ساعت شروع').value).toBe('03:30')
+    expect(document.activeElement).toBe(input('ارسال پشتیبان به گروه', 'ساعت شروع'))
+    expect(within(backups).queryByRole('button', { name: /به پیش‌فرض/ })).toBeNull()
+    save()
+    await until(() => expect(server().sent('PUT', URL)).toHaveLength(1))
+    expect(server().sent('PUT', URL)[0]?.body).toMatchObject({ send_backups_start: '03:30' })
+  })
+
+  it('put back a changed start with the rest, all at once', async () => {
+    server().on('PUT', URL, json({ schedule: backupsFrom('03:30') } satisfies ScheduleResponse))
+    await show(backupsFrom('02:30'))
+    expect(resetAll().getAttribute('aria-disabled')).toBeNull()
+
+    fireEvent.click(resetAll())
+
+    expect(input('ارسال پشتیبان به گروه', 'ساعت شروع').value).toBe('03:30')
+    expect(resetAll().getAttribute('aria-disabled')).toBe('true')
+    save()
+    await until(() => expect(server().sent('PUT', URL)).toHaveLength(1))
+    expect(server().sent('PUT', URL)[0]?.body).toMatchObject({ send_backups_start: '03:30' })
+  })
+
   it('all in already hold the press that would put them back', async () => {
     await show(DEFAULTS)
 
@@ -310,6 +365,20 @@ describe('unsaved changes', () => {
     expect(input('همگام‌سازی سرویس‌ها').value).toBe('30')
     expect(screen.queryByText('تغییرات ذخیره نشده')).toBeNull()
     expect(saveButton.getAttribute('aria-disabled')).toBe('true')
+  })
+
+  it('are none for a start typed back another way — Persian digits, one digit for the hour, a comma for the colon', async () => {
+    await show(backupsFrom('02:30'))
+    const saveButton = screen.getByRole('button', { name: 'ذخیره' })
+
+    for (const typed of ['۲:۳۰', '2,30', '۲،۳۰', ' 02.30 ']) {
+      type('ارسال پشتیبان به گروه', 'ساعت شروع', typed)
+      expect(saveButton.getAttribute('aria-disabled'), typed).toBe('true')
+      expect(screen.queryByText('تغییرات ذخیره نشده'), typed).toBeNull()
+    }
+
+    type('ارسال پشتیبان به گروه', 'ساعت شروع', '۲:۴۵')
+    expect(saveButton.getAttribute('aria-disabled')).toBeNull()
   })
 })
 

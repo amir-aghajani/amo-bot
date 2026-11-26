@@ -1,6 +1,6 @@
 import type { QueryKey } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { OrderKindsField, PlansField, targetsRead } from '@/components/discounts/targets'
+import { OrderKindsField, PlanReachField, targetsRead } from '@/components/discounts/targets'
 import { windowEnd, windowRequest, type WindowEnd } from '@/components/discounts/window'
 import { WindowField } from '@/components/discounts/window-field'
 import { Field } from '@/components/field'
@@ -23,7 +23,9 @@ interface Draft {
   name: string
   percent: string
   order_types: OwnOrderType[] | null
+  /** With `category_ids`: both null for every plan, else both lists (either may be empty). */
   plan_ids: number[] | null
+  category_ids: number[] | null
   starts: WindowEnd
   ends: WindowEnd
   enabled: boolean
@@ -35,6 +37,7 @@ function requestOf(draft: Draft): SaleRequest {
     percent: draft.percent,
     order_types: draft.order_types,
     plan_ids: draft.plan_ids,
+    category_ids: draft.category_ids,
     starts_at: windowRequest(draft.starts),
     ends_at: windowRequest(draft.ends),
     enabled: draft.enabled,
@@ -43,17 +46,25 @@ function requestOf(draft: Draft): SaleRequest {
 
 /** The draft as the server reads it, for `dirty`: its name trimmed, its percent by its digits, what it applies to as sets. */
 function readOf(draft: Draft): unknown {
-  return trimmed({ ...requestOf(draft), percent: asWhole(draft.percent), order_types: targetsRead(draft.order_types), plan_ids: targetsRead(draft.plan_ids) })
+  return trimmed({
+    ...requestOf(draft),
+    percent: asWhole(draft.percent),
+    order_types: targetsRead(draft.order_types),
+    plan_ids: targetsRead(draft.plan_ids),
+    category_ids: targetsRead(draft.category_ids),
+  })
 }
 
-/** A timed sale created or edited: the name customers see, its percent off, the order kinds and plans, and its window. */
+/** A timed sale created or edited: the name customers see, its percent off, the order kinds, plans and plan categories, and its window. */
 export function SaleForm({ sale, invalidates, onSaved, onCancel }: SaleFormProps) {
-  const { values, set, revert, error, formError, busy, dirty, submit, handleSubmit } = useForm<Draft>(
+  const everyPlan = sale === null || (sale.plans === null && sale.categories === null)
+  const { values, set, patch, revert, error, formError, busy, dirty, submit, handleSubmit } = useForm<Draft>(
     {
       name: sale?.name ?? '',
       percent: sale ? String(sale.percent) : '',
       order_types: sale ? sale.order_types : null,
-      plan_ids: sale?.plans ? sale.plans.map((plan) => plan.id) : null,
+      plan_ids: everyPlan ? null : (sale.plans ?? []).map((plan) => plan.id),
+      category_ids: everyPlan ? null : (sale.categories ?? []).map((category) => category.id),
       starts: windowEnd(sale?.starts_at ?? null),
       ends: windowEnd(sale?.ends_at ?? null, '23'),
       enabled: sale?.enabled ?? true,
@@ -82,7 +93,11 @@ export function SaleForm({ sale, invalidates, onSaved, onCancel }: SaleFormProps
       </div>
 
       <OrderKindsField value={values.order_types} onChange={(kinds) => set('order_types', kinds)} error={error('order_types')} />
-      <PlansField value={values.plan_ids} onChange={(ids) => set('plan_ids', ids)} error={error('plan_ids')} />
+      <PlanReachField
+        value={{ plan_ids: values.plan_ids, category_ids: values.category_ids }}
+        onChange={patch}
+        error={[error('plan_ids'), error('category_ids')].filter((message) => message !== undefined)}
+      />
 
       <div className="grid gap-4 sm:grid-cols-2">
         <WindowField id="sale_starts" label="شروع" value={values.starts} onChange={(starts) => set('starts', starts)} error={error('starts_at')} open="از همین حالا" />

@@ -18,7 +18,8 @@ use Psr\Log\LoggerInterface;
 /**
  * How the current bot is wired to Telegram: a webhook or polling (which needs the webhook gone), and the identity
  * Telegram reports. The main bot keeps its webhook secret and @username in config.php, an agent's bot on its row with a
- * webhook address of its own. An agent's bot handed over later follows the main bot's mode (follow()).
+ * webhook address of its own — a new secret each time its webhook is registered after being taken down. An agent's bot
+ * handed over later follows the main bot's mode (follow()).
  */
 final class BotLifecycle
 {
@@ -90,7 +91,11 @@ final class BotLifecycle
     }
 
     /**
-     * Take the current bot's webhook down (Telegram allows polling only without one).
+     * Take the current bot's webhook down (Telegram allows polling only without one). An agent's bot forgets its secret
+     * once Telegram has taken the webhook down, so the next one registered (enableWebhook()) gets a new one in the same
+     * step: «برداشتن Webhook» then «ثبت Webhook» renew every agent's secret — one an old backup carried, say. The main
+     * bot's stays in config.php, renewed from its own field. Refused, nothing is forgotten: the webhook may still be
+     * Telegram's, and registering it again puts it right.
      *
      * @throws TelegramApiException
      */
@@ -98,6 +103,10 @@ final class BotLifecycle
     {
         $this->api->deleteWebhook($dropPending);
         $this->state->webhookCleared();
+        $bot = CurrentBot::get();
+        if (!$bot->isMain() && $bot->exists && $bot->webhook_secret !== null) {
+            $bot->forceFill(['webhook_secret' => null])->save();
+        }
     }
 
     /**

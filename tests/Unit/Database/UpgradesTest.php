@@ -423,6 +423,45 @@ final class UpgradesTest extends TestCase
         ], $wordings, 'only the card texts\' amount to copy, in every shop, once');
     }
 
+    /**
+     * Each bot's webhook address kept in its settings loses its secret — the main bot's and an agent's —, on a database
+     * whose tables have a prefix (DB_PREFIX) too; nothing else is touched, and running it again changes nothing more.
+     */
+    public function testEachBotsKeptWebhookAddressLosesItsSecret(): void
+    {
+        $installed = self::connection();
+        $installed->setTablePrefix('amo_');
+        (new Schema($installed, new SqliteDriver(self::ROOT), require self::ROOT . '/tests/Fixtures/schema-0.1.0.php'))->create();
+        (new Upgrades($installed))->run(self::ROOT . '/database/upgrades', Installation::FIRST_RELEASE, '0.10.4', static function (): void {});
+        $agent = $installed->table('bots')->insertGetId(['title' => 'agent']);
+        $encode = static fn(string $value): string => json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+        $installed->table('settings')->insert([
+            ['bot_id' => 1, 'key' => 'telegram.webhook_url', 'value' => $encode('https://shop.example/store/webhooks/telegram/main_secret-0123456789')],
+            ['bot_id' => $agent, 'key' => 'telegram.webhook_url', 'value' => $encode("https://shop.example/store/webhooks/telegram/bot/{$agent}/0123456789abcdef0123456789abcdef0123456789abcdef")],
+            ['bot_id' => 1, 'key' => 'telegram.poll_heartbeat_at', 'value' => $encode('2026-11-26T10:00:00+00:00')],
+            ['bot_id' => 1, 'key' => 'bot.text.welcome', 'value' => $encode('https://shop.example/webhooks/telegram/a_word_of_the_owners')],
+        ]);
+
+        self::upgradeToCode($installed);
+        self::upgradeToCode($installed);
+        (require self::ROOT . '/database/upgrades/0.11.0.php')($installed->getSchemaBuilder(), $installed);
+
+        self::assertSame([
+            'https://shop.example/store/webhooks/telegram/***',
+            "https://shop.example/store/webhooks/telegram/bot/{$agent}/***",
+            '2026-11-26T10:00:00+00:00',
+            'https://shop.example/webhooks/telegram/a_word_of_the_owners',
+        ], $installed->table('settings')->orderBy('id')->pluck('value')->map(static fn(string $value): mixed => json_decode($value, true))->all(), 'every bot\'s address masked, once; nothing else');
+        self::assertSame(4, (int) $installed->selectOne('select count(*) as n from "amo_settings"')->n, 'the prefixed table');
+
+        // A fresh install has nothing to mask: the step finds no row.
+        $fresh = self::connection();
+        $fresh->setTablePrefix('amo_');
+        (new Schema($fresh, new SqliteDriver(self::ROOT), require self::ROOT . '/database/schema.php'))->create();
+        (require self::ROOT . '/database/upgrades/0.11.0.php')($fresh->getSchemaBuilder(), $fresh);
+        self::assertSame(0, $fresh->table('settings')->count());
+    }
+
     public function testTheUpgradesBetweenTwoVersionsRunInVersionOrder(): void
     {
         foreach (['0.1.0', '0.2.0', '0.3.0', '0.10.0', '0.11.0'] as $version) {

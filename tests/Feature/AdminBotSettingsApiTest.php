@@ -149,6 +149,8 @@ final class AdminBotSettingsApiTest extends HttpTestCase
             'report_tickets' => true,
             'report_reviews' => true,
             'report_backups' => true,
+            'report_daily' => true,
+            'daily_report_hour' => 0,
             'hold_minutes' => 60,
             'agents_without_perks' => false,
             'gift_codes_enabled' => false,
@@ -569,7 +571,7 @@ final class AdminBotSettingsApiTest extends HttpTestCase
         // Its tickets are its own to hear about.
         self::assertArrayNotHasKey('report_agency', $settings);
         self::assertTrue($settings['report_tickets']);
-        $reports = ['report_purchases' => true, 'report_renewals' => false, 'report_tests' => true, 'report_deletions' => true, 'report_wallet' => true, 'report_receipts' => true, 'report_users' => true, 'report_errors' => true, 'report_tickets' => true, 'report_reviews' => true, 'report_backups' => true];
+        $reports = ['report_purchases' => true, 'report_renewals' => false, 'report_tests' => true, 'report_deletions' => true, 'report_wallet' => true, 'report_receipts' => true, 'report_users' => true, 'report_errors' => true, 'report_tickets' => true, 'report_reviews' => true, 'report_backups' => true, 'report_daily' => true, 'daily_report_hour' => 7];
         self::assertSame(200, $this->putJson('/api/agent/bot/settings/reports', $reports)->getStatusCode());
         self::assertFalse($this->decode($this->get('/api/agent/bot/settings'))['settings']['report_renewals']);
 

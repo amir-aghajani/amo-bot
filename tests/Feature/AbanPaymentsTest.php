@@ -40,7 +40,8 @@ use Tests\Support\FakeAban;
  * reads the invoice and claims a paid one once (verify, then 409: paid all the same); paid in part waits, money in — and,
  * expired then, is held for support; expired or cancelled closes, another order or amount is held for support; an
  * invoice no longer pending is never opened
- * as a page; a test key is Aban's test mode, whose invoices a live key does not see.
+ * as a page; a test key is Aban's test mode, whose invoices a live key does not see — nor is a page of one key's mode
+ * shown again once the key is of the other.
  */
 final class AbanPaymentsTest extends HttpTestCase
 {
@@ -231,6 +232,25 @@ final class AbanPaymentsTest extends HttpTestCase
         }
     }
 
+    public function testAPageOpenedWithAKeyOfTheOtherModeIsNotShownAgain(): void
+    {
+        $method = $this->abanMethod('آبان گیت وی آزمایشی', key: FakeAban::TEST_KEY);
+        $test = $this->topUp('50000', $method)->payment()->refresh();
+        self::assertTrue($test->invoice['test']);
+        self::assertSame($test->id, $this->topUp('50000', $method)->payment()->id, 'tapped again with the same key: the same page');
+
+        // The owner puts the live key in: the test page is not shown for the order again, a live one is opened instead.
+        $this->setKey($method, FakeAban::KEY);
+        $live = $this->topUp('50000', $method)->payment()->refresh();
+        self::assertSame([$test->order_id, false], [$live->order_id, $live->invoice['test']]);
+        self::assertNotSame($test->id, $live->id);
+        self::assertSame(PaymentStatus::Pending, $test->refresh()->status, 'left as it is, for Aban to say what came of it');
+
+        // And back to the test key: the live page is not shown, the test one (still taking money) is.
+        $this->setKey($method, FakeAban::TEST_KEY);
+        self::assertSame($test->id, $this->topUp('50000', $method)->payment()->id);
+    }
+
     public function testAnInvoiceOfAnotherOrderOrAmountIsHeldAndNeverClaimed(): void
     {
         $payment = $this->topUp('50000')->payment()->refresh();
@@ -307,6 +327,13 @@ final class AbanPaymentsTest extends HttpTestCase
         $orders = $this->service(OrderService::class);
 
         return $this->service(Checkout::class)->pay($this->customer, $method ?? $this->method, OrderType::WalletTopUp, $amount, fn(?OrderKey $key): Order => $orders->openTopUp($this->customer, (int) $amount, $key));
+    }
+
+    /** The owner puts `$key` in as the method's key. */
+    private function setKey(PaymentMethod $method, string $key): void
+    {
+        $driver = $this->service(GatewayRegistry::class)->find(AbanGateway::key()) ?? throw new \LogicException('AbanGateway is not registered.');
+        $method->forceFill(['config' => $this->service(MethodSettings::class)->write($driver, ['api_key' => $key, 'show_card' => true])])->save();
     }
 
     private function callbackPath(Payment $payment): string

@@ -16,6 +16,8 @@ use App\Modules\Payments\Enums\CheckoutOutcome;
 use App\Modules\Payments\Enums\OnlineState;
 use App\Modules\Payments\Enums\PaymentStatus;
 use App\Modules\Payments\Exceptions\GatewayUnavailableException;
+use App\Modules\Payments\GatewayRegistry;
+use App\Modules\Payments\MethodSettings;
 use App\Modules\Payments\Models\Payment;
 use App\Modules\Payments\Models\PaymentMethod;
 use App\Modules\Payments\Services\Checkout;
@@ -33,7 +35,8 @@ use Tests\Support\FakeAqayePardakht;
  * AqayePardakht, a Shaparak gateway: a checkout creates a transaction in Toman, its browser's way back the callback
  * address; the customer is led on to the bank's page from a page on the shop's own address (Shaparak opens it only for
  * the gateway's domain as referrer), which asks nothing; their return only makes the shop verify — 1 or 2 paid, 0 not
- * yet while its page takes money and closed after, -10 held; the pin `sandbox` is its test service.
+ * yet while its page takes money and closed after, -10 held; the pin `sandbox` is its test service, and a payment is
+ * verified — or its page shown again — only while the method's pin is of the service it was opened on.
  */
 final class AqayePardakhtPaymentsTest extends HttpTestCase
 {
@@ -158,6 +161,31 @@ final class AqayePardakhtPaymentsTest extends HttpTestCase
         self::assertSame([AqayePardakhtGateway::SANDBOX_START . $payment->reference, true], [$payment->invoice['page'], $payment->invoice['sandbox']]);
     }
 
+    public function testAPaymentIsVerifiedOnlyWithAPinOfTheServiceItWasOpenedOn(): void
+    {
+        $online = $this->service(OnlinePayments::class);
+        $live = $this->topUp('50000')->payment()->refresh();
+        $this->aqaye->pay((string) $live->reference);
+
+        // The owner tries the sandbox out: a live transaction is never asked of it — it could say "paid" for nothing.
+        $this->setPin(AqayePardakhtGateway::SANDBOX_PIN);
+        $this->assertNotVerified($live, "Payment #{$live->id} was opened on AqayePardakht's live gateway, and its method now has the sandbox pin: it is not verified while the method has that pin; put the live pin back, then ask the gateway again («استعلام از درگاه»)");
+        // Nor is its live page shown for the order again: a sandbox one is opened instead.
+        $again = $this->topUp('50000')->payment()->refresh();
+        self::assertSame([$live->order_id, true], [$again->order_id, $again->invoice['sandbox']]);
+        self::assertNotSame($live->id, $again->id);
+        // A page opened in the sandbox meanwhile is verified with it.
+        $tried = $this->topUp('30000')->payment()->refresh();
+        self::assertTrue($tried->invoice['sandbox']);
+        self::assertSame(OnlineState::Waiting, $online->check($tried));
+
+        // And back: the live transaction is verified, and paid; the sandbox's is not asked of the live pin.
+        $this->setPin(FakeAqayePardakht::PIN);
+        self::assertSame(OnlineState::Paid, $online->check($live->refresh()->load('method')));
+        self::assertSame(PaymentStatus::Paid, $live->refresh()->status);
+        $this->assertNotVerified($tried, "Payment #{$tried->id} was opened on AqayePardakht's sandbox, and its method now has a live pin: it is not verified while the method has that pin; put the sandbox pin back, then ask the gateway again («استعلام از درگاه»)");
+    }
+
     public function testAWrongPinOrAnotherDomainOpensNothing(): void
     {
         $logs = $this->logs();
@@ -187,6 +215,28 @@ final class AqayePardakhtPaymentsTest extends HttpTestCase
         $orders = $this->service(OrderService::class);
 
         return $this->service(Checkout::class)->pay($this->customer, $method ?? $this->method, OrderType::WalletTopUp, $amount, fn(?OrderKey $key): Order => $orders->openTopUp($this->customer, (int) $amount, $key));
+    }
+
+    /** The owner sets the method's pin. */
+    private function setPin(string $pin): void
+    {
+        $driver = $this->service(GatewayRegistry::class)->find(AqayePardakhtGateway::key()) ?? throw new \LogicException('AqayePardakht is not registered.');
+        $this->method->forceFill(['config' => $this->service(MethodSettings::class)->write($driver, ['pin' => $pin])])->save();
+    }
+
+    /** Asked about, the payment is not verified — nothing sent to AqayePardakht —, and asked again later: `$detail` says why. */
+    private function assertNotVerified(Payment $payment, string $detail): void
+    {
+        $verifies = count($this->aqaye->callsTo('/verify'));
+        try {
+            $this->service(OnlinePayments::class)->check($payment->refresh()->load('method'));
+            self::fail('verified with the other service\'s pin');
+        } catch (GatewayUnavailableException $e) {
+            self::assertFalse($e->held, 'asked again later, never left to support for it');
+            self::assertStringContainsString($detail, $e->detail);
+        }
+        self::assertCount($verifies, $this->aqaye->callsTo('/verify'), 'nothing asked');
+        self::assertSame(PaymentStatus::Pending, $payment->refresh()->status);
     }
 
     /** The customer's browser at the payment's callback address, with `$query`. */

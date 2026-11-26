@@ -12,6 +12,7 @@ use App\Core\Exceptions\TooManyAttemptsException;
 use App\Core\Exceptions\ValidationException;
 use App\Core\Forms\Fields\Choice;
 use App\Core\Forms\Fields\Field;
+use App\Core\Forms\Fields\FieldRefused;
 use App\Core\Forms\Fields\Number;
 use App\Core\Forms\Fields\Secret;
 use App\Core\Forms\Fields\Text;
@@ -47,6 +48,9 @@ use Psr\Log\LoggerInterface;
  * before a database answers. Groups `app`, `telegram` and `advanced` are declared here; `database` is
  * DatabaseSettings' (written only once a database answers), `mail` MailSettings', `sms` SmsSettings'. Moving the Bot API's address to
  * another origin would send every bot's token there — agents' too — so that save asks the owner's current password.
+ * What hands over the main bot or the owner's seat is the owner's themselves alone (refuseOwnersOnly()): one of the main
+ * shop's admins, working the bot's management with the owner's seat, saves the rest of these groups but not that. The
+ * installer's own saves (saveSite(), saveBotToken(), saveDatabase()) come before any owner signs in and ask no one.
  */
 final class ConfigSettings
 {
@@ -70,8 +74,14 @@ final class ConfigSettings
         private readonly LoggerInterface $logger,
     ) {}
 
-    /** @return array<string, mixed> The screen: the file, every group, and what the screen needs to show them */
-    public function present(): array
+    /**
+     * The screen: the file, every group, and what the screen needs to show them. To anyone but the owner themselves
+     * (`$owner` false: one of the main shop's admins in the bot) the database's settings are not told — where it is and
+     * who signs in to it are the owner's alone, as its save is — and the webhook's secret is said only to be kept.
+     *
+     * @return array<string, mixed>
+     */
+    public function present(bool $owner = true): array
     {
         $file = $this->file->all();
         $groups = [];
@@ -79,6 +89,13 @@ final class ConfigSettings
             $groups[$group->key] = $group->present(static fn(Field $field): mixed => $file[$field->key] ?? null);
         }
         $groups['database'] = $this->database->present();
+        if (!$owner) {
+            $groups['database']['values'] = new \stdClass();
+            $secret = $groups['telegram']['webhook_secret'] ?? null;
+            if (is_array($secret) && ($secret['set'] ?? false) === true) {
+                $groups['telegram']['webhook_secret'] = ['set' => true, 'hint' => Secret::KEPT];
+            }
+        }
         $groups['mail'] = $this->mail->present();
         $groups['sms'] = $this->sms->present();
 
@@ -107,41 +124,44 @@ final class ConfigSettings
      * @return array<string, mixed> The screen as it is now (present())
      * @throws ValidationException|UnknownGroupException
      * @throws TooManyAttemptsException 429: the owner's password tried too often, from this address or for the account
+     * @throws ActorRefusedException 403: one of the main shop's admins changing what is the owner's alone
      */
     public function update(string $group, array $input, ServerRequestInterface $request): array
     {
         if ($group === 'database') {
+            self::theOwner($request, ActorRefusedException::ownersDatabase(...));
             $this->saveDatabase($input);
 
-            return $this->present();
+            return $this->present(true);
         }
         if ($group === 'mail') {
             $this->write($this->mail->validate($input));
 
-            return $this->present();
+            return $this->present(Principal::of($request)->isTheOwner());
         }
         if ($group === 'sms') {
             $this->write($this->sms->validate($input));
 
-            return $this->present();
+            return $this->present(Principal::of($request)->isTheOwner());
         }
 
         $errors = [];
         $settings = [];
+        $form = $this->group($group);
         try {
-            $settings = $this->check($this->group($group), $input);
+            $settings = $this->check($form, $input);
         } catch (ValidationException $e) {
             $errors = $e->errors();
         }
-        // Whoever knows the webhook's secret sends the shop updates in anyone's name: set by the owner themselves alone.
-        $secret = $settings['TELEGRAM_WEBHOOK_SECRET'] ?? null;
-        if ($group === 'telegram' && is_string($secret) && $secret !== (string) $this->file->get('TELEGRAM_WEBHOOK_SECRET') && !Principal::of($request)->isTheOwner()) {
-            throw ActorRefusedException::ownersSecret();
+        $owner = Principal::of($request)->isTheOwner();
+        if (!$owner) {
+            $this->refuseOwnersOnly($form, $settings);
         }
         if ($group === 'telegram' && $this->movesBotApi($input)) {
-            // Refused before the password is judged: an admin's wrong tries would count against the owner's sign-in.
-            if (!Principal::of($request)->isTheOwner()) {
-                throw ActorRefusedException::ownersPassword();
+            // Refused before the password is judged — an admin's wrong tries would count against the owner's sign-in —, in
+            // the Bot API address's own words even when the save failed its checks (a kept token left behind by the move).
+            if (!$owner) {
+                throw ActorRefusedException::ownersApi();
             }
             $unproven = $this->owner->confirm($request, Input::password($input, 'current_password'));
             if ($unproven !== null) {
@@ -151,7 +171,7 @@ final class ConfigSettings
         ValidationException::ifAny($errors);
         $this->write($settings);
 
-        return $this->present();
+        return $this->present($owner);
     }
 
     /**
@@ -211,13 +231,16 @@ final class ConfigSettings
     }
 
     /**
-     * Try a database configuration without saving it.
+     * Try a database configuration without saving it — the owner's alone, as its save is.
      *
      * @param array<string, mixed> $input
      * @throws ValidationException
+     * @throws ActorRefusedException 403: one of the main shop's admins, before anything is tried
      */
-    public function testDatabase(array $input): ProbeResult
+    public function testDatabase(array $input, ServerRequestInterface $request): ProbeResult
     {
+        self::theOwner($request, ActorRefusedException::ownersDatabase(...));
+
         return $this->assertDatabaseWorks($this->database->validate($input));
     }
 
@@ -368,14 +391,101 @@ final class ConfigSettings
     }
 
     /**
-     * Whether the save moves the Bot API's address to another origin (scheme, host or port).
+     * Refuses one of the main shop's admins what would hand them the main bot or the owner's seat, with the group's other
+     * fields left as they are or not: the site's address (every bot's webhook is registered under it, its secret in the
+     * path — a path is refused too), the webhook's secret (whoever knows it sends updates in anyone's name), the main
+     * bot's token (another bot's getWebhookInfo shows the address with its secret) and its @username (the owner's
+     * one-time link opens there, OwnerLinks), the Bot API's address (every bot's token goes there — a path on the same
+     * server is refused too), and the panels' session settings (the owner's own sign-in made longer-lived, or a cookie
+     * the host cannot keep). Each is judged on the value the save would write, as its field reads it (Persian digits,
+     * spaces and a trailing slash as the field takes them), never as typed. A save that fails its checks writes nothing
+     * and is not judged here.
+     *
+     * @param array<string, mixed> $settings What the save would write
+     * @throws ActorRefusedException
+     */
+    private function refuseOwnersOnly(Form $group, array $settings): void
+    {
+        $same = static fn(string $value): string => $value;
+        $address = static fn(string $url): string => rtrim(trim($url), '/');
+        if ($this->changes($group, $settings, 'APP_URL', $address)) {
+            throw ActorRefusedException::ownersAddress();
+        }
+        if ($this->changes($group, $settings, 'TELEGRAM_WEBHOOK_SECRET', $same)) {
+            throw ActorRefusedException::ownersSecret();
+        }
+        // Telegram's @usernames are one whatever their letters' case.
+        if ($this->changes($group, $settings, 'TELEGRAM_BOT_TOKEN', $same) || $this->changes($group, $settings, 'TELEGRAM_BOT_USERNAME', static fn(string $name): string => strtolower(ltrim(trim($name), '@')))) {
+            throw ActorRefusedException::ownersBot();
+        }
+        if ($this->changes($group, $settings, 'TELEGRAM_API_URL', $address)) {
+            throw ActorRefusedException::ownersApi();
+        }
+        // A switch as config.php may spell it (true, "true", "1"), a number as its digits.
+        $switch = static fn(string $value): string => filter_var(trim($value), FILTER_VALIDATE_BOOLEAN) ? 'on' : 'off';
+        if ($this->changes($group, $settings, 'SESSION_LIFETIME', static fn(string $minutes): string => (string) (int) trim($minutes)) || $this->changes($group, $settings, 'SESSION_SECURE_COOKIE', $switch)) {
+            throw ActorRefusedException::ownersSession();
+        }
+    }
+
+    /**
+     * Whether the save writes `$key` unlike both what config.php holds and what the app runs with now (its field's kept
+     * value: a secret left blank reads as the first, a text left out of config.php as the second), each as `$spelled`
+     * writes it — so a group sent back whole, as the screen showed it, changes nothing.
+     *
+     * @param array<string, mixed> $settings
+     * @param \Closure(string): string $spelled
+     */
+    private function changes(Form $group, array $settings, string $key, \Closure $spelled): bool
+    {
+        if (!array_key_exists($key, $settings)) {
+            return false;
+        }
+        $kept = $this->file->get($key);
+        $written = $spelled(is_scalar($settings[$key]) ? (string) $settings[$key] : '');
+        if ($written === $spelled(is_scalar($kept) ? (string) $kept : '')) {
+            return false;
+        }
+        foreach ($group->fields as $field) {
+            if ($field->key === $key) {
+                $now = $field->cast($kept);
+
+                return $written !== $spelled(is_scalar($now) ? (string) $now : '');
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Refuses anyone but the owner themselves (`$refusal`): one of the main shop's admins working the bot's management
+     * with the owner's seat.
+     *
+     * @param \Closure(): ActorRefusedException $refusal
+     * @throws ActorRefusedException
+     */
+    private static function theOwner(ServerRequestInterface $request, \Closure $refusal): void
+    {
+        if (!Principal::of($request)->isTheOwner()) {
+            throw $refusal();
+        }
+    }
+
+    /**
+     * Whether the save moves the Bot API's address to another origin (scheme, host or port) — judged on the address as
+     * the field writes it (a port in Persian digits is that port), never as typed. One the field refuses moves nothing:
+     * the save is refused with it.
      *
      * @param array<string, mixed> $input
      */
     private function movesBotApi(array $input): bool
     {
         $origin = Secret::byOrigin();
-        $to = $origin(Input::text($input, 'api_url'));
+        try {
+            $to = $origin($this->apiUrl()->read($input, null));
+        } catch (FieldRefused) {
+            return false;
+        }
 
         return $to !== null && $to !== $origin($this->apiUrl()->cast($this->file->get('TELEGRAM_API_URL')));
     }

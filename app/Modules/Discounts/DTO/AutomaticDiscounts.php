@@ -28,11 +28,12 @@ final readonly class AutomaticDiscounts
     ) {}
 
     /**
-     * The automatic discount that takes the most off `$base` for an order of `$kind` on plan `$planId` (a renewal's or an
-     * extra's: its service's plan; null reaches only a sale of every plan). Null when none takes anything: a kind no
-     * discount applies to, a free price, nothing running.
+     * The automatic discount that takes the most off `$base` for an order of `$kind` on plan `$planId`, filed under
+     * category `$categoryId` as it is now (a renewal's or an extra's: its service's plan; null reaches only a sale of
+     * every plan — Sale::takesPlan()). Null when none takes anything: a kind no discount applies to, a free price,
+     * nothing running.
      */
-    public function best(?int $planId, OrderType $kind, string $base): ?DiscountLine
+    public function best(?int $planId, ?int $categoryId, OrderType $kind, string $base): ?DiscountLine
     {
         if (!$kind->forThemselves() || !Money::isPositive($base)) {
             return null;
@@ -40,7 +41,7 @@ final readonly class AutomaticDiscounts
 
         $best = null;
         foreach ($this->sales as $sale) {
-            if ($sale->takesPlan($planId) && $sale->takesKind($kind)) {
+            if ($sale->takesPlan($planId, $categoryId) && $sale->takesKind($kind)) {
                 $best = self::larger($best, self::line(DiscountSource::Sale, $sale->name . ' ' . self::percent($sale->percent), $base, $sale->percent, $sale->id, $sale->ends_at));
             }
         }

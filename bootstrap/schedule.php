@@ -20,6 +20,7 @@ use App\Modules\Subscriptions\Tasks\NextPeriodTask;
 use App\Modules\Subscriptions\Tasks\SendRemindersTask;
 use App\Modules\Subscriptions\Tasks\SyncSubscriptionsTask;
 use App\Modules\Support\Tasks\PruneTicketsTask;
+use App\Modules\Telegram\Tasks\DailyReportTask;
 use App\Modules\Telegram\Tasks\PruneUpdatesTask;
 use App\Modules\Telegram\Tasks\SendBroadcastsTask;
 use App\Modules\Telegram\Tasks\SendReportsTask;
@@ -27,9 +28,11 @@ use App\Modules\Updates\Tasks\CheckReleasesTask;
 
 /*
  * Scheduled tasks, in the order a run takes them. `php bin/console schedule:run` (or the /cron/{token} URL, or bot:poll
- * while it polls) should be triggered every minute; the scheduler decides which tasks are due. A shop's own work
- * (`eachBot: true`) runs in every bot's shop in turn — the main bot's and each agent's, with that bot's rules and texts;
- * the servers' work runs across all of them at once. One run's time is shared over them (Core\Scheduling\Budget).
+ * while it polls) should be triggered every minute; the scheduler decides which tasks are due: each runs at its start
+ * (`at`, on the shop's clock — 00:00 unless said) and every interval after it. The heavier ones start apart, so the
+ * hour's and the day's runs do not all fall in one minute's run. A shop's own work (`eachBot: true`) runs in every bot's
+ * shop in turn — the main bot's and each agent's, with that bot's rules and texts; the servers' work runs across all of
+ * them at once. One run's time is shared over them (Core\Scheduling\Budget).
  */
 return static function (Scheduler $schedule): void {
     // Card-to-card receipts nobody reviewed inside their method's window.
@@ -54,32 +57,34 @@ return static function (Scheduler $schedule): void {
     $schedule->everyMinutes(1, MigrationsTask::class);
     // Every running service read from its panel — one call per server — and then «یادآوری»: services near their
     // end or low on traffic are reminded. In this order, so the reminders read what the sync just brought.
-    $schedule->everyMinutes(15, SyncSubscriptionsTask::class);
-    $schedule->everyMinutes(15, SendRemindersTask::class, eachBot: true);
+    $schedule->everyMinutes(15, SyncSubscriptionsTask::class, at: '00:05');
+    $schedule->everyMinutes(15, SendRemindersTask::class, eachBot: true, at: '00:05');
     // The services that are done with removed from their panels, by each shop's rules: its ended services so many hours
     // after they ended (off until it switches it on), its free tests that ended or never connected — in every shop that
     // has some, a stopped agent's too; after the sync, so it reads what the sync just brought.
-    $schedule->everyMinutes(15, CleanupServicesTask::class);
+    $schedule->everyMinutes(15, CleanupServicesTask::class, at: '00:05');
     // The agents' terms of selling, every agent's shop at once (a stopped bot's too): an agency's end and a month's minimum
     // purchase warned of days ahead, then the shop's selling suspended (never its bot); a month's minimum met lifts that.
-    $schedule->everyMinutes(60, AgencyStandingTask::class);
+    $schedule->everyMinutes(60, AgencyStandingTask::class, at: '00:10');
     // The updates the bots took, remembered so one Telegram sends again is served once: forgotten once it cannot come again.
-    $schedule->everyMinutes(60, PruneUpdatesTask::class);
+    $schedule->everyMinutes(60, PruneUpdatesTask::class, at: '00:25');
     // The websites' sessions that ended, the sign-in challenges that expired and the notices half a year old, every shop's.
-    $schedule->everyMinutes(60, PruneAccountsTask::class);
+    $schedule->everyMinutes(60, PruneAccountsTask::class, at: '00:40');
     // The tickets' housekeeping, each shop's: the pictures uploaded to tickets closed a month ago, and the group's week-old
     // reports of tickets that are closed.
-    $schedule->everyMinutes(60, PruneTicketsTask::class, eachBot: true);
+    $schedule->everyMinutes(60, PruneTicketsTask::class, eachBot: true, at: '00:55');
     // «قرعه‌کشی شبانه», each shop's: once its clock passed the hour of the draw, the day's draw among its buyers, once.
     $schedule->everyMinutes(10, NightlyDrawTask::class, eachBot: true);
     // Each shop's backup to its report group's «پشتیبان‌گیری» topic: the main shop's group the whole installation's, an
     // agent's group its own shop's alone.
-    $schedule->everyMinutes(24 * 60, SendBackupsTask::class, eachBot: true);
+    $schedule->everyMinutes(24 * 60, SendBackupsTask::class, eachBot: true, at: '00:00');
     // «انتقال از ربات دیگر»: an import left open a week cancelled, and what an ended one still keeps of the other bot's
     // data (its staged rows and uploaded file hold its panels' passwords) deleted.
-    $schedule->everyMinutes(24 * 60, PruneImportsTask::class);
+    $schedule->everyMinutes(24 * 60, PruneImportsTask::class, at: '03:00');
+    // «گزارش روزانه», each shop's: once its clock passed the report's hour, its day before in figures to its report group, once.
+    $schedule->everyMinutes(10, DailyReportTask::class, eachBot: true);
     // AmoBot's newest release read from GitHub once a day, so the owner's dashboard says when one is out.
-    $schedule->everyMinutes(24 * 60, CheckReleasesTask::class);
+    $schedule->everyMinutes(24 * 60, CheckReleasesTask::class, at: '03:30');
     // The report groups: what the panel and the tasks above queued, at Telegram's pace. Last, so a tick's own reports go in them.
     $schedule->everyMinutes(1, SendReportsTask::class, eachBot: true);
 };

@@ -65,17 +65,25 @@ final class BotWebhooks
 
     /**
      * Every bot that runs off its webhook — polling and webhooks are exclusive on Telegram's side —, the updates queued
-     * meanwhile discarded when `$dropPending`.
+     * meanwhile discarded when `$dropPending`. Each agent's bot taken off forgets its secret (BotLifecycle::disableWebhook()),
+     * and so does every other agent's bot — switched off, or without a token now —, whose webhook is in no use: the next
+     * one registered for any of them gets a new secret, so «برداشتن Webhook» then «ثبت Webhook» renew every agent's (one
+     * an old backup carried, say). One whose webhook Telegram still holds (its agency ended and taking it down failed) has
+     * the calls refused from then on, until it is registered again or taken down.
      *
      * @return list<BotOutcome<null>>
      */
     public function disable(bool $dropPending = false): array
     {
-        return $this->bots->eachServing(function () use ($dropPending): null {
+        $outcomes = $this->bots->eachServing(function () use ($dropPending): null {
             $this->lifecycle->disableWebhook($dropPending);
 
             return null;
         });
+        $served = array_map(static fn(BotOutcome $outcome): int => $outcome->bot->id, $outcomes);
+        Bot::query()->whereKeyNot(Bot::MAIN)->whereNotIn('id', $served)->whereNotNull('webhook_secret')->update(['webhook_secret' => null]);
+
+        return $outcomes;
     }
 
     /**

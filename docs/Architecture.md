@@ -188,9 +188,17 @@ open panels. A decision made there keeps its maker as the panels' do; a ticket's
 
 ## Background work
 
-`Core\Scheduling\Scheduler` runs the tasks `bootstrap/schedule.php` lists, at their intervals: the owner's, set in
-«زمان‌بندی کارها» (`Core\Scheduling\Intervals`, which the Settings module's `ScheduleSettings` implements, so Core names
-no module), the list's minutes the defaults — and the defaults while the database cannot be read. It is ticked every
+`Core\Scheduling\Scheduler` runs the tasks `bootstrap/schedule.php` lists, each on its grid — its start on the shop's
+clock and every interval after it (`Scheduler::slot()`: a grid of a day or less starts again at its start every day, a
+longer one counts from a Saturday), due once the grid's latest moment came since it last ran, so a late run moves
+nothing and a missed moment is run once. The grid is the shop's wall clock: a moment a spring-forward jumps over comes
+once, at the first minute after the jump, and in the hour a fall-back repeats a clock minute runs again only once a
+whole interval of real time has passed since the run it repeats (`due()`), so a task every hour or more often keeps
+running through it (an hourly one keeps its hour) and a daily 02:30 runs once, at the first 02:30. A last run ahead of
+the clock (a clock put back) counts as now. Intervals and starts are the owner's, set in «زمان‌بندی کارها»
+(`Core\Scheduling\Intervals`, which the Settings module's `ScheduleSettings` implements, so Core names no module), the
+list's minutes and `at` the defaults — and the defaults while the database cannot be read. Its clock is the app's
+(`Carbon::now()`), which a test may hold. It is ticked every
 minute by `bin/console schedule:run` from a cron, by the `/cron/{token}` address for a host whose cron can only call a
 URL, or by `bot:poll` (in a process of its own, so the polls go on). One run at a time (a file lock); a task's time is
 written before it runs, so one that kills the process does not run again every minute. A shop's task runs once in

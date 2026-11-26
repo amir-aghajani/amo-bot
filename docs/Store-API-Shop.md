@@ -288,13 +288,16 @@ last. Sent with a customer's bearer token, it lists none for one the customers' 
 ```json
 {
   "sales": [
-    { "id": 4, "name": "فروش ویژه نوروز", "percent": 20, "ends_at": "2026-03-21T20:30:00+00:00", "plan_ids": [3, 7], "order_types": ["purchase", "renewal"] }
+    { "id": 4, "name": "فروش ویژه نوروز", "percent": 20, "ends_at": "2026-03-21T20:30:00+00:00", "plan_ids": [3, 7], "category_ids": [2], "order_types": ["purchase", "renewal"] }
   ]
 }
 ```
 
 `percent` is what it takes off; `ends_at` when it ends (`null`: until support stops it — a countdown needs it);
-`plan_ids` the plans it holds for (`null`: every plan); `order_types` the kinds of order it holds for — `purchase`,
+`plan_ids` the plans on sale now — switched on, not hidden by the owner — that it holds for, those it names and those
+filed under the categories it names (`null`: every plan; `[]`: none of them on sale now, though it may still reach a
+renewal or an extra of a service on one); `category_ids` the categories it names, as stored (`null`: none);
+`order_types` the kinds of order it holds for — `purchase`,
 `renewal`, `extra_traffic`, `extra_time`, `extra_devices` — (`null`: every kind). It is for telling: what a sale takes
 off a plan for its reader is already in the plan's `offer_price` and `discount` ([discounts](#discounts)), the largest
 automatic discount alone.

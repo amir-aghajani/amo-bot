@@ -1176,7 +1176,7 @@ Accept a merge offer (the 202 of a `POST /me/identities/…`). The two accounts 
 
 ### POST /custom-services/quote
 
-What a service the customer builds would cost them, nothing ordered: the GB's price and the days' price by their tiers, their sum (`base`), the customer's automatic discount and — with `discount_code` — the code's, as lines, and what is left. Only a sale of every plan reaches a built service, and a code limited to certain plans never does; a code limited to certain servers holds once `server_id` is picked. A 422 on `status` while nothing may be built (`offered` of `GET /custom-services`); on `gb` or `days` for an amount that is no whole number or outside its bounds (the message says them); on `server_id` for a server not on offer now; on `discount_code` when it does not apply. Each code that does not apply uses one of the customer's 20 tries an hour (shared with the checkout's), then a 429 with `Retry-After`. A panel's preview of the mini app may ask it, as the builder does by itself — but not with a `discount_code` (a 403: those tries are the customer's).
+What a service the customer builds would cost them, nothing ordered: the GB's price and the days' price by their tiers, their sum (`base`), the customer's automatic discount and — with `discount_code` — the code's, as lines, and what is left. Only a sale of every plan reaches a built service, and a code limited to certain plans or categories never does; a code limited to certain servers holds once `server_id` is picked. A 422 on `status` while nothing may be built (`offered` of `GET /custom-services`); on `gb` or `days` for an amount that is no whole number or outside its bounds (the message says them); on `server_id` for a server not on offer now; on `discount_code` when it does not apply. Each code that does not apply uses one of the customer's 20 tries an hour (shared with the checkout's), then a 429 with `Retry-After`. A panel's preview of the mini app may ask it, as the builder does by itself — but not with a `discount_code` (a 403: those tries are the customer's).
 
 - **Who:** the signed-in customer ([the customer scheme](#the-customer-scheme)).
 
@@ -2864,7 +2864,7 @@ A preview of a service's renewal: on its own plan (or, for a service without one
 | `custom.devices` | integer | yes | Devices at once it gives; 0 — unlimited. From when, as a plan's `devices`. |
 | `custom.traffic_price` | string | yes | Toman: the GB at their tier's rate. |
 | `custom.days_price` | string | yes | Toman: the days at their tier's rate. |
-| `price` | string | yes | What the renewal costs the customer, in Toman: the plan's agent price for an agent or a «همکار» group member, else its price — or the package's two prices added (only a sale of every plan reaches it, and a code limited to certain plans never does) —, minus their largest automatic discount (`discounts`). A discount code is applied on top of this when paying (`discount_code`). |
+| `price` | string | yes | What the renewal costs the customer, in Toman: the plan's agent price for an agent or a «همکار» group member, else its price — or the package's two prices added (only a sale of every plan reaches it, and a code limited to certain plans or categories never does) —, minus their largest automatic discount (`discounts`). A discount code is applied on top of this when paying (`discount_code`). |
 | `discounts` | list of [DiscountLine](API-Schemas.md#discountline) | yes | The automatic discount in `price`: none, or one. |
 | `after` | object | yes | The service as the renewal would leave it by `method`, in StoreSubscription's shapes. By `extend` remaining days carry over, and a period's unused traffic expires when the period ends unless the shop carries it over (see `next_period`); by `reset_traffic` remaining days carry over and the traffic starts afresh; by `reset_time` the term starts afresh and the traffic left carries over. |
 | `after.term` | [StoreServiceTerm](#storeserviceterm) | yes |  |
@@ -3000,7 +3000,7 @@ An approved review, as the website shows it: the writer's text and choices as pl
 
 ### StoreSale
 
-A timed sale running now («فروش ویژه»): its name, its percent off, when it ends (null: until support stops it), and what it holds for — the plans named (null: every plan) and the kinds of order (null: every kind).
+A timed sale running now («فروش ویژه»): its name, its percent off, when it ends (null: until support stops it), and what it holds for — its plans (null: every plan) and the kinds of order (null: every kind).
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -3008,7 +3008,8 @@ A timed sale running now («فروش ویژه»): its name, its percent off, whe
 | `name` | string | yes | What the customer reads: «فروش ویژه نوروز». |
 | `percent` | integer | yes |  |
 | `ends_at` | string (date-time) or null | yes |  |
-| `plan_ids` | list of integer or null | yes |  |
+| `plan_ids` | list of integer or null | yes | The plans on sale now (switched on, not hidden by the owner) that it holds for: those it names and those filed under the categories it names; null for every plan; empty when none of them is on sale now (it may still reach a renewal or an extra of a service on one of its plans). |
+| `category_ids` | list of integer or null | yes | The plan categories it names, as stored — a category deleted since may stay —, whose plans on sale `plan_ids` already lists; null for none. |
 | `order_types` | list of [OwnOrderType](API-Schemas.md#ownordertype) or null | yes |  |
 
 ### StoreSalesResponse

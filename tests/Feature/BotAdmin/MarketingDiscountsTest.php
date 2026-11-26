@@ -6,10 +6,14 @@ namespace Tests\Feature\BotAdmin;
 
 use App\Modules\Discounts\Models\DiscountCode;
 use App\Modules\Discounts\Services\DiscountCodes;
+use App\Modules\Discounts\Services\DiscountForm;
 use App\Modules\Discounts\Services\DiscountSettings;
 use App\Modules\Orders\Enums\OrderStatus;
 use App\Modules\Telegram\Admin\Sections\Marketing\Form\Moment;
+use App\Modules\Telegram\Admin\Sections\Marketing\Words as Marketing;
+use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\Nav;
+use App\Modules\Telegram\Models\TelegramSession;
 use App\Modules\Users\Enums\UserRole;
 use App\Support\LocalTime;
 use Tests\BotTestCase;
@@ -142,6 +146,131 @@ final class MarketingDiscountsTest extends BotTestCase
         self::assertSame('مبلغ تخفیف: مبلغ تخفیف را به تومان بنویسید.', $this->popup());
         self::assertStringContainsString('⚠️ مبلغ تخفیف: <b>—</b>', $this->said()[0], 'marked on its field');
         self::assertSame(0, DiscountCode::query()->count());
+    }
+
+    public function testACodeIsHeldToCategoriesAndPlansFromOneList(): void
+    {
+        $this->owner();
+        $monthly = $this->category(['name' => 'ماهانه']);
+        $plan = $this->plan(['name' => 'ویژه']);
+        $code = $this->code('SPRING');
+        $this->send($this->message('/admin', chat: self::OWNER));
+        $this->send($this->tap(Nav::to('dcf', 'edit', $code->id), chat: self::OWNER));
+
+        $this->send($this->tap(Nav::to('dcf', 'ask', 10), chat: self::OWNER));
+        self::assertStringContainsString('برای کدام دسته‌ها و پلن‌ها؟', $this->said()[0]);
+        $keyboard = json_encode($this->inlineKeyboard($this->buttonsCall()), JSON_UNESCAPED_UNICODE) ?: '';
+        self::assertMatchesRegularExpression('/🗂 ماهانه.*ویژه/u', $keyboard, 'the categories first, marked, then the plans');
+        $this->send($this->tap(Nav::to('dcf', 'mt', 10, 0, 1), chat: self::OWNER));
+        $this->send($this->tap(Nav::to('dcf', 'mt', 10, 1, 1), chat: self::OWNER));
+        $this->send($this->tap(Nav::to('dcf', 'done', 10), chat: self::OWNER));
+        self::assertStringContainsString('🗂 ماهانه، ویژه', $this->said()[0], 'the review names both');
+        $this->send($this->tap(Nav::to('dcf', 'save'), chat: self::OWNER));
+
+        $code->refresh();
+        self::assertSame([[$monthly->id], [$plan->id]], [$code->category_ids, $code->plan_ids], 'one list, sent as the two the API takes');
+        $this->send($this->tap(Nav::to('dcv', 'show', $code->id), chat: self::OWNER));
+        self::assertStringContainsString('دسته «ماهانه» و پلن «ویژه»', $this->said()[0]);
+
+        // Back to every plan: «همه پلن‌ها» clears both.
+        $this->send($this->tap(Nav::to('dcf', 'edit', $code->id), chat: self::OWNER));
+        self::assertStringContainsString('🗂 ماهانه، ویژه', $this->said()[0], 'an edit starts from both');
+        $this->send($this->tap(Nav::to('dcf', 'ask', 10), chat: self::OWNER));
+        $this->send($this->tap(Nav::to('dcf', 'all', 10), chat: self::OWNER));
+        $this->send($this->tap(Nav::to('dcf', 'done', 10), chat: self::OWNER));
+        $this->send($this->tap(Nav::to('dcf', 'save'), chat: self::OWNER));
+        self::assertSame([null, null], [$code->refresh()->category_ids, $code->plan_ids]);
+    }
+
+    public function testACodeWhoseCategoriesAreGoneIsNeverSavedAsEveryPlan(): void
+    {
+        $this->owner();
+        $code = $this->code('GONE');
+        $code->forceFill(['category_ids' => [999]])->save();
+        $this->send($this->message('/admin', chat: self::OWNER));
+
+        $this->send($this->tap(Nav::to('dcv', 'show', $code->id), chat: self::OWNER));
+        self::assertStringContainsString('هیچ پلنی', $this->said()[0], 'it holds for no plan now, not for every one');
+        $this->send($this->tap(Nav::to('dcf', 'edit', $code->id), chat: self::OWNER));
+        self::assertStringContainsString('در «پلن‌ها» چیزی انتخاب نشده؛ دسته یا پلنی انتخاب کنید، یا «همه پلن‌ها».', $this->said()[0]);
+
+        // Another field changed and saved: refused at the plans, the code as it was.
+        $this->send($this->tap(Nav::to('dcf', 'ask', 2), chat: self::OWNER));
+        $this->send($this->message('35', chat: self::OWNER));
+        $this->send($this->tap(Nav::to('dcf', 'save'), chat: self::OWNER));
+        self::assertStringContainsString(DiscountForm::NO_PLAN_CHOSEN, (string) $this->popup());
+        self::assertSame(['10.00', [999], null], [$code->refresh()->value, $code->category_ids, $code->plan_ids]);
+    }
+
+    public function testNothingTickedInThePlansIsRefusedAndEveryPlanIsItsOwnButton(): void
+    {
+        $this->owner();
+        $this->category(['name' => 'ماهانه']);
+        $code = $this->code('TICK');
+        $this->send($this->message('/admin', chat: self::OWNER));
+        $this->send($this->tap(Nav::to('dcf', 'edit', $code->id), chat: self::OWNER));
+        $this->send($this->tap(Nav::to('dcf', 'ask', 10), chat: self::OWNER));
+
+        // Ticked and unticked: nothing chosen — refused, the question still asked, never taken for every plan.
+        $this->send($this->tap(Nav::to('dcf', 'mt', 10, 0, 1), chat: self::OWNER));
+        $this->send($this->tap(Nav::to('dcf', 'mt', 10, 0, 0), chat: self::OWNER));
+        $this->send($this->tap(Nav::to('dcf', 'done', 10), chat: self::OWNER));
+        self::assertSame(Marketing::REACH_NONE, $this->popup());
+        self::assertStringContainsString('برای کدام دسته‌ها و پلن‌ها؟', $this->said()[0]);
+
+        $this->send($this->tap(Nav::to('dcf', 'all', 10), chat: self::OWNER));
+        $this->send($this->tap(Nav::to('dcf', 'done', 10), chat: self::OWNER));
+        self::assertNull($this->popup());
+        self::assertStringContainsString('پلن‌ها: <b>همه پلن‌ها</b>', $this->said()[0], 'the review: «همه پلن‌ها» chosen, at its own button');
+    }
+
+    public function testACategoryDeletedBeforeTheSaveIsMarkedOnThePlansAndLetGoThere(): void
+    {
+        $this->owner();
+        $monthly = $this->category(['name' => 'ماهانه']);
+        $plan = $this->plan(['name' => 'ویژه']);
+        $code = $this->code('STALE');
+        $this->send($this->message('/admin', chat: self::OWNER));
+        $this->send($this->tap(Nav::to('dcf', 'edit', $code->id), chat: self::OWNER));
+        $this->send($this->tap(Nav::to('dcf', 'ask', 10), chat: self::OWNER));
+        $this->send($this->tap(Nav::to('dcf', 'mt', 10, 0, 1), chat: self::OWNER));
+        $this->send($this->tap(Nav::to('dcf', 'mt', 10, 1, 1), chat: self::OWNER));
+        $this->send($this->tap(Nav::to('dcf', 'done', 10), chat: self::OWNER));
+        self::assertStringContainsString('🗂 ماهانه، ویژه', $this->said()[0]);
+
+        // Deleted meanwhile (from the panel): said so on the review, and the panel's refusal of it marked on «پلن‌ها».
+        $monthly->delete();
+        $this->send($this->tap(Nav::to('dcf', 'sum'), chat: self::OWNER));
+        self::assertStringContainsString('حذف‌شده، ویژه', $this->said()[0], 'not its key');
+        $this->send($this->tap(Nav::to('dcf', 'save'), chat: self::OWNER));
+        self::assertSame('پلن‌ها: یکی از دسته‌های انتخاب‌شده دیگر وجود ندارد.', $this->popup(), 'the categories\' refusal named by the field shown');
+        self::assertStringContainsString('⚠️ پلن‌ها: <b>حذف‌شده، ویژه</b>', $this->said()[0], 'marked on «پلن‌ها»');
+        self::assertStringContainsString('⚠️ پلن‌ها: یکی از دسته‌های انتخاب‌شده دیگر وجود ندارد.', $this->said()[0]);
+        self::assertSame([null, null], [$code->refresh()->category_ids, $code->plan_ids], 'nothing saved');
+
+        // «✔️ تایید» lets it go: the plan kept, the mark gone, the save through.
+        $this->send($this->tap(Nav::to('dcf', 'ask', 10), chat: self::OWNER));
+        $this->send($this->tap(Nav::to('dcf', 'done', 10), chat: self::OWNER));
+        self::assertStringContainsString('پلن‌ها: <b>ویژه</b>', $this->said()[0]);
+        self::assertStringNotContainsString('⚠️', $this->said()[0]);
+        $this->send($this->tap(Nav::to('dcf', 'save'), chat: self::OWNER));
+        self::assertSame([null, [$plan->id]], [$code->refresh()->category_ids, $code->plan_ids]);
+    }
+
+    public function testADraftLeftFromBefore0110KeepsItsPlans(): void
+    {
+        $this->owner();
+        $plan = $this->plan(['name' => 'ویژه']);
+        $code = $this->code('OLD');
+        $this->send($this->message('/admin', chat: self::OWNER));
+        $this->send($this->tap(Nav::to('dcf', 'edit', $code->id), chat: self::OWNER));
+        // As 0.10 left it: the plans under `plan_ids` — one ticked, the code as saved for every plan.
+        $this->oldDraft('dcf', ['plan_ids' => [$plan->id]], ['plan_ids' => null]);
+
+        $this->send($this->tap(Nav::to('dcf', 'sum'), chat: self::OWNER));
+        self::assertStringContainsString('پلن‌ها: <b>ویژه</b>', $this->said()[0], 'its plan, not every plan');
+        $this->send($this->tap(Nav::to('dcf', 'save'), chat: self::OWNER));
+        self::assertSame([null, [$plan->id]], [$code->refresh()->category_ids, $code->plan_ids], 'never widened');
     }
 
     public function testACodeIsSwitchedEditedAndDeleted(): void
@@ -324,5 +453,25 @@ final class MarketingDiscountsTest extends BotTestCase
     private function code(string $text): DiscountCode
     {
         return $this->service(DiscountCodes::class)->create(['code' => $text, 'type' => 'percent', 'value' => 10, 'first_purchase_only' => false, 'enabled' => true]);
+    }
+
+    /**
+     * The open form's draft (and the row it was opened from) as a version before 0.11.0 kept them: no `plans`, these keys
+     * instead.
+     *
+     * @param array<string, mixed> $draft
+     * @param array<string, mixed> $was
+     */
+    private function oldDraft(string $screen, array $draft, array $was): void
+    {
+        $session = TelegramSession::of(self::OWNER) ?? self::fail('no chat');
+        $data = $session->data ?? [];
+        $state = $data[Admin::FACT]['screens'][$screen] ?? self::fail('no form open');
+        foreach (['draft' => $draft, 'was' => $was] as $key => $old) {
+            unset($state[$key]['plans']);
+            $state[$key] = $old + $state[$key];
+        }
+        $data[Admin::FACT]['screens'][$screen] = $state;
+        $session->forceFill(['data' => $data])->save();
     }
 }

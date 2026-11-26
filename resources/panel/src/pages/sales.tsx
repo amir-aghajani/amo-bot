@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { queryOptions } from '@tanstack/react-query'
 import { Flame, Plus } from 'lucide-react'
 import { SaleForm } from '@/components/discounts/sale-form'
-import { kindsWords, namedWords } from '@/components/discounts/targets'
+import { kindsWords, planReachWords } from '@/components/discounts/targets'
 import { windowWords } from '@/components/discounts/window'
 import { EmptyState } from '@/components/empty-state'
 import { ListView, PhoneFacts, RowTitleButton } from '@/components/list-view'
@@ -27,9 +27,9 @@ const salesQuery = queryOptions({ queryKey: queryKeys.sales, queryFn: () => api.
 const PROGRAM =
   'فروش ویژه درصدی از قیمت پلن‌هایی که انتخاب می‌کنید کم می‌کند، از زمان شروع تا زمان پایانش. اگر مشتری تخفیف اختصاصی یا تخفیف سطح وفاداری هم داشته باشد، فقط بزرگ‌ترین آن‌ها اعمال می‌شود و کد تخفیف روی مبلغ باقی‌مانده می‌آید. قیمت تخفیف‌خورده همه‌جا دیده می‌شود: دکمه پلن‌ها و جزئیات پلن در ربات، صفحه پرداخت و قیمت پلن در وب‌سایت.'
 
-/** What a sale is for, in a short line: «خرید · ۲ پلن». */
+/** What a sale is for, in a short line: «خرید · دسته «ماهانه» و ۲ پلن». */
 function saleTargets(sale: SaleRow): string {
-  return `${kindsWords(sale.order_types)} · ${sale.plans === null ? 'همه پلن‌ها' : namedWords('پلن', sale.plans)}`
+  return `${kindsWords(sale.order_types)} · ${planReachWords(sale.plans, sale.categories) ?? 'همه پلن‌ها'}`
 }
 
 /** «فروش ویژه» (both panels): the shop's timed percent-off sales, newest first, edited in a dialog. */

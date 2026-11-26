@@ -70,6 +70,7 @@ approve it in the panel.
 | One service | «فروش › اشتراک‌ها»: its link, usage, days and traffic added, switched off, moved, deleted ([Services](Services.md)) |
 | A server down | Its page says why; its services' days can be made good afterwards, or its services rescued to another server ([Servers](Servers.md#moving-its-services)) |
 | News for everyone | `/broadcast` in the bot; «ربات › ارسال همگانی» follows and controls the runs ([Broadcasts](Broadcasts.md)) |
+| The day's figures | Every day in the report group's «گزارش روزانه» topic: income, sales, the plans sold most, the agents' sales ([Report group](Telegram-Group.md#the-daily-report)); any range on the dashboard |
 | A backup | Every day in the report group's «پشتیبان‌گیری» topic; at any time, and a restore, in «تنظیمات پنل › پشتیبان‌گیری» — keep `config.php` and `storage/uploads/` with them ([Backups](Backups.md)) |
 
 The menu counts what waits beside its entries — «پشتیبانی», «نظرات», «سفارش‌ها», «پرداخت‌ها» —, and every list follows the shop

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Admin\Api;
 
 use App\Core\Http\ApiController;
+use App\Modules\Auth\Principal;
 use App\Modules\Settings\Services\ConfigSettings;
 use App\Support\Input;
 use Psr\Http\Message\ResponseInterface as Response;
@@ -19,15 +20,16 @@ final class ConfigSettingsController extends ApiController
 {
     public function __construct(private readonly ConfigSettings $settings) {}
 
-    /** GET /settings/config */
+    /** GET /settings/config — to one of the main shop's admins in the bot, without the database's settings or the webhook secret's hint */
     public function index(Request $request, Response $response): Response
     {
-        return $this->json($response, $this->settings->present());
+        return $this->json($response, $this->settings->present(Principal::of($request)->isTheOwner()));
     }
 
     /**
      * PUT /settings/config/{group} — app, database, telegram, mail, sms or advanced, as the screen shows it; the main bot's,
-     * moving the Bot API's address, with the owner's current password
+     * moving the Bot API's address, with the owner's current password. The site's address, the main bot's token, @username
+     * and webhook secret, and the database are the owner's themselves alone (ConfigSettings::update()).
      *
      * @param array<string, string> $args
      */
@@ -42,10 +44,10 @@ final class ConfigSettingsController extends ApiController
         return $this->json($response, ['bot' => $this->settings->testTelegram(Input::text($this->input($request), 'token'))]);
     }
 
-    /** POST /settings/config/database/test — {driver?, …its fields}: a secret left blank is the stored one */
+    /** POST /settings/config/database/test — {driver?, …its fields}: a secret left blank is the stored one; the owner's alone, as the save is */
     public function testDatabase(Request $request, Response $response): Response
     {
-        return $this->json($response, ['database' => $this->settings->testDatabase($this->input($request))->toArray()]);
+        return $this->json($response, ['database' => $this->settings->testDatabase($this->input($request), $request)->toArray()]);
     }
 
     /** POST /settings/config/mail/test — {to}: a short email by the mail settings as saved — or why none goes */

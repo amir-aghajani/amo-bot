@@ -51,8 +51,9 @@ const AREA_QUERIES: Record<Area, readonly QueryKey[]> = {
   grants: [queryKeys.everyServerGrants, queryKeys.massGrants],
   // A move of a server's services under way moves its cursor every second: its card, and one's failures.
   migrations: [queryKeys.everyServerMigrations, queryKeys.everyServerMigration],
-  // The catalogue — and an agent's smallest plan on sale, which their traffic is held against (account, dashboard).
-  plans: [queryKeys.plans, queryKeys.planCategories, queryKeys.planOptions, queryKeys.account, queryKeys.dashboards],
+  // The catalogue — and an agent's smallest plan on sale, which their traffic is held against (account, dashboard); the
+  // discount codes and sales limited to plans or categories, which a category renamed or removed changes.
+  plans: [queryKeys.plans, queryKeys.planCategories, queryKeys.planOptions, queryKeys.account, queryKeys.dashboards, queryKeys.discountCodes, queryKeys.sales],
   payment_methods: [queryKeys.paymentMethods],
   // The orders, the payments made for them, a customer's and an agent's bot's counts, each plan's sales, the dashboard,
   // the sidebar's count of the stuck ones, each discount code's uses, each loyalty tier's customers, whether a test's

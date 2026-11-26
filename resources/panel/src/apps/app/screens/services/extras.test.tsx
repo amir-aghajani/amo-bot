@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { keys, queryClient } from '@/apps/app/lib/query'
 import ExtrasScreen from '@/apps/app/screens/services/extras'
@@ -74,6 +74,52 @@ describe('extras for a service', () => {
 
     await until(() => expect(server().sent('POST', `${SERVICE}/extra-traffic`)).toHaveLength(1))
     expect(server().sent('POST', `${SERVICE}/extra-traffic`)[0]?.body).toEqual({ gb: 25, method_id: 1, expected_amount: '45000' })
+  })
+
+  it('prices an amount typed that is one of the options at the price of that option, as the shop does, and holds the order to it', async () => {
+    server().on('POST', `${SERVICE}/extra-traffic`, json(checkout('extra_traffic', '16200.00')))
+    open()
+
+    fireEvent.click(await screen.findByRole('radio', { name: /مقدار دلخواه/ }))
+    fireEvent.change(screen.getByLabelText('حجم (گیگابایت)'), { target: { value: '۱۰' } })
+    fireEvent.click(await screen.findByRole('button', { name: 'پرداخت ۱۶٬۲۰۰ تومان' }))
+
+    await until(() => expect(server().sent('POST', `${SERVICE}/extra-traffic`)).toHaveLength(1))
+    expect(server().sent('POST', `${SERVICE}/extra-traffic`)[0]?.body).toEqual({ gb: 10, method_id: 1, expected_amount: '16200.00' })
+  })
+
+  it('sells an amount typed that is one of the options outside the bounds of a typed amount, as the shop does, and refuses any other there', async () => {
+    server().on('POST', `${SERVICE}/extra-traffic`, json(checkout('extra_traffic', '16200.00')))
+    open({ traffic: { ...TRAFFIC, custom: { min: 20, max: 40 } }, time: null, devices: DEVICES })
+
+    fireEvent.click(await screen.findByRole('radio', { name: /مقدار دلخواه/ }))
+    const field = screen.getByLabelText('حجم (گیگابایت)')
+    fireEvent.change(field, { target: { value: '۴۵' } })
+    expect(screen.getByText('عددی از ۲۰ تا ۴۰ بنویسید.')).toBeTruthy()
+    // Settled, still nothing to pay.
+    await act(() => new Promise((resolve) => setTimeout(resolve, 500)))
+    expect(screen.queryByRole('button', { name: /^پرداخت/ })).toBeNull()
+
+    fireEvent.change(field, { target: { value: '۱۰' } })
+    expect(screen.queryByText('عددی از ۲۰ تا ۴۰ بنویسید.')).toBeNull()
+    fireEvent.click(await screen.findByRole('button', { name: 'پرداخت ۱۶٬۲۰۰ تومان' }))
+
+    await until(() => expect(server().sent('POST', `${SERVICE}/extra-traffic`)).toHaveLength(1))
+    expect(server().sent('POST', `${SERVICE}/extra-traffic`)[0]?.body).toEqual({ gb: 10, method_id: 1, expected_amount: '16200.00' })
+  })
+
+  it('holds a typed count of devices that is one of the options to the price of that option', async () => {
+    const devices: StoreExtraOffer = { ...DEVICES, price: '600.00', offer_price: '600.00', options: [{ quantity: 2, price: '1000.00', offer_price: '1000.00' }], custom: { min: 1, max: 5 } }
+    server().on('POST', `${SERVICE}/extra-devices`, json(checkout('extra_devices', '1000.00')))
+    open({ traffic: TRAFFIC, time: null, devices })
+
+    fireEvent.click(await screen.findByRole('radio', { name: 'کاربر' }))
+    fireEvent.click(screen.getByRole('radio', { name: /مقدار دلخواه/ }))
+    fireEvent.change(screen.getByLabelText('تعداد کاربر'), { target: { value: '2' } })
+    fireEvent.click(await screen.findByRole('button', { name: 'پرداخت ۱٬۰۰۰ تومان' }))
+
+    await until(() => expect(server().sent('POST', `${SERVICE}/extra-devices`)).toHaveLength(1))
+    expect(server().sent('POST', `${SERVICE}/extra-devices`)[0]?.body).toEqual({ devices: 2, method_id: 1, expected_amount: '1000.00' })
   })
 
   it('takes a free extra with one button, naming no card transfer while another way is offered', async () => {

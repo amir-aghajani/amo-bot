@@ -34,7 +34,8 @@ use Slim\ResponseEmitter;
  * extensions, whether PHP may swap the app's folders), then Install in one request — the shop held (Maintenance), the
  * folders swapped (AppFolders), the database upgraded, compiled code forgotten, the version recorded. A failure after the
  * swap takes it back; an install a crash cut short is finished by the next step. The replaced version stays aside for
- * rollback() while the database is unchanged. Files put in place by hand make an upgrading run of their own.
+ * rollback() while the database is unchanged and those files are still the ones in place. Files put in place by hand
+ * make an upgrading run of their own.
  */
 final class Updater
 {
@@ -61,6 +62,9 @@ final class Updater
     public const DATABASE_CHANGED = 'این به‌روزرسانی دیتابیس را هم تغییر داده است؛ برگشت به نسخه قبلی فقط با نسخه پشتیبان دیتابیس ممکن است (راهنمای Upgrading).';
 
     public const NOTHING_KEPT = 'نسخه قبلی دیگر نگه داشته نشده است.';
+
+    /** The running version is not the one the last update installed (files put in place by hand since): sprintf'd with both. */
+    public const NOT_THIS_VERSION = 'نسخه‌ای که الان اجرا می‌شود (%s) همان نسخه‌ای نیست که این به‌روزرسانی نصب کرد (%s)؛ فایل‌های برنامه بعد از آن دستی عوض شده‌اند و برگشت به نسخه قبلی از این‌جا ممکن نیست.';
 
     public const ZIP_MISMATCH = 'فایل دانلودشده با امضای نسخه جور نیست و نصب نمی‌شود؛ دوباره امتحان کنید.';
 
@@ -233,8 +237,9 @@ final class Updater
     }
 
     /**
-     * Put back the version the last update replaced — while it is kept and the update changed nothing of the database
-     * (only a backup takes that back).
+     * Put back the version the last update replaced — while it is kept, the update changed nothing of the database
+     * (only a backup takes that back), and the app's files in place are still the version it installed (running()): a run
+     * left from before files were put in place by hand would put an older version back over a newer one.
      *
      * @return array<string, mixed>
      * @throws UpdateRefusedException when it may not be taken back, or could not be
@@ -246,6 +251,9 @@ final class Updater
             $run = $this->workspace->run();
             if ($run === null || $run->step !== UpdateStep::Done) {
                 throw UpdateRefusedException::refused(self::NOT_DONE);
+            }
+            if ($run->version !== $this->running()) {
+                throw UpdateRefusedException::refused(sprintf(self::NOT_THIS_VERSION, $this->running(), $run->version));
             }
             if ($run->upgraded !== []) {
                 throw UpdateRefusedException::refused(self::DATABASE_CHANGED);
@@ -339,7 +347,7 @@ final class Updater
             return $run->unpacked($next, intdiv($next * 100, $package->count()));
         }
 
-        $version = preg_match("/const VERSION = '([^']+)'/", Files::read("{$release}/app/Core/Application.php") ?? '', $code) === 1 ? $code[1] : null;
+        $version = self::versionIn($release);
         $missing = array_filter([...$manifest->paths, ...self::RELEASE_FILES], static fn(string $path): bool => !file_exists("{$release}/{$path}"));
         if ($missing !== [] || $version !== $manifest->version) {
             throw UpdateRefusedException::refused(self::NOT_COMPLETE);
@@ -515,8 +523,23 @@ final class Updater
             'checked_at' => $latest['checked_at'] === null ? null : gmdate(DATE_ATOM, $latest['checked_at']),
             'available' => $release !== null && $release->isNewer() && !$taken,
             'blocker' => $this->blocker($release),
-            'run' => $run?->present($run->step === UpdateStep::Done && $run->upgraded === [] && $run->paths !== [] && $this->folders->kept()),
+            'run' => $run?->present($run->step === UpdateStep::Done && $run->version === $this->running() && $run->upgraded === [] && $run->paths !== [] && $this->folders->kept()),
         ];
+    }
+
+    /**
+     * The version the app's files in place are (their Application::VERSION), which every request from now on runs — the
+     * one this request loaded when they cannot be read.
+     */
+    private function running(): string
+    {
+        return self::versionIn($this->app) ?? Application::VERSION;
+    }
+
+    /** The version a folder of AmoBot's files is, as its app/Core/Application.php says it; null when it says none. */
+    private static function versionIn(string $folder): ?string
+    {
+        return preg_match("/const VERSION = '([^']+)'/", Files::read("{$folder}/app/Core/Application.php") ?? '', $code) === 1 ? $code[1] : null;
     }
 
     /** What blocks a self-update to `$release`: the host, or a release without its signed files. */

@@ -56,7 +56,7 @@ final class ReportGroupConnectTest extends BotTestCase
 
         $made = array_map(fn(int $i): array => $this->params($i), range(2, 1 + $topics));
         self::assertSame(array_map(static fn(Topic $topic): string => $topic->title(), Topic::cases()), array_column($made, 'name'));
-        self::assertSame(['9367192', '7322096', '16749490', '16478047', '16766590', '13338331', '16749490', '16478047', '7322096', '16766590', '13338331', '9367192'], array_column($made, 'icon_color'), "Telegram's own six colours");
+        self::assertSame(['9367192', '7322096', '16749490', '16478047', '16766590', '13338331', '16749490', '16478047', '7322096', '16766590', '13338331', '9367192', '7322096'], array_column($made, 'icon_color'), "Telegram's own six colours");
         self::assertSame('icon-cart', $made[0]['icon_custom_emoji_id']);
         self::assertSame('icon-money', $made[4]['icon_custom_emoji_id']);
         self::assertSame('icon-warning', $made[7]['icon_custom_emoji_id'], 'matched whether or not the emoji carries its variation selector');

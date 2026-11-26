@@ -73,7 +73,7 @@ final class BackupsScreen extends BaseScreen
             '<b>📥 دریافت پشتیبان</b>: یک فایل پشتیبان همین حالا ساخته و همین‌جا فرستاده می‌شود؛ ساختنش ممکن است چند ثانیه طول بکشد. ' . "فایل فقط در همین نصب \u{2068}AmoBot\u{2069} بازگردانی می‌شود. آن را جای امنی نگه دارید؛ هرکس آن را داشته باشد، داده‌های مشتری‌ها را دارد.",
             '<b>🔁 ارسال خودکار</b>: فایل پشتیبان به تاپیک «پشتیبان‌گیری» گروه گزارش‌ها فرستاده می‌شود. گروه را خصوصی نگه دارید؛ هرکس در آن باشد، فایل را دارد. ' . (Access::main($admin->seat) ? 'فاصله ارسال در «تنظیمات پنل › زمان‌بندی کارها» تعیین می‌شود.' : 'فاصله ارسال را مالک فروشگاه اصلی تعیین می‌کند.'),
             '<b>♻️ بازگردانی</b>: ' . ($whole ? 'کل نصب' : 'فروشگاه ' . Tables::shop(is_array($status['shop'] ?? null) ? $status['shop'] : null)) . ' را به حالت یک فایل پشتیبان برگردانید. اول فایل بررسی و محتوایش نشان داده می‌شود؛ تا تایید نکنید، چیزی تغییر نمی‌کند.',
-            '<b>🗂 پیش از بازگردانی‌ها</b>: پیش از هر بازگردانی، حالت همان لحظه نگه داشته می‌شود (سه مورد آخر)، تا اگر فایل اشتباهی بازگردانی شد، بتوانید با آن به حالت قبل برگردید.',
+            '<b>🗂 پیش از بازگردانی‌ها</b>: پیش از هر بازگردانی، حالت همان لحظه نگه داشته می‌شود (سه مورد آخر)، تا اگر فایل اشتباهی بازگردانی شد، بتوانید با آن به حالت قبل برگردید.' . (self::oldFilesHidden($admin) ? " حالت‌هایی که پیش از نسخه \u{2068}0.11.0\u{2069} نگه داشته شده‌اند این‌جا نشان داده نمی‌شوند: آن‌ها و هر فایل پشتیبان پیش از این نسخه رمز \u{2068}Webhook\u{2069} ربات‌ها را دارند و دریافت و بازگردانی‌شان فقط با " . ($admin->seat->isOwner() ? 'خود مالک' : 'خود نماینده یا مالک') . ' است.' : ''),
         ]))->back(PanelSettingsScreen::ID);
     }
 
@@ -114,6 +114,16 @@ final class BackupsScreen extends BaseScreen
     public static function deliver(Admin $admin, ApiFile $file, string $caption): bool
     {
         return $admin->send($file, $caption);
+    }
+
+    /**
+     * Whether the API keeps files made before 0.11.0 from this seat — an admin's with the owner's or the agent's, not the
+     * owner or the agent themselves (Admin\Api\BackupsController::oldFiles()): left out of the states kept, refused to
+     * send or restore.
+     */
+    private static function oldFilesHidden(Admin $admin): bool
+    {
+        return $admin->seat->principal->customer !== null;
     }
 
     /**

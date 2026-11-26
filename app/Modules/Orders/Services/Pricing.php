@@ -91,7 +91,7 @@ final class Pricing
     {
         $price = $buyer->purchase($plan);
 
-        return self::quoted($automatic, $price->amount, $price->pricing, OrderType::Purchase, $plan->id);
+        return self::quoted($automatic, $price->amount, $price->pricing, OrderType::Purchase, $plan->id, $plan->category_id);
     }
 
     /**
@@ -101,7 +101,7 @@ final class Pricing
      */
     public function purchase(?User $user, Plan $plan, ?Server $server = null, ?string $code = null): Quote
     {
-        return $this->coded($this->offers($user, $plan)[$plan->id], $user, $code, new CodeTarget(OrderType::Purchase, $plan->id, $server?->id));
+        return $this->coded($this->offers($user, $plan)[$plan->id], $user, $code, new CodeTarget(OrderType::Purchase, $plan->id, $plan->category_id, $server?->id));
     }
 
     /**
@@ -117,7 +117,7 @@ final class Pricing
         $quotes = [];
         foreach ($plans as $plan) {
             $price = $buyer->renewal($plan);
-            $quotes[$plan->id] = self::quoted($automatic, $price->amount, $price->pricing, OrderType::Renewal, $plan->id);
+            $quotes[$plan->id] = self::quoted($automatic, $price->amount, $price->pricing, OrderType::Renewal, $plan->id, $plan->category_id);
         }
 
         return $quotes;
@@ -136,7 +136,7 @@ final class Pricing
             return $this->built($user, $with, OrderType::Renewal, $subscription->server_id, $code);
         }
 
-        return $this->coded($this->renewalOffers($user, $with)[$with->id], $user, $code, new CodeTarget(OrderType::Renewal, $with->id, $subscription->server_id));
+        return $this->coded($this->renewalOffers($user, $with)[$with->id], $user, $code, new CodeTarget(OrderType::Renewal, $with->id, $with->category_id, $subscription->server_id));
     }
 
     /**
@@ -147,7 +147,7 @@ final class Pricing
      */
     public function extra(User $user, Subscription $subscription, ExtraKind $kind, string $base, ?string $code = null): Quote
     {
-        return $this->coded(self::extraOffer($this->automatic($user), $subscription, $kind, $base), $user, $code, new CodeTarget($kind->orderType(), $subscription->plan_id, $subscription->server_id));
+        return $this->coded(self::extraOffer($this->automatic($user), $subscription, $kind, $base), $user, $code, new CodeTarget($kind->orderType(), $subscription->plan_id, $subscription->plan?->category_id, $subscription->server_id));
     }
 
     /**
@@ -156,7 +156,7 @@ final class Pricing
      */
     public static function extraOffer(AutomaticDiscounts $automatic, Subscription $subscription, ExtraKind $kind, string $base): Quote
     {
-        return self::quoted($automatic, $base, OrderPricing::Regular, $kind->orderType(), $subscription->plan_id);
+        return self::quoted($automatic, $base, OrderPricing::Regular, $kind->orderType(), $subscription->plan_id, $subscription->plan?->category_id);
     }
 
     /**
@@ -173,21 +173,25 @@ final class Pricing
     /**
      * A package the customer builds, bought as `$type` (a purchase, or a renewal of their service on server `$serverId`)
      * at `$price`, with the code they typed — an order of no plan, as an extra of a service without one is priced: no
-     * first-purchase or agent price (a plan's), only a sale of every plan reaches it, and a code held to plans never does.
+     * first-purchase or agent price (a plan's), only a sale of every plan reaches it, and a code held to plans or
+     * categories never does.
      *
      * @throws DiscountCodeRefusedException the code does not hold for it
      */
     private function built(?User $user, CustomPrice $price, OrderType $type, ?int $serverId, ?string $code): Quote
     {
-        $quote = self::quoted($this->automatic($user), $price->total(), OrderPricing::Regular, $type, null);
+        $quote = self::quoted($this->automatic($user), $price->total(), OrderPricing::Regular, $type, null, null);
 
-        return $this->coded($quote, $user, $code, new CodeTarget($type, null, $serverId));
+        return $this->coded($quote, $user, $code, new CodeTarget($type, null, null, $serverId));
     }
 
-    /** `$base` at `$pricing`, less the largest of the customer's automatic discounts for an order of `$type` on plan `$planId`. */
-    private static function quoted(AutomaticDiscounts $automatic, string $base, OrderPricing $pricing, OrderType $type, ?int $planId): Quote
+    /**
+     * `$base` at `$pricing`, less the largest of the customer's automatic discounts for an order of `$type` on plan
+     * `$planId`, in category `$categoryId`.
+     */
+    private static function quoted(AutomaticDiscounts $automatic, string $base, OrderPricing $pricing, OrderType $type, ?int $planId, ?int $categoryId): Quote
     {
-        return new Quote(Money::normalize($base), $pricing, $automatic->best($planId, $type, $base));
+        return new Quote(Money::normalize($base), $pricing, $automatic->best($planId, $categoryId, $type, $base));
     }
 
     /**

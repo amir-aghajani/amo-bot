@@ -104,7 +104,8 @@ it on:
 
 Once the shop's clock has passed the hour, the day's draw is made — once a day, however many runs come. The scheduler
 looks every 10 minutes by default ([the task schedule](Running-In-Production.md#the-task-schedule)), so a draw comes
-at most that long after its hour.
+at most that long after its hour. Keep that interval at an hour or less: a longer one may leave no look between the hour
+and midnight, and that day's draw does not happen.
 
 - **The entries** are the orders paid since the draw before: the purchases, renewals and extras paid and not given
   back, at a price. Each draw's time ends a minute before it is made, so an order paid at that moment enters the next

@@ -7,6 +7,7 @@ namespace Tests\Feature;
 use App\Core\Exceptions\TooManyAttemptsException;
 use App\Modules\Bots\CurrentBot;
 use App\Modules\Catalog\Models\Plan;
+use App\Modules\Catalog\Services\PlanCategoryService;
 use App\Modules\Discounts\DTO\CodeTarget;
 use App\Modules\Discounts\Enums\DiscountSource;
 use App\Modules\Discounts\Enums\DiscountType;
@@ -96,6 +97,7 @@ final class DiscountsTest extends DatabaseTestCase
         yield 'ended' => [['ends_at' => '2026-10-08 11:00:00'], DiscountCodes::ENDED];
         yield 'another kind' => [['order_types' => ['renewal']], 'این کد تخفیف برای خرید نیست.'];
         yield 'another plan' => [['plan_ids' => [999]], DiscountCodes::WRONG_PLAN];
+        yield 'another category' => [['category_ids' => [999]], DiscountCodes::WRONG_PLAN];
         yield 'another server' => [['server_ids' => [999]], DiscountCodes::WRONG_SERVER];
         yield 'a larger order' => [['min_amount' => '150000'], 'این کد تخفیف برای سفارش‌های دست‌کم ۱۵۰٬۰۰۰ تومان است.'];
     }
@@ -153,6 +155,86 @@ final class DiscountsTest extends DatabaseTestCase
         $this->assertRefused(DiscountCodes::WRONG_SERVER, fn() => $this->pricing()->purchase($this->ali, $this->plan, null, 'BERLIN'), 'no server picked yet');
     }
 
+    public function testASaleOfSomeCategoriesIsOnEveryPlanInThemAndThePlansItNames(): void
+    {
+        $this->extrasOnSale();
+        $monthly = $this->category(['name' => 'ماهانه']);
+        $this->plan->forceFill(['category_id' => $monthly->id])->save();
+        $vip = $this->plan(['name' => 'ویژه', 'price' => '100000.00'], $this->server);
+        $loose = $this->plan(['name' => 'بی‌دسته', 'price' => '100000.00'], $this->server);
+        $this->sale('فروش ماهانه', 25, ['category_ids' => [$monthly->id], 'plan_ids' => [$vip->id]]);
+
+        foreach ([$this->plan->refresh(), $vip] as $plan) {
+            self::assertSame('75000.00', $this->pricing()->purchase($this->ali, $plan, $this->server)->amount(), $plan->name);
+        }
+        self::assertSame('100000.00', $this->pricing()->purchase($this->ali, $loose, $this->server)->amount(), 'a plan in no category, not named');
+        $subscription = $this->subscription($this->ali, $this->plan, $this->server, 'ali_1');
+        self::assertSame('75000.00', $this->pricing()->renewal($this->ali, $subscription, $this->plan)->amount(), "a renewal on the category's plan");
+        self::assertSame('5250.00', $this->pricing()->extra($this->ali, $subscription, ExtraKind::Time, '7000')->amount(), "an extra: the service's plan's category");
+
+        // A plan moved into the category later is on sale too.
+        $loose->forceFill(['category_id' => $monthly->id])->save();
+        self::assertSame('75000.00', $this->pricing()->purchase($this->ali, $loose->refresh(), $this->server)->amount());
+    }
+
+    public function testACodeForSomeCategoriesHoldsForEveryPlanInThemAndThePlansItNames(): void
+    {
+        $monthly = $this->category(['name' => 'ماهانه']);
+        $weekly = $this->category(['name' => 'هفتگی']);
+        $this->plan->forceFill(['category_id' => $monthly->id])->save();
+        $another = $this->plan(['name' => 'دوماهه', 'price' => '100000.00', 'category_id' => $monthly->id], $this->server);
+        $weeklyPlan = $this->plan(['name' => 'هفتگی', 'price' => '100000.00', 'category_id' => $weekly->id], $this->server);
+        $vip = $this->plan(['name' => 'ویژه', 'price' => '100000.00', 'category_id' => $weekly->id], $this->server);
+        $loose = $this->plan(['name' => 'بی‌دسته', 'price' => '100000.00'], $this->server);
+        $this->discountCode('MONTHLY', 20, ['category_ids' => [$monthly->id]]);
+        $this->discountCode('MIXED', 30, ['category_ids' => [$monthly->id], 'plan_ids' => [$vip->id]]);
+
+        foreach ([$this->plan, $another] as $plan) {
+            self::assertSame('80000.00', $this->pricing()->purchase($this->ali, $plan, $this->server, 'MONTHLY')->amount(), $plan->name);
+        }
+        foreach ([$weeklyPlan, $vip, $loose] as $plan) {
+            $this->assertRefused(DiscountCodes::WRONG_PLAN, fn() => $this->pricing()->purchase($this->ali, $plan, $this->server, 'MONTHLY'));
+        }
+        foreach ([$this->plan, $another, $vip] as $plan) {
+            self::assertSame('70000.00', $this->pricing()->purchase($this->ali, $plan, $this->server, 'MIXED')->amount(), "{$plan->name}: its category's, or named");
+        }
+        $this->assertRefused(DiscountCodes::WRONG_PLAN, fn() => $this->pricing()->purchase($this->ali, $weeklyPlan, $this->server, 'MIXED'));
+        $this->assertRefused(DiscountCodes::WRONG_PLAN, fn() => $this->pricing()->purchase($this->ali, $loose, $this->server, 'MIXED'), 'a plan in no category');
+
+        // A plan moved into the category later holds; one in it while it is switched off too: the plan is still filed there.
+        $weeklyPlan->forceFill(['category_id' => $monthly->id])->save();
+        self::assertSame('80000.00', $this->pricing()->purchase($this->ali, $weeklyPlan->refresh(), $this->server, 'MONTHLY')->amount(), 'moved in');
+        $monthly->forceFill(['is_active' => false])->save();
+        self::assertSame('80000.00', $this->pricing()->purchase($this->ali, $this->plan->refresh(), $this->server, 'MONTHLY')->amount(), 'its category off');
+    }
+
+    public function testACodeWhoseCategoryIsGoneHoldsForNoPlanAndNeverForEveryOne(): void
+    {
+        $monthly = $this->category(['name' => 'ماهانه']);
+        $this->plan->forceFill(['category_id' => $monthly->id])->save();
+        $this->discountCode('MONTHLY', 20, ['category_ids' => [$monthly->id]]);
+
+        $this->service(PlanCategoryService::class)->delete($monthly);
+
+        $this->assertRefused(DiscountCodes::WRONG_PLAN, fn() => $this->pricing()->purchase($this->ali, $this->plan->refresh(), $this->server, 'MONTHLY'), 'its plans left in no category');
+        $row = $this->service(DiscountCodes::class)->present(DiscountCode::query()->where('code', 'MONTHLY')->firstOrFail());
+        self::assertSame([[], null], [$row['categories'], $row['plans']], 'said as naming nothing that is left, not as every plan');
+    }
+
+    public function testACodeForACategoryHoldsForARenewalAndAnExtraByTheServicesPlan(): void
+    {
+        $this->extrasOnSale();
+        $monthly = $this->category(['name' => 'ماهانه']);
+        $this->plan->forceFill(['category_id' => $monthly->id])->save();
+        $loose = $this->plan(['name' => 'بی‌دسته', 'price' => '100000.00'], $this->server);
+        $subscription = $this->subscription($this->ali, $this->plan, $this->server, 'ali_1');
+        $this->discountCode('KEEP', 10, ['order_types' => ['renewal', 'extra_time'], 'category_ids' => [$monthly->id]]);
+
+        self::assertSame('90000.00', $this->pricing()->renewal($this->ali, $subscription, $this->plan->refresh(), 'KEEP')->amount());
+        self::assertSame('6300.00', $this->pricing()->extra($this->ali, $subscription, ExtraKind::Time, '7000', 'KEEP')->amount(), "the service's plan's category");
+        $this->assertRefused(DiscountCodes::WRONG_PLAN, fn() => $this->pricing()->renewal($this->ali, $subscription, $loose, 'KEEP'), 'renewed on a plan in no category');
+    }
+
     public function testACodeForRenewalsAndExtrasHoldsByTheServicesPlanAndServer(): void
     {
         $this->extrasOnSale();
@@ -172,8 +254,8 @@ final class DiscountsTest extends DatabaseTestCase
         $topUp = $this->service(OrderService::class)->openTopUp($this->ali, 50000);
 
         self::assertSame(['50000.00', '0.00', null], [$topUp->amount, $topUp->discount_amount, $topUp->discounts]);
-        self::assertNull($this->pricing()->automatic($this->ali)->best($this->plan->id, OrderType::WalletTopUp, '50000'));
-        self::assertNull($this->pricing()->automatic($this->ali)->best(null, OrderType::Traffic, '50000'));
+        self::assertNull($this->pricing()->automatic($this->ali)->best($this->plan->id, null, OrderType::WalletTopUp, '50000'));
+        self::assertNull($this->pricing()->automatic($this->ali)->best(null, null, OrderType::Traffic, '50000'));
     }
 
     public function testTheLargestAutomaticDiscountAppliesThenTheCodeOnWhatItLeft(): void
@@ -464,7 +546,7 @@ final class DiscountsTest extends DatabaseTestCase
     {
         $codes = $this->service(DiscountCodes::class);
         $this->discountCode('GOOD', 10);
-        $target = new CodeTarget(OrderType::Purchase, $this->plan->id, $this->server->id);
+        $target = new CodeTarget(OrderType::Purchase, $this->plan->id, $this->plan->category_id, $this->server->id);
 
         for ($i = 0; $i < DiscountCodes::WRONG_CODES; ++$i) {
             // A code that holds costs nothing.

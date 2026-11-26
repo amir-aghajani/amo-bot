@@ -5,24 +5,31 @@ declare(strict_types=1);
 namespace App\Modules\Settings\Services;
 
 use App\Core\Forms\Fields\Number;
+use App\Core\Forms\Fields\Text;
 use App\Core\Forms\FieldSpec;
 use App\Core\Scheduling\Intervals;
+use App\Core\Scheduling\Scheduler;
 use App\Modules\Bots\Models\Bot;
 use App\Support\Input;
+use App\Support\Persian;
 
 /**
- * «زمان‌بندی کارها», the owner's — one for the whole installation, kept with the main shop, since one scheduler runs every
- * shop's work: how often each scheduled task runs (Intervals — bootstrap/schedule.php's minutes the defaults), and the
- * times the tasks decide by: when an unpaid order is dropped, how the online gateways are asked about a payment, and how
- * long the notices, the tickets' pictures and the report group's messages are kept. Each has its default, the value the
- * shop ran with before it was a setting. What keeps the shop safe stays fixed: how long an update is remembered so one
- * Telegram sends again runs once, how long a checkout's request key answers again, when a delivery left half-way counts
- * as stuck, and how long a test account's claim may wait.
+ * «زمان‌بندی کارها», the owner's — one for the whole installation, kept with the main shop, since one scheduler runs
+ * every shop's work: how often each scheduled task runs and the time of day its runs are counted from (Intervals —
+ * bootstrap/schedule.php's minutes and starts the defaults), and the times the tasks decide by: when an unpaid order is
+ * dropped, how the online gateways are asked about a payment, and how long the notices, the tickets' pictures and the
+ * report group's messages are kept. Each has its default, the value the shop ran with before it was a setting. What
+ * keeps the shop safe stays fixed: how long an update is remembered so one Telegram sends again runs once, how long a
+ * checkout's request key answers again, when a delivery left half-way counts as stuck, and how long a test account's
+ * claim may wait.
  */
 final class ScheduleSettings implements Intervals
 {
     /** The longest a task may wait between two runs: a week, in minutes. */
     public const EVERY_MAX = 7 * 24 * 60;
+
+    /** What a task's start is: the hint beside its field. */
+    public const START_HINT = 'به وقت منطقه زمانی فروشگاه. اجراها از این ساعت شمرده می‌شوند: هر روز همین ساعت یک اجرا، و بعد هر بار به اندازه فاصله اجرا — مثلا هر ۱۰ دقیقه از ۰۰:۰۳ یعنی ۰۰:۰۳، ۰۰:۱۳، ۰۰:۲۳ و… . اجرایی که کمی دیر انجام شود، زمان اجرای بعدی را جابه‌جا نمی‌کند. اگر ساعتی بگذارید که امروز گذشته و کار از آن به بعد اجرا نشده، در نوبت بعدی یک بار اجرا می‌شود. فاصله بیشتر از یک روز از روز شنبه شمرده می‌شود؛ برای کاری که هر دقیقه اجرا می‌شود، ساعت شروع اثری ندارد.';
 
     /** The times' defaults: what the shop ran with before they were settings. */
     public const ORDER_HOURS = 48;
@@ -53,9 +60,10 @@ final class ScheduleSettings implements Intervals
         'prune_updates' => ['پاک‌سازی سابقه پیام‌های ربات', 'سابقه پیام‌هایی که ربات گرفته، بعد از گذشتن زمانی که تلگرام ممکن است دوباره بفرستدشان، پاک می‌شود.'],
         'prune_accounts' => ['پاک‌سازی حساب‌های وب‌سایت', 'ورودهای تمام‌شده وب‌سایت، کدهای ورود منقضی و اعلان‌های قدیمی پاک می‌شوند.'],
         'prune_tickets' => ['پاک‌سازی تیکت‌ها', 'تصویرهای تیکت‌های بسته‌شده و گزارش‌های قدیمی تیکت‌ها در گروه گزارش‌ها پاک می‌شوند.'],
-        'nightly_draw' => ['قرعه‌کشی شبانه', 'بعد از رسیدن ساعت قرعه‌کشی، قرعه‌کشی همان روز یک بار انجام می‌شود.'],
+        'nightly_draw' => ['قرعه‌کشی شبانه', 'بعد از رسیدن ساعت قرعه‌کشی، قرعه‌کشی همان روز یک بار انجام می‌شود. ساعتش «ساعت قرعه‌کشی» است؛ این‌جا فقط تعیین می‌شود هر چند وقت یک بار بررسی شود که موعدش رسیده است یا نه. فاصله را یک ساعت یا کمتر نگه دارید: با فاصله بیشتر ممکن است هیچ اجرایی بین «ساعت قرعه‌کشی» و پایان روز نیفتد و قرعه‌کشی آن روز انجام نشود.'],
         'send_backups' => ['ارسال پشتیبان به گروه', 'فایل پشتیبان به تاپیک «پشتیبان‌گیری» گروه گزارش‌های هر فروشگاه فرستاده می‌شود: گروه فروشگاه اصلی پشتیبان کل نصب را می‌گیرد، گروه هر نماینده پشتیبان فروشگاه خودش را.'],
         'prune_imports' => ['پاک‌سازی انتقال‌ها', 'انتقالی که یک هفته باز و دست‌نخورده مانده لغو می‌شود، و داده‌هایی که از ربات قبلی برای انتقال خوانده شده و فایل پشتیبانش، بعد از پایان انتقال پاک می‌شوند.'],
+        'daily_report' => ['گزارش روزانه', 'بعد از رسیدن «ساعت گزارش روزانه» هر فروشگاه، آمار روزی که گذشت یک بار به تاپیک «گزارش روزانه» گروه گزارش‌هایش فرستاده می‌شود. ساعتش «ساعت گزارش روزانه» است؛ این‌جا فقط تعیین می‌شود هر چند وقت یک بار بررسی شود که موعدش رسیده است یا نه. فاصله را یک ساعت یا کمتر نگه دارید: با فاصله بیشتر ممکن است هیچ اجرایی بین «ساعت گزارش روزانه» و پایان روز نیفتد و گزارش روز قبل فرستاده نشود.'],
         'check_releases' => ['بررسی نسخه تازه', 'آخرین نسخه AmoBot از GitHub خوانده می‌شود تا داشبورد بگوید نسخه تازه‌ای آمده است.'],
         'send_reports' => ['ارسال گزارش‌ها', 'گزارش‌هایی که در صف مانده‌اند، با سرعتی که تلگرام می‌پذیرد، به گروه گزارش‌ها فرستاده می‌شوند.'],
     ];
@@ -72,7 +80,7 @@ final class ScheduleSettings implements Intervals
 
     public function __construct(private readonly Settings $settings)
     {
-        $this->orderHours = self::number('expire_orders_hours', self::ORDER_HOURS, 'مهلت سفارش پرداخت‌نشده', 1, 30 * 24, 'ساعت', 'سفارش پرداخت‌نشده‌ای که این مدت دست نخورده کنار گذاشته می‌شود؛ سفارشی که پولش در دست پشتیبانی است هیچ‌وقت.');
+        $this->orderHours = self::number('expire_orders_hours', self::ORDER_HOURS, 'مهلت سفارش پرداخت‌نشده', 1, 30 * 24, 'ساعت', 'سفارش پرداخت‌نشده‌ای که این مدت دست نخورده کنار گذاشته می‌شود؛ سفارشی که پولش در دست پشتیبانی است، یا درگاه پولی از پرداختش دارد ولی تسویه نکرده، هیچ‌وقت.');
         $this->checkMinutes = self::number('online_payments_check_minutes', self::CHECK_MINUTES, 'فاصله پرسیدن، صفحه پرداخت باز', 1, 60, 'دقیقه', 'تا وقتی صفحه پرداخت درگاه باز است، هر این چند دقیقه یک بار از درگاه پرسیده می‌شود.');
         $this->lateHours = self::number('online_payments_late_hours', self::LATE_HOURS, 'پرسیدن پس از بسته شدن صفحه', 0, 72, 'ساعت', 'تا این مدت پس از بسته شدن صفحه پرداخت هنوز پرسیده می‌شود؛ درگاه ممکن است پول را دیرتر بگیرد.');
         $this->lateCheckMinutes = self::number('online_payments_late_check_minutes', self::LATE_CHECK_MINUTES, 'فاصله پرسیدن، صفحه بسته', 1, 24 * 60, 'دقیقه', 'پس از بسته شدن صفحه پرداخت، هر این چند دقیقه یک بار پرسیده می‌شود.');
@@ -89,6 +97,41 @@ final class ScheduleSettings implements Intervals
         $minutes = Input::integerOf($this->settings->get(self::intervalKey($key), null, Bot::MAIN));
 
         return $minutes !== null && $minutes >= 1 && $minutes <= self::EVERY_MAX ? $minutes : $default;
+    }
+
+    /**
+     * The minute of the shop's day the task's runs are counted from, as the owner set it; `$default` while they set none
+     * (or set what is no time of day).
+     */
+    public function start(string $key, int $default): int
+    {
+        $kept = $this->settings->get(self::startKey($key), null, Bot::MAIN);
+
+        return (is_string($kept) ? Scheduler::minuteOf(self::typedClock($kept)) : null) ?? $default;
+    }
+
+    /**
+     * The field a task's start is set by, "HH:MM" on the shop's clock (Scheduler::CLOCK_PATTERN), its default
+     * `$default` (the schedule's). What is typed is read first (typedClock()): Persian digits («۰۰:۰۳» is 00:03), one
+     * digit for the hour or the minute ("3:5" is 03:05, "0:03" 00:03), a bare hour ("3" is 03:00), «٫», ".", "：", ","
+     * or «،» for the colon, any space left out; then "24:00", "3:60", "9:30am" or anything else that is no time of day
+     * is refused in the field's words (`mismatch`) — only past sixteen characters for its length.
+     */
+    public function startField(string $key, int $default): Text
+    {
+        return new Text(
+            $key . '_start',
+            self::startKey($key),
+            Scheduler::clock($default),
+            'ساعت شروع «' . (self::TASKS[$key][0] ?? $key) . '»',
+            // Room for what does not read as a time ("9:30am", "09:300"): the pattern's words refuse it, not a length's.
+            16,
+            required: true,
+            pattern: Scheduler::CLOCK_PATTERN,
+            mismatch: 'ساعت شروع را به شکل ۰۰:۰۳ بنویسید، از ۰۰:۰۰ تا ۲۳:۵۹.',
+            normalize: self::typedClock(...),
+            spec: new FieldSpec('ساعت شروع', hint: self::START_HINT),
+        );
     }
 
     /** The field a task's interval is set by, its default `$default` minutes (the schedule's). */
@@ -177,6 +220,27 @@ final class ScheduleSettings implements Intervals
     private static function intervalKey(string $key): string
     {
         return "schedule.{$key}.minutes";
+    }
+
+    private static function startKey(string $key): string
+    {
+        return "schedule.{$key}.start";
+    }
+
+    /**
+     * A time of day as typed — Persian digits, «٫», ".", "：", "," or «،» for the colon, any space left out (a tab, a
+     * non-breaking one, as the panel's clockOf()), one digit for an hour or a minute, a bare hour — as "HH:MM"; anything
+     * else, so tidied, left for the field's pattern to refuse.
+     */
+    private static function typedClock(string $typed): string
+    {
+        $latin = Persian::latinDigits(trim($typed));
+        $typed = str_replace(['٫', '.', '：', ',', '،'], ':', preg_replace('/\s+/u', '', $latin) ?? $latin);
+        if (preg_match('/^(\d{1,2})(?::(\d{1,2}))?$/', $typed, $parts) === 1) {
+            return sprintf('%02d:%02d', (int) $parts[1], (int) ($parts[2] ?? 0));
+        }
+
+        return $typed;
     }
 
     private static function number(string $name, int $default, string $label, int $min, int $max, string $unit, string $hint, ?Number $atLeast = null): Number

@@ -80,8 +80,10 @@ The shop's admins are its customers given the role — «کاربران», the r
 is the switch**: there is nothing to turn on and nothing to grant. They manage the shop with the seat of the bot they write to:
 
 - **In the main bot**, every admin has the owner's: every section, the shop switcher and any shop
-  ([below](#another-shop)), the panel's settings — the bot's token and the database among them —, the backups and their
-  restore, the update.
+  ([below](#another-shop)), the panel's settings but what would hand them the main bot or your seat — the site's address,
+  the main bot's token and username, the Bot API's address, the database, the panels' session
+  ([below](#what-an-admin-may-not-do)) —, the backups and their restore but the files made before 0.11.0, the update but
+  its rollback.
 - **In an agent's bot**, its admins have the agent's — their panel's sections, in their shop — while the agency stands;
   once it ends, nobody manages from that bot.
 - **Taking the role away, or a ban,** ends it at their next message.
@@ -97,8 +99,9 @@ What is still theirs alone:
   ([below](#what-an-admin-may-not-do)).
 - **Your own Telegram accounts and login stay yours**: «👑 حساب تلگرام مالک» is your linked accounts' alone
   ([above](#your-own-telegram-account)), and so are their ban and their admin role; the panel's username and password
-  change in the panel alone, as for you; and moving the Bot API's address or the main bot's webhook secret is yours
-  alone too ([below](#what-an-admin-may-not-do)).
+  change in the panel alone, as for you; and the site's address, the main bot's token, username and webhook secret, the
+  Bot API's address, the database, the panels' session settings and rolling an update back are yours alone too
+  ([below](#what-an-admin-may-not-do)).
 
 The shop's website is another door: «مدیران سایت» and its grants still limit what the same admins do there, and there
 alone ([Store API: the shop's admins](Store-API-Admins.md#letting-admins-in)). The report group's buttons answer them as
@@ -517,8 +520,9 @@ A start or an end is typed as a Jalali day, an hour after it if you like, in the
   «⚠️» where it is not; the join switch (turning it on asks first); a channel added by its link; a channel's page with
   «🔍 بررسی دوباره», «📋 کپی لینک», moved, deleted.
 - **«📋 گروه گزارش‌ها»** — «🔗 ساخت لینک اتصال» and its steps, «📋 کپی پیام اتصال»; connected: a card of its state, its
-  topics by their state, «📨 پیام تست», «🔍 بررسی دوباره», «🧵 بخش‌های گزارش» (each topic a chip, switched at a tap),
-  «🔗 اتصال گروه دیگر», «✂️ قطع اتصال» (asked) ([Report group](Telegram-Group.md)).
+  topics by their state, «📨 پیام تست», «🔍 بررسی دوباره», «🧵 بخش‌های گزارش» (each topic a chip, switched at a tap;
+  while «گزارش روزانه» is on, «ساعت گزارش روزانه» too, asked «از ۰ تا ۲۳» with «↩️ پیش‌فرض»), «🔗 اتصال گروه دیگر»,
+  «✂️ قطع اتصال» (asked) ([Report group](Telegram-Group.md)).
 
 ### Servers and agents
 
@@ -569,8 +573,9 @@ A start or an end is typed as a Jalali day, an hour after it if you like, in the
   shop's back (asked) ([Bot settings](Bot-Settings.md)).
 - **«🛡 مدیران ربات»** — the shop's admins, a page at a time with a search (a name, a username or a Telegram id), each a
   button to their customer page, where «🛡 برداشتن مدیریت ربات» takes the role away. Over the list, what an admin has
-  here — in the main shop your access to everything but «👑 حساب تلگرام مالک», in an agent's shop all the agent has there
-  —, their decisions under their own name and nothing on their own account ([above](#the-shops-admins)). **«➕ افزودن
+  here — in the main shop your access to everything but what is yours alone ([below](#what-an-admin-may-not-do)), in an
+  agent's shop all the agent has there —, their decisions under their own name and nothing on their own account
+  ([above](#the-shops-admins)). **«➕ افزودن
   مدیر ربات»** asks for a customer of the shop: their number with # («#۱۲»), their Telegram id, or their @username. One
   found is asked in red — «این کاربر مدیر ربات شود؟», what the role hands over, «✔️ بله، مدیر ربات شود» — and the list
   comes back with «✅ … مدیر ربات شد»; one already an admin is said so; several are offered under «🔎 کدام کاربر؟», each a
@@ -595,29 +600,36 @@ A start or an end is typed as a Jalali day, an hour after it if you like, in the
   kept encrypted with the app's key until it is saved; the cron address and your panel password are never kept:
   - `config.php`'s groups, each a draft saved once with «💾 ذخیره», a refusal under its field: «🤖 ربات تلگرام» (the
     token — «🧪 بررسی توکن» fills the username in —, the API's address, the poll's timeout, the webhook secret and a new
-    one; your current password asked only when the API's address moves — the address moved and a new secret are yours
-    alone, refused to an admin), «🗄 دیتابیس» (its driver's form, «🧪 تست
-    اتصال»), «🏷 برنامه» (name, address, a time zone found by typing part of its name, debug), «📧 ایمیل» (a driver or
-    none, the sender, «📧 ارسال ایمیل تست»), «📨 پیامک» (a driver or none, the agents' switch, «💰 اعتبار حساب»,
-    «📱 ارسال پیامک آزمایشی» showing its code) and «🔧 پیشرفته» (log level, session length, timeout, secure cookie, the
-    cron token — the cron address and cPanel's line at a tap).
+    one, «🎲 ساختن رمز تازه»; your current password asked only when the API's address moves), «🗄 دیتابیس» (its
+    driver's form, «🧪 تست اتصال»), «🏷 برنامه» (name, address, a time zone found by typing part of its name, debug),
+    «📧 ایمیل» (a driver or none, the sender, «📧 ارسال ایمیل تست»), «📨 پیامک» (a driver or none, the agents' switch,
+    «💰 اعتبار حساب», «📱 ارسال پیامک آزمایشی» showing its code) and «🔧 پیشرفته» (log level, session length, timeout,
+    secure cookie, the cron token — the cron address and cPanel's line at a tap). To an admin, «🤖 ربات تلگرام» shows the
+    token, the username, the API's address and the webhook secret, «🏷 برنامه» the address and «🔧 پیشرفته» the session
+    length and the secure cookie, with no button to change them and a line saying so — «🔒 «…»، «…» را فقط خود مالک عوض
+    می‌کند.» —; their «🧪 بررسی توکن» fills no username in, and «🗄 دیتابیس» is not among their cards
+    ([below](#what-an-admin-may-not-do)).
   - «⬆️ به‌روزرسانی» — the version, the last check, the newest release with its notes, what holds it back and the update
     by hand; «⬇️ به‌روزرسانی به نسخه …» after the panel's question, then its steps with their progress, «▶️ ادامه
-    به‌روزرسانی» a step a tap; «🔁 تلاش دوباره», «⏹ لغو به‌روزرسانی», «↩️ بازگرداندن نسخه قبلی» (asked), «🔍 بررسی نسخه
-    تازه».
-  - «⏱ زمان‌بندی کارها» — the tasks in the order they run, last and next run, a warning while the cron never ran with
-    «🔧 راه‌اندازی Cron»; each timing changed from its default marked, «↩️ پیش‌فرض» on its question, and «↩️ بازگشت به
-    همه پیش‌فرض‌ها» (asked).
+    به‌روزرسانی» a step a tap; «🔁 تلاش دوباره», «⏹ لغو به‌روزرسانی», «↩️ بازگرداندن نسخه قبلی» (asked; yours alone —
+    an admin reads «🔒 برگشت به نسخه قبلی برنامه فقط با خود مالک است.» instead), «🔍 بررسی نسخه تازه».
+  - «⏱ زمان‌بندی کارها» — the tasks in the order they run, each with its interval and «از» its start (none for a task
+    every minute), last and next run, a warning while the cron never ran with «🔧 راه‌اندازی Cron»; a task's screen asks
+    its interval, its «ساعت شروع» (typed as `HH:MM`, «۰۲:۳۰» or "2:30") and the times it decides by, each changed from its
+    default marked, «↩️ پیش‌فرض» on its question; and «↩️ بازگشت به همه پیش‌فرض‌ها» (asked).
   - «💾 پشتیبان‌گیری» — «📥 دریافت فایل پشتیبان» (made now, sent as a file); the report group's switch, how often, the
     last sent or why it failed; «♻️ بازگردانی از فایل»: «📤 فرستادن فایل پشتیبان», then see what it holds, «📋 ردیف‌های
     هر جدول», its warnings and what is lost, then «✔️ بله، می‌دانم؛ بازگردانی شود»; afterwards «📥 دریافت حالت قبل», and
-    the states kept from before each restore, each sent as a file.
+    the states kept from before each restore, each sent as a file — to an admin, those kept before 0.11.0 left out, as
+    the screen says ([below](#what-an-admin-may-not-do)).
   - «🚚 انتقال از ربات دیگر» — the imports so far; «➕ انتقال تازه»: the old bot, then its backup sent here or
     «🔌 اتصال به دیتابیس»; reading and writing go a step a tap (about 15 seconds each); the review — what was found,
     «🖥 پنل‌ها», «✅ چه چیزهایی منتقل شود», «📋 آنچه نیامد», the warnings —; «▶️ شروع انتقال» or «⏹ لغو انتقال» after
     the panel's questions; the report, the problems by reason, «🗑 حذف گزارش» ([Importing](Importing.md)).
   - «🛰 دریافت پیام‌ها» — the version and PHP's (an unsafe one warned of), the bot's state, the cron, the webhook's mode
     and address, the https warning, «🔗 ثبت Webhook» and «⛓ برداشتن Webhook» (asked), and what became of each bot.
+    Taken off and registered again, every agent's bot gets a new webhook secret — one that is off, at its next
+    registration —; «🔗 ثبت دوباره Webhook» alone keeps it ([Panel settings](Panel-Settings.md#the-telegram-bot)).
   - «🔐 ورود به پنل» — changes nothing here: the panel's username and password change in the panel alone (saving there
     signs other browsers out, which a chat cannot stand in for); for you, it leads to «👑 حساب تلگرام مالک».
 - **«👑 حساب تلگرام مالک»** (your linked accounts' alone, not an admin's) — [above](#your-own-telegram-account).
@@ -656,17 +668,37 @@ alone:
   ([above](#your-own-telegram-account)), and an account linked as the owner is banned, or its admin role changed, by you
   alone, since a banned account manages nothing: «این حساب تلگرام مالک فروشگاه است و مسدود نمی‌شود.», «نقش حساب تلگرام
   مالک فروشگاه را فقط خود مالک عوض می‌کند.»
-- **Never the main bot's keys** — moving the Bot API's address, which sends every bot's token there and asks your
-  password («این تغییر رمز عبور پنل را می‌خواهد و فقط کار خود مالک است.»), or a new webhook secret, whose holder could
+- **Never the main bot's keys** — the Bot API's address, any change of it, its path on the same server too: every
+  bot's token goes there («آدرس API تلگرام را فقط خود مالک عوض می‌کند؛ توکن همه ربات‌ها به همین آدرس فرستاده
+  می‌شود.»; moving it to another server asks your password, never theirs); or a new webhook secret, whose holder could
   send the shop updates in anyone's name («رمز Webhook ربات اصلی را فقط خود مالک عوض می‌کند.»).
+- **Never what would hand them the main bot or your seat** — the site's address, any change of it, its path too: every
+  bot's webhook is under it, its secret in the path («آدرس سایت را فقط خود مالک عوض می‌کند؛ پیام‌های تلگرام همه ربات‌ها
+  به همین آدرس فرستاده می‌شود.»); the main bot's token, changed or cleared — another bot's token shows its webhook's
+  address to whoever holds it —, and its username, since your one-time link to link a Telegram account opens in that
+  bot («توکن و نام کاربری ربات اصلی را فقط خود مالک عوض می‌کند.»); the database, saved or even tested, since whoever
+  picks it picks who you are in the bot («دیتابیس فروشگاه را فقط خود مالک عوض یا تست می‌کند.»). In the bot these
+  fields show to them with a «🔒» line and no edit button, and «🗄 دیتابیس» is not among their cards, nor are its
+  settings told them; a value sent back as it was changes nothing, so the rest of the card still saves.
+- **Never the panels' session** — «طول Session پنل‌ها» and «کوکی Session همیشه امن»: a longer session, or a cookie your
+  host cannot keep, is your own sign-in made weaker or shut («طول Session و کوکی Session پنل‌ها را فقط خود مالک عوض
+  می‌کند.»). «🔧 پیشرفته» shows them with the «🔒» line; the log level, the outgoing timeout and the cron token stay
+  theirs.
+- **Never an update rolled back** — the version before lacks the guards that came since («برگشت به نسخه قبلی برنامه
+  فقط با خود مالک است.»); running an update is theirs.
+- **Never a backup made before 0.11.0** — with your seat or an agent's: such a file holds the bots' webhook secrets, so
+  the states an earlier version kept before a restore are not listed to them, and no file made before 0.11.0 is sent to
+  them or restored by them («این فایل پشتیبان پیش از نسخه 0.11.0 ساخته شده و رمز Webhook ربات‌ها در آن است؛ دریافت
+  و بازگردانی‌اش فقط با خود مالک یا خود نماینده است.»). You, and an agent in their own shop, still can.
 - **Never the agent's own account banned** in an agent's bot: the agent or you alone ban it, since it would shut them
   out of their bot («این حساب نماینده صاحب این ربات است و مسدود نمی‌شود.»).
 
 Taking their own role away is still theirs: it asks first, and their management ends with it
 ([below](#watch-out-for)). These guards are each admin's own: two admins can do those things for each other, and an
-admin changes another admin's account as you would. And what is yours alone guards against slips, not against an admin
-set on it: with the site's address, the database and the bot's token theirs to change, one could still reach what
-these rules keep for you. Make admins only of people you trust with the whole shop.
+admin changes another admin's account as you would. What stays theirs is still most of the shop — every section, the
+mail and SMS settings, the rest of the advanced group (the log level, the outgoing timeout, the cron token), the
+backups made since 0.11.0 and their restore, running an update —: make admins only of people you trust with the whole
+shop.
 
 ## The panel's rules and its log
 
@@ -699,8 +731,10 @@ The first three, the panel does not do either:
 
 - **A linked account is your whole panel.** Anyone holding that Telegram account manages every shop: link your own
   accounts alone, turn on Telegram's two-step verification, and let an account go the day you lose it.
-- **So is an admin of the main bot.** Every shop, the panel's settings — the token, the database —, the backups and the
-  update are theirs in the bot: give the role only to people you trust, and take it away the day one leaves. An agent's
+- **So, nearly, is an admin of the main bot.** Every shop, the panel's settings but what is yours alone, the backups and
+  their restore, and the update are theirs in the bot: give the role only to people you trust, and take it away the day
+  one leaves. A backup made before 0.11.0 holds the bots' webhook secrets: if one of them could reach it, make new ones
+  ([Releases](Releases.md)). An agent's
   admins hold that agent's shop the same way.
 - **Taking the admin role from your own account** asks first: you and an agent keep «⚙️ مدیریت» and still pass the bot's
   conditions, but the report group's buttons answer admins alone; an admin of the shop loses the management with it.

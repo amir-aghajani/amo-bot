@@ -7,6 +7,7 @@ namespace Tests\Feature\Backups;
 use App\Core\Application;
 use App\Core\Exceptions\ValidationException;
 use App\Core\Security\Encrypter;
+use App\Modules\Auth\Exceptions\ActorRefusedException;
 use App\Modules\Auth\Services\Reviewers;
 use App\Modules\Backups\BackupContents;
 use App\Modules\Backups\BackupReader;
@@ -15,6 +16,7 @@ use App\Modules\Backups\BackupScope;
 use App\Modules\Backups\BackupTables;
 use App\Modules\Backups\BackupWriter;
 use App\Modules\Backups\Exceptions\BackupRefusedException;
+use App\Modules\Backups\ForeignKeys;
 use App\Modules\Backups\Restorer;
 use App\Modules\Bots\CurrentBot;
 use App\Modules\Bots\Models\Bot;
@@ -196,6 +198,118 @@ final class BackupsTest extends DatabaseTestCase
         self::assertNull($bot->login_code, 'no login link opens a panel from a restore');
     }
 
+    /**
+     * Nor any webhook secret the file held: «برداشتن Webhook» and «ثبت Webhook» renew an agent's, and Telegram calls its
+     * bot with the secret it was last given — each bot keeps its own as it is now (none for one put off its webhook since),
+     * and a bot that is gone now comes back with none.
+     */
+    public function testTheWholeInstallationsRestoreKeepsEachBotsWebhookSecretAsItIsNow(): void
+    {
+        $off = $this->agentBot($this->agent(overrides: ['telegram_id' => 9002]), overrides: ['telegram_id' => 777001, 'username' => 'off_shop_bot']);
+        $gone = $this->agentBot($this->agent(overrides: ['telegram_id' => 9003]), overrides: ['telegram_id' => 777002, 'username' => 'gone_shop_bot']);
+        foreach ([[$this->shop, 'old-secret-from-the-backup'], [$off, 'off-secret-from-the-backup'], [$gone, 'gone-secret-from-the-backup']] as [$bot, $secret]) {
+            $bot->forceFill(['webhook_secret' => $secret])->save();
+        }
+        $path = $this->backup(BackupScope::installation());
+        // Since the backup: the shop's renewed, the other's put off its webhook, and the third bot gone.
+        $this->shop->forceFill(['webhook_secret' => 'new-secret-after-renewal'])->save();
+        $stored = $this->db()->table('bots')->where('id', $this->shop->id)->value('webhook_secret');
+        $off->forceFill(['webhook_secret' => null])->save();
+        ForeignKeys::without($this->db(), fn() => $this->db()->table('bots')->where('id', $gone->id)->delete());
+
+        $this->restore($path);
+
+        self::assertSame('new-secret-after-renewal', $this->shop->refresh()->webhook_secret, 'the secret Telegram calls with now');
+        self::assertSame($stored, $this->db()->table('bots')->where('id', $this->shop->id)->value('webhook_secret'), 'as it was stored');
+        self::assertNull($off->refresh()->webhook_secret, 'none since: none still');
+        $back = Bot::query()->find($gone->id);
+        self::assertInstanceOf(Bot::class, $back, 'the bot gone since comes back');
+        self::assertNull($back->webhook_secret, 'with no secret');
+    }
+
+    /**
+     * A file made before 0.11.0 holds each bot's webhook address whole: without `$oldFiles` (an admin with a bot's seat,
+     * BackupsController) it is refused at its check, and at its restore under a token checked for someone else — before
+     * anything moves or any state is kept —; with it, restored.
+     */
+    public function testAFileMadeBeforeZeroElevenIsRestoredOnlyWithOldFiles(): void
+    {
+        $scope = BackupScope::installation();
+        $backups = $this->service(Backups::class);
+        $old = (string) file_get_contents($this->rewrite($this->backup($scope), static fn(string $line, int $i): string => $i === 0 ? str_replace('"app_version":"' . Application::VERSION . '"', '"app_version":"0.10.4"', $line) : $line));
+        $upload = static fn(): UploadedFile => new UploadedFile((new StreamFactory())->createStream($old), 'b.json.gz', null, strlen($old));
+        $refused = static function (\Closure $call, string $why): void {
+            try {
+                $call();
+                self::fail($why);
+            } catch (ActorRefusedException $e) {
+                self::assertSame(ActorRefusedException::OWNERS_BACKUP, $e->getMessage(), $why);
+            }
+        };
+
+        $refused(static fn() => $backups->inspect($upload(), $scope, false), 'not checked');
+        $token = $backups->inspect($upload(), $scope, true)['token'];
+        $since = $this->customer(['telegram_id' => 502]);
+        $refused(static fn() => $backups->restore($token, $scope, false), 'not restored');
+        self::assertTrue(User::query()->whereKey($since->id)->exists(), 'nothing moved');
+        self::assertSame([], $backups->kept($scope, true), 'no state kept');
+
+        $backups->restore($token, $scope, true);
+        self::assertFalse(User::query()->whereKey($since->id)->exists(), 'restored');
+    }
+
+    /**
+     * No backup holds a bot's webhook secret, whatever the database holds: one brought to this version by hand, or not
+     * upgraded yet, may keep the address whole — the file's header names this version all the same.
+     */
+    public function testNoBackupHoldsAWebhookSecretWhateverTheDatabaseHolds(): void
+    {
+        $this->db()->table('settings')->insert([
+            ['bot_id' => Bot::MAIN, 'key' => 'telegram.webhook_url', 'value' => json_encode('https://shop.example.com/webhooks/telegram/MAINSECRET0123456789abcdef'), 'updated_at' => now()],
+            ['bot_id' => $this->shop->id, 'key' => 'telegram.webhook_url', 'value' => json_encode("https://shop.example.com/index.php/webhooks/telegram/bot/{$this->shop->id}/AGENTSECRET0123456789"), 'updated_at' => now()],
+        ]);
+
+        foreach ([BackupScope::installation(), BackupScope::shop($this->shop->id)] as $scope) {
+            $path = $this->backup($scope);
+            $addresses = array_column(array_filter($this->rowsIn($path, 'settings'), static fn(array $row): bool => $row['key'] === 'telegram.webhook_url'), 'value', 'bot_id');
+            $masked = [$this->shop->id => "\"https://shop.example.com/index.php/webhooks/telegram/bot/{$this->shop->id}/***\""];
+            self::assertEquals($scope->isShop() ? $masked : [Bot::MAIN => '"https://shop.example.com/webhooks/telegram/***"'] + $masked, $addresses, $scope->kind());
+            self::assertStringNotContainsString('SECRET', (string) gzdecode((string) file_get_contents($path)), $scope->kind());
+        }
+        self::assertStringContainsString('MAINSECRET', (string) $this->db()->table('settings')->where('bot_id', Bot::MAIN)->where('key', 'telegram.webhook_url')->value('value'), 'the database as it is');
+    }
+
+    /**
+     * A restore leaves no bot's webhook address in the settings with its secret, whatever the file held (one written
+     * before 0.11.0 kept it whole): masked in the restore itself, for the whole installation and for a shop — never left
+     * to the upgrades after it — so no backup made after it carries one.
+     */
+    public function testARestoreMasksTheWebhookAddressesItBringsBack(): void
+    {
+        $main = ['bot_id' => Bot::MAIN, 'key' => 'telegram.webhook_url'];
+        $agent = ['bot_id' => $this->shop->id, 'key' => 'telegram.webhook_url'];
+        $this->db()->table('settings')->insert([
+            $main + ['value' => json_encode('https://shop.example.com/webhooks/telegram/***', JSON_UNESCAPED_SLASHES), 'updated_at' => now()],
+            $agent + ['value' => json_encode("https://shop.example.com/webhooks/telegram/bot/{$this->shop->id}/***", JSON_UNESCAPED_SLASHES), 'updated_at' => now()],
+        ]);
+        // Files of this version holding the addresses whole, as a writer before 0.11.0 wrote them.
+        $shop = $this->shop->id;
+        $whole = static fn(string $line): string => str_replace(['telegram/***', "bot/{$shop}/***"], ['telegram/MAINSECRET0123456789abcdef', "bot/{$shop}/AGENTSECRET0123456789"], $line);
+        $all = $this->rewrite($this->backup(BackupScope::installation()), $whole);
+        $theirs = $this->rewrite($this->backup(BackupScope::shop($this->shop->id)), $whole);
+        self::assertStringContainsString('MAINSECRET', (string) gzdecode((string) file_get_contents($all)));
+        self::assertStringContainsString('AGENTSECRET', (string) gzdecode((string) file_get_contents($theirs)));
+        $value = fn(array $row): mixed => $this->db()->table('settings')->where($row)->value('value');
+
+        $this->restore($all);
+        self::assertSame('"https://shop.example.com/webhooks/telegram/***"', $value($main));
+        self::assertSame("\"https://shop.example.com/webhooks/telegram/bot/{$this->shop->id}/***\"", $value($agent));
+
+        $this->db()->table('settings')->where($agent)->update(['value' => json_encode('https://elsewhere.example.com/webhooks/telegram/bot/1/***', JSON_UNESCAPED_SLASHES)]);
+        $this->restore($theirs);
+        self::assertSame("\"https://shop.example.com/webhooks/telegram/bot/{$this->shop->id}/***\"", $value($agent), 'a shop\'s restore too');
+    }
+
     public function testAFileAnybodyChangedOrAnotherInstallationSignedIsRefused(): void
     {
         $path = $this->backup(BackupScope::shop($this->shop->id));
@@ -309,11 +423,11 @@ final class BackupsTest extends DatabaseTestCase
         $scope = BackupScope::shop($this->shop->id);
         $backups = $this->service(Backups::class);
         $file = (string) file_get_contents($this->backup($scope));
-        $restore = static fn(): array => $backups->restore($backups->inspect(new UploadedFile((new StreamFactory())->createStream($file), 'b.json.gz', null, strlen($file)), $scope)['token'], $scope);
+        $restore = static fn(): array => $backups->restore($backups->inspect(new UploadedFile((new StreamFactory())->createStream($file), 'b.json.gz', null, strlen($file)), $scope, true)['token'], $scope, true);
         for ($i = 0; $i < Backups::KEEP; $i++) {
             $restore();
         }
-        self::assertCount(Backups::KEEP, $backups->kept($scope));
+        self::assertCount(Backups::KEEP, $backups->kept($scope, true));
 
         try {
             $this->whileListening(QueryExecuted::class, static function (QueryExecuted $query): void {
@@ -325,10 +439,10 @@ final class BackupsTest extends DatabaseTestCase
         } catch (\RuntimeException $e) {
             self::assertSame('the restore failed', $e->getMessage());
         }
-        self::assertCount(Backups::KEEP + 1, $backups->kept($scope), 'none of the states before it gone');
+        self::assertCount(Backups::KEEP + 1, $backups->kept($scope, true), 'none of the states before it gone');
 
         $restore();
-        self::assertCount(Backups::KEEP, $backups->kept($scope));
+        self::assertCount(Backups::KEEP, $backups->kept($scope, true));
     }
 
     /** A write that fails half-way leaves nothing: neither the file nor its half-made part. */

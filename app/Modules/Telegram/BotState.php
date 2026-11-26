@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Telegram;
 
+use App\Core\Logging\Redact;
 use App\Modules\Settings\Services\Settings;
 use App\Modules\Telegram\Update\ReceivedUpdates;
 use Illuminate\Support\Carbon;
@@ -22,10 +23,13 @@ final class BotState
         private readonly ReceivedUpdates $updates,
     ) {}
 
-    /** The bot was put on its webhook at `$url`. */
+    /**
+     * The bot was put on its webhook at `$url`, kept with its secret masked (Redact): the settings go into every backup,
+     * which a shop's admin downloads — and only whether there is one is ever read.
+     */
     public function webhookSet(string $url): void
     {
-        $this->settings->set(self::WEBHOOK_URL, $url);
+        $this->settings->set(self::WEBHOOK_URL, Redact::text($url));
     }
 
     /** The bot was taken off its webhook. */
@@ -40,7 +44,7 @@ final class BotState
         $this->settings->set(self::POLL_HEARTBEAT_AT, now()->toIso8601String());
     }
 
-    /** The webhook URL registered by bot:webhook:set; null in polling mode. */
+    /** The webhook URL registered (bot:webhook:set, the panel), its secret masked; null in polling mode. */
     public function webhookUrl(): ?string
     {
         $url = $this->settings->get(self::WEBHOOK_URL);

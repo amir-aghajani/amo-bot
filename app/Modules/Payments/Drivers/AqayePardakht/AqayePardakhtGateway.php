@@ -20,7 +20,8 @@ use GuzzleHttp\ClientInterface;
  * address, since Shaparak opens it only for a referrer of the gateway's verified domain (OnlineRequest::viaShop()) —,
  * then back to the shop's callback address in their browser (only a reason to ask). What came of it is verify's word —
  * the one call its pin may make about a transaction: 1 paid now, 2 verified before (both paid), 0 not paid — yet, while
- * its page takes money; closed after —, -10 for another amount (held). Its sandbox — the pin `sandbox` — moves no money.
+ * its page takes money; closed after —, -10 for another amount (held). Its sandbox — the pin `sandbox` — moves no money,
+ * and a payment is verified only with a pin of the service it was opened on: the other knows nothing it can trust of it.
  * Its details kept on the payment (`payments.invoice`): the transaction's id, the Toman it was created for, the bank's
  * page and whether it is the sandbox's. The transaction's id is the payment's reference; its page — the shop's, leading
  * on to the bank's — is shown at the order's sum.
@@ -92,6 +93,19 @@ final class AqayePardakhtGateway implements OnlineGateway
         $amount = $invoice['amount'] ?? null;
         if (!is_string($id) || preg_match(self::TRANSACTION, $id) !== 1 || !is_int($amount)) {
             throw new GatewayUnavailableException("Payment #{$payment->id} keeps no AqayePardakht transaction and amount.");
+        }
+        // Opened on the sandbox and the pin live now, or the other way round: not asked while it is (a sandbox that answered
+        // "paid" for a live transaction would deliver for nothing). The task gives it up after the late hours all the same;
+        // once the pin is switched back, an ask settles it — support's, the customer's, the callback. No pin: call() says so.
+        $opened = $invoice['sandbox'] ?? null;
+        if ($this->pin !== '' && is_bool($opened) && $opened !== ($this->pin === self::SANDBOX_PIN)) {
+            throw new GatewayUnavailableException(sprintf(
+                'Payment #%d was opened on AqayePardakht\'s %s, and its method now has %s: it is not verified while the method has that pin; put the %s pin back, then ask the gateway again («استعلام از درگاه»)',
+                $payment->id,
+                $opened ? 'sandbox' : 'live gateway',
+                $opened ? 'a live pin' : 'the sandbox pin',
+                $opened ? 'sandbox' : 'live',
+            ));
         }
 
         [$status, $answer] = $this->call('/verify', ['amount' => $amount, 'transid' => $id]);

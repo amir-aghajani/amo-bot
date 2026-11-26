@@ -26,8 +26,8 @@ customer takes it with one button («🎁 دریافت رایگان»), with not
 - An automatic renewal («تمدید خودکار») and the renewal's price shown before paying take the automatic discount. A code
   is only ever typed by the customer, at a checkout.
 - A service the customer builds («سرویس دلخواه» — [Custom services](Custom-Services.md)) has no plan: it has no
-  first-purchase or agent price, only a sale for every plan reaches it, and a code held to some plans never holds for
-  it.
+  first-purchase or agent price, only a sale for every plan reaches it, and a code held to some plans or categories
+  never holds for it.
 
 ### Agents and colleagues
 
@@ -87,8 +87,15 @@ after a question.
 - «سقف کل استفاده» — how many orders may be made with it in all; empty, without limit.
 - «سقف استفاده هر مشتری» — how many by one customer; 1 makes it once a customer.
 - «محدودیت‌های بیشتر», folded:
-  - «پلن‌ها» — every plan, or the ones ticked. A renewal's and extra traffic's, time's or devices' plan is their
-    service's.
+  - «پلن‌ها» — every plan, or the categories and plans ticked, which add up. A category stands for every plan filed
+    under it when the order is made — a plan moved there later too, and one in a category switched off —; a plan ticked
+    counts whatever its category. A renewal's and extra traffic's, time's or devices' plan is their service's. Deleting a
+    category takes its plans out of the code (they are left in no category); a code whose categories and plans are all
+    gone holds for no plan, and is not saved with nothing ticked: tick a category or a plan, or «همه پلن‌ها». In the
+    bot, «✔️ تایید» with nothing ticked is refused («دست‌کم یک دسته یا پلن انتخاب کنید، یا «همه پلن‌ها».») — «همه
+    پلن‌ها» is the way to every plan —, and a category or plan deleted while the form is open reads «حذف‌شده» on the
+    review and is dropped at «✔️ تایید»; the panel marks a deleted category's refusal on «پلن‌ها», and while the shop
+    has no category says «هنوز دسته‌ای ندارید؛ از بخش «دسته‌بندی‌ها» بسازید.».
   - «سرورها» — every server, or the ones ticked. A purchase's server is the one the customer picks; a renewal's and an
     extra's is their service's.
   - «حداقل مبلغ سفارش (تومان)» — the least an order must come to, after the automatic discount, for the code to hold.
@@ -104,7 +111,7 @@ after a question.
 At a checkout a code holds when:
 
 - it is the shop's, switched on, and inside its window;
-- it is for that kind of order, that plan and that server;
+- it is for that kind of order, that plan (ticked itself, or filed under a category ticked) and that server;
 - the customer has bought nothing, when it asks that;
 - the order comes to at least its least;
 - it has uses left — in all, and for that customer.
@@ -127,7 +134,8 @@ An order nobody pays gives its use back: cancelled by support, or dropped as unp
 sooner than any other unpaid order — after the hold set on «کدهای تخفیف» › «تنظیمات»:
 
 - «مهلت (دقیقه)» — 0 to 1440, 60 by default. An unpaid order made with a code that nothing happened to for that long,
-  and whose money is not with support — its receipt in review, or its card payment sent to support's private chat —, is
+  and whose money is not with support — its receipt in review, or its card payment sent to support's private chat — nor
+  in at its online gateway, not settled yet (a part paid, a receipt in the gateway's review, confirmations awaited), is
   cancelled with the note «مهلت استفاده از کد تخفیف تمام شد», and the code's use is free for someone else. 0 — such an
   order waits as long as any unpaid one (48 hours by default).
 
@@ -149,7 +157,9 @@ another unpaid order of theirs — another plan, another server — is told so, 
 - «درصد تخفیف» — 1 to 100.
 - «برای چه سفارش‌هایی» — every kind of order, or the ones ticked (a purchase, a renewal, extra traffic, extra time,
   extra devices).
-- «پلن‌ها» — every plan, or the ones ticked; a renewal's and an extra's plan is their service's.
+- «پلن‌ها» — every plan, or the categories and plans ticked, as a code's: a category is every plan filed under it when
+  the order is made, and nothing ticked is refused — in the bot at «✔️ تایید», «همه پلن‌ها» the way to every plan —; a
+  renewal's and an extra's plan is their service's.
 - «شروع» and «پایان» — as a code's.
 - «فعال».
 

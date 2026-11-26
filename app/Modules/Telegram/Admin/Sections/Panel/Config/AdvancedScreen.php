@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Telegram\Admin\Sections\Panel\Config;
 
+use App\Modules\Auth\Exceptions\ActorRefusedException;
 use App\Modules\Telegram\Admin\Sections\Panel\Forms\DraftForm;
 use App\Modules\Telegram\Admin\Ui\Admin;
 use App\Modules\Telegram\Admin\Ui\Button;
@@ -15,7 +16,7 @@ use App\Modules\Telegram\Admin\Ui\Words;
 /**
  * «پیشرفته» of config.php: the log, the panels' session, the timeout of outgoing requests, and the cron run from the
  * web — its token, and the whole address and the cPanel line, shown on a tap (the screen shows the address masked, as the
- * panel does until its copy button).
+ * panel does until its copy button). The session's two are the owner's themselves alone: an admin sees them, 🔒.
  *
  * Actions besides the form's: `cron` (the whole address and line shown, until the next tap).
  */
@@ -50,6 +51,11 @@ final class AdvancedScreen extends ConfigScreen
         return '✅ تنظیمات پیشرفته ذخیره شد.';
     }
 
+    protected function ownersOnly(): array
+    {
+        return ['session_lifetime' => ActorRefusedException::OWNERS_SESSION, 'session_secure_cookie' => ActorRefusedException::OWNERS_SESSION];
+    }
+
     protected function formOf(array $config): DraftForm
     {
         $levels = [];
@@ -61,9 +67,9 @@ final class AdvancedScreen extends ConfigScreen
 
         return DraftForm::fixed([
             DraftForm::field('log_level', 'choice', 'سطح لاگ', required: true, options: $levels),
-            DraftForm::field('session_lifetime', 'number', "طول \u{2068}Session\u{2069} پنل‌ها", 'بعد از این مدت بی‌کاری باید دوباره وارد شد؛ در پنل شما و پنل نماینده‌ها.', required: true, unit: 'دقیقه', min: 5, max: 43200),
+            DraftForm::field('session_lifetime', 'number', "طول \u{2068}Session\u{2069} پنل‌ها", 'بعد از این مدت بی‌کاری باید دوباره وارد شد؛ در پنل شما و پنل نماینده‌ها. فقط خود مالک آن را عوض می‌کند.', required: true, unit: 'دقیقه', min: 5, max: 43200),
             DraftForm::field('http_timeout', 'number', 'تایم‌اوت درخواست‌های خروجی', required: true, unit: 'ثانیه', min: 5, max: 120),
-            DraftForm::field('session_secure_cookie', 'toggle', "کوکی \u{2068}Session\u{2069} همیشه امن", 'روی https کوکی خودکار امن می‌شود. فقط وقتی روشن کنید که سایت پشت پروکسی (مثلا Cloudflare) است و PHP درخواست را http می‌بیند؛ روی http واقعی ورود به پنل غیرممکن می‌شود.', default: false),
+            DraftForm::field('session_secure_cookie', 'toggle', "کوکی \u{2068}Session\u{2069} همیشه امن", 'روی https کوکی خودکار امن می‌شود. فقط وقتی روشن کنید که سایت پشت پروکسی (مثلا Cloudflare) است و PHP درخواست را http می‌بیند؛ روی http واقعی ورود به پنل غیرممکن می‌شود. فقط خود مالک آن را عوض می‌کند.', default: false),
             DraftForm::field('cron_token', 'secret', "توکن \u{2068}Cron\u{2069}", 'کارهای زمان‌بندی‌شده (تمدید خودکار، یادآوری‌ها، همگام‌سازی سرویس‌ها) با صدا زدن آدرس Cron اجرا می‌شوند: توکن بسازید و ذخیره کنید، بعد خط Cron را که این‌جا آماده می‌شود در فرم Cron Jobs در cPanel بگذارید، یا آدرس را به یک سرویس Cron بیرونی بدهید که هر دقیقه صدایش بزند.', generate: 20),
         ], self::groupOf($config, 'advanced'));
     }

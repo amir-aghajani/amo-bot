@@ -22,7 +22,8 @@ use App\Support\Persian;
  * chat keeps — a switch set as its button says, a choice picked, the rest typed through a question that says the value
  * now (a secret is taken away once read, kept encrypted and never shown back) — then «💾 ذخیره» sends it in one
  * request, as the panel's card does. What the API refuses is said under the summary, field by field, the draft kept to
- * fix; «↩️ دور انداختن تغییرها» goes back to what is saved; the driver's and the fields' hints are folded away.
+ * fix; «↩️ دور انداختن تغییرها» goes back to what is saved; the driver's and the fields' hints are folded away. A field
+ * only the owner themselves changes (ownersOnly()) is shown to one of the main shop's admins with «🔒», never edited.
  *
  * Actions: `e` (i: edit field i; a switch's i and 1|0, the state it is set to), `c` (i, n: choice n), `pk` (i, n: a
  * found choice n), `x` (i: emptied / cleared), `k` (i: a secret kept as it is), `g` (i: a secret made up), `df` (i:
@@ -131,6 +132,18 @@ abstract class DraftScreen extends BaseScreen
         return true;
     }
 
+    /**
+     * The fields only the owner themselves changes, each with the API's refusal of anyone else (ActorRefusedException's
+     * words): to one of the main shop's admins working with the owner's seat they show their value and say so, but are
+     * never offered to edit — a save still sends them as they are. None by default.
+     *
+     * @return array<string, string> By field name
+     */
+    protected function ownersOnly(): array
+    {
+        return [];
+    }
+
     /** The field a refusal's key names (`captcha.site_key` is `site_key`). */
     protected function errorField(string $key): string
     {
@@ -193,6 +206,13 @@ abstract class DraftScreen extends BaseScreen
         if ($field === null || !in_array($action, ['e', 'c', 'pk', 'x', 'k', 'g', 'df'], true)) {
             return $this->action($admin, $action, $args, $form, $driver, $values);
         }
+        // An older window's button, or one typed by hand, to a field only the owner changes.
+        $refusal = $this->locked($admin, $field);
+        if ($refusal !== null) {
+            $admin->alert($refusal);
+
+            return $this->card($admin, $form);
+        }
         $name = DraftForm::name($field);
         switch ($action) {
             case 'e':
@@ -248,6 +268,12 @@ abstract class DraftScreen extends BaseScreen
         if ($field === null) {
             return $this->card($admin, $form);
         }
+        $refusal = $this->locked($admin, $field);
+        if ($refusal !== null) {
+            $admin->alert($refusal);
+
+            return $this->card($admin, $form);
+        }
         $name = DraftForm::name($field);
         $type = (string) ($field['type'] ?? 'text');
         if ($type === 'choice') {
@@ -289,6 +315,7 @@ abstract class DraftScreen extends BaseScreen
         $refused = [];
         $hints = [];
         $buttons = [];
+        $locked = [];
         if ($form->choose !== null) {
             $facts[$this->chooseLabel()] = Fmt::e($form->choices()[$driver] ?? $driver);
             $about = $driver === DraftForm::NONE ? ($form->none['hint'] ?? '') : implode(' · ', array_filter([$form->drivers[$driver]['description'] ?? '', ...($form->drivers[$driver]['notes'] ?? [])]));
@@ -316,11 +343,19 @@ abstract class DraftScreen extends BaseScreen
             if (isset($errors[$name])) {
                 $refused[] = '⚠️ ' . Fmt::e($label) . ': ' . Fmt::e((string) $errors[$name]);
             }
+            if ($this->locked($admin, $field) !== null) {
+                $locked[] = '«' . Fmt::e($label) . '»';
+
+                continue;
+            }
             $buttons[] = ($field['type'] ?? '') === 'toggle'
                 ? Button::to(Words::turn(($values[$name] ?? false) !== true, $label), $this->screen(), 'e', $index, ($values[$name] ?? false) === true ? 0 : 1)
                 : Button::to(Words::edit($label), $this->screen(), 'e', $index);
         }
         $view->card($facts)->lines(...$refused);
+        if ($locked !== []) {
+            $view->line('🔒 ' . implode('، ', $locked) . ' را فقط خود مالک عوض می‌کند.');
+        }
         $dirty = $form->dirty($driver, $values, $this->crypt);
         if ($dirty && !$this->alwaysSubmits()) {
             $view->line()->line('✏️ <b>تغییرها هنوز ذخیره نشده‌اند.</b>');
@@ -564,6 +599,17 @@ abstract class DraftScreen extends BaseScreen
     private function within(): array
     {
         return [...$this->path(), Fmt::bare($this->title())];
+    }
+
+    /**
+     * The API's refusal of `$field` to this seat — one of the main shop's admins, and a field only the owner changes
+     * (ownersOnly()) —; null to the owner themselves and for every other field.
+     *
+     * @param array<string, mixed> $field
+     */
+    private function locked(Admin $admin, array $field): ?string
+    {
+        return $admin->seat->principal->isTheOwner() ? null : ($this->ownersOnly()[DraftForm::name($field)] ?? null);
     }
 
     /**

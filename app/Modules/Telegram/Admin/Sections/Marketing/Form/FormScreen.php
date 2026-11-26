@@ -25,13 +25,15 @@ use App\Modules\Telegram\Admin\Ui\Words;
  * (fields not walked) a section of their own —, the panel's refusals marked on their fields, «✏️» for each and one save,
  * «✔️ ساختن»: the panel's own POST. Editing a row starts at its review, from the row as the panel has it now (row()); its
  * save («💾 ذخیره», the panel's PUT) is offered once something changed. A field's choices — the shop's plans, servers —
- * come View::CHOICES_MOST a page, the page each field is on kept in the state.
+ * come View::CHOICES_MOST a page, the page each field is on kept in the state. A draft an older version left in the chat
+ * is read as this one keeps it (upgrade()).
  *
  * Actions: `new`, `edit` (id), `sum` (the review), `ask` (i: asked from the review), `prev` (i: the step before step
  * i), `skip` (i: step i left as it is), `clr` (i: emptied), `pick` (i, n: choice n; a switch's 0 on, 1 off), `mt` (i,
- * n, 1|0: choice n ticked or not), `all` (i), `done` (i: the ticks done), `q` (i, n: quick value n), `pg` (i, n: the
- * choices' page n), `save`; the answer to a typed field is `v` (i). A button carries the step it is on — and a tick the
- * state it sets —, so a second tap, or one from an older window, lands where the first did.
+ * n, 1|0: choice n ticked or not), `all` (i), `done` (i: the ticks done — none ticked refused where Step::refusesNone()
+ * says so), `q` (i, n: quick value n), `pg` (i, n: the choices' page n), `save`; the answer to a typed field is `v` (i).
+ * A button carries the step it is on — and a tick the state it sets —, so a second tap, or one from an older window,
+ * lands where the first did.
  */
 abstract class FormScreen extends BaseScreen
 {
@@ -237,7 +239,19 @@ abstract class FormScreen extends BaseScreen
                 return $this->ask($admin, $steps, $index);
             case 'done':
                 $chosen = $draft[$step->key] ?? null;
-                if (is_array($chosen) && $chosen === []) {
+                if (is_array($chosen) && $step->noneTicked !== '') {
+                    // Rows deleted since are let go; none left is refused, never taken for every one — that is «همه»'s own
+                    // button.
+                    $kept = $step->offered($chosen);
+                    if ($kept === []) {
+                        $admin->alert($step->noneTicked);
+
+                        return $this->ask($admin, $steps, $index);
+                    }
+                    if (count($kept) !== count($chosen)) {
+                        $this->put($admin, $step, $kept);
+                    }
+                } elseif (is_array($chosen) && $chosen === []) {
                     if ($step->all === '') {
                         $admin->alert('دست‌کم یکی را انتخاب کنید.');
 
@@ -277,7 +291,7 @@ abstract class FormScreen extends BaseScreen
     }
 
     /**
-     * The draft as it stands.
+     * The draft as it stands (upgrade()).
      *
      * @return array<string, mixed>
      */
@@ -285,7 +299,19 @@ abstract class FormScreen extends BaseScreen
     {
         $draft = $admin->state($this->screen())['draft'] ?? [];
 
-        return is_array($draft) ? $draft : [];
+        return is_array($draft) ? $this->upgrade($draft) : [];
+    }
+
+    /**
+     * A draft an older version left in the chat (a field kept under another key then), as this one keeps it; any draft
+     * as it is by default.
+     *
+     * @param array<string, mixed> $draft
+     * @return array<string, mixed>
+     */
+    protected function upgrade(array $draft): array
+    {
+        return $draft;
     }
 
     /**
@@ -317,16 +343,17 @@ abstract class FormScreen extends BaseScreen
             if (!$step->shown($draft)) {
                 continue;
             }
-            $fields[] = $step->field;
+            $fields = [...$fields, ...$step->fields()];
             $value = $draft[$step->key] ?? null;
-            $error = is_string($errors[$step->field] ?? null) ? $errors[$step->field] : null;
-            $label = ($error !== null ? '⚠️ ' : '') . $step->label;
+            // The refusals under any field it is sent as (a code's plans and categories).
+            $said = array_values(array_filter(array_map(static fn(string $field): mixed => $errors[$field] ?? null, $step->fields()), is_string(...)));
+            $label = ($said !== [] ? '⚠️ ' : '') . $step->label;
             if ($parted && !$step->walked) {
                 $later[$label] = $step->display($value);
             } else {
                 $facts[$label] = $step->display($value);
             }
-            if ($error !== null) {
+            foreach ($said as $error) {
                 $refused[] = '⚠️ ' . Fmt::e($step->label) . ': ' . Fmt::e($error);
             }
             $buttons[] = $this->button($index, $step, $value);
@@ -343,7 +370,7 @@ abstract class FormScreen extends BaseScreen
         foreach ($this->notes($admin, $id, $draft) as $note) {
             $view->note($note);
         }
-        $changed = $id > 0 && $draft != ($state['was'] ?? null);
+        $changed = $id > 0 && $draft != (is_array($state['was'] ?? null) ? $this->upgrade($state['was']) : null);
         if ($id > 0) {
             $view->line()->line($changed ? '<b>' . Fmt::e(Marketing::UNSAVED) . '</b>' : '<i>' . Fmt::e(Marketing::UNCHANGED) . '</i>');
         }
@@ -555,8 +582,8 @@ abstract class FormScreen extends BaseScreen
             $draft = $this->draft($admin);
             $labels = [];
             foreach ($steps as $step) {
-                if ($step->shown($draft)) {
-                    $labels[$step->field] ??= $step->label;
+                foreach ($step->shown($draft) ? $step->fields() : [] as $field) {
+                    $labels[$field] ??= $step->label;
                 }
             }
             $admin->remember($this->screen(), ['errors' => $errors, 'walk' => false]);
@@ -571,14 +598,13 @@ abstract class FormScreen extends BaseScreen
         return $this->done($admin, $row, $id === 0);
     }
 
-    /** Set a field in the draft, its refusal gone. */
+    /** Set a field in the draft, its refusals gone — under every field it is sent as. */
     private function put(Admin $admin, Step $step, mixed $value): void
     {
         $state = $admin->state($this->screen());
         $draft = $this->draft($admin);
         $draft[$step->key] = $value;
-        $errors = Json::part($state, 'errors');
-        unset($errors[$step->field]);
+        $errors = array_diff_key(Json::part($state, 'errors'), array_flip($step->fields()));
         $admin->remember($this->screen(), ['draft' => $draft, 'errors' => $errors]);
     }
 

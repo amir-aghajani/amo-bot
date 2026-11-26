@@ -301,10 +301,11 @@ class Order extends Model
     }
 
     /**
-     * Unpaid orders an idle checkout's expiry may drop (Tasks\ExpireOrdersTask): pending, and none of their money with
+     * Unpaid orders an idle checkout's expiry may drop (Tasks\ExpireOrdersTask): pending, none of their money with
      * support — no receipt in review, no card transfer taken in support's private chat, no online payment held for
-     * support (Payment::isWithSupport()).
-     * The expiry itself keeps one whose online payment is held for support, or whose online page still takes money
+     * support (Payment::isWithSupport()) —, and no online payment still pending, or failed with its page (a late
+     * receipt), with money in at its gateway (Payments\Services\OnlinePayments::hasMoneyIn()).
+     * The expiry itself keeps those too, and one whose online page still takes money
      * (Payments\Services\PaymentService::expire()).
      *
      * @return Builder<static>
@@ -313,7 +314,10 @@ class Order extends Model
     {
         return static::query()
             ->where('status', OrderStatus::Pending->value)
-            ->whereDoesntHave('payments', Payment::whereWithSupport(...));
+            ->whereDoesntHave('payments', Payment::whereWithSupport(...))
+            ->whereDoesntHave('payments', static fn(Builder $payment) => $payment
+                ->whereIn('status', [PaymentStatus::Pending->value, PaymentStatus::Failed->value])
+                ->whereNotNull('invoice->money_in'));
     }
 
     /** @return BelongsTo<User, $this> */

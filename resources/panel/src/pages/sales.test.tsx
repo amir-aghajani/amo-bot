@@ -20,6 +20,7 @@ function open(answer: Answer = sales()) {
   server()
     .on('GET', '/api/admin/sales', answer)
     .on('GET', '/api/admin/plans', json({ plans: [planRow({ id: 3, name: 'یک‌ماهه' }), planRow({ id: 4, name: 'سه‌ماهه' })] }))
+    .on('GET', '/api/admin/plans/options', json({ categories: [{ id: 7, name: 'ماهانه', is_active: true }], servers: [] }))
   render(<SalesPage />, { wrapper: providers({ at: '/sales' }).wrapper })
 }
 
@@ -31,13 +32,18 @@ beforeEach(() => {
 
 describe('the sales', () => {
   it('list each sale — its percent, what it is for, how it stands', async () => {
-    open(sales([saleRow(), saleRow({ id: 5, name: 'تمدید ارزان', percent: 50, order_types: ['renewal'], plans: [{ id: 3, name: 'یک‌ماهه' }], enabled: false, state: 'off' })]))
+    open(
+      sales([
+        saleRow(),
+        saleRow({ id: 5, name: 'تمدید ارزان', percent: 50, order_types: ['renewal'], plans: [{ id: 3, name: 'یک‌ماهه' }], categories: [{ id: 7, name: 'ماهانه' }], enabled: false, state: 'off' }),
+      ]),
+    )
 
     const [, first, second] = within(await screen.findByRole('table', { name: 'فروش‌های ویژه' })).getAllByRole('row')
     if (!first || !second) throw new Error('Two sales are listed.')
     expect(within(first).getByText('۲۰٪')).toBeTruthy()
     expect(within(first).getByText('همه سفارش‌ها · همه پلن‌ها')).toBeTruthy()
-    expect(within(second).getByText('تمدید · پلن «یک‌ماهه»')).toBeTruthy()
+    expect(within(second).getByText('تمدید · دسته «ماهانه» و پلن «یک‌ماهه»')).toBeTruthy()
     expect(within(second).getByText('غیرفعال')).toBeTruthy()
   })
 
@@ -69,6 +75,7 @@ describe('a sale', () => {
       percent: '15',
       order_types: null,
       plan_ids: [4],
+      category_ids: [],
       starts_at: '2026-12-21T00:00',
       ends_at: '2026-12-22T23:00',
       enabled: true,

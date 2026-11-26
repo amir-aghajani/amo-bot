@@ -836,10 +836,11 @@ return [
 
         /*
          * Discounts. `discount_codes` — a code typed at checkout: `type` percent, fixed or free and its `value` (a percent
-         * capped at `max_discount`, or Toman), limited by `min_amount`, `order_types`, `plan_ids`, `server_ids` (null:
-         * any), `first_purchase_only`, its window and its uses (`max_uses`, `per_user`). A use is an order made with it
-         * that is not cancelled, so an unpaid order gives its use back by itself. `sales` — a timed percent off plans
-         * («فروش ویژه»). `loyalty_tiers` — tiers by what a customer spent («سطح وفاداری»), each a discount and extra
+         * capped at `max_discount`, or Toman), limited by `min_amount`, `order_types`, its plans — those of `plan_ids` and
+         * those filed under `category_ids` (both null: any) —, `server_ids` (null: any), `first_purchase_only`, its window
+         * and its uses (`max_uses`, `per_user`). A use is an order made with it that is not cancelled, so an unpaid order
+         * gives its use back by itself. `sales` — a timed percent off plans and categories («فروش ویژه»), named as a
+         * code's are. `loyalty_tiers` — tiers by what a customer spent («سطح وفاداری»), each a discount and extra
          * cashback. A customer's own discount is `users.discount_percent`.
          */
         'discount_codes' => static function (Blueprint $table): void {
@@ -853,6 +854,7 @@ return [
             $table->decimal('min_amount', 14, 2)->nullable();
             $table->json('order_types')->nullable();
             $table->json('plan_ids')->nullable();
+            $table->json('category_ids')->nullable();
             $table->json('server_ids')->nullable();
             $table->boolean('first_purchase_only')->default(false);
             $table->timestamp('starts_at')->nullable();
@@ -873,6 +875,7 @@ return [
             $table->unsignedTinyInteger('percent');
             $table->json('order_types')->nullable();
             $table->json('plan_ids')->nullable();
+            $table->json('category_ids')->nullable();
             $table->timestamp('starts_at')->nullable();
             $table->timestamp('ends_at')->nullable();
             $table->boolean('enabled')->default(true);

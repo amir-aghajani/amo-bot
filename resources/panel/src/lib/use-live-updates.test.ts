@@ -57,6 +57,8 @@ const DERIVED: Record<Area, QueryKey[]> = {
     queryKeys.planOptions, // the plan form's categories
     queryKeys.account, // an agent's smallest plan on sale, held against their traffic
     queryKeys.dashboards, // the same, on an agent's dashboard
+    queryKeys.discountCodes, // the plans and categories a code is limited to: its reach once one is renamed or removed
+    queryKeys.sales, // the same, for a timed sale
   ],
   payment_methods: [queryKeys.paymentMethods],
   orders: [

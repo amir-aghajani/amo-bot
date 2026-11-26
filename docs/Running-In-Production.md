@@ -44,19 +44,39 @@ dashboard's «وضعیت سیستم» card says when the scheduler last ran. Eve
 ### The task schedule
 
 «تنظیمات پنل › زمان‌بندی کارها», the owner's: every scheduled task in the order a run takes them — what it does, whether
-it runs in each shop, when it last ran and when it is next due — with how often it runs and, for a few, the times it
-decides by. One for the whole installation, kept with the main shop: one scheduler runs every shop's work, an agent's
+it runs in each shop, when it last ran and when it is next due — with how often it runs, from what time of day, and,
+for a few, the times it decides by. One for the whole installation, kept with the main shop: one scheduler runs every shop's work, an agent's
 too. The page is saved as one form — every value checked, and all kept or none.
 
 How often a task runs is 1 to 10080 minutes (a week). The cron starts the scheduler once a minute, so 1 is as often as
-any task can run; its next run counts from its last. While the database cannot be read, every task runs at its default.
+any task can run. Each task also has «ساعت شروع», the time of day on the shop's clock its runs are counted from: a run at
+it every day, then one every interval after it — every 10 minutes from 00:03 is 00:03, 00:13, 00:23… An interval that
+does not fit a day evenly (every 25 minutes) starts again at that time each day; one longer than a day counts from it on
+a Saturday. A run that comes a little late (Cron missed a minute, a task before it took long) does not move the next; a
+task that has not run since its last moment — Cron stopped for a while, or its start was moved to a time already past
+today — runs once at the next tick; a server clock put back stalls none, each waits for its next moment. At a
+daylight-saving change the schedule follows the shop's clock. A moment the clock jumps over in spring runs once, at the
+first minute after the jump (a daily 02:30 runs at 03:00 that day). In the hour a fall-back repeats, a minute of the
+clock runs again only once a whole interval of real time has passed since the run it repeats: a task every hour or more
+often keeps running through that hour (an hourly one keeps its hour), and a daily 02:30 runs once, at the first 02:30.
+A start is typed as `HH:MM` from 00:00 to 23:59 — Persian digits, one digit for the hour or the minute ("3:5" is
+03:05), a bare hour ("9" is 09:00), and «٫», ".", "：", "," or «،» for the colon are taken too, any space (a tab, a
+non-breaking one) left out; a blank one is refused. A task that runs every minute has no use for its start,
+and the bot's list does not show it. «ارسال پشتیبان به گروه» starts at 00:00; the heavier tasks start apart, so the hour's
+and the day's runs do not all fall in one minute: «همگام‌سازی سرویس‌ها», «یادآوری‌ها» and «حذف سرویس‌های تمام‌شده» at
+00:05 (:05, :20, :35, :50), «شرایط نمایندگی» at 00:10, «پاک‌سازی سابقه پیام‌های ربات» at 00:25, «پاک‌سازی حساب‌های
+وب‌سایت» at 00:40, «پاک‌سازی تیکت‌ها» at 00:55, «پاک‌سازی انتقال‌ها» at 03:00 and «بررسی نسخه تازه» at 03:30; every other
+at 00:00. The nightly draw and the daily report go by their own hour («ساعت قرعه‌کشی», «ساعت گزارش روزانه»): their task's
+interval and start only say how often it looks whether that hour has come. Keep that interval at an hour or less: a
+longer one may leave no look between their hour and midnight, and that day's draw does not happen, or the day before's
+report is not sent. While the database cannot be read, every task runs at its defaults.
 
 | Task | What it does | Runs by default every |
 |---|---|---|
 | «تایید خودکار رسیدها» | Card-to-card receipts nobody reviewed within their method's window, approved ([Payment methods](Payment-Methods.md#approving-receipts-by-themselves)) | minute |
 | «بررسی پرداخت‌های آنلاین» | Online payments not paid yet, asked about at their gateway — a few each run, in case a gateway's callback never came ([Payment methods](Payment-Methods.md#every-online-gateway)) | minute |
 | «ادامه تحویل‌های نیمه‌کاره» | Paid orders that a process left undelivered when it died, delivered (a failed delivery waits for support) | minute |
-| «کنار گذاشتن سفارش‌های رهاشده» | Unpaid orders nobody touched for a while, cancelled — one made with a discount code sooner, once the code's hold is over; never one whose money may be with support ([Orders and payments](Orders-And-Payments.md#what-runs-by-itself)) | 10 minutes |
+| «کنار گذاشتن سفارش‌های رهاشده» | Unpaid orders nobody touched for a while, cancelled — one made with a discount code sooner, once the code's hold is over; never one whose money may be with support, nor one with money in at its online gateway, not settled yet ([Orders and payments](Orders-And-Payments.md#what-runs-by-itself)) | 10 minutes |
 | «ارسال پیام‌های همگانی» | Broadcasts, a batch at a time | minute |
 | «تمدید خودکار» | The services whose «تمدید خودکار» is on and whose end is near, renewed from the wallet ([Services](Services.md#what-runs-by-itself)) | 30 minutes |
 | «شروع دوره تمدیدشده» | A renewed service's next period, begun where the paid one ended | 10 minutes |
@@ -72,6 +92,7 @@ any task can run; its next run counts from its last. While the database cannot b
 | «قرعه‌کشی شبانه» | Once the shop's clock has passed the hour of the draw, the day's draw — once a day, so the interval only sets how soon after the hour it comes ([Loyalty, cashback and draws](Loyalty-Cashback-And-Draws.md#the-nightly-draw)) | 10 minutes |
 | «ارسال پشتیبان به گروه» | Each shop's backup, sent to its report group's «پشتیبان‌گیری» topic: the main shop's group gets the whole installation's, an agent's group its own shop's — in every shop whose group is connected and whose topic is on ([Backups](Backups.md#in-the-report-group)) | day (1440 minutes) |
 | «پاک‌سازی انتقال‌ها» | An import from another bot left open and untouched for 7 days, cancelled; and whatever an ended import still keeps of the other bot's data — its copy of it, the uploaded file, the panels' passwords —, deleted ([Importing from another bot](Importing.md#the-imports-own-data)) | day (1440 minutes) |
+| «گزارش روزانه» | Once a shop's clock has passed its «ساعت گزارش روزانه», its day before in figures to its report group's «گزارش روزانه» topic — once a day, so the interval only sets how soon after the hour it comes ([Report group](Telegram-Group.md#the-daily-report)) | 10 minutes |
 | «بررسی نسخه تازه» | AmoBot's newest release, read from GitHub, so the dashboard says when one is out ([Upgrading](Upgrading.md)) | day (1440 minutes) |
 | «ارسال گزارش‌ها» | The report groups' queued messages, at Telegram's pace ([Report group](Telegram-Group.md#pace)) | minute |
 
@@ -83,7 +104,7 @@ The times the tasks decide by, each under its task:
 
 | Task | Setting | Default | From – to |
 |---|---|---|---|
-| «کنار گذاشتن سفارش‌های رهاشده» | «مهلت سفارش پرداخت‌نشده» — an unpaid order nobody touched for this long is cancelled; never one whose money is with support | 48 hours | 1 – 720 hours |
+| «کنار گذاشتن سفارش‌های رهاشده» | «مهلت سفارش پرداخت‌نشده» — an unpaid order nobody touched for this long is cancelled; never one whose money is with support, nor one with money in at its online gateway, not settled yet | 48 hours | 1 – 720 hours |
 | «بررسی پرداخت‌های آنلاین» | «فاصله پرسیدن، صفحه پرداخت باز» — while a gateway's page is open, its payment is asked about this often | 3 minutes | 1 – 60 minutes |
 | «بررسی پرداخت‌های آنلاین» | «پرسیدن پس از بسته شدن صفحه» — still asked about this long after its page closed: a gateway may take the money late | 2 hours | 0 – 72 hours |
 | «بررسی پرداخت‌های آنلاین» | «فاصله پرسیدن، صفحه بسته» — after its page closed, asked about this often | 15 minutes | 1 – 1440 minutes |

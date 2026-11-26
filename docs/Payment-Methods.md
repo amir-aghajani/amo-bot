@@ -305,9 +305,10 @@ whatever a discount code's hold says.
 receipt in review, or an underpayment whose rest the customer said they would pay; AbanGateway with an invoice split
 into parts and paid in part; Plisio with a coin seen on its chain and awaiting its confirmations. The shop does not give
 up on such a payment: it asks every quarter of an hour until 48 hours after its page closed (by default), and settles it
-as soon as the gateway does. Still unsettled then, the payment is [held for you](#a-payment-held-for-you). Should the gateway close
-it unsettled before — AtlasPay rejecting the receipt, AbanGateway's invoice paid in part expiring —, it is held for you
-at once: money may have left the customer's account.
+as soon as the gateway does. Meanwhile its order never expires — not by a discount code's hold nor by the unpaid limit
+—, so a payment settled late delivers it. Still unsettled then, the payment is [held for you](#a-payment-held-for-you).
+Should the gateway close it unsettled before — AtlasPay rejecting the receipt, AbanGateway's invoice paid in part
+expiring —, it is held for you at once: money may have left the customer's account.
 
 **No money is lost.** Money a gateway takes for an order that is no longer waiting — paid another way, cancelled,
 expired, or a page paid late — goes to the customer's wallet («پرداخت آنلاین #… پس از بسته شدن سفارش #…»). The customer
@@ -434,7 +435,7 @@ Setting it up:
 | «نام روش» | What the checkout's button says |
 | «کمترین مبلغ (تومان)» / «بیشترین مبلغ (تومان)» | The amounts it is offered for ([above](#the-least-and-most-amount)) |
 | «مرچنت کد» | Your gateway's code from the Zarinpal panel |
-| «حالت آزمایشی (sandbox)» | Zarinpal's test service: any code in its shape is taken and no money moves — but a payment there still delivers its order. Only for trying it out; the list says «حالت آزمایشی: پولی جابه‌جا نمی‌شود» while it is on. A payment is always asked about where it was opened: switching it leaves the payments already opened as they were |
+| «حالت آزمایشی (sandbox)» | Zarinpal's test service: any code in its shape is taken and no money moves — but a payment there still delivers its order. Only for trying it out; the list says «حالت آزمایشی: پولی جابه‌جا نمی‌شود» while it is on. A payment is always asked about where it was opened: switching it leaves the payments already opened as they were — but a page opened in the other mode is not shown again: a new one opens |
 | «فعال» | Whether the checkout offers it |
 
 How a payment goes ([every online gateway](#every-online-gateway) has the rest):
@@ -511,7 +512,7 @@ Setting it up:
 |---|---|
 | «نام روش» | What the checkout's button says |
 | «کمترین مبلغ (تومان)» / «بیشترین مبلغ (تومان)» | The amounts it is offered for ([above](#the-least-and-most-amount)) |
-| «کلید API» | Your key from AbanGateway's panel. A test key (`ag_test_…`) moves no money — but an invoice paid by AbanGateway's simulation still delivers its order; the list says «حالت آزمایشی: پولی جابه‌جا نمی‌شود» while it is set |
+| «کلید API» | Your key from AbanGateway's panel. A test key (`ag_test_…`) moves no money — but an invoice paid by AbanGateway's simulation still delivers its order; the list says «حالت آزمایشی: پولی جابه‌جا نمی‌شود» while it is set. A page opened with the other kind of key (test or live) is not shown again after the key is switched: a new one opens |
 | «نمایش کارت در ربات و سایت» | On (the default): the card, its holder and the exact sum come under the page with copy buttons, so the customer can pay without opening AbanGateway's page |
 | «فعال» | Whether the checkout offers it |
 
@@ -594,7 +595,7 @@ Setting it up:
 |---|---|
 | «نام روش» | What the checkout's button says |
 | «کمترین مبلغ (تومان)» / «بیشترین مبلغ (تومان)» | The amounts it is offered for ([above](#the-least-and-most-amount)) |
-| «کد پین درگاه» | Your gateway's pin from the AqayePardakht panel; `sandbox` for its test service, where no money moves — but a payment there still delivers its order. The list says «حالت آزمایشی: پولی جابه‌جا نمی‌شود» while it is set |
+| «کد پین درگاه» | Your gateway's pin from the AqayePardakht panel; `sandbox` for its test service, where no money moves — but a payment there still delivers its order. The list says «حالت آزمایشی: پولی جابه‌جا نمی‌شود» while it is set. Switching between a live pin and `sandbox`: a payment opened under the other is not verified while the pin differs — the scheduler closes it as failed after its late hours; switched back, the customer's «🔄 بررسی پرداخت» or support's «استعلام از درگاه» settles one that was really paid —, and its page is not shown again: a new one opens |
 | «فعال» | Whether the checkout offers it |
 
 How a payment goes ([every online gateway](#every-online-gateway) has the rest):

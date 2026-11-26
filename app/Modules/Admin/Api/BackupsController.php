@@ -7,6 +7,7 @@ namespace App\Modules\Admin\Api;
 use App\Core\Exceptions\ValidationException;
 use App\Core\Http\ApiController;
 use App\Core\Http\LongRunning;
+use App\Modules\Auth\Exceptions\ActorRefusedException;
 use App\Modules\Auth\Principal;
 use App\Modules\Backups\Backups;
 use App\Modules\Backups\BackupScope;
@@ -18,7 +19,9 @@ use Slim\Exception\HttpNotFoundException;
 /**
  * «پشتیبان‌گیری», both panels: the owner in the main shop backs up and restores the whole installation, any other panel
  * its shop alone (BackupScope::for()). A backup downloads as it is made; a file to restore is uploaded and described
- * first (inspect), then restored by its token — the state before kept to download.
+ * first (inspect), then restored by its token — the state before kept to download. A file made before 0.11.0
+ * (Backups::MASKED_SINCE) is never an admin's working a bot's management with its owner's or agent's seat (oldFiles()):
+ * not listed among the states kept, refused to download or restore (403).
  */
 final class BackupsController extends ApiController
 {
@@ -33,7 +36,9 @@ final class BackupsController extends ApiController
     /** GET /backups */
     public function show(Request $request, Response $response): Response
     {
-        return $this->json($response, ['backups' => $this->backups->status(BackupScope::for(Principal::of($request)))]);
+        $principal = Principal::of($request);
+
+        return $this->json($response, ['backups' => $this->backups->status(BackupScope::for($principal), self::oldFiles($principal))]);
     }
 
     /** PUT /backups/auto — {enabled}: the shop's backup to its report group, or not */
@@ -53,15 +58,24 @@ final class BackupsController extends ApiController
         return $this->file($response, $made['path'], $made['name']);
     }
 
-    /** POST /backups/inspect — multipart `file`: checked and described, kept under a token to restore */
+    /**
+     * POST /backups/inspect — multipart `file`: checked and described, kept under a token to restore
+     *
+     * @throws ActorRefusedException 403: a file made before 0.11.0, to one of the main shop's admins with the owner's seat
+     */
     public function inspect(Request $request, Response $response): Response
     {
         LongRunning::keepGoing(self::TIME_LIMIT);
+        $principal = Principal::of($request);
 
-        return $this->json($response, ['inspection' => $this->backups->inspect($this->uploadedFile($request), BackupScope::for(Principal::of($request)))]);
+        return $this->json($response, ['inspection' => $this->backups->inspect($this->uploadedFile($request), BackupScope::for($principal), self::oldFiles($principal))]);
     }
 
-    /** POST /backups/restore — {token, confirm: true} */
+    /**
+     * POST /backups/restore — {token, confirm: true}
+     *
+     * @throws ActorRefusedException 403: a file made before 0.11.0, to one of the main shop's admins with the owner's seat
+     */
     public function restore(Request $request, Response $response): Response
     {
         $input = $this->input($request);
@@ -70,17 +84,34 @@ final class BackupsController extends ApiController
         }
         // Begun, it ends — committed or rolled back — even when the admin closes the page.
         LongRunning::keepGoing(self::TIME_LIMIT);
+        $principal = Principal::of($request);
 
-        return $this->json($response, ['restore' => $this->backups->restore((string) ($input['token'] ?? ''), BackupScope::for(Principal::of($request)))]);
+        return $this->json($response, ['restore' => $this->backups->restore((string) ($input['token'] ?? ''), BackupScope::for($principal), self::oldFiles($principal))]);
     }
 
-    /** GET /backups/kept/{name} — a state kept from before a restore */
-    /** @param array{name: string} $args */
+    /**
+     * GET /backups/kept/{name} — a state kept from before a restore
+     *
+     * @param array{name: string} $args
+     * @throws ActorRefusedException 403: one made before 0.11.0, to one of the main shop's admins with the owner's seat
+     */
     public function kept(Request $request, Response $response, array $args): Response
     {
-        $path = $this->backups->keptPath(BackupScope::for(Principal::of($request)), $args['name']) ?? throw new HttpNotFoundException($request);
+        $principal = Principal::of($request);
+        $path = $this->backups->keptPath(BackupScope::for($principal), $args['name'], self::oldFiles($principal)) ?? throw new HttpNotFoundException($request);
 
         return $this->file($response, $path, $args['name']);
+    }
+
+    /**
+     * Whether a file made before 0.11.0 is theirs too: the owner's themselves (Principal::isTheOwner()), and an agent's
+     * themselves, of their own shop (its webhook's secret is theirs) — never an admin working a bot's management with its
+     * seat, a customer account beside it: one of the main shop's admins with the owner's (in the main shop or another),
+     * nor one of an agent's bot's admins with the agent's.
+     */
+    private static function oldFiles(Principal $principal): bool
+    {
+        return $principal->customer === null;
     }
 
     /** A backup file to save, streamed from disk. */

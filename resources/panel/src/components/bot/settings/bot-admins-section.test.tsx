@@ -29,8 +29,13 @@ describe('the bot’s admins', () => {
     expect(screen.getByText(/به نام خودشان ثبت می‌شود و هیچ مدیری درباره حساب خودش تصمیم نمی‌گیرد/)).toBeTruthy()
     expect(screen.getByText(/همان دسترسی مالک را دارد/)).toBeTruthy()
     expect(screen.getByText(/به خودش تخفیف اختصاصی یا گروه «همکار» نمی‌دهد/)).toBeTruthy()
-    expect(screen.getByText('تنظیمات پنل، از جمله توکن ربات و دیتابیس؛ جز ورود به پنل، حساب‌های تلگرام مالک، آدرس Bot API و رمز Webhook که با خود مالک می‌ماند')).toBeTruthy()
+    expect(screen.getByText('تنظیمات پنل')).toBeTruthy()
     expect(screen.getByText('پشتیبان‌گیری و بازگردانی، و به‌روزرسانی')).toBeTruthy()
+    expect(
+      screen.getByText(
+        'جز ورود به پنل، حساب‌های تلگرام مالک، آدرس سایت، توکن و نام کاربری ربات اصلی، آدرس Bot API، رمز Webhook، دیتابیس، تنظیمات Session پنل‌ها، پشتیبان‌های ساخته‌شده پیش از نسخه 0.11.0 و برگرداندن به نسخه قبلی که با خود مالک می‌ماند.',
+      ),
+    ).toBeTruthy()
     expect(screen.queryByText(/همان دسترسی نماینده/)).toBeNull()
   })
 

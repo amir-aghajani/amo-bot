@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Telegram\Admin\Sections\Panel\Config;
 
+use App\Modules\Auth\Exceptions\ActorRefusedException;
 use App\Modules\Telegram\Admin\Sections\Panel\Forms\DraftForm;
 use App\Modules\Telegram\Admin\Sections\Panel\SystemScreen;
 use App\Modules\Telegram\Admin\Ui\Admin;
@@ -12,11 +13,13 @@ use App\Modules\Telegram\Admin\Ui\Fmt;
 use App\Modules\Telegram\Admin\Ui\Icons;
 use App\Modules\Telegram\Admin\Ui\Json;
 use App\Modules\Telegram\Admin\Ui\View;
+use App\Support\Persian;
 
 /**
  * «ربات تلگرام» of config.php: the main bot's token — checked with Telegram before saving, its @username filled in from
  * the check —, its @username, and the advanced rest. Moving the Bot API address to another origin sends every bot's token
- * there: the token is typed again and the save asks for the owner's password.
+ * there: the token is typed again and the save asks for the owner's password. The token, the @username, the Bot API
+ * address and the webhook's secret are the owner's themselves alone: an admin sees them, 🔒, and saves the rest.
  *
  * Actions besides the form's: `test` (the token checked).
  */
@@ -53,17 +56,27 @@ final class TelegramScreen extends ConfigScreen
         return '✅ تنظیمات ربات ذخیره شد.';
     }
 
+    protected function ownersOnly(): array
+    {
+        return [
+            'token' => ActorRefusedException::OWNERS_BOT,
+            'username' => ActorRefusedException::OWNERS_BOT,
+            'api_url' => ActorRefusedException::OWNERS_API,
+            'webhook_secret' => ActorRefusedException::OWNERS_SECRET,
+        ];
+    }
+
     protected function formOf(array $config): DraftForm
     {
         $group = self::groupOf($config, 'telegram');
         $webhook = is_string(self::meta($config)['webhook_url'] ?? null) ? self::meta($config)['webhook_url'] : '';
-        $token = DraftForm::field('token', 'secret', 'توکن ربات اصلی', "از \u{2068}BotFather\u{2069} با دستور \u{2068}/newbot\u{2069} یا \u{2068}/token\u{2069} بگیرید.", required: true);
+        $token = DraftForm::field('token', 'secret', 'توکن ربات اصلی', "از \u{2068}BotFather\u{2069} با دستور \u{2068}/newbot\u{2069} یا \u{2068}/token\u{2069} بگیرید. فقط خود مالک آن را عوض می‌کند.", required: true);
         $token['bound_to'] = ['api_url'];
         $token['moved'] = 'آدرس API تلگرام عوض شده است؛ توکن ربات اصلی را دوباره وارد کنید: توکن ذخیره‌شده به آدرس دیگری فرستاده نمی‌شود.';
 
         return DraftForm::fixed([
             $token,
-            DraftForm::field('username', 'text', 'نام کاربری ربات اصلی', 'بدون @؛ با «🧪 بررسی توکن» خودش پر می‌شود.', ltr: true),
+            DraftForm::field('username', 'text', 'نام کاربری ربات اصلی', 'بدون @؛ با «🧪 بررسی توکن» خودش پر می‌شود. لینک ورود حساب تلگرام مالک به همین ربات می‌رود؛ فقط خود مالک آن را عوض می‌کند.', ltr: true),
             DraftForm::field('api_url', 'url', "آدرس \u{2068}API\u{2069} تلگرام", "برای سرور \u{2068}Bot API\u{2069} محلی یا آینه تغییر دهید؛ توکن همه ربات‌ها، ربات‌های نماینده‌ها هم، به همین آدرس فرستاده می‌شود؛ فقط خود مالک آن را عوض می‌کند.", required: true),
             DraftForm::field('current_password', 'secret', 'رمز عبور فعلی پنل', 'آدرس API تلگرام به جای دیگری می‌رود و از این به بعد توکن همه ربات‌ها، ربات‌های نماینده‌ها هم، به آن فرستاده می‌شود؛ برای همین رمز عبور ورود به پنل خواسته می‌شود.', required: true, transient: true),
             DraftForm::field('poll_timeout', 'number', "تایم‌اوت \u{2068}long polling\u{2069}", 'فقط در حالت polling استفاده می‌شود.', required: true, unit: 'ثانیه', min: 1, max: 60),
@@ -104,7 +117,8 @@ final class TelegramScreen extends ConfigScreen
         $typed = DraftForm::unseal($token, $this->crypt);
         $bot = (array) ($admin->api->post('/settings/config/telegram/test', $typed === '' ? [] : ['token' => $typed])['bot'] ?? []);
         $admin->remember(self::ID, ['test' => ['name' => $bot['name'] ?? '', 'username' => $bot['username'] ?? '', 'id' => $bot['id'] ?? ''], 'tested' => $token]);
-        if (is_string($bot['username'] ?? null) && $bot['username'] !== ($values['username'] ?? '')) {
+        // The @username is the owner's to change: an admin's check fills in nothing their save would be refused.
+        if ($admin->seat->principal->isTheOwner() && is_string($bot['username'] ?? null) && $bot['username'] !== ($values['username'] ?? '')) {
             $values['username'] = $bot['username'];
             $this->keep($admin, $driver, $values, []);
         }
@@ -135,7 +149,8 @@ final class TelegramScreen extends ConfigScreen
      */
     private function moves(DraftForm $form, array $values): bool
     {
-        $now = DraftForm::origin((string) ($values['api_url'] ?? ''));
+        // As the API reads it: a port in Persian digits is that port.
+        $now = DraftForm::origin(Persian::latinDigits((string) ($values['api_url'] ?? '')));
         $was = $form->stored['']['api_url'] ?? '';
 
         return $now !== '' && str_contains($now, '://') && $now !== DraftForm::origin(is_string($was) ? $was : '');

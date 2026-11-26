@@ -19,6 +19,15 @@ final class Access
         return $seat->isOwner() && $seat->shop()->isMain();
     }
 
+    /**
+     * config.php's database: the owner themselves, working the main shop — never one of its admins with the owner's seat
+     * (ConfigSettings refuses them its save and its test).
+     */
+    public static function theOwner(AdminSeat $seat): bool
+    {
+        return self::main($seat) && $seat->principal->isTheOwner();
+    }
+
     /** The update, the webhooks, the system's state: the owner. */
     public static function system(AdminSeat $seat): bool
     {

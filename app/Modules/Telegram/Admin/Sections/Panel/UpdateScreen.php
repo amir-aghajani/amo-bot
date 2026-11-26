@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Telegram\Admin\Sections\Panel;
 
+use App\Modules\Auth\Exceptions\ActorRefusedException;
 use App\Modules\Telegram\Admin\AdminSeat;
 use App\Modules\Telegram\Admin\Door\ApiRefusal;
 use App\Modules\Telegram\Admin\Ui\Admin;
@@ -18,7 +19,8 @@ use App\Modules\Telegram\Admin\Ui\Words;
  * «به‌روزرسانی» (the owner's): the running version, the newest release and its notes, and the one-press update — a step
  * a tap (each one request, as the panel drives it; a shared host gives a request half a minute) until it is installed,
  * with how far it got. A failed step offers a retry (and a cancel before the install starts); a done update can be
- * rolled back while the server allows. The start and the rollback are asked first, in the panel's words.
+ * rolled back while the server allows — by the owner themselves alone: an admin with the owner's seat sees it 🔒. The
+ * start and the rollback are asked first, in the panel's words.
  *
  * Actions: `check`, `start` (asks), `go` (begins, and takes the first step), `step`, `cancel`, `back` (asks), `rollback`.
  */
@@ -49,17 +51,23 @@ final class UpdateScreen extends BaseScreen
 
     public function show(Admin $admin, array $args): View
     {
-        return $this->view((array) ($admin->api->get('/system/update')['update'] ?? []));
+        return $this->view($admin, (array) ($admin->api->get('/system/update')['update'] ?? []));
     }
 
     public function act(Admin $admin, string $action, array $args): View
     {
+        // The rollback is the owner's themselves alone: an older window's button, to anyone else, is refused at once.
+        if (in_array($action, ['back', 'rollback'], true) && !$admin->seat->principal->isTheOwner()) {
+            $admin->alert(ActorRefusedException::OWNERS_ROLLBACK);
+
+            return $this->show($admin, $args);
+        }
         switch ($action) {
             case 'check':
                 $update = (array) ($admin->api->post('/system/update/check')['update'] ?? []);
                 $admin->notice('✅ بررسی شد.');
 
-                return $this->view($update);
+                return $this->view($admin, $update);
             case 'start':
                 $update = (array) ($admin->api->get('/system/update')['update'] ?? []);
                 $version = (string) (((array) ($update['latest'] ?? []))['version'] ?? '');
@@ -81,7 +89,7 @@ final class UpdateScreen extends BaseScreen
                 $update = (array) ($admin->api->post('/system/update/cancel')['update'] ?? []);
                 $admin->notice('✅ به‌روزرسانی لغو شد.');
 
-                return $this->view($update);
+                return $this->view($admin, $update);
             case 'back':
                 $run = (array) (((array) ($admin->api->get('/system/update')['update'] ?? []))['run'] ?? []);
 
@@ -96,7 +104,7 @@ final class UpdateScreen extends BaseScreen
                 $update = (array) ($admin->api->post('/system/update/rollback')['update'] ?? []);
                 $admin->notice('✅ نسخه قبلی برگشت.');
 
-                return $this->view($update);
+                return $this->view($admin, $update);
         }
 
         return $this->show($admin, $args);
@@ -117,11 +125,11 @@ final class UpdateScreen extends BaseScreen
             $admin->notice('✅ به‌روزرسانی تمام شد.');
         }
 
-        return $this->view($update);
+        return $this->view($admin, $update);
     }
 
     /** @param array<string, mixed> $update GET /system/update's `update` */
-    private function view(array $update): View
+    private function view(Admin $admin, array $update): View
     {
         $current = (string) ($update['current'] ?? '');
         $latest = is_array($update['latest'] ?? null) ? $update['latest'] : null;
@@ -156,7 +164,7 @@ final class UpdateScreen extends BaseScreen
             $view->row(Button::to('⬇️ به‌روزرسانی به نسخه ' . (string) ($latest['version'] ?? ''), self::ID, 'start')->primary());
         }
         if ($run !== null) {
-            $this->run($view, $run);
+            $this->run($view, $run, $admin->seat->principal->isTheOwner());
         }
 
         return $view->row(Button::to('🔍 بررسی نسخه تازه', self::ID, 'check'))
@@ -165,11 +173,12 @@ final class UpdateScreen extends BaseScreen
     }
 
     /**
-     * The update under way — its steps, how far the one at hand is, a refusal and the ways on — or the last one, over.
+     * The update under way — its steps, how far the one at hand is, a refusal and the ways on — or the last one, over: its
+     * rollback offered to the owner themselves (`$owner`), said to be theirs to anyone else.
      *
      * @param array<string, mixed> $run
      */
-    private function run(View $view, array $run): void
+    private function run(View $view, array $run, bool $owner): void
     {
         $version = Fmt::ltr((string) ($run['version'] ?? ''));
         $from = Fmt::ltr((string) ($run['from'] ?? ''));
@@ -183,8 +192,10 @@ final class UpdateScreen extends BaseScreen
         }
         if ($step === 'done') {
             $view->line('✅ فروشگاه از نسخه ' . $from . ' به نسخه ' . $version . ' به‌روز شد (' . $finished . ').');
-            if (Json::on($run, 'rollback')) {
+            if (Json::on($run, 'rollback') && $owner) {
                 $view->row(Button::to('↩️ بازگرداندن نسخه قبلی', self::ID, 'back')->danger());
+            } elseif (Json::on($run, 'rollback')) {
+                $view->line('🔒 ' . ActorRefusedException::OWNERS_ROLLBACK);
             }
 
             return;

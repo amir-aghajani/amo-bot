@@ -8,6 +8,7 @@ use App\Modules\Bots\CurrentBot;
 use App\Modules\Settings\Services\BotSettingsScreen;
 use App\Modules\Settings\Services\Settings;
 use App\Modules\Telegram\Admin\Ui\Nav;
+use App\Modules\Telegram\Admin\Ui\Words;
 use App\Modules\Telegram\BotSettings;
 use App\Modules\Telegram\Qr\QrBackground;
 use App\Modules\Users\Enums\UserRole;
@@ -264,6 +265,23 @@ final class BotAreaSettingsTest extends BotTestCase
         self::assertContains(['text' => '⏸ خریدها', 'callback_data' => Nav::to('rgt', 'e', 0, 1)], $topics, 'the chip says its state and carries the other');
         self::assertContains('🟢 تمدیدها', array_column($topics, 'text'));
         self::assertStringNotContainsString('خریدها: <b>', implode("\n", $this->said()));
+
+        // The daily report's hour beside them, said as a clock, typed as a number.
+        self::assertStringContainsString('ساعت گزارش روزانه: <b>۰۰:۰۰</b>', implode("\n", $this->said()));
+        $this->send($this->tap(Nav::to('rgt', 'e', 13), chat: self::OWNER));
+        $this->send($this->message('۹', chat: self::OWNER));
+        self::assertSame(9, $this->settings()['daily_report_hour']);
+        self::assertStringContainsString('ساعت گزارش روزانه: <b>۰۹:۰۰</b>', implode("\n", $this->said()));
+
+        // The panel's bounds said where it is typed, its default at a tap; an hour past them refused, the hour kept.
+        $this->send($this->tap(Nav::to('rgt', 'e', 13), chat: self::OWNER));
+        self::assertStringContainsString(Words::LIMITS . ': از ۰ تا ۲۳', $this->said()[0]);
+        self::assertContains(Nav::to('rgt', 'd', 13), $this->buttons(), '«↩️ پیش‌فرض» while it holds another hour');
+        $this->send($this->message('24', chat: self::OWNER));
+        self::assertSame(9, $this->settings()['daily_report_hour'], '24 is no hour of the day');
+        self::assertStringContainsString('ساعت گزارش روزانه باید عددی بین', implode("\n", [...$this->said(), (string) $this->popup()]), 'the panel\'s refusal');
+        $this->send($this->tap(Nav::to('rgt', 'd', 13), chat: self::OWNER));
+        self::assertSame(0, $this->settings()['daily_report_hour'], 'back to its default');
     }
 
     public function testTheQrPictureIsSentSeenAndPutBack(): void

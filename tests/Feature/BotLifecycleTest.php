@@ -5,21 +5,25 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Core\Config\ConfigFile;
+use App\Modules\Backups\BackupScope;
+use App\Modules\Backups\BackupWriter;
 use App\Modules\Bots\CurrentBot;
 use App\Modules\Telegram\Api\BotToken;
+use App\Modules\Telegram\Api\TelegramApiException;
 use App\Modules\Telegram\BotState;
 use App\Modules\Telegram\Exceptions\WebhookAddressException;
 use App\Modules\Telegram\Services\BotHealth;
 use App\Modules\Telegram\Services\BotLifecycle;
+use App\Modules\Telegram\Services\BotWebhooks;
 use Tests\DatabaseTestCase;
 use Tests\Support\FakeTelegram;
 
 /**
  * Wiring a bot to Telegram: the webhook at APP_URL (the shop's address, its sub-folder included), the secret made when
- * missing, the state the dashboard reads, and polling taking the webhook down — an agent's bot at an address of its
- * own, with a secret of its own, following the main bot's mode, and a refusal that keeps it from running told on its
- * row. The main bot's @username lands in config.php when it changed; a config.php that cannot be written costs only
- * that.
+ * missing, the state the dashboard reads (the address without its secret), and polling taking the webhook down — an
+ * agent's bot at an address of its own, with a secret of its own, following the main bot's mode, and a refusal that
+ * keeps it from running told on its row. The main bot's @username lands in config.php when it changed; a config.php
+ * that cannot be written costs only that.
  */
 final class BotLifecycleTest extends DatabaseTestCase
 {
@@ -46,7 +50,8 @@ final class BotLifecycleTest extends DatabaseTestCase
         self::assertSame('["message"]', $params['allowed_updates']);
         self::assertSame('true', $params['drop_pending_updates']);
         self::assertArrayNotHasKey('max_connections', $params, "the main bot's is Telegram's own");
-        self::assertSame($url, $this->state()->webhookUrl());
+        self::assertSame('https://shop.example/panel/webhooks/telegram/***', $this->state()->webhookUrl(), 'remembered without its secret');
+        self::assertStringNotContainsString('s3cret', (string) $this->db()->table('settings')->where('key', 'telegram.webhook_url')->value('value'), 'never in the settings a backup holds');
         self::assertNull($this->file->get('TELEGRAM_WEBHOOK_SECRET'), 'a configured secret is not rewritten');
     }
 
@@ -93,6 +98,112 @@ final class BotLifecycleTest extends DatabaseTestCase
         self::assertSame('amo_shop_bot', $this->file->get('TELEGRAM_BOT_USERNAME'));
     }
 
+    /**
+     * A whole installation's backup — which an admin of the main bot downloads, or has sent to a report group — holds no
+     * webhook's secret: neither the main bot's nor an agent's, each address kept with its secret masked.
+     */
+    public function testABackupHoldsNoWebhooksSecret(): void
+    {
+        $bot = $this->agentBot();
+        $this->lifecycle()->enableWebhook(null, dropPending: false);
+        $this->lifecycle()->follow($bot);
+        $secret = (string) $bot->refresh()->webhook_secret;
+        self::assertSame(48, strlen($secret), 'the agent\'s bot is on its webhook');
+
+        $path = $this->scratchDir() . '/installation.json.gz';
+        $this->service(BackupWriter::class)->write(BackupScope::installation(), $path);
+        $file = implode('', gzfile($path) ?: []);
+
+        self::assertStringContainsString('https://shop.example/panel/webhooks/telegram/***', $file, 'the main bot\'s address is there, masked');
+        self::assertStringContainsString("https://shop.example/panel/webhooks/telegram/bot/{$bot->id}/***", $file, 'and the agent\'s');
+        self::assertStringNotContainsString('s3cret', $file, 'never the main bot\'s secret');
+        self::assertStringNotContainsString($secret, $file, 'nor the agent\'s');
+    }
+
+    /**
+     * «برداشتن Webhook» then «ثبت Webhook» (BotWebhooks, the panel's and the bot's «دریافت پیام‌ها») renew every agent's
+     * bot's secret — one an old backup carried, say —: forgotten once Telegram took its webhook down, a new one made and
+     * registered with Telegram in the same step as its webhook. The main bot's stays config.php's.
+     */
+    public function testTakingTheWebhooksDownAndPuttingThemBackGivesEveryAgentsBotANewSecret(): void
+    {
+        $bot = $this->agentBot();
+        $this->telegram()->on('getMe', static fn(array $params, string $token): array => ['id' => BotToken::botId($token), 'username' => $token === FakeTelegram::TOKEN ? 'amo_shop_bot' : 'agent_shop_bot', 'first_name' => 'AmoBot']);
+        $webhooks = $this->service(BotWebhooks::class);
+        $webhooks->enable();
+        $old = (string) $bot->refresh()->webhook_secret;
+        self::assertSame(48, strlen($old));
+
+        $webhooks->disable();
+        self::assertNull($bot->refresh()->webhook_secret, 'forgotten once Telegram took the webhook down');
+        self::assertNull($this->db()->table('bots')->where('id', $bot->id)->value('webhook_secret'));
+
+        $this->telegram()->reset();
+        $webhooks->enable();
+
+        $new = (string) $bot->refresh()->webhook_secret;
+        self::assertSame(48, strlen($new));
+        self::assertNotSame($old, $new, 'a new secret');
+        $set = $this->webhooksSet();
+        self::assertSame(["https://shop.example/panel/webhooks/telegram/bot/{$bot->id}/{$new}", $new], $set[FakeTelegram::AGENT_TOKEN] ?? null, 'registered with Telegram in the same step');
+        self::assertSame(['https://shop.example/panel/webhooks/telegram/s3cret', 's3cret'], $set[FakeTelegram::TOKEN] ?? null, 'the main bot\'s secret untouched');
+        self::assertNull($this->file->get('TELEGRAM_WEBHOOK_SECRET'), 'config.php not rewritten');
+    }
+
+    /**
+     * An agent's bot that does not run now (its agency taken away) forgets its secret too when the webhooks are taken down
+     * — nothing of it is asked of Telegram —, and gets a new one when its webhook is registered again.
+     */
+    public function testAnAgentsBotThatIsOffGetsANewSecretToo(): void
+    {
+        $bot = $this->agentBot();
+        $this->telegram()->on('getMe', static fn(array $params, string $token): array => ['id' => BotToken::botId($token), 'username' => $token === FakeTelegram::TOKEN ? 'amo_shop_bot' : 'agent_shop_bot', 'first_name' => 'AmoBot']);
+        $webhooks = $this->service(BotWebhooks::class);
+        $webhooks->enable();
+        $old = (string) $bot->refresh()->webhook_secret;
+        self::assertSame(48, strlen($old));
+        $level = $this->db()->table('users')->where('id', $bot->user_id)->value('agency_level_id');
+        $this->db()->table('users')->where('id', $bot->user_id)->update(['agency_level_id' => null]);
+
+        $this->telegram()->reset();
+        $webhooks->disable();
+        self::assertSame([FakeTelegram::TOKEN], array_map($this->telegram()->tokenOf(...), array_keys($this->telegram()->calls())), 'only the bots that run are asked');
+        self::assertNull($bot->refresh()->webhook_secret, 'forgotten all the same');
+
+        $this->db()->table('users')->where('id', $bot->user_id)->update(['agency_level_id' => $level]);
+        $this->telegram()->reset();
+        $webhooks->enable();
+        $new = (string) $bot->refresh()->webhook_secret;
+        self::assertNotSame($old, $new, 'a new secret');
+        self::assertSame(["https://shop.example/panel/webhooks/telegram/bot/{$bot->id}/{$new}", $new], $this->webhooksSet()[FakeTelegram::AGENT_TOKEN] ?? null);
+    }
+
+    /**
+     * Telegram refusing to take an agent's bot's webhook down forgets nothing — the webhook may still be Telegram's —, and
+     * «ثبت Webhook» registers it again with the secret it has.
+     */
+    public function testAWebhookTelegramWouldNotTakeDownKeepsItsSecretAndIsRegisteredAgain(): void
+    {
+        $bot = $this->agentBot();
+        $this->lifecycle()->enableWebhook(null, dropPending: false);
+        $this->lifecycle()->follow($bot);
+        $secret = (string) $bot->refresh()->webhook_secret;
+
+        $this->telegram()->reset();
+        $this->telegram()->fail(400, 'Bad Request: try again later');
+        try {
+            CurrentBot::run($bot, fn() => $this->lifecycle()->disableWebhook(false));
+            self::fail('Telegram\'s refusal was swallowed');
+        } catch (TelegramApiException) {
+        }
+        self::assertSame($secret, $bot->refresh()->webhook_secret, 'kept');
+        self::assertNotNull(CurrentBot::run($bot, fn(): ?string => $this->state()->webhookUrl()), 'still on its webhook, as far as the shop knows');
+
+        $this->telegram()->reset();
+        CurrentBot::run($bot, fn(): string => $this->lifecycle()->enableWebhook(null, dropPending: false));
+        self::assertSame(["https://shop.example/panel/webhooks/telegram/bot/{$bot->id}/{$secret}", $secret], [$this->telegram()->params(0)['url'], $this->telegram()->params(0)['secret_token']]);
+    }
+
     public function testAnAgentsBotHasAWebhookOfItsOwnAndFollowsTheMainBotsMode(): void
     {
         $bot = $this->agentBot();
@@ -114,8 +225,9 @@ final class BotLifecycleTest extends DatabaseTestCase
         $url = "https://shop.example/panel/webhooks/telegram/bot/{$bot->id}/{$secret}";
         self::assertSame([$url, $secret], [$this->telegram()->params(0)['url'], $this->telegram()->params(0)['secret_token']]);
         self::assertSame((string) BotLifecycle::AGENT_CONNECTIONS, $this->telegram()->params(0)['max_connections'] ?? null, 'Telegram calls it a few at a time');
-        self::assertSame($url, CurrentBot::run($bot, fn(): ?string => $this->state()->webhookUrl()), 'its own state');
-        self::assertSame('https://shop.example/panel/webhooks/telegram/s3cret', $this->state()->webhookUrl(), "the main bot's untouched");
+        self::assertSame("https://shop.example/panel/webhooks/telegram/bot/{$bot->id}/***", CurrentBot::run($bot, fn(): ?string => $this->state()->webhookUrl()), 'its own state, without its secret');
+        self::assertStringNotContainsString($secret, (string) $this->db()->table('settings')->where('bot_id', $bot->id)->where('key', 'telegram.webhook_url')->value('value'), 'never in its shop\'s settings, which its backup holds');
+        self::assertSame('https://shop.example/panel/webhooks/telegram/***', $this->state()->webhookUrl(), "the main bot's untouched");
 
         // Its identity lands on its row.
         $this->telegram()->reply(['id' => BotToken::botId(FakeTelegram::AGENT_TOKEN), 'username' => 'agent_new_name', 'first_name' => 'فروشگاه نماینده']);
@@ -174,5 +286,22 @@ final class BotLifecycleTest extends DatabaseTestCase
     private function state(): BotState
     {
         return $this->service(BotState::class);
+    }
+
+    /**
+     * Each bot's webhook registered since the last reset, by the token it was asked with: [its address, its secret].
+     *
+     * @return array<string, array{string, string}>
+     */
+    private function webhooksSet(): array
+    {
+        $set = [];
+        foreach ($this->telegram()->calls() as $i => $method) {
+            if ($method === 'setWebhook') {
+                $set[$this->telegram()->tokenOf($i)] = [(string) $this->telegram()->params($i)['url'], (string) $this->telegram()->params($i)['secret_token']];
+            }
+        }
+
+        return $set;
     }
 }

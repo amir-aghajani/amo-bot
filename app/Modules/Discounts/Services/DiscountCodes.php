@@ -10,6 +10,7 @@ use App\Core\Exceptions\TooManyAttemptsException;
 use App\Core\Exceptions\ValidationException;
 use App\Core\Security\RateLimiter;
 use App\Modules\Catalog\Models\Plan;
+use App\Modules\Catalog\Models\PlanCategory;
 use App\Modules\Discounts\DTO\CodeTarget;
 use App\Modules\Discounts\DTO\DiscountLine;
 use App\Modules\Discounts\Enums\CodeState;
@@ -242,8 +243,8 @@ final class DiscountCodes
 
     /**
      * Codes as the panels show them, with their uses (withCount `uses`) and whether an order keeps them (withExists
-     * `kept`: `deletable` says up front what delete() would answer); the plans and servers they name are read once for
-     * the whole list.
+     * `kept`: `deletable` says up front what delete() would answer); the plans, categories and servers they name are
+     * read once for the whole list.
      *
      * @param Collection<int, DiscountCode> $codes
      * @return list<array<string, mixed>>
@@ -251,8 +252,10 @@ final class DiscountCodes
     private function presentAll(Collection $codes): array
     {
         $planIds = $codes->flatMap(static fn(DiscountCode $code): array => $code->plan_ids ?? [])->unique()->values()->all();
+        $categoryIds = $codes->flatMap(static fn(DiscountCode $code): array => $code->category_ids ?? [])->unique()->values()->all();
         $serverIds = $codes->flatMap(static fn(DiscountCode $code): array => $code->server_ids ?? [])->unique()->values()->all();
         $plans = $planIds === [] ? [] : Plan::query()->whereIn('id', $planIds)->pluck('name', 'id')->all();
+        $categories = $categoryIds === [] ? [] : PlanCategory::query()->whereIn('id', $categoryIds)->pluck('name', 'id')->all();
         $servers = $serverIds === [] ? [] : Server::query()->whereIn('id', $serverIds)->pluck('name', 'id')->all();
 
         return array_values($codes->map(static fn(DiscountCode $code): array => [
@@ -265,6 +268,7 @@ final class DiscountCodes
             'min_amount' => $code->min_amount,
             'order_types' => $code->order_types,
             'plans' => DiscountForm::named($code->plan_ids, $plans),
+            'categories' => DiscountForm::named($code->category_ids, $categories),
             'servers' => DiscountForm::named($code->server_ids, $servers),
             'first_purchase_only' => $code->first_purchase_only,
             'starts_at' => DiscountForm::moment($code->starts_at),
@@ -299,7 +303,7 @@ final class DiscountCodes
             $code->starts_at !== null && $code->starts_at > now() => sprintf(self::NOT_YET, Persian::date($code->starts_at, withTime: true)),
             $code->ends_at !== null && $code->ends_at <= now() => self::ENDED,
             !$code->takesKind($target->kind) => sprintf(self::WRONG_KIND, $target->kind->label()),
-            !$code->takesPlan($target->planId) => self::WRONG_PLAN,
+            !$code->takesPlan($target->planId, $target->categoryId) => self::WRONG_PLAN,
             !$code->takesServer($target->serverId) => self::WRONG_SERVER,
             !Money::isPositive($amount) => self::NOTHING_TO_TAKE,
             $code->min_amount !== null && Money::compare($amount, $code->min_amount) < 0 => sprintf(self::TOO_LITTLE, Money::format($code->min_amount)),
@@ -434,7 +438,7 @@ final class DiscountCodes
         $minAmount = self::amountOrNull($input, 'min_amount', 'حداقل مبلغ سفارش', $errors, least: 0);
 
         $orderTypes = DiscountForm::kinds($input['order_types'] ?? null, $errors);
-        $planIds = DiscountForm::ids($input['plan_ids'] ?? null, 'plan_ids', Plan::query(), 'پلن', $errors);
+        [$planIds, $categoryIds] = DiscountForm::plans($input, $errors);
         // A server the owner keeps from an agent's shop is none of its choices.
         $serverIds = DiscountForm::ids($input['server_ids'] ?? null, 'server_ids', Server::shown(), 'سرور', $errors);
         if (!Input::isBoolean($input['first_purchase_only'] ?? null)) {
@@ -463,6 +467,7 @@ final class DiscountCodes
             'min_amount' => $minAmount,
             'order_types' => $orderTypes,
             'plan_ids' => $planIds,
+            'category_ids' => $categoryIds,
             'server_ids' => $serverIds,
             'first_purchase_only' => Input::truthy($input['first_purchase_only']),
             'starts_at' => $window['starts_at'],

@@ -128,6 +128,26 @@ final class BotAreaSettingsSearchTest extends BotTestCase
         self::assertStringContainsString('موردی برای انتخاب نیست.', $this->said()[0]);
     }
 
+    public function testTheDailyReportsHourIsFoundOnTheTopicsCardAndAskedThere(): void
+    {
+        $this->owner(UserRole::Admin);
+
+        $this->send($this->tap(Nav::to('ss'), chat: self::OWNER));
+        $this->send($this->message('ساعت گزارش روزانه', chat: self::OWNER));
+        self::assertSame(Nav::to('rgt', 'f', 'daily_report_hour'), $this->callbacks($this->windowCall())[0] ?? null, 'first: the field, on «بخش‌های گزارش»');
+        $this->send($this->tap(Nav::to('rgt', 'f', 'daily_report_hour'), chat: self::OWNER));
+        self::assertStringContainsString('<b>✍️ ساعت گزارش روزانه</b>', $this->said()[0], 'asked at once');
+        self::assertStringContainsString(Words::LIMITS . ': از ۰ تا ۲۳', $this->said()[0]);
+        $this->send($this->message('۸', chat: self::OWNER));
+        self::assertSame(8, $this->settings()['daily_report_hour']);
+
+        // The words owners look for it by: the report group, and the schedule's start time beside its own.
+        $screens = static fn(string $query): array => array_map(static fn(SettingsEntry $entry): string => $entry->screen, SettingsIndex::find($query, static fn(): bool => true));
+        self::assertContains('rgt', $screens('گزارش روزانه'));
+        self::assertContains('rg', $screens('daily report'));
+        self::assertContains('ppj', $screens('ساعت شروع'));
+    }
+
     public function testTheSeatFindsOnlyItsOwnScreensAndThePanelsAloneSaysWhy(): void
     {
         $this->owner(UserRole::Admin);

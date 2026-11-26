@@ -101,7 +101,8 @@ step says what it takes, and waits for another.
 
 An order left unpaid expires after 48 hours of nothing, by default ([the task schedule](Running-In-Production.md#the-task-schedule))
 — except one whose receipt is with support, whose card payment went to support's private chat, whose online page still
-takes money, or whose online payment is held for support and still waits.
+takes money, whose online payment has money in at its gateway, not settled yet, or whose online payment is held for
+support and still waits.
 
 ### Paying by card
 
@@ -331,7 +332,8 @@ previous owner's screen orders nothing once it is handed on: a tap on it says th
 
 A service with an order the customer made still open waits for it («⚠️ این سرویس الان منتقل نمی‌شود: …») — a renewal or
 an extra waiting for its payment or receipt, or being delivered. An unpaid one is dropped by itself after 48 hours by default,
-unless its card transfer went to support's private chat; one whose delivery failed sends the customer to support, who
+unless its card transfer went to support's private chat or its online payment has money in at its gateway, not settled
+yet; one whose delivery failed sends the customer to support, who
 retries it or gives the money back. A customer who looked up 10 ids in 10 minutes, or handed on 5 services in an hour,
 waits a while.
 

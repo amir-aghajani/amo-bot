@@ -255,7 +255,8 @@ same way ([the shop](Store-API-Shop.md#what-it-sells)). Renewing a service witho
 lists only the categories that have one of them, and asks for a category only when they are in more than one
 ([Bot guide](Bot-Guide.md#renewing)).
 
-Deleting a category is always possible: its plans stay, without a category.
+Deleting a category is always possible: its plans stay, without a category — and a discount code or a sale held to the
+category no longer holds for them ([Discounts](Discounts.md#a-codes-fields)).
 
 ## Watch out for
 

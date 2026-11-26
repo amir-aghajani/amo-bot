@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Discounts\Services;
 
+use App\Modules\Catalog\Models\Plan;
+use App\Modules\Catalog\Models\PlanCategory;
 use App\Modules\Orders\Enums\OrderType;
 use App\Support\Input;
 use App\Support\LocalTime;
@@ -12,11 +14,14 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 
 /**
- * The fields a discount code's and a sale's forms share: the window, the kinds of order and the plans named. Each reader
- * adds its refusals to `$errors` under its field, so a form reports every mistake at once.
+ * The fields a discount code's and a sale's forms share: the window, the kinds of order and the plans and categories
+ * named. Each reader adds its refusals to `$errors` under its field, so a form reports every mistake at once.
  */
 final class DiscountForm
 {
+    /** The form's plans with nothing chosen (plans()): every plan is said by naming none, never by ticking nothing. */
+    public const NO_PLAN_CHOSEN = 'دست‌کم یک دسته یا پلن انتخاب کنید؛ برای همه پلن‌ها، «همه پلن‌ها» را انتخاب کنید.';
+
     private const NOT_A_MOMENT = 'زمان را به شکل روز و ساعت بنویسید.';
     private const BACKWARDS = 'زمان پایان باید بعد از زمان شروع باشد.';
 
@@ -88,8 +93,30 @@ final class DiscountForm
     }
 
     /**
-     * Rows named by id — the shop's plans, the servers —, each once and sorted; null (an empty list, or left out) for
-     * every one.
+     * The plans named one by one (`plan_ids`) and the categories whose plans it holds for, now and later (`category_ids`):
+     * each a list of the shop's rows (ids()), null for none; both null for every plan. Both sent as lists and both empty
+     * is a choice of nothing — «همه پلن‌ها» unticked and nothing ticked, or a code or sale whose categories and plans
+     * were all deleted since —, refused under `plan_ids` rather than taken as every plan; a plan list sent empty alone,
+     * as before there were categories, is every plan still.
+     *
+     * @param array<string, mixed> $input
+     * @param array<string, list<string>> $errors
+     * @return array{0: list<int>|null, 1: list<int>|null} The plans' ids and the categories'
+     */
+    public static function plans(array $input, array &$errors): array
+    {
+        $planIds = self::ids($input['plan_ids'] ?? null, 'plan_ids', Plan::query(), 'پلن', $errors);
+        $categoryIds = self::ids($input['category_ids'] ?? null, 'category_ids', PlanCategory::query(), 'دسته', $errors);
+        if (is_array($input['plan_ids'] ?? null) && is_array($input['category_ids'] ?? null) && $planIds === null && $categoryIds === null && !isset($errors['plan_ids']) && !isset($errors['category_ids'])) {
+            $errors['plan_ids'][] = self::NO_PLAN_CHOSEN;
+        }
+
+        return [$planIds, $categoryIds];
+    }
+
+    /**
+     * Rows named by id — the shop's plans, its plan categories, the servers —, each once and sorted; null (an empty list,
+     * or left out) for every one (the categories: for none, the plans saying the rest — plans()).
      *
      * @param Builder<covariant Model> $rows
      * @param array<string, list<string>> $errors

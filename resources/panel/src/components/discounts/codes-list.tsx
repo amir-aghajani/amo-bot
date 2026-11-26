@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { Copy, Plus, Search, TicketPercent } from 'lucide-react'
 import { CodeForm } from '@/components/discounts/code-form'
-import { kindsWords, namedWords } from '@/components/discounts/targets'
+import { kindsWords, namedWords, planReachWords } from '@/components/discounts/targets'
 import { windowWords } from '@/components/discounts/window'
 import { EmptyState } from '@/components/empty-state'
 import { ListView, PhoneFacts, RowTitleButton } from '@/components/list-view'
@@ -35,10 +35,11 @@ function codeWorth(code: Pick<DiscountCodeRow, 'type' | 'value' | 'max_discount'
   }
 }
 
-/** What a code holds for, in a short line: «خرید، تمدید · ۲ پلن · ۱ سرور · خرید اول · دست‌کم ۱۰۰٬۰۰۰ تومان». */
-function codeTargets(code: Pick<DiscountCodeRow, 'order_types' | 'plans' | 'servers' | 'first_purchase_only' | 'min_amount'>): string {
+/** What a code holds for, in a short line: «خرید، تمدید · دسته «ماهانه» و ۲ پلن · ۱ سرور · خرید اول · دست‌کم ۱۰۰٬۰۰۰ تومان». */
+function codeTargets(code: Pick<DiscountCodeRow, 'order_types' | 'plans' | 'categories' | 'servers' | 'first_purchase_only' | 'min_amount'>): string {
   const parts = [kindsWords(code.order_types)]
-  if (code.plans !== null) parts.push(namedWords('پلن', code.plans))
+  const plans = planReachWords(code.plans, code.categories)
+  if (plans !== null) parts.push(plans)
   if (code.servers !== null) parts.push(namedWords('سرور', code.servers))
   if (code.first_purchase_only) parts.push('خرید اول')
   if (code.min_amount !== null) parts.push(`دست‌کم ${formatMoney(code.min_amount)}`)

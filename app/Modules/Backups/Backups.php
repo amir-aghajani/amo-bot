@@ -7,6 +7,7 @@ namespace App\Modules\Backups;
 use App\Core\Exceptions\ValidationException;
 use App\Core\Scheduling\Scheduler;
 use App\Core\Support\Files;
+use App\Modules\Auth\Exceptions\ActorRefusedException;
 use App\Modules\Backups\Exceptions\BackupRefusedException;
 use App\Modules\Backups\Tasks\SendBackupsTask;
 use App\Modules\Bots\Models\Bot;
@@ -24,9 +25,20 @@ use Psr\Log\LoggerInterface;
  * scope's state just before kept first (the last KEEP of them, the older ones gone once a restore went through), to
  * download should the restore be the wrong one. Files made for a download, uploads not restored and their
  * descriptions, and files a write left half-made go after a while (prune(), also once a day from SendBackupsTask).
+ * A file made before MASKED_SINCE is the owner's and an agent's themselves alone, never an admin's working a bot's
+ * management with its seat (`$oldFiles` false): neither a state kept from before a restore to download, nor a file to
+ * restore.
  */
 final class Backups
 {
+    /**
+     * The version since which a backup holds no bot's webhook secret: BackupWriter writes the address masked whatever the
+     * database holds (BotState::webhookSet() keeps it so; database/upgrades/0.11.0.php masked those kept before). A file
+     * of an older one holds each bot's address whole — the main bot's secret alone lets an update in under the owner's
+     * Telegram account —: the owner's alone.
+     */
+    public const MASKED_SINCE = '0.11.0';
+
     /** How long an uploaded file waits to be restored. */
     public const UPLOAD_MINUTES = 30;
 
@@ -54,11 +66,11 @@ final class Backups
 
     /**
      * What the panel shows of `$scope`'s backups: what they hold, their sending to the report group, the states kept from
-     * before a restore, and what one upload here takes.
+     * before a restore (those made before MASKED_SINCE left out without `$oldFiles`), and what one upload here takes.
      *
      * @return array<string, mixed>
      */
-    public function status(BackupScope $scope): array
+    public function status(BackupScope $scope, bool $oldFiles): array
     {
         $shop = $scope->shop === null ? null : Bot::query()->find($scope->shop);
         $last = $this->settings->get(self::LAST_SENT);
@@ -73,7 +85,7 @@ final class Backups
                 'last_sent_at' => is_array($last) && is_string($last['at'] ?? null) ? $last['at'] : null,
                 'last_problem' => is_array($last) && is_string($last['problem'] ?? null) ? $last['problem'] : null,
             ],
-            'kept' => $this->kept($scope),
+            'kept' => $this->kept($scope, $oldFiles),
             'upload_max_bytes' => self::uploadLimit(),
         ];
     }
@@ -101,12 +113,13 @@ final class Backups
 
     /**
      * Check a file uploaded to restore into `$scope` and describe it — what it is of, when, what it holds, what a restore
-     * leaves out — kept under a token its restore names.
+     * leaves out — kept under a token its restore names. Without `$oldFiles`, a file made before MASKED_SINCE is refused.
      *
      * @return array<string, mixed>
      * @throws ValidationException (BackupRefusedException's words)
+     * @throws ActorRefusedException 403: a file made before MASKED_SINCE, without `$oldFiles`
      */
-    public function inspect(?UploadedFileInterface $upload, BackupScope $scope): array
+    public function inspect(?UploadedFileInterface $upload, BackupScope $scope, bool $oldFiles): array
     {
         $this->prune();
         if ($upload === null || $upload->getError() === UPLOAD_ERR_NO_FILE) {
@@ -126,6 +139,7 @@ final class Backups
         try {
             $contents = $this->reader->read($path);
             self::hold($contents, $scope);
+            self::holdOld($contents->appVersion, $oldFiles);
             $analysis = $this->restorer->analyse($path, $contents);
         } catch (\Throwable $e) {
             @unlink($path);
@@ -154,8 +168,9 @@ final class Backups
      *
      * @return array{rows: array<string, int>, kept: string}
      * @throws ValidationException
+     * @throws ActorRefusedException 403: a file made before MASKED_SINCE, without `$oldFiles`
      */
-    public function restore(string $token, BackupScope $scope): array
+    public function restore(string $token, BackupScope $scope, bool $oldFiles): array
     {
         $this->prune();
         $path = preg_match('/^[0-9a-f]{32}$/D', $token) === 1 ? $this->uploadPath($token) : '';
@@ -167,6 +182,7 @@ final class Backups
         // Read and held again: the file is what was checked, and the shop the one it was checked for.
         $contents = $this->reader->read($path);
         self::hold($contents, $scope);
+        self::holdOld($contents->appVersion, $oldFiles);
         $analysis = $this->restorer->analyse($path, $contents);
 
         $kept = $this->keep($scope);
@@ -185,27 +201,40 @@ final class Backups
     }
 
     /**
-     * The states kept from before a restore of `$scope`, newest first.
+     * The states kept from before a restore of `$scope`, newest first — without `$oldFiles`, those made before
+     * MASKED_SINCE left out.
      *
      * @return list<array{name: string, made_at: string, size: int}>
      */
-    public function kept(BackupScope $scope): array
+    public function kept(BackupScope $scope, bool $oldFiles): array
     {
         $kept = [];
         foreach (glob($this->folder('kept/' . self::scopeFolder($scope)) . '/*.json.gz') ?: [] as $path) {
-            $kept[] = ['name' => basename($path), 'made_at' => date(DATE_ATOM, (int) filemtime($path)), 'size' => (int) filesize($path)];
+            if ($oldFiles || !$this->holdsSecrets($path)) {
+                $kept[] = ['name' => basename($path), 'made_at' => date(DATE_ATOM, (int) filemtime($path)), 'size' => (int) filesize($path)];
+            }
         }
         usort($kept, static fn(array $a, array $b): int => strcmp($b['made_at'], $a['made_at']) ?: strcmp($b['name'], $a['name']));
 
         return $kept;
     }
 
-    /** The path of a state kept from before a restore of `$scope`; null for a name that is none of them. */
-    public function keptPath(BackupScope $scope, string $name): ?string
+    /**
+     * The path of a state kept from before a restore of `$scope`; null for a name that is none of them.
+     *
+     * @throws ActorRefusedException 403: one made before MASKED_SINCE, without `$oldFiles`
+     */
+    public function keptPath(BackupScope $scope, string $name, bool $oldFiles): ?string
     {
         $path = $this->folder('kept/' . self::scopeFolder($scope)) . '/' . $name;
+        if (preg_match('/^[A-Za-z0-9_.-]+\.json\.gz$/D', $name) !== 1 || !is_file($path)) {
+            return null;
+        }
+        if (!$oldFiles && $this->holdsSecrets($path)) {
+            throw ActorRefusedException::ownersBackup();
+        }
 
-        return preg_match('/^[A-Za-z0-9_.-]+\.json\.gz$/D', $name) === 1 && is_file($path) ? $path : null;
+        return $path;
     }
 
     /** What PHP takes in one upload here, bytes: the smaller of its two limits. */
@@ -268,6 +297,27 @@ final class Backups
         }
     }
 
+    /**
+     * A file made before MASKED_SINCE is restored only by whoever may have it (`$oldFiles`): its webhook addresses are
+     * masked by the restore, but the file itself is the owner's.
+     *
+     * @throws ActorRefusedException
+     */
+    private static function holdOld(string $version, bool $oldFiles): void
+    {
+        if (!$oldFiles && version_compare($version, self::MASKED_SINCE, '<')) {
+            throw ActorRefusedException::ownersBackup();
+        }
+    }
+
+    /** Whether a state kept from before a restore was made before MASKED_SINCE — or names no version, so is taken for one. */
+    private function holdsSecrets(string $path): bool
+    {
+        $version = $this->reader->version($path);
+
+        return $version === null || version_compare($version, self::MASKED_SINCE, '<');
+    }
+
     /** The scope's state now, kept before a restore. */
     private function keep(BackupScope $scope): string
     {
@@ -277,11 +327,11 @@ final class Backups
         return $name;
     }
 
-    /** The newest KEEP states kept from before a restore of `$scope`; the older ones go. */
+    /** The newest KEEP states kept from before a restore of `$scope` — of every one, whoever restored —; the older ones go. */
     private function keepOnly(BackupScope $scope): void
     {
         $folder = $this->folder('kept/' . self::scopeFolder($scope));
-        foreach (array_slice($this->kept($scope), self::KEEP) as $old) {
+        foreach (array_slice($this->kept($scope, true), self::KEEP) as $old) {
             @unlink($folder . '/' . $old['name']);
         }
     }

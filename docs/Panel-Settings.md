@@ -44,7 +44,11 @@ answered in the last two minutes) or «مشکل دارد» (neither: the bots ge
 - **«برداشتن Webhook»** — asks first, then takes every bot off webhooks: «Webhook برداشته شد؛ ربات تا Webhook دوباره
   ثبت نشود پیامی روی هاست نمی‌گیرد: در همین کارت «ثبت Webhook» را بزنید.» A shop on a host gets nothing until
   «ثبت Webhook» is pressed again (only a developer's machine, running the poller, receives updates without one —
-  [Console commands](Console-Commands.md)).
+  [Console commands](Console-Commands.md)). Taken off, every agent's bot forgets its webhook secret — one that is off,
+  or has no token, too —, so the next registration of each gives it a new one: the way to renew them, after making the
+  main bot's new «رمز Webhook» above. A running bot whose take-down Telegram refused keeps its secret («ثبت Webhook»
+  puts it right), and a plain «ثبت دوباره Webhook» keeps them all. Meanwhile Telegram keeps the bots' messages and
+  delivers them once the webhooks are registered again.
 
 Each bot's outcome is said on its own line — the main bot's token refused, an agent's (they send a new one from the main
 bot's «ربات من»), another program polling the same bot, Telegram out of reach.
@@ -187,12 +191,16 @@ Everything about it: [Importing from another bot](Importing.md).
 
 ## The task schedule
 
-«زمان‌بندی کارها» — how often each scheduled task runs, and the times a few of them decide by: when an unpaid order is
-dropped, how the online gateways are asked about a payment, and how long the website's notices, the tickets' pictures
-and the report group's messages are kept. One for the whole installation, every shop's work with it. Each task shows
-what it does, whether it runs in each shop, and when it last ran and is next due. The page is saved as one form: every
-value checked, and all kept or none; one left at its default follows the default of a later version. Every task, its
-default and its bounds: [the task schedule](Running-In-Production.md#the-task-schedule).
+«زمان‌بندی کارها» — how often each scheduled task runs and from what time of day («ساعت شروع»), and the times a few of
+them decide by: when an unpaid order is dropped, how the online gateways are asked about a payment, and how long the
+website's notices, the tickets' pictures and the report group's messages are kept. One for the whole installation,
+every shop's work with it. Each task shows what it does, whether it runs in each shop, and when it last ran and is next
+due. The page is saved as one form: every value checked, and all kept or none; one left at its default follows the
+default of a later version. A start is a time of day on the shop's clock — `HH:MM`, Persian digits, a bare hour or «،»
+for the colon taken too, any space left out —, and goes by that clock at a daylight-saving change: a time the clock
+skips in spring runs once, at the first minute after it, and in the hour a fall-back repeats a task every hour or more
+often keeps running, while a daily one runs once. Every task, its default and its
+bounds: [the task schedule](Running-In-Production.md#the-task-schedule).
 
 ## Advanced
 

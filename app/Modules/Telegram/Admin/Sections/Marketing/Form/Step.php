@@ -16,10 +16,12 @@ use App\Support\Unit;
  * One field of a form the bot asks as a wizard (FormScreen), as the panel's form has it: the draft's key for it, the API's
  * field it is sent as, its label — the review card's — and its question — the step's title, a question («چند درصد؟») —,
  * its hint, and how it is set: typed (text, a code, a count, a percent, an amount of money, a decimal, a day and hour), a
- * choice among buttons, several of them (`all`: none named is every one), or a switch — a record's «فعال» one said as its
- * chip (active()). `when` shows it only while another field's value is one of those; `optional` lets it be left empty
- * (`none`: what empty means); a field not `walked` is set from the review alone (the panel's «محدودیت‌های بیشتر»);
- * `quick` offers values at a tap; a typed one says its limits (range()) and an example.
+ * choice among buttons, several of them (`all`: none named is every one — unless refusesNone(), «همه» then a button of
+ * its own), or a switch — a record's «فعال» one said as its chip (active()). It may be sent as more than one of the
+ * API's fields (as(): a code's plans and categories), a refusal under any marked on it. `when` shows it only while
+ * another field's value is one of those; `optional` lets it be left empty (`none`: what empty means); a field not
+ * `walked` is set from the review alone (the panel's «محدودیت‌های بیشتر»); `quick` offers values at a tap; a typed one
+ * says its limits (range()) and an example.
  */
 final class Step
 {
@@ -36,6 +38,12 @@ final class Step
 
     /** The API's field it is sent as (a refusal names it). */
     public string $field;
+
+    /**
+     * @var list<string> The API's other fields it is sent as too (a code's categories beside its plans): a refusal under
+     *                   one is marked on it as well
+     */
+    public array $also = [];
 
     /** The step's title: what it asks. */
     public string $question;
@@ -54,6 +62,13 @@ final class Step
 
     /** MULTI: the label of every one (null); empty — at least one must be ticked. */
     public string $all = '';
+
+    /**
+     * MULTI with `all`, of rows that may be deleted (a code's categories and plans): «✔️ تایید» with none ticked is refused
+     * with this alert — every one is `all`'s own button —, a choice deleted since is let go on it and said «حذف‌شده»
+     * meanwhile; '' takes none ticked as every one.
+     */
+    public string $noneTicked = '';
 
     /** MOMENT: the hour a day typed alone stands for. */
     public int $hour = 0;
@@ -203,12 +218,23 @@ final class Step
         return $this;
     }
 
-    /** Sent to the API under `$field`. */
-    public function as(string $field): self
+    /** Sent to the API under `$field` — and under `$also` too, a refusal under any marked on it. */
+    public function as(string $field, string ...$also): self
     {
         $this->field = $field;
+        $this->also = array_values($also);
 
         return $this;
+    }
+
+    /**
+     * The API's fields it is sent as: its own, then the others.
+     *
+     * @return list<string>
+     */
+    public function fields(): array
+    {
+        return [$this->field, ...$this->also];
     }
 
     /** MULTI: none named is every one, `$label` its words. */
@@ -217,6 +243,25 @@ final class Step
         $this->all = $label;
 
         return $this;
+    }
+
+    /** MULTI with `all`, of rows that may be deleted: «✔️ تایید» with none ticked refused with `$alert` (noneTicked). */
+    public function refusesNone(string $alert): self
+    {
+        $this->noneTicked = $alert;
+
+        return $this;
+    }
+
+    /**
+     * MULTI: of `$chosen`, those still among its choices, in their order.
+     *
+     * @param list<mixed> $chosen
+     * @return list<int|string>
+     */
+    public function offered(array $chosen): array
+    {
+        return array_values(array_filter(array_keys($this->options()), static fn(int|string $key): bool => in_array($key, $chosen, true)));
     }
 
     /** A whole number from `$min` to `$max`. */
@@ -350,7 +395,9 @@ final class Step
                 return Fmt::e($this->all !== '' ? $this->all : $this->none);
             }
             $options = $this->options();
-            $names = array_map(static fn(mixed $one): string => $options[is_int($one) || is_string($one) ? $one : ''] ?? Fmt::digits(is_scalar($one) ? (string) $one : ''), $value);
+            // A choice no longer offered: a deleted row, said so where rows may be deleted (noneTicked), else as kept.
+            $gone = fn(mixed $one): string => $this->noneTicked !== '' ? 'حذف‌شده' : Fmt::digits(is_scalar($one) ? (string) $one : '');
+            $names = array_map(static fn(mixed $one): string => $options[is_int($one) || is_string($one) ? $one : ''] ?? $gone($one), $value);
 
             return $names === [] ? 'هیچ‌کدام' : Fmt::e(Fmt::cut(implode('، ', $names), 160));
         }

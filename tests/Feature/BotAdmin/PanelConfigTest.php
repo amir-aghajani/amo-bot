@@ -193,33 +193,112 @@ final class PanelConfigTest extends BotTestCase
         self::assertContains(['text' => Words::SAVE, 'callback_data' => Nav::to('ppa', 'save'), 'style' => 'success'], array_merge(...$this->inlineKeyboard(0)));
     }
 
-    public function testAnAdminSavesNoWebhookSecretOfTheirOwn(): void
+    /**
+     * The main bot's token, @username, Bot API address and webhook secret are the owner's themselves alone: an admin sees
+     * them with «🔒», is offered none to edit — an older window's button is refused in the API's words —, saves the rest
+     * of the card, and a token checked fills in no @username of theirs; the owner's own linked account edits them all.
+     */
+    public function testAnAdminSeesTheMainBotsOwnersOnlyFieldsLockedAndSavesTheRest(): void
     {
-        $this->file->setMany(['TELEGRAM_WEBHOOK_SECRET' => 'owners_secret-0123456789']);
+        $this->file->setMany(['TELEGRAM_WEBHOOK_SECRET' => 'owners_secret-0123456789', 'TELEGRAM_BOT_TOKEN' => self::TOKEN, 'TELEGRAM_API_URL' => 'https://api.telegram.org']);
         $this->customer(['telegram_id' => 7100, 'role' => UserRole::Admin]);
 
-        $this->send($this->tap(Nav::to('ppt', 'e', 5), chat: 7100));
-        $this->send($this->message('admins_secret-0123456789', chat: 7100));
-        $this->send($this->tap(Nav::to('ppt', 'save'), chat: 7100));
-        self::assertSame(ActorRefusedException::OWNERS_SECRET, $this->popup(), 'the panel\'s refusal, as a popup');
-        self::assertSame('owners_secret-0123456789', $this->file->get('TELEGRAM_WEBHOOK_SECRET'), 'nothing written');
+        $this->send($this->tap(Nav::to('ppt'), chat: 7100));
+        self::assertStringContainsString('🔒 «توکن ربات اصلی»، «نام کاربری ربات اصلی»، «آدرس', $this->said()[0], 'each said to be the owner\'s');
+        foreach ([0, 1, 2, 5] as $field) {
+            self::assertNotContains(Nav::to('ppt', 'e', $field), $this->callbacks(0), "field {$field}: not offered");
+        }
+        self::assertContains(Nav::to('ppt', 'e', 4), $this->callbacks(0), 'the polling timeout is theirs');
 
-        $this->send($this->tap(Nav::to('ppt', 'e', 5), chat: self::OWNER));
-        $this->send($this->message('new_secret-0123456789ab', chat: self::OWNER));
-        $this->send($this->tap(Nav::to('ppt', 'save'), chat: self::OWNER));
+        foreach ([0 => ActorRefusedException::OWNERS_BOT, 1 => ActorRefusedException::OWNERS_BOT, 2 => ActorRefusedException::OWNERS_API, 5 => ActorRefusedException::OWNERS_SECRET] as $field => $refusal) {
+            $this->send($this->tap(Nav::to('ppt', 'e', $field), chat: 7100));
+            self::assertSame($refusal, $this->popup(), "field {$field}: an older window's button, refused in the API's words");
+            self::assertNotContains('deleteMessage', $this->calls());
+        }
+
+        $this->telegram()->reply(['id' => 123456789, 'is_bot' => true, 'first_name' => 'فروشگاه', 'username' => 'another_name_bot']);
+        $this->send($this->tap(Nav::to('ppt', 'test'), chat: 7100));
+        self::assertStringContainsString('another_name_bot', implode("\n", $this->said()), 'the kept token checked');
+        $this->send($this->tap(Nav::to('ppt', 'e', 4), chat: 7100));
+        $this->send($this->message('25', chat: 7100));
+        $this->send($this->tap(Nav::to('ppt', 'save'), chat: 7100));
+        self::assertSame('✅ تنظیمات ربات ذخیره شد.', $this->popup(), 'no @username filled in that the save would be refused');
+        self::assertSame(
+            [25, self::TOKEN, 'owners_secret-0123456789', 'https://api.telegram.org'],
+            [$this->file->get('TELEGRAM_POLL_TIMEOUT'), $this->file->get('TELEGRAM_BOT_TOKEN'), $this->file->get('TELEGRAM_WEBHOOK_SECRET'), $this->file->get('TELEGRAM_API_URL')],
+            'the rest saved, the owner\'s left as they are',
+        );
+        self::assertNotSame('another_name_bot', $this->file->get('TELEGRAM_BOT_USERNAME'), 'the @username the check told left out');
+
+        $this->tapAs(Nav::to('ppt'));
+        self::assertStringNotContainsString('🔒', $this->said()[0], 'nothing locked to the owner');
+        $this->tapAs(Nav::to('ppt', 'e', 5));
+        $this->sayAs('new_secret-0123456789ab');
+        $this->tapAs(Nav::to('ppt', 'save'));
         self::assertSame('new_secret-0123456789ab', $this->file->get('TELEGRAM_WEBHOOK_SECRET'), 'the owner\'s own linked account saves it');
     }
 
-    public function testAnAdminMovesNoBotApiAddressFromTheBot(): void
+    /** The site's address is the owner's themselves alone: an admin sees it with «🔒» and saves the card's rest. */
+    public function testAnAdminSeesTheSiteAddressLockedAndSavesTheRest(): void
     {
-        $this->file->setMany(['TELEGRAM_API_URL' => 'https://api.telegram.org']);
+        $this->file->setMany(['APP_URL' => 'https://shop.example.com']);
         $this->customer(['telegram_id' => 7100, 'role' => UserRole::Admin]);
 
-        $this->send($this->tap(Nav::to('ppt', 'e', 2), chat: 7100));
-        $this->send($this->message('https://botapi.example', chat: 7100));
-        $this->send($this->tap(Nav::to('ppt', 'save'), chat: 7100));
-        self::assertSame(ActorRefusedException::OWNERS_PASSWORD, $this->popup(), 'the owner\'s alone: refused, no password typed');
-        self::assertSame('https://api.telegram.org', $this->file->get('TELEGRAM_API_URL'), 'nothing written');
+        $this->send($this->tap(Nav::to('ppa'), chat: 7100));
+        self::assertStringContainsString('🔒 «آدرس سایت» را فقط خود مالک عوض می‌کند.', $this->said()[0]);
+        self::assertNotContains(Nav::to('ppa', 'e', 1), $this->callbacks(0));
+        $this->send($this->tap(Nav::to('ppa', 'e', 1), chat: 7100));
+        self::assertSame(ActorRefusedException::OWNERS_ADDRESS, $this->popup());
+
+        $this->send($this->tap(Nav::to('ppa', 'e', 0), chat: 7100));
+        $this->send($this->message('فروشگاه تازه', chat: 7100));
+        $this->send($this->tap(Nav::to('ppa', 'save'), chat: 7100));
+        self::assertSame(['فروشگاه تازه', 'https://shop.example.com'], [$this->file->get('APP_NAME'), $this->file->get('APP_URL')], 'the name saved, the address sent as it stands');
+
+        $this->tapAs(Nav::to('ppa', 'e', 1));
+        $this->sayAs('https://new.example.com');
+        $this->tapAs(Nav::to('ppa', 'save'));
+        self::assertSame('https://new.example.com', $this->file->get('APP_URL'), 'the owner\'s own linked account moves it');
+    }
+
+    /** The panels' session is the owner's own sign-in: an admin sees its two fields with «🔒» and saves the card's rest. */
+    public function testAnAdminSeesThePanelsSessionLockedAndSavesTheRest(): void
+    {
+        $this->file->setMany(['SESSION_LIFETIME' => 120, 'SESSION_SECURE_COOKIE' => false, 'OUTGOING_HTTP_TIMEOUT' => 30]);
+        $this->customer(['telegram_id' => 7100, 'role' => UserRole::Admin]);
+
+        $this->send($this->tap(Nav::to('ppv'), chat: 7100));
+        self::assertStringContainsString("🔒 «طول \u{2068}Session\u{2069} پنل‌ها»، «کوکی \u{2068}Session\u{2069} همیشه امن» را فقط خود مالک عوض می‌کند.", $this->said()[0]);
+        self::assertNotContains(Nav::to('ppv', 'e', 1), $this->callbacks(0));
+        self::assertNotContains(Nav::to('ppv', 'e', 3, 1), $this->callbacks(0));
+        foreach ([1, 3] as $field) {
+            $this->send($this->tap(Nav::to('ppv', 'e', $field, 1), chat: 7100));
+            self::assertSame(ActorRefusedException::OWNERS_SESSION, $this->popup(), "field {$field}");
+        }
+
+        $this->send($this->tap(Nav::to('ppv', 'e', 0), chat: 7100));
+        $this->send($this->tap(Nav::to('ppv', 'c', 0, 3), chat: 7100));
+        $this->send($this->tap(Nav::to('ppv', 'save'), chat: 7100));
+        self::assertSame('✅ تنظیمات پیشرفته ذخیره شد.', $this->popup());
+        self::assertSame(['warning', 120, false], [$this->file->get('LOG_LEVEL'), $this->file->get('SESSION_LIFETIME'), $this->file->get('SESSION_SECURE_COOKIE')], 'the log saved, the session as it stood');
+    }
+
+    /** The database is the owner's themselves alone to save or try: an admin is not offered its card at all. */
+    public function testAnAdminIsNotOfferedTheDatabase(): void
+    {
+        $this->customer(['telegram_id' => 7100, 'role' => UserRole::Admin]);
+
+        $this->send($this->tap(Nav::to('pp'), chat: 7100));
+        self::assertNotContains(Nav::to('ppd'), $this->callbacks(0));
+        self::assertContains(Nav::to('ppa'), $this->callbacks(0), 'the rest of config.php is still theirs');
+
+        $this->mysql->probed = [];
+        $this->send($this->tap(Nav::to('ppd', 'test'), chat: 7100));
+        self::assertStringContainsString('مدیریت فروشگاه', $this->said()[0], 'a screen it may not open is the home');
+        self::assertSame([], $this->mysql->probed, 'nothing tried');
+
+        $this->tapAs(Nav::to('pp'));
+        self::assertContains(Nav::to('ppd'), $this->callbacks(0), 'the owner\'s own linked account has it');
     }
 
     public function testAnAgentHasNoneOfTheFileButTheirBackups(): void

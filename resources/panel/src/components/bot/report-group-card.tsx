@@ -17,7 +17,8 @@ import { useMainShop } from '@/lib/auth'
  * the queue, with a test, a check and disconnecting. Every action applies at once.
  */
 export function ReportGroupCard() {
-  // The agency's requests are reported in the main bot's group alone.
+  // The agency's requests are reported in the main bot's group alone. The description's words up to that choice are one
+  // string, so no line break before it reads as a space before «،» in the settings search.
   const mainShop = useMainShop()
   const read = useReportGroup()
   const { data: group, refetch } = read
@@ -40,8 +41,9 @@ export function ReportGroupCard() {
         <CardHeading>
           <CardTitle>گروه گزارش‌ها</CardTitle>
           <CardDescription>
-            گزارش خریدها، تمدیدها، اکانت‌های تست، حذف سرویس‌ها، شارژ کیف پول، رسیدها، کاربران جدید، خطاها، تیکت‌ها، نظرات{mainShop ? '، پشتیبان‌ها و درخواست‌های نمایندگی' : ' و پشتیبان‌ها'} در یک گروه
-            تلگرام، هر کدام در تاپیک خودش. ربات تاپیک‌ها را خودش می‌سازد و مدیرهای ربات رسیدها را همان‌جا با دکمه تایید یا رد می‌کنند و با ریپلای به تیکت‌ها پاسخ می‌دهند.
+            {'گزارش خریدها، تمدیدها، اکانت‌های تست، حذف سرویس‌ها، شارژ کیف پول، رسیدها، کاربران جدید، خطاها، تیکت‌ها، نظرات، پشتیبان‌ها'}
+            {mainShop ? '، آمار روزانه و درخواست‌های نمایندگی' : ' و آمار روزانه'} در یک گروه تلگرام، هر کدام در تاپیک خودش. ربات تاپیک‌ها را خودش می‌سازد و مدیرهای ربات رسیدها را همان‌جا با دکمه
+            تایید یا رد می‌کنند و با ریپلای به تیکت‌ها پاسخ می‌دهند.
           </CardDescription>
         </CardHeading>
       </CardHeader>

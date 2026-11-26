@@ -119,6 +119,14 @@ describe('the Telegram card', () => {
 
     fireEvent.change(screen.getByLabelText('آدرس API تلگرام'), { target: { value: 'https://api.telegram.org/mirror' } })
     expect(screen.queryByLabelText('رمز عبور فعلی پنل')).toBeNull()
+    // A port in Persian digits is that port, as the server saves it: another origin.
+    fireEvent.change(screen.getByLabelText('آدرس API تلگرام'), { target: { value: 'https://api.telegram.org:۸۴۴۳' } })
+    expect(screen.getByLabelText('رمز عبور فعلی پنل')).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('آدرس API تلگرام'), { target: { value: 'https://api.telegram.org:8٬443' } })
+    expect(screen.getByLabelText('رمز عبور فعلی پنل')).toBeTruthy()
+    // A host the browser would fold (fullwidth letters) the server compares as typed: a move too.
+    fireEvent.change(screen.getByLabelText('آدرس API تلگرام'), { target: { value: 'https://ａｐｉ.telegram.org' } })
+    expect(screen.getByLabelText('رمز عبور فعلی پنل')).toBeTruthy()
 
     fireEvent.change(screen.getByLabelText('آدرس API تلگرام'), { target: { value: 'https://bot-api.example.com' } })
     expect(screen.getByText(/توکن همه ربات‌ها، ربات‌های نماینده‌ها هم، به آن فرستاده می‌شود/)).toBeTruthy()

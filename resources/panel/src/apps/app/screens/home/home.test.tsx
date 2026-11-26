@@ -15,7 +15,7 @@ vi.mock('@/apps/app/config', () => import('@/apps/app/test/config'))
  * the card that leads to buying when nothing runs. The bell is read again every minute, not while minimised in Telegram.
  */
 
-const SALE: StoreSale = { id: 4, name: 'فروش ویژه پاییز', percent: 20, ends_at: new Date(Date.now() + 2 * 86_400_000).toISOString(), plan_ids: null, order_types: null }
+const SALE: StoreSale = { id: 4, name: 'فروش ویژه پاییز', percent: 20, ends_at: new Date(Date.now() + 2 * 86_400_000).toISOString(), plan_ids: null, category_ids: null, order_types: null }
 
 function page(services: StoreSubscription[], total = services.length): StoreSubscriptionsResponse {
   return { subscriptions: services, meta: { page: 1, per_page: 25, total, last_page: 1 } }

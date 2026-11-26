@@ -29,6 +29,6 @@ final class WiringTest extends DatabaseTestCase
     {
         $task = $this->service(Scheduler::class)->tasks()[PruneImportsTask::class] ?? null;
 
-        self::assertSame(['key' => 'prune_imports', 'interval' => 24 * 60 * 60, 'eachBot' => false], $task === null ? null : array_diff_key($task, ['task' => true]), 'once a day, for the installation as a whole');
+        self::assertSame(['key' => 'prune_imports', 'interval' => 24 * 60 * 60, 'start' => 180, 'eachBot' => false], $task === null ? null : array_diff_key($task, ['task' => true]), 'once a day, for the installation as a whole');
     }
 }

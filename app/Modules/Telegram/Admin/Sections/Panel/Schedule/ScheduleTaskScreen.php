@@ -19,11 +19,12 @@ use App\Modules\Telegram\Admin\Ui\View;
 use App\Modules\Telegram\Admin\Ui\Words;
 
 /**
- * One scheduled task (ScheduleScreen's, by its place): what it does, when it last ran and is next due, how often it runs
- * and the times it decides by — each beside its default, typed anew or put back to it, the schedule saved whole with the
- * one changed.
+ * One scheduled task (ScheduleScreen's, by its place): what it does, when it last ran and is next due, how often it runs,
+ * from what time of day («ساعت شروع», "HH:MM") and the times it decides by — each beside its default, typed anew or put
+ * back to it, the schedule saved whole with the one changed.
  *
- * Actions: `e` (task, field: asks), `df` (task, field: its default).
+ * Actions: `e` (task, field: asks), `df` (task, field: its default), `es` (task: asks its start), `ds` (task: its start's
+ * default).
  */
 final class ScheduleTaskScreen extends BaseScreen
 {
@@ -52,6 +53,7 @@ final class ScheduleTaskScreen extends BaseScreen
         ];
         $hints = [];
         $buttons = [];
+        $start = ScheduleScreen::start($task);
         foreach (ScheduleScreen::fields($task) as $place => $field) {
             $label = (string) ($field['label'] ?? '');
             $value = (int) ($field['value'] ?? 0);
@@ -62,6 +64,12 @@ final class ScheduleTaskScreen extends BaseScreen
                 $hints[] = '<b>' . Fmt::e($label) . '</b>: ' . Fmt::e($field['hint']);
             }
             $buttons[] = Button::to(Words::edit($label), self::ID, 'e', $index, $place);
+            if ($place === 0) {
+                // Its start, right after its interval: the two say when it runs.
+                $facts[$start['label']] = Fmt::digits($start['value']) . ($start['value'] === $start['default'] ? '' : ' ✏️ (پیش‌فرض: ' . Fmt::digits($start['default']) . ')');
+                $hints[] = '<b>' . Fmt::e($start['label']) . '</b>: ' . Fmt::e($start['hint']);
+                $buttons[] = Button::to(Words::edit($start['label']), self::ID, 'es', $index);
+            }
         }
 
         return $view->card($facts)->tiles(...$buttons)->help(implode("\n\n", $hints))->back(ScheduleScreen::ID);
@@ -70,6 +78,9 @@ final class ScheduleTaskScreen extends BaseScreen
     public function act(Admin $admin, string $action, array $args): View
     {
         $tasks = ScheduleScreen::tasks(ScheduleScreen::read($admin));
+        if (in_array($action, ['es', 'ds'], true)) {
+            return $this->startAct($admin, $action, $tasks, self::id($args));
+        }
         $field = ScheduleScreen::fields($tasks[self::id($args)] ?? [])[self::id($args, 1)] ?? null;
         if ($field === null) {
             return $this->show($admin, $args);
@@ -96,6 +107,12 @@ final class ScheduleTaskScreen extends BaseScreen
     public function input(Admin $admin, string $action, array $args, Answer $answer): View
     {
         $tasks = ScheduleScreen::tasks(ScheduleScreen::read($admin));
+        if ($action === 'es' && isset($tasks[self::id($args)])) {
+            // As typed — «۰۲:۳۰», "2:30" —: the server reads it, and refuses what is no time of day.
+            $this->save($admin, $tasks, ScheduleScreen::start($tasks[self::id($args)])['name'], trim($answer->text()));
+
+            return $this->show($admin, [(string) self::id($args)]);
+        }
         $field = ScheduleScreen::fields($tasks[self::id($args)] ?? [])[self::id($args, 1)] ?? null;
         if ($action === 'e' && $field !== null) {
             $value = $answer->integer() ?? throw new ApiRefusal(422, Words::NOT_NUMBER);
@@ -106,12 +123,40 @@ final class ScheduleTaskScreen extends BaseScreen
     }
 
     /**
+     * A task's start: `es` asks it, `ds` puts its default back.
+     *
+     * @param list<array<string, mixed>> $tasks
+     */
+    private function startAct(Admin $admin, string $action, array $tasks, int $index): View
+    {
+        $task = $tasks[$index] ?? null;
+        if ($task === null) {
+            return $admin->open(ScheduleScreen::ID);
+        }
+        $start = ScheduleScreen::start($task);
+        if ($action === 'ds') {
+            $this->save($admin, $tasks, $start['name'], $start['default']);
+
+            return $this->show($admin, [(string) $index]);
+        }
+        $prompt = (new Prompt($start['label'], self::ID, 'es', [$index], Fmt::e($start['hint']), Button::to(Words::CANCEL, self::ID, 'show', $index)))
+            ->current(Fmt::digits($start['value']))
+            ->example('۰۰:۰۳')
+            ->limits('از ۰۰:۰۰ تا ۲۳:۵۹، به وقت منطقه زمانی فروشگاه');
+        if ($start['value'] !== $start['default']) {
+            $prompt->resettable(self::ID, 'ds', $index);
+        }
+
+        return $admin->ask($prompt);
+    }
+
+    /**
      * The schedule saved whole, `$name` as `$value`.
      *
      * @param list<array<string, mixed>> $tasks
      * @throws ApiRefusal
      */
-    private function save(Admin $admin, array $tasks, string $name, int $value): void
+    private function save(Admin $admin, array $tasks, string $name, int|string $value): void
     {
         $admin->api->put('/schedule', array_replace(ScheduleScreen::body($tasks), [$name => $value]));
         $admin->notice('✅ زمان‌بندی ذخیره شد.');

@@ -2681,7 +2681,7 @@ export interface ConfigTelegramRequest {
   clear_token?: boolean
   /** The bot's username, with or without the @; blank for none. */
   username?: string
-  /** The Bot API's address: http(s) with a host, without credentials, ? or #. Moving it to another origin (scheme, host or port) sends every bot's token there, agents' included, so the save then needs `current_password` — and the owner themselves: an admin of the main bot is refused it (403). */
+  /** The Bot API's address: http(s) with a host, without credentials, ? or #. Moving it to another origin (scheme, host or port) sends every bot's token there, agents' included, so the save then needs `current_password`. Any change of it, its path on the same server too, is the owner's themselves alone: an admin of the main bot is refused it (403), the password never judged. */
   api_url: string
   /** The owner's current panel password. Read only when `api_url` moves to another origin: blank or wrong (a wrong one counts as a failed sign-in) is a 422 on it, and nothing is saved. */
   current_password?: string
@@ -2809,8 +2809,9 @@ export interface SmsCreditResponse {
 export interface ConfigAdvancedRequest {
   /** One of `meta.log_levels`; anything else is refused. */
   log_level: string
-  /** Minutes, 5 to 43200. */
+  /** Minutes, 5 to 43200. A change is the owner's themselves alone: an admin of the main bot is refused it (403). */
   session_lifetime: WholeNumberInput
+  /** A change is the owner's themselves alone: an admin of the main bot is refused it (403). */
   session_secure_cookie: boolean
   /** Seconds, 5 to 120. */
   http_timeout: WholeNumberInput
@@ -4777,8 +4778,10 @@ export interface DiscountCodeRow {
   min_amount: string | null
   /** The order types it applies to; null for every type a discount can apply to. */
   order_types: OwnOrderType[] | null
-  /** The plans it applies to (for a renewal or extra, the service's plan); null for any. */
+  /** The plans it names one by one (for a renewal or extra, the service's plan counts); null for none. With `categories`, it applies to these plans and to every plan in those categories; both null: any plan. */
   plans: NamedRef[] | null
+  /** The plan categories it names: it applies to every plan filed under one as the plan is at checkout — a plan moved there later too, and one in a category switched off; null for none. Plans and categories deleted since are left out of both lists, and a code whose plans and categories are all gone applies to no plan (an empty list here, or in `plans`, is not null). */
+  categories: NamedRef[] | null
   /** The servers it applies to (for a purchase, the chosen server; for a renewal or extra, the service's); null for any. */
   servers: NamedRef[] | null
   /** Only for customers who have not bought a service yet. */
@@ -4823,8 +4826,10 @@ export interface DiscountCodeRequest {
   min_amount?: AmountInput | null
   /** At least one; null (or all of them) for every type. */
   order_types?: OwnOrderType[] | null
-  /** Plan ids; null or empty for any. */
+  /** Plan ids named one by one; null or empty for none. With `category_ids` null or left out too, the code applies to any plan; both sent as lists and both empty is refused under `plan_ids` (a choice of nothing — say any plan with null). A row read with `plans: []` (its plans deleted since) and `categories: null`, sent back as read, is a lone empty `plan_ids`: every plan. */
   plan_ids?: number[] | null
+  /** Plan category ids: the code applies to every plan in them, as the plan is filed at checkout, besides the plans of `plan_ids`. Null or empty for none; a category deleted since is a 422 on it. A service built by the customer, with no plan, is reached only by a code of every plan (both null or left out). */
+  category_ids?: number[] | null
   /** Server ids; null or empty for any. */
   server_ids?: number[] | null
   first_purchase_only: boolean
@@ -4844,7 +4849,7 @@ export interface DiscountSwitchRequest {
   enabled: boolean
 }
 
-/** A timed sale («فروش ویژه»): a percent off the listed plans, for the listed order types, between its start and end. It is one of the automatic discounts; at checkout the largest applies. */
+/** A timed sale («فروش ویژه»): a percent off the listed plans and the plans of the listed categories, for the listed order types, between its start and end. It is one of the automatic discounts; at checkout the largest applies. */
 export interface SaleRow {
   id: number
   /** The name customers see, such as «فروش ویژه نوروز». */
@@ -4852,8 +4857,10 @@ export interface SaleRow {
   percent: number
   /** Null for every type a discount can apply to. */
   order_types: OwnOrderType[] | null
-  /** Null for every plan (for an extra, the service's plan counts). */
+  /** The plans it names one by one (for an extra, the service's plan counts); null for none. With `categories` null too, every plan. */
   plans: NamedRef[] | null
+  /** The plan categories it names: it takes its percent off every plan filed under one as the plan is at checkout — a plan moved there later too, and one in a category switched off; null for none. Plans and categories deleted since are left out, and a sale whose plans and categories are all gone holds for no plan (an empty list is not null). */
+  categories: NamedRef[] | null
   starts_at: string | null
   ends_at: string | null
   enabled: boolean
@@ -4877,8 +4884,10 @@ export interface SaleRequest {
   percent: WholeNumberInput
   /** At least one; null (or all of them) for every type. */
   order_types?: OwnOrderType[] | null
-  /** Plan ids; null or empty for every plan. */
+  /** Plan ids named one by one; null or empty for none. With `category_ids` null or left out too, the sale is on every plan; both sent as lists and both empty is refused under `plan_ids` (a choice of nothing — say every plan with null). A row read with `plans: []` (its plans deleted since) and `categories: null`, sent back as read, is a lone empty `plan_ids`: every plan. */
   plan_ids?: number[] | null
+  /** Plan category ids: the sale is on every plan in them, as the plan is filed at checkout, besides the plans of `plan_ids`. Null or empty for none; a category deleted since is a 422 on it. A service built by the customer, with no plan, is reached only by a sale of every plan (both null or left out). */
+  category_ids?: number[] | null
   /** A local date and time in the shop's time zone, such as 2026-03-20T00:00. Blank or null: from now. */
   starts_at?: string | null
   /** The same format, after `starts_at`. Blank or null: no end. */
@@ -4887,7 +4896,7 @@ export interface SaleRequest {
 }
 
 export interface BotSettingsData {
-  /** «کدهای تخفیف»: how many minutes an order made with a discount code may stay unpaid. After that, if untouched and no receipt is with support, it is cancelled and the code's use is freed. 0: as long as any unpaid order (two days by default). */
+  /** «کدهای تخفیف»: how many minutes an order made with a discount code may stay unpaid. After that, if untouched, no receipt is with support and no money is in at its online gateway unsettled (a part paid, a receipt in the gateway's review, confirmations awaited), it is cancelled and the code's use is freed. 0: as long as any unpaid order (two days by default). */
   hold_minutes: number
   /** «همکارها فقط با قیمت همکاری»: whoever pays agent prices (an agent, or in a «همکار» group) goes without the customers' perks, whatever they buy — no sale, loyalty tier, discount code, first-purchase price, cashback, lucky wheel or nightly draw; a plan's agent price where it has one, the regular price elsewhere (a plan without one, extras, a built service); their own discount stays. */
   agents_without_perks: boolean
@@ -5085,6 +5094,10 @@ export interface BotSettingsData {
   report_reviews: boolean
   /** The shop's backup file, sent once a day by default (the owner's «زمان‌بندی کارها»): the main shop's group gets the whole installation's, an agent's group its own shop's. */
   report_backups: boolean
+  /** «گزارش روزانه»: once a day, the shop's day before in figures — its income (money that came in, as the dashboard counts it) by payment method and against the day before, its sales by kind of order (wallet-paid ones too; a service given free — a prize, a referral's gift, support's free order — is no sale), the plans and servers sold most, new customers, buyers and free tests, the services running and what waits on support; in the main shop's group, what each agent's bot sold, in an agent's its traffic left. A day with no sale says so, its income still shown. */
+  report_daily: boolean
+  /** The hour (0 to 23, in the shop's time zone) from which the daily report of the day before is sent; 0, just after midnight, by default. The `daily_report` task looks every 10 minutes by default: an interval over an hour may let the day pass with no look after this hour, and that report is not sent. */
+  daily_report_hour: number
   /** «کد هدیه»: customers can redeem gift codes, with the bot's «🎁 کد هدیه» button or on the website. Codes can be created either way. */
   gift_codes_enabled: boolean
   /** «گردونه شانس»: customers can spin the lucky wheel with the bot's «🎡 گردونه شانس» button. */
@@ -5231,7 +5244,7 @@ export interface BackupsStatus {
     /** What kept that one from going (Telegram's words); null when it went. */
     last_problem: string | null
   }
-  /** Newest first. */
+  /** Newest first — without those kept before 0.11.0 to an admin working a bot's management with its owner's or agent's seat. */
   kept: BackupKept[]
   /** The largest file this host takes in one upload (PHP's smaller limit); 0 when it does not say. */
   upload_max_bytes: number
@@ -5674,6 +5687,9 @@ export interface BotReportsSettingsRequest {
   report_tickets: boolean
   report_reviews: boolean
   report_backups: boolean
+  report_daily: boolean
+  /** 0 to 23. */
+  daily_report_hour: WholeNumberInput
 }
 
 export interface BotQrSettingsRequest {
@@ -5709,7 +5725,7 @@ export interface BotChannelRequest {
   link: string
 }
 
-export type ReportTopicKey = 'purchases' | 'renewals' | 'tests' | 'deletions' | 'wallet' | 'receipts' | 'users' | 'errors' | 'agency' | 'tickets' | 'reviews' | 'backups'
+export type ReportTopicKey = 'purchases' | 'renewals' | 'tests' | 'deletions' | 'wallet' | 'receipts' | 'users' | 'errors' | 'agency' | 'tickets' | 'reviews' | 'backups' | 'daily'
 
 /** A topic of the report group, in the group's order. */
 export interface ReportTopicInfo {
@@ -5944,10 +5960,23 @@ export interface ScheduleTask {
   each_shop: boolean
   /** When it last ran; null when it never did. */
   last_ran_at: string | null
-  /** When it is due again: its last run and its interval. A moment past means at the scheduler's next tick (every minute); null when it never ran, which is due at once. */
+  /** When it is due again: the next moment of its grid — its start on the shop's clock and every interval after it — or, while it has not run since the grid's latest moment, that one. A moment past means at the scheduler's next tick (every minute); null when it never ran, which is due at once. */
   next_run_at: string | null
+  start: ScheduleStart
   /** Its interval first, then the times it decides by. */
   fields: ScheduleField[]
+}
+
+/** The time of day a task's runs are counted from (`<task>_start`), on the shop's clock: a run at it every day, and then every interval after it — every 10 minutes from 00:03 is 00:03, 00:13, 00:23… A grid of a day or less starts again at it every day; a longer one counts from it on a Saturday. A run held up a little does not move the next; a task that has not run since the grid's latest moment (the start moved to a time already past, Cron stopped) runs once at the next tick. A server clock put back stalls no task: each waits for its next moment. At a daylight-saving change the schedule follows the shop's clock: a moment the clock jumps over in spring runs once, at the first minute after the jump (a daily 02:30 runs at 03:00 that day); in the hour a fall-back repeats, a minute of the clock runs again only once a whole interval of real time has passed since the run it repeats — a task every hour or more often keeps running through that hour (an hourly one keeps its hour), and a daily 02:30 runs once, at the first 02:30. Of no effect on a task that runs every minute. */
+export interface ScheduleStart {
+  /** What ScheduleRequest calls it: `<task>_start`. */
+  name: string
+  label: string
+  hint: string | null
+  /** "HH:MM": what the shop runs with — the owner's, or the default. */
+  value: string
+  /** "HH:MM" while the owner set nothing; saving it keeps nothing. */
+  default: string
 }
 
 /** «زمان‌بندی کارها»: the owner's, for the whole installation — one scheduler runs every shop's work. */
@@ -5961,7 +5990,7 @@ export interface ScheduleResponse {
   schedule: Schedule
 }
 
-/** Every task's fields, saved whole (a missing one is refused), each by its ScheduleField `name`. A value equal to its default is kept as none. */
+/** Every task's fields, saved whole (a missing one is refused), each by its ScheduleField `name`, and its start by its ScheduleStart `name`. A value equal to its default is kept as none. */
 export interface ScheduleRequest {
   /** Minutes between two runs of `auto_approve_receipts`, 1 to 10080; 1 by default. */
   auto_approve_receipts_minutes: WholeNumberInput
@@ -6001,10 +6030,56 @@ export interface ScheduleRequest {
   send_backups_minutes: WholeNumberInput
   /** Minutes between two runs of `prune_imports`, 1 to 10080; 1440 by default. */
   prune_imports_minutes: WholeNumberInput
+  /** Minutes between two runs of `daily_report`, 1 to 10080; 10 by default. */
+  daily_report_minutes: WholeNumberInput
   /** Minutes between two runs of `check_releases`, 1 to 10080; 1440 by default. */
   check_releases_minutes: WholeNumberInput
   /** Minutes between two runs of `send_reports`, 1 to 10080; 1 by default. */
   send_reports_minutes: WholeNumberInput
+  /** "HH:MM" on the shop's clock from 00:00 to 23:59 (Persian digits, one digit for the hour or the minute — "3:5" is 03:05 —, a bare hour — "9" is 09:00 —, and «٫», ".", "：", "," or «،» for the colon taken too, any space — a tab, a non-breaking one — left out; blank is refused): the time `auto_approve_receipts`'s runs are counted from (ScheduleStart); 00:00 by default. */
+  auto_approve_receipts_start: string
+  /** "HH:MM" on the shop's clock from 00:00 to 23:59 (Persian digits, one digit for the hour or the minute — "3:5" is 03:05 —, a bare hour — "9" is 09:00 —, and «٫», ".", "：", "," or «،» for the colon taken too, any space — a tab, a non-breaking one — left out; blank is refused): the time `online_payments`'s runs are counted from (ScheduleStart); 00:00 by default. */
+  online_payments_start: string
+  /** "HH:MM" on the shop's clock from 00:00 to 23:59 (Persian digits, one digit for the hour or the minute — "3:5" is 03:05 —, a bare hour — "9" is 09:00 —, and «٫», ".", "：", "," or «،» for the colon taken too, any space — a tab, a non-breaking one — left out; blank is refused): the time `resume_deliveries`'s runs are counted from (ScheduleStart); 00:00 by default. */
+  resume_deliveries_start: string
+  /** "HH:MM" on the shop's clock from 00:00 to 23:59 (Persian digits, one digit for the hour or the minute — "3:5" is 03:05 —, a bare hour — "9" is 09:00 —, and «٫», ".", "：", "," or «،» for the colon taken too, any space — a tab, a non-breaking one — left out; blank is refused): the time `expire_orders`'s runs are counted from (ScheduleStart); 00:00 by default. */
+  expire_orders_start: string
+  /** "HH:MM" on the shop's clock from 00:00 to 23:59 (Persian digits, one digit for the hour or the minute — "3:5" is 03:05 —, a bare hour — "9" is 09:00 —, and «٫», ".", "：", "," or «،» for the colon taken too, any space — a tab, a non-breaking one — left out; blank is refused): the time `send_broadcasts`'s runs are counted from (ScheduleStart); 00:00 by default. */
+  send_broadcasts_start: string
+  /** "HH:MM" on the shop's clock from 00:00 to 23:59 (Persian digits, one digit for the hour or the minute — "3:5" is 03:05 —, a bare hour — "9" is 09:00 —, and «٫», ".", "：", "," or «،» for the colon taken too, any space — a tab, a non-breaking one — left out; blank is refused): the time `auto_renew`'s runs are counted from (ScheduleStart); 00:00 by default. */
+  auto_renew_start: string
+  /** "HH:MM" on the shop's clock from 00:00 to 23:59 (Persian digits, one digit for the hour or the minute — "3:5" is 03:05 —, a bare hour — "9" is 09:00 —, and «٫», ".", "：", "," or «،» for the colon taken too, any space — a tab, a non-breaking one — left out; blank is refused): the time `next_period`'s runs are counted from (ScheduleStart); 00:00 by default. */
+  next_period_start: string
+  /** "HH:MM" on the shop's clock from 00:00 to 23:59 (Persian digits, one digit for the hour or the minute — "3:5" is 03:05 —, a bare hour — "9" is 09:00 —, and «٫», ".", "：", "," or «،» for the colon taken too, any space — a tab, a non-breaking one — left out; blank is refused): the time `grants`'s runs are counted from (ScheduleStart); 00:00 by default. */
+  grants_start: string
+  /** "HH:MM" on the shop's clock from 00:00 to 23:59 (Persian digits, one digit for the hour or the minute — "3:5" is 03:05 —, a bare hour — "9" is 09:00 —, and «٫», ".", "：", "," or «،» for the colon taken too, any space — a tab, a non-breaking one — left out; blank is refused): the time `migrations`'s runs are counted from (ScheduleStart); 00:00 by default. */
+  migrations_start: string
+  /** "HH:MM" on the shop's clock from 00:00 to 23:59 (Persian digits, one digit for the hour or the minute — "3:5" is 03:05 —, a bare hour — "9" is 09:00 —, and «٫», ".", "：", "," or «،» for the colon taken too, any space — a tab, a non-breaking one — left out; blank is refused): the time `sync_subscriptions`'s runs are counted from (ScheduleStart); 00:05 by default. */
+  sync_subscriptions_start: string
+  /** "HH:MM" on the shop's clock from 00:00 to 23:59 (Persian digits, one digit for the hour or the minute — "3:5" is 03:05 —, a bare hour — "9" is 09:00 —, and «٫», ".", "：", "," or «،» for the colon taken too, any space — a tab, a non-breaking one — left out; blank is refused): the time `send_reminders`'s runs are counted from (ScheduleStart); 00:05 by default. */
+  send_reminders_start: string
+  /** "HH:MM" on the shop's clock from 00:00 to 23:59 (Persian digits, one digit for the hour or the minute — "3:5" is 03:05 —, a bare hour — "9" is 09:00 —, and «٫», ".", "：", "," or «،» for the colon taken too, any space — a tab, a non-breaking one — left out; blank is refused): the time `cleanup_services`'s runs are counted from (ScheduleStart); 00:05 by default. */
+  cleanup_services_start: string
+  /** "HH:MM" on the shop's clock from 00:00 to 23:59 (Persian digits, one digit for the hour or the minute — "3:5" is 03:05 —, a bare hour — "9" is 09:00 —, and «٫», ".", "：", "," or «،» for the colon taken too, any space — a tab, a non-breaking one — left out; blank is refused): the time `agency_standing`'s runs are counted from (ScheduleStart); 00:10 by default. */
+  agency_standing_start: string
+  /** "HH:MM" on the shop's clock from 00:00 to 23:59 (Persian digits, one digit for the hour or the minute — "3:5" is 03:05 —, a bare hour — "9" is 09:00 —, and «٫», ".", "：", "," or «،» for the colon taken too, any space — a tab, a non-breaking one — left out; blank is refused): the time `prune_updates`'s runs are counted from (ScheduleStart); 00:25 by default. */
+  prune_updates_start: string
+  /** "HH:MM" on the shop's clock from 00:00 to 23:59 (Persian digits, one digit for the hour or the minute — "3:5" is 03:05 —, a bare hour — "9" is 09:00 —, and «٫», ".", "：", "," or «،» for the colon taken too, any space — a tab, a non-breaking one — left out; blank is refused): the time `prune_accounts`'s runs are counted from (ScheduleStart); 00:40 by default. */
+  prune_accounts_start: string
+  /** "HH:MM" on the shop's clock from 00:00 to 23:59 (Persian digits, one digit for the hour or the minute — "3:5" is 03:05 —, a bare hour — "9" is 09:00 —, and «٫», ".", "：", "," or «،» for the colon taken too, any space — a tab, a non-breaking one — left out; blank is refused): the time `prune_tickets`'s runs are counted from (ScheduleStart); 00:55 by default. */
+  prune_tickets_start: string
+  /** "HH:MM" on the shop's clock from 00:00 to 23:59 (Persian digits, one digit for the hour or the minute — "3:5" is 03:05 —, a bare hour — "9" is 09:00 —, and «٫», ".", "：", "," or «،» for the colon taken too, any space — a tab, a non-breaking one — left out; blank is refused): the time `nightly_draw`'s runs are counted from (ScheduleStart); 00:00 by default. */
+  nightly_draw_start: string
+  /** "HH:MM" on the shop's clock from 00:00 to 23:59 (Persian digits, one digit for the hour or the minute — "3:5" is 03:05 —, a bare hour — "9" is 09:00 —, and «٫», ".", "：", "," or «،» for the colon taken too, any space — a tab, a non-breaking one — left out; blank is refused): the time `send_backups`'s runs are counted from (ScheduleStart); 00:00 by default. */
+  send_backups_start: string
+  /** "HH:MM" on the shop's clock from 00:00 to 23:59 (Persian digits, one digit for the hour or the minute — "3:5" is 03:05 —, a bare hour — "9" is 09:00 —, and «٫», ".", "：", "," or «،» for the colon taken too, any space — a tab, a non-breaking one — left out; blank is refused): the time `prune_imports`'s runs are counted from (ScheduleStart); 03:00 by default. */
+  prune_imports_start: string
+  /** "HH:MM" on the shop's clock from 00:00 to 23:59 (Persian digits, one digit for the hour or the minute — "3:5" is 03:05 —, a bare hour — "9" is 09:00 —, and «٫», ".", "：", "," or «،» for the colon taken too, any space — a tab, a non-breaking one — left out; blank is refused): the time `daily_report`'s runs are counted from (ScheduleStart); 00:00 by default. */
+  daily_report_start: string
+  /** "HH:MM" on the shop's clock from 00:00 to 23:59 (Persian digits, one digit for the hour or the minute — "3:5" is 03:05 —, a bare hour — "9" is 09:00 —, and «٫», ".", "：", "," or «،» for the colon taken too, any space — a tab, a non-breaking one — left out; blank is refused): the time `check_releases`'s runs are counted from (ScheduleStart); 03:30 by default. */
+  check_releases_start: string
+  /** "HH:MM" on the shop's clock from 00:00 to 23:59 (Persian digits, one digit for the hour or the minute — "3:5" is 03:05 —, a bare hour — "9" is 09:00 —, and «٫», ".", "：", "," or «،» for the colon taken too, any space — a tab, a non-breaking one — left out; blank is refused): the time `send_reports`'s runs are counted from (ScheduleStart); 00:00 by default. */
+  send_reports_start: string
   /** Hours an unpaid order nobody touched waits before it is dropped (one whose money may be with support never is). 1 to 720; 48 by default. */
   expire_orders_hours: WholeNumberInput
   /** Minutes between two asks to its gateway about an online payment whose page still takes money. 1 to 60; 3 by default. */
@@ -7550,14 +7625,17 @@ export interface StorePlan {
 /** The label a plan's card wears in the mini app and on the website: `bestseller` («پرفروش‌ترین»), `recommended` («پیشنهاد ما») or `vip` («VIP»). */
 export type PlanBadge = 'bestseller' | 'recommended' | 'vip'
 
-/** A timed sale running now («فروش ویژه»): its name, its percent off, when it ends (null: until support stops it), and what it holds for — the plans named (null: every plan) and the kinds of order (null: every kind). */
+/** A timed sale running now («فروش ویژه»): its name, its percent off, when it ends (null: until support stops it), and what it holds for — its plans (null: every plan) and the kinds of order (null: every kind). */
 export interface StoreSale {
   id: number
   /** What the customer reads: «فروش ویژه نوروز». */
   name: string
   percent: number
   ends_at: string | null
+  /** The plans on sale now (switched on, not hidden by the owner) that it holds for: those it names and those filed under the categories it names; null for every plan; empty when none of them is on sale now (it may still reach a renewal or an extra of a service on one of its plans). */
   plan_ids: number[] | null
+  /** The plan categories it names, as stored — a category deleted since may stay —, whose plans on sale `plan_ids` already lists; null for none. */
+  category_ids: number[] | null
   order_types: OwnOrderType[] | null
 }
 
@@ -8271,7 +8349,7 @@ export interface StoreRenewal {
     /** Toman: the days at their tier's rate. */
     days_price: string
   } | null
-  /** What the renewal costs the customer, in Toman: the plan's agent price for an agent or a «همکار» group member, else its price — or the package's two prices added (only a sale of every plan reaches it, and a code limited to certain plans never does) —, minus their largest automatic discount (`discounts`). A discount code is applied on top of this when paying (`discount_code`). */
+  /** What the renewal costs the customer, in Toman: the plan's agent price for an agent or a «همکار» group member, else its price — or the package's two prices added (only a sale of every plan reaches it, and a code limited to certain plans or categories never does) —, minus their largest automatic discount (`discounts`). A discount code is applied on top of this when paying (`discount_code`). */
   price: string
   /** The automatic discount in `price`: none, or one. */
   discounts: DiscountLine[]
@@ -8721,7 +8799,7 @@ export type PanelWrite =
   | { method: 'POST'; path: '/client-errors'; body: ClientErrorRequest; answer: void }
   /** Set the webhook of every bot. Each webhook is under APP_URL, which must be HTTPS (else a 422 and no bot is changed). Same as `bot:webhook:set`: a bot that fails does not stop the others. */
   | { method: 'POST'; path: '/system/webhook'; body: undefined; answer: WebhooksResponse }
-  /** Delete the webhook of every bot. The bots go back to polling, so `bot:poll` must run. Same as `bot:webhook:delete`. */
+  /** Delete the webhook of every bot. The bots go back to polling, so `bot:poll` must run. Same as `bot:webhook:delete`. Every agent's bot forgets its webhook secret — one Telegram took off, and every one switched off or without a token —, so its next registration (`POST`) gives it a new one; a running bot whose take-down Telegram refused keeps its own. The main bot's secret is config.php's and stays. */
   | { method: 'DELETE'; path: '/system/webhook'; body: undefined; answer: WebhooksResponse }
   /** Check GitHub for the newest release now. A 502 when GitHub does not answer; the release read before is kept. */
   | { method: 'POST'; path: '/system/update/check'; body: undefined; answer: UpdateResponse }
@@ -8731,7 +8809,7 @@ export type PanelWrite =
   | { method: 'POST'; path: '/system/update/step'; body: undefined; answer: UpdateResponse }
   /** Cancel the update before installing starts (`run.cancel`). The downloaded and unpacked files are deleted. */
   | { method: 'POST'; path: '/system/update/cancel'; body: undefined; answer: UpdateResponse }
-  /** Roll back the last update (`run.rollback`). Puts the replaced version back. Refused once the update changed the database: only a backup can undo that. */
+  /** Roll back the last update (`run.rollback`). Puts the replaced version back. Refused (422) once the update changed the database — only a backup can undo that — and when the app's files in place are no longer the version it installed (put in place by hand since): `run.rollback` is then false. The owner's themselves alone: one of the main bot's admins, working its management with the owner's seat, is refused it (403 `برگشت به نسخه قبلی برنامه فقط با خود مالک است.`), since the version before lacks the guards that came since. */
   | { method: 'POST'; path: '/system/update/rollback'; body: undefined; answer: UpdateResponse }
   /** Add a server. Its panel is checked right away. */
   | { method: 'POST'; path: '/servers'; body: ServerRequest; answer: ServerCreatedResponse }
@@ -8929,9 +9007,9 @@ export type PanelWrite =
   | { method: 'PUT'; path: '/preferences/favorites'; body: PanelFavoritesRequest; answer: PanelPreferencesResponse }
   /** Whether the shop's backup goes to its report group's «پشتیبان‌گیری» topic (the `report_backups` switch of the bot settings). */
   | { method: 'PUT'; path: '/backups/auto'; body: BackupsAutoRequest; answer: BackupsResponse }
-  /** Check a backup file to restore and describe it, before anything moves: made by this installation and unchanged, by this version or an older one, of this panel's scope (and shop). A 422 under `file` says why one is refused. The file waits under the token for 30 minutes. */
+  /** Check a backup file to restore and describe it, before anything moves: made by this installation and unchanged, by this version or an older one, of this panel's scope (and shop). A 422 under `file` says why one is refused. The file waits under the token for 30 minutes. A file made before 0.11.0 (it holds each bot's webhook address with its secret) is the owner's and the agent's themselves alone: an admin working a bot's management with their seat is refused it (403 `این فایل پشتیبان پیش از نسخه 0.11.0 ساخته شده و رمز Webhook ربات‌ها در آن است؛ دریافت و بازگردانی‌اش فقط با خود مالک یا خود نماینده است.`). */
   | { method: 'POST'; path: '/backups/inspect'; body: BackupInspectRequest; answer: BackupInspectionResponse }
-  /** Restore the file an inspection kept, all of it or nothing — the state now kept first, to download (`kept`). A shop's restore touches its own rows alone and signs its customers out of its website and mini app; the whole installation's signs every shop's customers out. The panels' own sign-ins stay. */
+  /** Restore the file an inspection kept, all of it or nothing — the state now kept first, to download (`kept`). A shop's restore touches its own rows alone and signs its customers out of its website and mini app; the whole installation's signs every shop's customers out. The panels' own sign-ins stay. The whole installation's keeps each bot's webhook secret as it is now (a bot deleted since comes back with none), and every restore keeps the webhook addresses it brings back without their secret. A file made before 0.11.0 is refused to an admin working a bot's management with its owner's or agent's seat, as at the inspection (403). */
   | { method: 'POST'; path: '/backups/restore'; body: BackupRestoreRequest; answer: BackupRestoreResponse }
   /** Disconnect the report group. The bot stays in the group. */
   | { method: 'DELETE'; path: '/bot/report-group'; body: undefined; answer: ReportGroupResponse }
@@ -9045,13 +9123,13 @@ export type PanelWrite =
   | { method: 'DELETE'; path: `/cashback/rules/${number}`; body: undefined; answer: void }
   /** Ask Telegram which bot a token belongs to. Uses the stored token when none is given. */
   | { method: 'POST'; path: '/settings/config/telegram/test'; body: TelegramTestRequest; answer: BotIdentityResponse }
-  /** Test database settings without saving them. */
+  /** Test database settings without saving them. The owner's themselves alone, as the save is: one of the main bot's admins, working its management with the owner's seat, is refused it before anything is tried (403 `دیتابیس فروشگاه را فقط خود مالک عوض یا تست می‌کند.`). */
   | { method: 'POST'; path: '/settings/config/database/test'; body: DatabaseRequest; answer: DatabaseCheckResponse }
   /** Send a test email with the saved mail settings. A 422 while no email can go out (no transport or no sender address saved); a 502 with the transport's reason when it refused the email. */
   | { method: 'POST'; path: '/settings/config/mail/test'; body: MailTestRequest; answer: MailTestResponse }
   /** Send a test code by SMS with the saved SMS settings, through the approved pattern a sign-in code goes by. A 422 while no SMS can go out (no driver, or not its settings, saved) or on `to`; a 502 with the provider's reason when it refused the SMS. */
   | { method: 'POST'; path: '/settings/config/sms/test'; body: SmsTestRequest; answer: SmsTestResponse }
-  /** Save one group of the config.php settings. Two changes of `telegram` are the owner's themselves alone — one of the main bot's admins, working its management with the owner's seat, is refused them: the Bot API's address moved to another origin (403 `این تغییر رمز عبور پنل را می‌خواهد و فقط کار خود مالک است.`, before the password is judged), and a new webhook secret (403 `رمز Webhook ربات اصلی را فقط خود مالک عوض می‌کند.`). */
+  /** Save one group of the config.php settings. What would hand over the main bot or the owner's seat is the owner's themselves alone — one of the main bot's admins, working its management with the owner's seat, is refused it with a 403, the group's other fields saved by them as before: `database` saved at all (403 `دیتابیس فروشگاه را فقط خود مالک عوض یا تست می‌کند.`); in `app`, the site's address changed — any change, its path too: every bot's webhook is under it (403 `آدرس سایت را فقط خود مالک عوض می‌کند؛ پیام‌های تلگرام همه ربات‌ها به همین آدرس فرستاده می‌شود.`); in `telegram`, a new webhook secret (403 `رمز Webhook ربات اصلی را فقط خود مالک عوض می‌کند.`), the main bot's token changed or cleared, or its @username changed — the owner's one-time link opens in that bot (403 `توکن و نام کاربری ربات اصلی را فقط خود مالک عوض می‌کند.`) —, and the Bot API's address changed, its path on the same server too: every bot's token goes there (403 `آدرس API تلگرام را فقط خود مالک عوض می‌کند؛ توکن همه ربات‌ها به همین آدرس فرستاده می‌شود.`, the password never judged for them); in `advanced`, the panels' session length or secure cookie changed (403 `طول Session و کوکی Session پنل‌ها را فقط خود مالک عوض می‌کند.`), the log level, the timeout and the cron token saved by them as before. A value sent back as the screen showed it changes nothing, and the rest of the group saves. The installer's own saves, before an owner signs in, are not these. */
   | { method: 'PUT'; path: `/settings/config/${ConfigGroup}`; body: ConfigSettingsRequest; answer: ConfigSettingsResponse }
   /** A new one-time link (`t.me/<main bot>?start=owner-<code>`): the Telegram account that opens it within ten minutes becomes the owner in the main bot — and its bot admin, unless it was one already. It works once; a new link ends the last. At most five accounts are linked, a sixth letting the oldest go with the admin role its link gave it. The panel's current password comes first (`current_password`): blank or wrong is a 422 on it, and a wrong one counts as a failed sign-in (a 429 while this address or the account must wait). Then a 422 on `link` while the main bot's username is not known yet (check its token in «تنظیمات پنل › ربات تلگرام»). The bot's own screen («👑 حساب تلگرام مالک»), asked by an account linked already, sends no password; one of the main bot's admins is refused (403 `حساب‌های تلگرام مالک را فقط خود مالک تغییر می‌دهد.`). A new panel login (`PUT /auth/credentials`, or a recovery) lets every linked account go and ends an open link. */
   | { method: 'POST'; path: '/settings/owner-telegram/link'; body: OwnerTelegramLinkRequest; answer: OwnerTelegramLinkResponse }
@@ -9153,7 +9231,7 @@ export type StoreWrite =
   | { method: 'DELETE'; path: `/me/identities/${StoreIdentityKind}`; body: undefined; answer: StoreMeResponse }
   /** Accept a merge offer (the 202 of a `POST /me/identities/…`). The two accounts become one: the older account stays and takes over everything the other owned, then also gets the way in being added. A password set this way ends every other session of the account. This session is signed in to the remaining account, and the customer is notified. A 403 when the session's sign-in is not recent; a 422 when the ticket is not this account's, is used or expired, the other account no longer has that way in, or the merge is no longer allowed. */
   | { method: 'POST'; path: '/me/merge'; body: StoreMergeRequest; answer: StoreMeResponse }
-  /** What a service the customer builds would cost them, nothing ordered: the GB's price and the days' price by their tiers, their sum (`base`), the customer's automatic discount and — with `discount_code` — the code's, as lines, and what is left. Only a sale of every plan reaches a built service, and a code limited to certain plans never does; a code limited to certain servers holds once `server_id` is picked. A 422 on `status` while nothing may be built (`offered` of `GET /custom-services`); on `gb` or `days` for an amount that is no whole number or outside its bounds (the message says them); on `server_id` for a server not on offer now; on `discount_code` when it does not apply. Each code that does not apply uses one of the customer's 20 tries an hour (shared with the checkout's), then a 429 with `Retry-After`. A panel's preview of the mini app may ask it, as the builder does by itself — but not with a `discount_code` (a 403: those tries are the customer's). */
+  /** What a service the customer builds would cost them, nothing ordered: the GB's price and the days' price by their tiers, their sum (`base`), the customer's automatic discount and — with `discount_code` — the code's, as lines, and what is left. Only a sale of every plan reaches a built service, and a code limited to certain plans or categories never does; a code limited to certain servers holds once `server_id` is picked. A 422 on `status` while nothing may be built (`offered` of `GET /custom-services`); on `gb` or `days` for an amount that is no whole number or outside its bounds (the message says them); on `server_id` for a server not on offer now; on `discount_code` when it does not apply. Each code that does not apply uses one of the customer's 20 tries an hour (shared with the checkout's), then a 429 with `Retry-After`. A panel's preview of the mini app may ask it, as the builder does by itself — but not with a `discount_code` (a 403: those tries are the customer's). */
   | { method: 'POST'; path: '/custom-services/quote'; body: StoreCustomQuoteRequest; answer: StoreCustomQuoteResponse }
   /** Buy a service the customer builds, paid with `method_id`: the same checkout as `POST /orders`, as the bot's «🛠 ساخت سرویس دلخواه» buys it, at `POST /custom-services/quote`'s price. The order is a purchase without a plan (`plan` null) carrying its own `traffic_bytes`, `days` and `devices`; once delivered, its service has no plan either. `server_id` may be left out while the builder sells on one server. The service is named as `POST /orders` names one (`name_mode`, `client_name`). A 422 on `status` while nothing may be built; on `gb` or `days` for an amount that is no whole number or outside its bounds; on `server_id` for none picked among several servers, or a server not on offer now; on `name_mode` or `client_name` as `POST /orders` refuses them; on `method_id` for a method that cannot pay it, or a wallet short of the price; on `discount_code` when it does not apply; on `idempotency_key` for a key used for a different order or first sent with another `method_id`. The 5 unpaid orders, a receipt still in review, the 409s (`expected_amount` among them), the 429 past 30 ordering requests in 10 minutes and the 503 while the bot is switched off are `POST /orders`' own. Repeated with the same `Idempotency-Key`, it returns the order that key made, as it is now: never a second order or a second charge. */
   | { method: 'POST'; path: '/custom-services/orders'; body: StoreCustomOrderRequest; answer: StoreCheckoutResponse }

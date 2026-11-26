@@ -56,6 +56,9 @@ final class Words
     /** Several ticked: the step done. */
     public const TICKED = '✔️ تایید';
 
+    /** A code's or a sale's «پلن‌ها» done with none ticked (Step::refusesNone()): every plan is a button of its own. */
+    public const REACH_NONE = 'دست‌کم یک دسته یا پلن انتخاب کنید، یا «همه پلن‌ها».';
+
     /** The way through over: every field once more before the save. */
     public const REVIEW = 'همه را یک بار ببینید؛ هر کدام را می‌شود عوض کرد، بعد بسازید.';
 
@@ -244,6 +247,114 @@ final class Words
     public static function plans(Admin $admin, string $off = 'غیرفعال'): array
     {
         return self::rows($admin->api->get('/plans')['plans'] ?? [], 'name', $off);
+    }
+
+    /**
+     * A code's or a sale's plans as one list to tick (the panel's PlanReachField): the shop's categories first, «🗂 ماهانه»
+     * — each standing for every plan filed under it, one moved there later too —, then its plans; keyed `c<id>` and
+     * `p<id>` (reachOf(), reachBody()).
+     *
+     * @return array<string, string>
+     * @throws ApiRefusal
+     */
+    public static function planReach(Admin $admin): array
+    {
+        $reach = [];
+        foreach (self::rows($admin->api->get('/plans/options')['categories'] ?? [], 'name', 'غیرفعال') as $id => $name) {
+            $reach['c' . $id] = Icons::CATEGORIES . ' ' . $name;
+        }
+        foreach (self::plans($admin) as $id => $name) {
+            $reach['p' . $id] = $name;
+        }
+
+        return $reach;
+    }
+
+    /**
+     * A code's or a sale's `plans` and `categories` as the one list planReach() ticks; null for every plan (both null).
+     * Either list empty — all it named deleted since — stays an empty list: it holds for no plan.
+     *
+     * @return list<string>|null
+     */
+    public static function reachOf(mixed $plans, mixed $categories): ?array
+    {
+        if (!is_array($plans) && !is_array($categories)) {
+            return null;
+        }
+
+        return [
+            ...array_map(static fn(int $id): string => 'c' . $id, self::ids($categories) ?? []),
+            ...array_map(static fn(int $id): string => 'p' . $id, self::ids($plans) ?? []),
+        ];
+    }
+
+    /**
+     * The list planReach() ticked as the API takes it: `plan_ids` and `category_ids`, both null for every plan.
+     *
+     * @return array{plan_ids: list<int>|null, category_ids: list<int>|null}
+     */
+    public static function reachBody(mixed $reach): array
+    {
+        if (!is_array($reach)) {
+            return ['plan_ids' => null, 'category_ids' => null];
+        }
+        $ids = static fn(string $kind): array => array_values(array_map(
+            static fn(string $key): int => (int) substr($key, 1),
+            array_filter($reach, static fn(mixed $key): bool => is_string($key) && str_starts_with($key, $kind)),
+        ));
+
+        return ['plan_ids' => $ids('p'), 'category_ids' => $ids('c')];
+    }
+
+    /**
+     * A code's or a sale's draft as 0.11.0 keeps it, from one an older version left in the chat (its plans under
+     * `plan_ids`, no `plans`): those plans ticked in the one list (`p<id>`) — none for none, every plan only for every
+     * plan (null), never wider —; any other draft as it is.
+     *
+     * @param array<string, mixed> $draft
+     * @return array<string, mixed>
+     */
+    public static function reachDraft(array $draft): array
+    {
+        if (array_key_exists('plans', $draft) || !array_key_exists('plan_ids', $draft)) {
+            return $draft;
+        }
+        $plans = $draft['plan_ids'];
+        unset($draft['plan_ids']);
+        $draft['plans'] = is_array($plans) ? array_values(array_map(static fn(mixed $id): string => 'p' . (is_numeric($id) ? (int) $id : 0), $plans)) : null;
+
+        return $draft;
+    }
+
+    /**
+     * The note under a code's or a sale's review while nothing is ticked in «پلن‌ها» — every category and plan it named
+     * deleted since —: its save is refused, as the panel's form refuses it; none otherwise.
+     *
+     * @return list<string>
+     */
+    public static function reachNotes(mixed $reach): array
+    {
+        return $reach === [] ? ['در «پلن‌ها» چیزی انتخاب نشده؛ دسته یا پلنی انتخاب کنید، یا «همه پلن‌ها».'] : [];
+    }
+
+    /**
+     * A code's or a sale's plans in words (the panel's planReachWords): «دسته «ماهانه»», «۲ دسته و پلن «ویژه»»; «هیچ پلنی»
+     * once all it named is gone; null for every plan.
+     */
+    public static function reach(mixed $plans, mixed $categories): ?string
+    {
+        if (!is_array($plans) && !is_array($categories)) {
+            return null;
+        }
+        $parts = [];
+        if (is_array($categories) && $categories !== []) {
+            $parts[] = self::named('دسته', $categories);
+        }
+        if (is_array($plans) && $plans !== []) {
+            $parts[] = self::named('پلن', $plans);
+        }
+
+        return $parts === [] ? 'هیچ پلنی' : implode(' و ', $parts);
     }
 
     /**

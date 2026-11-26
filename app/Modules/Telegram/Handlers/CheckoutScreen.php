@@ -204,7 +204,8 @@ final class CheckoutScreen
      * PaymentMethods::forOrder() — a method whose bounds or cards cannot take the amount is left out, but not one the
      * customer's own open payment of it waits on, and when none is left the customer is told so), the row `$instead`
      * (other things to buy) and «بازگشت» to `$back`. Something `$free` gets one «🎁 دریافت رایگان» button instead,
-     * through the first way to pay: the checkout settles a free order whichever is picked. With a `$quote`,
+     * through the first way to pay at any amount — one pay() takes, so never a card method without a card on —: the
+     * checkout settles a free order whichever is picked. With a `$quote`,
      * «🏷 کد تخفیف دارم» — or «❌ حذف کد تخفیف» while a code is applied — is offered while the shop has codes, something
      * is left to pay and the customer may use one (not Perks::withheld()). A purchase's checkout says its service's name
      * under the text, with a button per way the shop lets buyers name it (nameRow()). The row `$choices` (a renewal's
@@ -219,7 +220,9 @@ final class CheckoutScreen
     {
         $ctx->session->enter(self::stateFor($checkout, $amount));
 
-        $methods = $this->methods->forOrder($type, $amount, $ctx->user);
+        // Every method takes nothing to pay, a card method with no card on too, which pay() refuses: a free checkout lists
+        // the ways pay() takes (any amount).
+        $methods = $this->methods->forOrder($type, $free ? null : $amount, $ctx->user);
         $keyboard = InlineKeyboard::make();
         if ($free && $methods !== []) {
             $keyboard->row(InlineKeyboard::callback($this->texts->get(BotText::CheckoutFree), $pay($methods[0])));

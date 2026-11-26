@@ -96,8 +96,9 @@ final class LayersTest extends TestCase
         'Support' => ['Auth', 'Bots', 'Notifications', 'Settings', 'Subscriptions', 'Telegram', 'Users'],
         // A customer's card in the report group shows their website sign-in and its devices (Accounts).
         'Telegram' => ['Accounts', 'Agency', 'Auth', 'Bots', 'Catalog', 'Discounts', 'Notifications', 'Orders', 'Payments', 'Providers', 'Referrals', 'Reviews', 'Rewards', 'Settings', 'Subscriptions', 'Support', 'Users'],
-        // The newest release read last is the installation's runtime state: the main bot's settings rows (Bots, Settings).
-        'Updates' => ['Bots', 'Settings'],
+        // The newest release read last is the installation's runtime state: the main bot's settings rows (Bots, Settings);
+        // rolling an update back is the owner's alone (Auth).
+        'Updates' => ['Auth', 'Bots', 'Settings'],
         // Support signs a customer out or turns their two-factor sign-in off (Accounts); a newcomer's referrer (Referrals);
         // a newcomer reported, a picture fetched from Telegram (Telegram).
         'Users' => ['Accounts', 'Agency', 'Auth', 'Bots', 'Notifications', 'Orders', 'Payments', 'Referrals', 'Settings', 'Subscriptions', 'Telegram'],

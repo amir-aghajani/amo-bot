@@ -2826,6 +2826,8 @@ One of:
 | `report_tickets` | boolean | yes |  |
 | `report_reviews` | boolean | yes |  |
 | `report_backups` | boolean | yes |  |
+| `report_daily` | boolean | yes |  |
+| `daily_report_hour` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | 0 to 23. |
 
 **`BotQrSettingsRequest`**
 
@@ -3050,7 +3052,7 @@ The settings search's favorites, in the user's order — the whole list each tim
 
 ### GET /api/{panel}/backups
 
-«پشتیبان‌گیری»: what this panel's backups hold — the whole installation for the owner in the main shop, the shop alone in any other panel —, their sending to the report group, and the states kept from before a restore.
+«پشتیبان‌گیری»: what this panel's backups hold — the whole installation for the owner in the main shop, the shop alone in any other panel —, their sending to the report group, and the states kept from before a restore. To an admin working a bot's management with its owner's or agent's seat (not the owner or the agent themselves), the states kept before 0.11.0 are left out: a file made before 0.11.0 holds each bot's webhook address with its secret.
 
 **Answers**
 
@@ -3095,7 +3097,7 @@ A backup made now, to save: gzip of JSON lines, signed by this installation's ke
 
 ### POST /api/{panel}/backups/inspect
 
-Check a backup file to restore and describe it, before anything moves: made by this installation and unchanged, by this version or an older one, of this panel's scope (and shop). A 422 under `file` says why one is refused. The file waits under the token for 30 minutes.
+Check a backup file to restore and describe it, before anything moves: made by this installation and unchanged, by this version or an older one, of this panel's scope (and shop). A 422 under `file` says why one is refused. The file waits under the token for 30 minutes. A file made before 0.11.0 (it holds each bot's webhook address with its secret) is the owner's and the agent's themselves alone: an admin working a bot's management with their seat is refused it (403 `این فایل پشتیبان پیش از نسخه 0.11.0 ساخته شده و رمز Webhook ربات‌ها در آن است؛ دریافت و بازگردانی‌اش فقط با خود مالک یا خود نماینده است.`).
 
 **Body**, as a form (`multipart/form-data`):
 
@@ -3114,7 +3116,7 @@ A backup file to restore, as a browser form uploads it.
 
 ### POST /api/{panel}/backups/restore
 
-Restore the file an inspection kept, all of it or nothing — the state now kept first, to download (`kept`). A shop's restore touches its own rows alone and signs its customers out of its website and mini app; the whole installation's signs every shop's customers out. The panels' own sign-ins stay.
+Restore the file an inspection kept, all of it or nothing — the state now kept first, to download (`kept`). A shop's restore touches its own rows alone and signs its customers out of its website and mini app; the whole installation's signs every shop's customers out. The panels' own sign-ins stay. The whole installation's keeps each bot's webhook secret as it is now (a bot deleted since comes back with none), and every restore keeps the webhook addresses it brings back without their secret. A file made before 0.11.0 is refused to an admin working a bot's management with its owner's or agent's seat, as at the inspection (403).
 
 **Body**, as JSON:
 
@@ -3132,7 +3134,7 @@ Restore the file an inspection kept, all of it or nothing — the state now kept
 
 ### GET /api/{panel}/backups/kept/{name}
 
-A state kept from before a restore, to save.
+A state kept from before a restore, to save. One kept before 0.11.0 is refused to an admin working a bot's management with its owner's or agent's seat (403 `این فایل پشتیبان پیش از نسخه 0.11.0 ساخته شده و رمز Webhook ربات‌ها در آن است؛ …`); an unknown name is a 404.
 
 **Parameters**
 
@@ -3747,7 +3749,8 @@ A discount code's whole form. Every refusal is returned at once, under its field
 | `max_discount` | [AmountInput](API-Schemas.md#amountinput) or null | no | For `percent`: the cap, whole Toman above zero; blank or null for none. Ignored for other types. |
 | `min_amount` | [AmountInput](API-Schemas.md#amountinput) or null | no | Whole Toman; blank or null for none. |
 | `order_types` | list of [OwnOrderType](API-Schemas.md#ownordertype) or null | no | At least one; null (or all of them) for every type. |
-| `plan_ids` | list of integer or null | no | Plan ids; null or empty for any. |
+| `plan_ids` | list of integer or null | no | Plan ids named one by one; null or empty for none. With `category_ids` null or left out too, the code applies to any plan; both sent as lists and both empty is refused under `plan_ids` (a choice of nothing — say any plan with null). A row read with `plans: []` (its plans deleted since) and `categories: null`, sent back as read, is a lone empty `plan_ids`: every plan. |
+| `category_ids` | list of integer or null | no | Plan category ids: the code applies to every plan in them, as the plan is filed at checkout, besides the plans of `plan_ids`. Null or empty for none; a category deleted since is a 422 on it. A service built by the customer, with no plan, is reached only by a code of every plan (both null or left out). |
 | `server_ids` | list of integer or null | no | Server ids; null or empty for any. |
 | `first_purchase_only` | boolean | yes |  |
 | `starts_at` | string or null | no | A local date and time in the shop's time zone (not the browser's), such as 2026-03-20T18:00. Blank or null: from now. |
@@ -3786,7 +3789,8 @@ A discount code's whole form. Every refusal is returned at once, under its field
 | `max_discount` | [AmountInput](API-Schemas.md#amountinput) or null | no | For `percent`: the cap, whole Toman above zero; blank or null for none. Ignored for other types. |
 | `min_amount` | [AmountInput](API-Schemas.md#amountinput) or null | no | Whole Toman; blank or null for none. |
 | `order_types` | list of [OwnOrderType](API-Schemas.md#ownordertype) or null | no | At least one; null (or all of them) for every type. |
-| `plan_ids` | list of integer or null | no | Plan ids; null or empty for any. |
+| `plan_ids` | list of integer or null | no | Plan ids named one by one; null or empty for none. With `category_ids` null or left out too, the code applies to any plan; both sent as lists and both empty is refused under `plan_ids` (a choice of nothing — say any plan with null). A row read with `plans: []` (its plans deleted since) and `categories: null`, sent back as read, is a lone empty `plan_ids`: every plan. |
+| `category_ids` | list of integer or null | no | Plan category ids: the code applies to every plan in them, as the plan is filed at checkout, besides the plans of `plan_ids`. Null or empty for none; a category deleted since is a 422 on it. A service built by the customer, with no plan, is reached only by a code of every plan (both null or left out). |
 | `server_ids` | list of integer or null | no | Server ids; null or empty for any. |
 | `first_purchase_only` | boolean | yes |  |
 | `starts_at` | string or null | no | A local date and time in the shop's time zone (not the browser's), such as 2026-03-20T18:00. Blank or null: from now. |
@@ -3868,7 +3872,8 @@ A sale's whole form. Every refusal is returned at once, under its field.
 | `name` | string | yes | At most 64 characters. |
 | `percent` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | 1 to 100. |
 | `order_types` | list of [OwnOrderType](API-Schemas.md#ownordertype) or null | no | At least one; null (or all of them) for every type. |
-| `plan_ids` | list of integer or null | no | Plan ids; null or empty for every plan. |
+| `plan_ids` | list of integer or null | no | Plan ids named one by one; null or empty for none. With `category_ids` null or left out too, the sale is on every plan; both sent as lists and both empty is refused under `plan_ids` (a choice of nothing — say every plan with null). A row read with `plans: []` (its plans deleted since) and `categories: null`, sent back as read, is a lone empty `plan_ids`: every plan. |
+| `category_ids` | list of integer or null | no | Plan category ids: the sale is on every plan in them, as the plan is filed at checkout, besides the plans of `plan_ids`. Null or empty for none; a category deleted since is a 422 on it. A service built by the customer, with no plan, is reached only by a sale of every plan (both null or left out). |
 | `starts_at` | string or null | no | A local date and time in the shop's time zone, such as 2026-03-20T00:00. Blank or null: from now. |
 | `ends_at` | string or null | no | The same format, after `starts_at`. Blank or null: no end. |
 | `enabled` | boolean | yes |  |
@@ -3899,7 +3904,8 @@ A sale's whole form. Every refusal is returned at once, under its field.
 | `name` | string | yes | At most 64 characters. |
 | `percent` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | 1 to 100. |
 | `order_types` | list of [OwnOrderType](API-Schemas.md#ownordertype) or null | no | At least one; null (or all of them) for every type. |
-| `plan_ids` | list of integer or null | no | Plan ids; null or empty for every plan. |
+| `plan_ids` | list of integer or null | no | Plan ids named one by one; null or empty for none. With `category_ids` null or left out too, the sale is on every plan; both sent as lists and both empty is refused under `plan_ids` (a choice of nothing — say every plan with null). A row read with `plans: []` (its plans deleted since) and `categories: null`, sent back as read, is a lone empty `plan_ids`: every plan. |
+| `category_ids` | list of integer or null | no | Plan category ids: the sale is on every plan in them, as the plan is filed at checkout, besides the plans of `plan_ids`. Null or empty for none; a category deleted since is a 422 on it. A service built by the customer, with no plan, is reached only by a sale of every plan (both null or left out). |
 | `starts_at` | string or null | no | A local date and time in the shop's time zone, such as 2026-03-20T00:00. Blank or null: from now. |
 | `ends_at` | string or null | no | The same format, after `starts_at`. Blank or null: no end. |
 | `enabled` | boolean | yes |  |
@@ -4645,7 +4651,7 @@ Set the webhook of every bot. Each webhook is under APP_URL, which must be HTTPS
 
 ### DELETE /api/admin/system/webhook
 
-Delete the webhook of every bot. The bots go back to polling, so `bot:poll` must run. Same as `bot:webhook:delete`.
+Delete the webhook of every bot. The bots go back to polling, so `bot:poll` must run. Same as `bot:webhook:delete`. Every agent's bot forgets its webhook secret — one Telegram took off, and every one switched off or without a token —, so its next registration (`POST`) gives it a new one; a running bot whose take-down Telegram refused keeps its own. The main bot's secret is config.php's and stays.
 
 **Answers**
 
@@ -4723,7 +4729,7 @@ Cancel the update before installing starts (`run.cancel`). The downloaded and un
 
 ### POST /api/admin/system/update/rollback
 
-Roll back the last update (`run.rollback`). Puts the replaced version back. Refused once the update changed the database: only a backup can undo that.
+Roll back the last update (`run.rollback`). Puts the replaced version back. Refused (422) once the update changed the database — only a backup can undo that — and when the app's files in place are no longer the version it installed (put in place by hand since): `run.rollback` is then false. The owner's themselves alone: one of the main bot's admins, working its management with the owner's seat, is refused it (403 `برگشت به نسخه قبلی برنامه فقط با خود مالک است.`), since the version before lacks the guards that came since.
 
 **Body:** none.
 
@@ -5864,7 +5870,7 @@ The agency program's numbers. Also whether it is on and the credit a new agent s
 
 ### GET /api/admin/schedule
 
-«زمان‌بندی کارها»: every scheduled task — what it does, when it last ran and is due — with how often it runs and the times it decides by. One for the whole installation, the owner's.
+«زمان‌بندی کارها»: every scheduled task — what it does, when it last ran and is due — with how often it runs, the time of day its runs are counted from (`start`, ScheduleStart) and the times it decides by. One for the whole installation, the owner's.
 
 **Answers**
 
@@ -5879,7 +5885,7 @@ Save the schedule.
 
 **Body**, as JSON:
 
-Every task's fields, saved whole (a missing one is refused), each by its ScheduleField `name`. A value equal to its default is kept as none.
+Every task's fields, saved whole (a missing one is refused), each by its ScheduleField `name`, and its start by its ScheduleStart `name`. A value equal to its default is kept as none.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -5902,8 +5908,31 @@ Every task's fields, saved whole (a missing one is refused), each by its Schedul
 | `nightly_draw_minutes` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Minutes between two runs of `nightly_draw`, 1 to 10080; 10 by default. |
 | `send_backups_minutes` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Minutes between two runs of `send_backups`, 1 to 10080; 1440 by default. |
 | `prune_imports_minutes` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Minutes between two runs of `prune_imports`, 1 to 10080; 1440 by default. |
+| `daily_report_minutes` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Minutes between two runs of `daily_report`, 1 to 10080; 10 by default. |
 | `check_releases_minutes` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Minutes between two runs of `check_releases`, 1 to 10080; 1440 by default. |
 | `send_reports_minutes` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Minutes between two runs of `send_reports`, 1 to 10080; 1 by default. |
+| `auto_approve_receipts_start` | string | yes | "HH:MM" on the shop's clock from 00:00 to 23:59 (Persian digits, one digit for the hour or the minute — "3:5" is 03:05 —, a bare hour — "9" is 09:00 —, and «٫», ".", "：", "," or «،» for the colon taken too, any space — a tab, a non-breaking one — left out; blank is refused): the time `auto_approve_receipts`'s runs are counted from (ScheduleStart); 00:00 by default. |
+| `online_payments_start` | string | yes | "HH:MM" on the shop's clock from 00:00 to 23:59 (Persian digits, one digit for the hour or the minute — "3:5" is 03:05 —, a bare hour — "9" is 09:00 —, and «٫», ".", "：", "," or «،» for the colon taken too, any space — a tab, a non-breaking one — left out; blank is refused): the time `online_payments`'s runs are counted from (ScheduleStart); 00:00 by default. |
+| `resume_deliveries_start` | string | yes | "HH:MM" on the shop's clock from 00:00 to 23:59 (Persian digits, one digit for the hour or the minute — "3:5" is 03:05 —, a bare hour — "9" is 09:00 —, and «٫», ".", "：", "," or «،» for the colon taken too, any space — a tab, a non-breaking one — left out; blank is refused): the time `resume_deliveries`'s runs are counted from (ScheduleStart); 00:00 by default. |
+| `expire_orders_start` | string | yes | "HH:MM" on the shop's clock from 00:00 to 23:59 (Persian digits, one digit for the hour or the minute — "3:5" is 03:05 —, a bare hour — "9" is 09:00 —, and «٫», ".", "：", "," or «،» for the colon taken too, any space — a tab, a non-breaking one — left out; blank is refused): the time `expire_orders`'s runs are counted from (ScheduleStart); 00:00 by default. |
+| `send_broadcasts_start` | string | yes | "HH:MM" on the shop's clock from 00:00 to 23:59 (Persian digits, one digit for the hour or the minute — "3:5" is 03:05 —, a bare hour — "9" is 09:00 —, and «٫», ".", "：", "," or «،» for the colon taken too, any space — a tab, a non-breaking one — left out; blank is refused): the time `send_broadcasts`'s runs are counted from (ScheduleStart); 00:00 by default. |
+| `auto_renew_start` | string | yes | "HH:MM" on the shop's clock from 00:00 to 23:59 (Persian digits, one digit for the hour or the minute — "3:5" is 03:05 —, a bare hour — "9" is 09:00 —, and «٫», ".", "：", "," or «،» for the colon taken too, any space — a tab, a non-breaking one — left out; blank is refused): the time `auto_renew`'s runs are counted from (ScheduleStart); 00:00 by default. |
+| `next_period_start` | string | yes | "HH:MM" on the shop's clock from 00:00 to 23:59 (Persian digits, one digit for the hour or the minute — "3:5" is 03:05 —, a bare hour — "9" is 09:00 —, and «٫», ".", "：", "," or «،» for the colon taken too, any space — a tab, a non-breaking one — left out; blank is refused): the time `next_period`'s runs are counted from (ScheduleStart); 00:00 by default. |
+| `grants_start` | string | yes | "HH:MM" on the shop's clock from 00:00 to 23:59 (Persian digits, one digit for the hour or the minute — "3:5" is 03:05 —, a bare hour — "9" is 09:00 —, and «٫», ".", "：", "," or «،» for the colon taken too, any space — a tab, a non-breaking one — left out; blank is refused): the time `grants`'s runs are counted from (ScheduleStart); 00:00 by default. |
+| `migrations_start` | string | yes | "HH:MM" on the shop's clock from 00:00 to 23:59 (Persian digits, one digit for the hour or the minute — "3:5" is 03:05 —, a bare hour — "9" is 09:00 —, and «٫», ".", "：", "," or «،» for the colon taken too, any space — a tab, a non-breaking one — left out; blank is refused): the time `migrations`'s runs are counted from (ScheduleStart); 00:00 by default. |
+| `sync_subscriptions_start` | string | yes | "HH:MM" on the shop's clock from 00:00 to 23:59 (Persian digits, one digit for the hour or the minute — "3:5" is 03:05 —, a bare hour — "9" is 09:00 —, and «٫», ".", "：", "," or «،» for the colon taken too, any space — a tab, a non-breaking one — left out; blank is refused): the time `sync_subscriptions`'s runs are counted from (ScheduleStart); 00:05 by default. |
+| `send_reminders_start` | string | yes | "HH:MM" on the shop's clock from 00:00 to 23:59 (Persian digits, one digit for the hour or the minute — "3:5" is 03:05 —, a bare hour — "9" is 09:00 —, and «٫», ".", "：", "," or «،» for the colon taken too, any space — a tab, a non-breaking one — left out; blank is refused): the time `send_reminders`'s runs are counted from (ScheduleStart); 00:05 by default. |
+| `cleanup_services_start` | string | yes | "HH:MM" on the shop's clock from 00:00 to 23:59 (Persian digits, one digit for the hour or the minute — "3:5" is 03:05 —, a bare hour — "9" is 09:00 —, and «٫», ".", "：", "," or «،» for the colon taken too, any space — a tab, a non-breaking one — left out; blank is refused): the time `cleanup_services`'s runs are counted from (ScheduleStart); 00:05 by default. |
+| `agency_standing_start` | string | yes | "HH:MM" on the shop's clock from 00:00 to 23:59 (Persian digits, one digit for the hour or the minute — "3:5" is 03:05 —, a bare hour — "9" is 09:00 —, and «٫», ".", "：", "," or «،» for the colon taken too, any space — a tab, a non-breaking one — left out; blank is refused): the time `agency_standing`'s runs are counted from (ScheduleStart); 00:10 by default. |
+| `prune_updates_start` | string | yes | "HH:MM" on the shop's clock from 00:00 to 23:59 (Persian digits, one digit for the hour or the minute — "3:5" is 03:05 —, a bare hour — "9" is 09:00 —, and «٫», ".", "：", "," or «،» for the colon taken too, any space — a tab, a non-breaking one — left out; blank is refused): the time `prune_updates`'s runs are counted from (ScheduleStart); 00:25 by default. |
+| `prune_accounts_start` | string | yes | "HH:MM" on the shop's clock from 00:00 to 23:59 (Persian digits, one digit for the hour or the minute — "3:5" is 03:05 —, a bare hour — "9" is 09:00 —, and «٫», ".", "：", "," or «،» for the colon taken too, any space — a tab, a non-breaking one — left out; blank is refused): the time `prune_accounts`'s runs are counted from (ScheduleStart); 00:40 by default. |
+| `prune_tickets_start` | string | yes | "HH:MM" on the shop's clock from 00:00 to 23:59 (Persian digits, one digit for the hour or the minute — "3:5" is 03:05 —, a bare hour — "9" is 09:00 —, and «٫», ".", "：", "," or «،» for the colon taken too, any space — a tab, a non-breaking one — left out; blank is refused): the time `prune_tickets`'s runs are counted from (ScheduleStart); 00:55 by default. |
+| `nightly_draw_start` | string | yes | "HH:MM" on the shop's clock from 00:00 to 23:59 (Persian digits, one digit for the hour or the minute — "3:5" is 03:05 —, a bare hour — "9" is 09:00 —, and «٫», ".", "：", "," or «،» for the colon taken too, any space — a tab, a non-breaking one — left out; blank is refused): the time `nightly_draw`'s runs are counted from (ScheduleStart); 00:00 by default. |
+| `send_backups_start` | string | yes | "HH:MM" on the shop's clock from 00:00 to 23:59 (Persian digits, one digit for the hour or the minute — "3:5" is 03:05 —, a bare hour — "9" is 09:00 —, and «٫», ".", "：", "," or «،» for the colon taken too, any space — a tab, a non-breaking one — left out; blank is refused): the time `send_backups`'s runs are counted from (ScheduleStart); 00:00 by default. |
+| `prune_imports_start` | string | yes | "HH:MM" on the shop's clock from 00:00 to 23:59 (Persian digits, one digit for the hour or the minute — "3:5" is 03:05 —, a bare hour — "9" is 09:00 —, and «٫», ".", "：", "," or «،» for the colon taken too, any space — a tab, a non-breaking one — left out; blank is refused): the time `prune_imports`'s runs are counted from (ScheduleStart); 03:00 by default. |
+| `daily_report_start` | string | yes | "HH:MM" on the shop's clock from 00:00 to 23:59 (Persian digits, one digit for the hour or the minute — "3:5" is 03:05 —, a bare hour — "9" is 09:00 —, and «٫», ".", "：", "," or «،» for the colon taken too, any space — a tab, a non-breaking one — left out; blank is refused): the time `daily_report`'s runs are counted from (ScheduleStart); 00:00 by default. |
+| `check_releases_start` | string | yes | "HH:MM" on the shop's clock from 00:00 to 23:59 (Persian digits, one digit for the hour or the minute — "3:5" is 03:05 —, a bare hour — "9" is 09:00 —, and «٫», ".", "：", "," or «،» for the colon taken too, any space — a tab, a non-breaking one — left out; blank is refused): the time `check_releases`'s runs are counted from (ScheduleStart); 03:30 by default. |
+| `send_reports_start` | string | yes | "HH:MM" on the shop's clock from 00:00 to 23:59 (Persian digits, one digit for the hour or the minute — "3:5" is 03:05 —, a bare hour — "9" is 09:00 —, and «٫», ".", "：", "," or «،» for the colon taken too, any space — a tab, a non-breaking one — left out; blank is refused): the time `send_reports`'s runs are counted from (ScheduleStart); 00:00 by default. |
 | `expire_orders_hours` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Hours an unpaid order nobody touched waits before it is dropped (one whose money may be with support never is). 1 to 720; 48 by default. |
 | `online_payments_check_minutes` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Minutes between two asks to its gateway about an online payment whose page still takes money. 1 to 60; 3 by default. |
 | `online_payments_late_hours` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Hours after its page closed that an online payment is still asked about (a gateway may take money late). 0 to 72; 2 by default. |
@@ -6360,7 +6389,7 @@ Delete an agency level. Refused (409) while agents are on it.
 
 ### GET /api/admin/settings/config
 
-The installation's configuration, read from config.php.
+The installation's configuration, read from config.php. To one of the main bot's admins, working its management with the owner's seat, the database's settings are not told — `groups.database.values` comes empty, with its driver and the drivers' descriptions alone — and the webhook secret's hint reads «••••••••» while one is kept; the owner sees both.
 
 **Answers**
 
@@ -6401,7 +6430,7 @@ A token to check with Telegram. Blank or left out: the stored token.
 
 ### POST /api/admin/settings/config/database/test
 
-Test database settings without saving them.
+Test database settings without saving them. The owner's themselves alone, as the save is: one of the main bot's admins, working its management with the owner's seat, is refused it before anything is tried (403 `دیتابیس فروشگاه را فقط خود مالک عوض یا تست می‌کند.`).
 
 **Body**, as JSON:
 
@@ -6488,7 +6517,7 @@ The SMS account's credit by the saved settings, asked of its provider (which als
 
 ### PUT /api/admin/settings/config/{group}
 
-Save one group of the config.php settings. Two changes of `telegram` are the owner's themselves alone — one of the main bot's admins, working its management with the owner's seat, is refused them: the Bot API's address moved to another origin (403 `این تغییر رمز عبور پنل را می‌خواهد و فقط کار خود مالک است.`, before the password is judged), and a new webhook secret (403 `رمز Webhook ربات اصلی را فقط خود مالک عوض می‌کند.`).
+Save one group of the config.php settings. What would hand over the main bot or the owner's seat is the owner's themselves alone — one of the main bot's admins, working its management with the owner's seat, is refused it with a 403, the group's other fields saved by them as before: `database` saved at all (403 `دیتابیس فروشگاه را فقط خود مالک عوض یا تست می‌کند.`); in `app`, the site's address changed — any change, its path too: every bot's webhook is under it (403 `آدرس سایت را فقط خود مالک عوض می‌کند؛ پیام‌های تلگرام همه ربات‌ها به همین آدرس فرستاده می‌شود.`); in `telegram`, a new webhook secret (403 `رمز Webhook ربات اصلی را فقط خود مالک عوض می‌کند.`), the main bot's token changed or cleared, or its @username changed — the owner's one-time link opens in that bot (403 `توکن و نام کاربری ربات اصلی را فقط خود مالک عوض می‌کند.`) —, and the Bot API's address changed, its path on the same server too: every bot's token goes there (403 `آدرس API تلگرام را فقط خود مالک عوض می‌کند؛ توکن همه ربات‌ها به همین آدرس فرستاده می‌شود.`, the password never judged for them); in `advanced`, the panels' session length or secure cookie changed (403 `طول Session و کوکی Session پنل‌ها را فقط خود مالک عوض می‌کند.`), the log level, the timeout and the cron token saved by them as before. A value sent back as the screen showed it changes nothing, and the rest of the group saves. The installer's own saves, before an owner signs in, are not these.
 
 **Parameters**
 
@@ -6518,7 +6547,7 @@ One of:
 | `token` | string | no | Left out or blank: the stored token stays, as long as the Bot API address (`api_url`) stays on the same host. |
 | `clear_token` | boolean | no |  |
 | `username` | string | no | The bot's username, with or without the @; blank for none. |
-| `api_url` | string | yes | The Bot API's address: http(s) with a host, without credentials, ? or #. Moving it to another origin (scheme, host or port) sends every bot's token there, agents' included, so the save then needs `current_password` — and the owner themselves: an admin of the main bot is refused it (403). |
+| `api_url` | string | yes | The Bot API's address: http(s) with a host, without credentials, ? or #. Moving it to another origin (scheme, host or port) sends every bot's token there, agents' included, so the save then needs `current_password`. Any change of it, its path on the same server too, is the owner's themselves alone: an admin of the main bot is refused it (403), the password never judged. |
 | `current_password` | string | no | The owner's current panel password. Read only when `api_url` moves to another origin: blank or wrong (a wrong one counts as a failed sign-in) is a 422 on it, and nothing is saved. |
 | `poll_timeout` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Seconds, 1 to 60. |
 | `webhook_secret` | string | no | The secret part of the main bot's webhook address. A new one is the owner's themselves alone: an admin of the main bot is refused it (403). |
@@ -6594,8 +6623,8 @@ One of:
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `log_level` | string | yes | One of `meta.log_levels`; anything else is refused. |
-| `session_lifetime` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Minutes, 5 to 43200. |
-| `session_secure_cookie` | boolean | yes |  |
+| `session_lifetime` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Minutes, 5 to 43200. A change is the owner's themselves alone: an admin of the main bot is refused it (403). |
+| `session_secure_cookie` | boolean | yes | A change is the owner's themselves alone: an admin of the main bot is refused it (403). |
 | `http_timeout` | [WholeNumberInput](API-Schemas.md#wholenumberinput) | yes | Seconds, 5 to 120. |
 | `cron_token` | string | no |  |
 | `clear_cron_token` | boolean | no |  |
@@ -7490,7 +7519,7 @@ The shop a backup is of.
 | `auto.every_minutes` | integer | yes | How often it goes: the owner's «زمان‌بندی کارها» (`send_backups_minutes`), a day by default. |
 | `auto.last_sent_at` | string (date-time) or null | yes | When it last tried; null when it never did. |
 | `auto.last_problem` | string or null | yes | What kept that one from going (Telegram's words); null when it went. |
-| `kept` | list of [BackupKept](#backupkept) | yes | Newest first. |
+| `kept` | list of [BackupKept](#backupkept) | yes | Newest first — without those kept before 0.11.0 to an admin working a bot's management with its owner's or agent's seat. |
 | `upload_max_bytes` | integer | yes | The largest file this host takes in one upload (PHP's smaller limit); 0 when it does not say. |
 
 ### BluepalGatewayConfig
@@ -7590,7 +7619,7 @@ How a bot runs. The main bot's mode applies to the whole installation: every bot
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
-| `hold_minutes` | integer | yes | «کدهای تخفیف»: how many minutes an order made with a discount code may stay unpaid. After that, if untouched and no receipt is with support, it is cancelled and the code's use is freed. 0: as long as any unpaid order (two days by default). |
+| `hold_minutes` | integer | yes | «کدهای تخفیف»: how many minutes an order made with a discount code may stay unpaid. After that, if untouched, no receipt is with support and no money is in at its online gateway unsettled (a part paid, a receipt in the gateway's review, confirmations awaited), it is cancelled and the code's use is freed. 0: as long as any unpaid order (two days by default). |
 | `agents_without_perks` | boolean | yes | «همکارها فقط با قیمت همکاری»: whoever pays agent prices (an agent, or in a «همکار» group) goes without the customers' perks, whatever they buy — no sale, loyalty tier, discount code, first-purchase price, cashback, lucky wheel or nightly draw; a plan's agent price where it has one, the regular price elsewhere (a plan without one, extras, a built service); their own discount stays. |
 | `enabled` | boolean | yes |  |
 | `phone_required` | boolean | yes |  |
@@ -7695,6 +7724,8 @@ How a bot runs. The main bot's mode applies to the whole installation: every bot
 | `report_tickets` | boolean | yes | Support tickets and their messages (in every shop). |
 | `report_reviews` | boolean | yes | Reviews written on the website (in every shop). |
 | `report_backups` | boolean | yes | The shop's backup file, sent once a day by default (the owner's «زمان‌بندی کارها»): the main shop's group gets the whole installation's, an agent's group its own shop's. |
+| `report_daily` | boolean | yes | «گزارش روزانه»: once a day, the shop's day before in figures — its income (money that came in, as the dashboard counts it) by payment method and against the day before, its sales by kind of order (wallet-paid ones too; a service given free — a prize, a referral's gift, support's free order — is no sale), the plans and servers sold most, new customers, buyers and free tests, the services running and what waits on support; in the main shop's group, what each agent's bot sold, in an agent's its traffic left. A day with no sale says so, its income still shown. |
+| `daily_report_hour` | integer | yes | The hour (0 to 23, in the shop's time zone) from which the daily report of the day before is sent; 0, just after midnight, by default. The `daily_report` task looks every 10 minutes by default: an interval over an hour may let the day pass with no look after this hour, and that report is not sent. |
 | `gift_codes_enabled` | boolean | yes | «کد هدیه»: customers can redeem gift codes, with the bot's «🎁 کد هدیه» button or on the website. Codes can be created either way. |
 | `wheel_enabled` | boolean | yes | «گردونه شانس»: customers can spin the lucky wheel with the bot's «🎡 گردونه شانس» button. |
 | `wheel_cooldown_hours` | integer | yes | Hours a customer waits between two spins that gave a prize. |
@@ -8030,7 +8061,8 @@ A discount code («کد تخفیف») a customer types at checkout, in the bot o
 | `max_discount` | string or null | yes | For `percent`: the most Toman it takes off; null for no cap. |
 | `min_amount` | string or null | yes | The minimum order amount (after the automatic discount) for the code to apply; null for none. |
 | `order_types` | list of [OwnOrderType](API-Schemas.md#ownordertype) or null | yes | The order types it applies to; null for every type a discount can apply to. |
-| `plans` | list of [NamedRef](API-Schemas.md#namedref) or null | yes | The plans it applies to (for a renewal or extra, the service's plan); null for any. |
+| `plans` | list of [NamedRef](API-Schemas.md#namedref) or null | yes | The plans it names one by one (for a renewal or extra, the service's plan counts); null for none. With `categories`, it applies to these plans and to every plan in those categories; both null: any plan. |
+| `categories` | list of [NamedRef](API-Schemas.md#namedref) or null | yes | The plan categories it names: it applies to every plan filed under one as the plan is at checkout — a plan moved there later too, and one in a category switched off; null for none. Plans and categories deleted since are left out of both lists, and a code whose plans and categories are all gone applies to no plan (an empty list here, or in `plans`, is not null). |
 | `servers` | list of [NamedRef](API-Schemas.md#namedref) or null | yes | The servers it applies to (for a purchase, the chosen server; for a renewal or extra, the service's); null for any. |
 | `first_purchase_only` | boolean | yes | Only for customers who have not bought a service yet. |
 | `starts_at` | string (date-time) or null | yes |  |
@@ -9179,7 +9211,7 @@ A topic of the report group, in the group's order.
 
 ### ReportTopicKey
 
-String: `purchases`, `renewals`, `tests`, `deletions`, `wallet`, `receipts`, `users`, `errors`, `agency`, `tickets`, `reviews`, `backups`.
+String: `purchases`, `renewals`, `tests`, `deletions`, `wallet`, `receipts`, `users`, `errors`, `agency`, `tickets`, `reviews`, `backups`, `daily`.
 
 ### RewardOrderRef
 
@@ -9261,7 +9293,7 @@ A Rikhtam crypto method (rikhtam.com), an online gateway for crypto: the custome
 
 ### SaleRow
 
-A timed sale («فروش ویژه»): a percent off the listed plans, for the listed order types, between its start and end. It is one of the automatic discounts; at checkout the largest applies.
+A timed sale («فروش ویژه»): a percent off the listed plans and the plans of the listed categories, for the listed order types, between its start and end. It is one of the automatic discounts; at checkout the largest applies.
 
 | Field | Type | Required | What it is |
 |---|---|---|---|
@@ -9269,7 +9301,8 @@ A timed sale («فروش ویژه»): a percent off the listed plans, for the li
 | `name` | string | yes | The name customers see, such as «فروش ویژه نوروز». |
 | `percent` | integer | yes |  |
 | `order_types` | list of [OwnOrderType](API-Schemas.md#ownordertype) or null | yes | Null for every type a discount can apply to. |
-| `plans` | list of [NamedRef](API-Schemas.md#namedref) or null | yes | Null for every plan (for an extra, the service's plan counts). |
+| `plans` | list of [NamedRef](API-Schemas.md#namedref) or null | yes | The plans it names one by one (for an extra, the service's plan counts); null for none. With `categories` null too, every plan. |
+| `categories` | list of [NamedRef](API-Schemas.md#namedref) or null | yes | The plan categories it names: it takes its percent off every plan filed under one as the plan is at checkout — a plan moved there later too, and one in a category switched off; null for none. Plans and categories deleted since are left out, and a sale whose plans and categories are all gone holds for no plan (an empty list is not null). |
 | `starts_at` | string (date-time) or null | yes |  |
 | `ends_at` | string (date-time) or null | yes |  |
 | `enabled` | boolean | yes |  |
@@ -9312,6 +9345,18 @@ One number a scheduled task is set by: its interval (its first field, `<task>_mi
 |---|---|---|---|
 | `schedule` | [Schedule](#schedule) | yes |  |
 
+### ScheduleStart
+
+The time of day a task's runs are counted from (`<task>_start`), on the shop's clock: a run at it every day, and then every interval after it — every 10 minutes from 00:03 is 00:03, 00:13, 00:23… A grid of a day or less starts again at it every day; a longer one counts from it on a Saturday. A run held up a little does not move the next; a task that has not run since the grid's latest moment (the start moved to a time already past, Cron stopped) runs once at the next tick. A server clock put back stalls no task: each waits for its next moment. At a daylight-saving change the schedule follows the shop's clock: a moment the clock jumps over in spring runs once, at the first minute after the jump (a daily 02:30 runs at 03:00 that day); in the hour a fall-back repeats, a minute of the clock runs again only once a whole interval of real time has passed since the run it repeats — a task every hour or more often keeps running through that hour (an hourly one keeps its hour), and a daily 02:30 runs once, at the first 02:30. Of no effect on a task that runs every minute.
+
+| Field | Type | Required | What it is |
+|---|---|---|---|
+| `name` | string | yes | What ScheduleRequest calls it: `<task>_start`. |
+| `label` | string | yes |  |
+| `hint` | string or null | yes |  |
+| `value` | string | yes | "HH:MM": what the shop runs with — the owner's, or the default. |
+| `default` | string | yes | "HH:MM" while the owner set nothing; saving it keeps nothing. |
+
 ### ScheduleTask
 
 One scheduled task, in the order a run takes them.
@@ -9323,7 +9368,8 @@ One scheduled task, in the order a run takes them.
 | `description` | string | yes | What it does, in a sentence. |
 | `each_shop` | boolean | yes | It runs in every shop in turn — the main one's and each agent's —; otherwise once across all of them. |
 | `last_ran_at` | string (date-time) or null | yes | When it last ran; null when it never did. |
-| `next_run_at` | string (date-time) or null | yes | When it is due again: its last run and its interval. A moment past means at the scheduler's next tick (every minute); null when it never ran, which is due at once. |
+| `next_run_at` | string (date-time) or null | yes | When it is due again: the next moment of its grid — its start on the shop's clock and every interval after it — or, while it has not run since the grid's latest moment, that one. A moment past means at the scheduler's next tick (every minute); null when it never ran, which is due at once. |
+| `start` | [ScheduleStart](#schedulestart) | yes |  |
 | `fields` | list of [ScheduleField](#schedulefield) | yes | Its interval first, then the times it decides by. |
 
 ### SecretState

@@ -467,6 +467,14 @@ updates), its topics `ReportTopics` (each made under a lease, so two processes n
   end, past that day — kept as a popup over the buttons; its report and verdict are `ShopReports`' own wording.
 - **The backup** — `Topic::Backups` has no queued report: `Backups\Tasks\SendBackupsTask` sends the shop's file to
   its thread itself, at its own time, apart from the queue and its pace ([Architecture](Architecture.md#backups)).
+- **The daily report** — `Telegram\Tasks\DailyReportTask` (every 10 minutes, each shop) asks
+  `Reports\DailyReport::sendIfDue()`: nothing is read while the shop has no group or `Topic::Daily` is off; from
+  `ReportSettings::dailyHour()` on, the shop's day before — its whole calendar day, `LocalTime`'s midnights in UTC — is
+  read whole into `DailyFigures` (income by `Payment::moneyIn()` as the dashboard; sales by the payments accepted that
+  day joined to their `Order::KEPT` orders, a late payment gone to the wallet left out; the main shop's agents in one
+  grouped read across shops), then queued by `ShopReports::daily()` with `ref` `daily:<Y-m-d>` — that row is what makes
+  it once. Its words set things beside numbers apart by «،» (the Persian zero is a dot) and mark each name and list line
+  right to left.
 
 ### A customer's card
 
@@ -486,7 +494,12 @@ card, drops it, `CustomerCards::dropNonces()`), `CustomerOrder` (a service made 
 «افزودن سفارش»: `ManualOrders`, the confirm button carrying a nonce as the order's key), `CustomerDiscount`,
 `CustomerHistory` (orders, payments, tickets, referrals — reading only), `CustomerAccount` (the website's sign-in:
 two-factor off, every device signed out) and `CustomerMessage` (a message from support, as the panel's «ارسال پیام»,
-on every card but the admin's own); the groups, the phone excuse, the role and the ban are the front's own.
+on every card but the admin's own); the groups, the phone excuse, the role and the ban are the front's own, and so is
+«💬 باز کردن پیوی» (`UserManagement::privateChat()`: a t.me link by the customer's @username, else `tg://user?id=`; none
+for a customer without Telegram nor on the admin's own card, kept on an agent's read-only card). Telegram refuses a
+message whose `tg://user` button it will not link — the user's privacy (BUTTON_USER_PRIVACY_RESTRICTED) or a user it does
+not know (BUTTON_USER_INVALID), both its plain bad request (`Refusal::BadRequest`) —, so the card's send and rewrite go
+again once without such buttons (`GroupButtons::withoutUserLinks()`, null for any other refusal or rows without one).
 
 - **What every section shares** is `Customers\CustomerCards`: `press()` checks a press once for all — in the shop's
   connected report group, by one of its bot admins (`GroupButtons::admin()`, never the button's data), about a customer
@@ -533,8 +546,12 @@ ban ends any of them. `AdminSeat::isAdmin()` (a `customer` on the principal) mar
 them a decision about their own account (`Actor::is()`, `ActorRefusedException::own…()`), `Reviewers::present()` shows
 them the owner's login as «پشتیبانی», and what is the owner's own — the linked accounts (`OwnerAccountsScreen`, the
 `/settings/owner-telegram` routes, `ActorRefusedException::ownerOnly()`), a linked account's ban and role
-(`ownerBanned()`, `ownerRole()`), the Bot API's address and the main bot's webhook secret (`ConfigSettings`:
-`ownersPassword()`, `ownersSecret()`) — asks `Principal::isTheOwner()` (`Actor::isTheOwner()`); an agent's own account
+(`ownerBanned()`, `ownerRole()`), what hands over the main bot or the owner's seat (`ConfigSettings::refuseOwnersOnly()`:
+the site's address, the webhook secret, the main bot's token and username, the Bot API's address, the panels' session
+settings; the database's save and test; `GET /settings/config` without the database's values) and the update's
+rollback (`ownersRollback()`) — asks `Principal::isTheOwner()` (`Actor::isTheOwner()`); a backup made before 0.11.0
+(`Backups::MASKED_SINCE`) is refused to any seat with a `customer`, an agent's bot's admins too
+(`BackupsController::oldFiles()`, `ownersBackup()`); an agent's own account
 in their bot is banned by `Actor::isTheAgent()` or the owner alone (`agentBanned()`). `AdminSeat::in()` carries an
 admin's account in the shop picked, so `Actor::is()` holds there too. Every such principal has `inBot`, which reaches
 `Actor::$inBot`: a ticket's answer from here is `TicketChannel::Manage`.

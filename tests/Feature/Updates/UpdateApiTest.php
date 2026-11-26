@@ -6,10 +6,16 @@ namespace Tests\Feature\Updates;
 
 use App\Core\Installation;
 use App\Core\Support\FileLock;
+use App\Modules\Auth\Exceptions\ActorRefusedException;
+use App\Modules\Telegram\Admin\AdminSeats;
+use App\Modules\Telegram\Admin\Door\ApiRefusal;
+use App\Modules\Telegram\Admin\Door\PanelBridge;
+use App\Modules\Telegram\Admin\OwnerLinks;
 use App\Modules\Updates\AppFolders;
 use App\Modules\Updates\Manifest;
 use App\Modules\Updates\Updater;
 use App\Modules\Updates\Workspace;
+use App\Modules\Users\Models\User;
 use PHPUnit\Framework\Attributes\RequiresPhpExtension;
 use Tests\Support\FakeGitHub;
 use Tests\Support\FakeRelease;
@@ -100,6 +106,65 @@ final class UpdateApiTest extends UpdateTestCase
         self::assertFileDoesNotExist($this->flag);
         self::assertDirectoryDoesNotExist("{$this->work}/previous/app", 'nothing kept aside any more');
         self::assertSame(422, $this->postJson(self::SCREEN . '/rollback')->getStatusCode(), 'once');
+    }
+
+    /**
+     * Files put in place by hand since the last update — a newer version over it — are not what it installed: taking it
+     * back would put the older version back over them. Neither offered nor done.
+     */
+    public function testAnUpdateWhoseFilesWereReplacedByHandSinceIsNotTakenBack(): void
+    {
+        $this->release()->publish($this->gitHub, $this->next);
+        $this->postJson(self::SCREEN . '/start', ['version' => $this->next]);
+        self::assertTrue($this->stepUntil('done')['run']['rollback']);
+        $this->place($this->folder, FakeRelease::files($this->later));
+
+        self::assertFalse($this->screen($this->get(self::SCREEN))['run']['rollback'], 'not offered');
+        $response = $this->postJson(self::SCREEN . '/rollback');
+
+        self::assertSame([422, sprintf(Updater::NOT_THIS_VERSION, $this->later, $this->next)], [$response->getStatusCode(), $this->decode($response)['message']]);
+        self::assertSame($this->later, $this->shopFile('app/marker.txt'), 'the files put in place stay');
+        self::assertDirectoryExists("{$this->work}/previous/app", 'what the update replaced is still kept');
+    }
+
+    /**
+     * The version before lacks the guards that came since: one of the main shop's admins, from the bot's management with
+     * the owner's seat, runs an update but takes none back; the owner's own linked account does.
+     */
+    public function testAnUpdateIsTakenBackByTheOwnerThemselvesAlone(): void
+    {
+        $this->release()->publish($this->gitHub, $this->next);
+        $this->postJson(self::SCREEN . '/start', ['version' => $this->next]);
+        $this->stepUntil('done');
+        $seats = $this->service(AdminSeats::class);
+        $bridge = fn(User $user): PanelBridge => $this->service(PanelBridge::class)->for($seats->of($user) ?? throw new \LogicException('no seat'));
+
+        $admin = $bridge($this->admin(['telegram_id' => 5151]));
+        self::assertTrue($admin->get('/system/update')['update']['run']['rollback'] ?? null, 'the screen as the panel shows it');
+        try {
+            $admin->post('/system/update/rollback');
+            self::fail('an admin took the update back');
+        } catch (ApiRefusal $refusal) {
+            self::assertSame([403, ActorRefusedException::OWNERS_ROLLBACK], [$refusal->status, $refusal->getMessage()]);
+        }
+        // Working an agent's shop with the owner's seat, still an admin.
+        $elsewhere = $this->service(PanelBridge::class)->for(($seats->of($this->admin(['telegram_id' => 5152])) ?? throw new \LogicException('no seat'))->in($this->agentBot()));
+        try {
+            $elsewhere->post('/system/update/rollback');
+            self::fail('an admin took the update back from another shop');
+        } catch (ApiRefusal $refusal) {
+            self::assertSame([403, ActorRefusedException::OWNERS_ROLLBACK], [$refusal->status, $refusal->getMessage()], 'nor from another shop');
+        }
+        self::assertSame($this->next, $this->shopFile('app/marker.txt'), 'nothing taken back');
+
+        $this->config(['telegram.username' => 'amo_shop_bot']);
+        $this->customer(['telegram_id' => 7001]);
+        $links = $this->service(OwnerLinks::class);
+        $link = $links->link() ?? throw new \LogicException('no link');
+        self::assertTrue($links->redeem(substr($link['url'], (int) strpos($link['url'], '=') + 1), 7001));
+        $owner = $bridge(User::query()->where('telegram_id', 7001)->firstOrFail());
+        self::assertSame('rolled_back', $owner->post('/system/update/rollback')['update']['run']['step'] ?? null);
+        self::assertSame(self::CURRENT, $this->shopFile('app/marker.txt'), 'the owner\'s own linked account takes it back');
     }
 
     public function testAnUpdateThatChangedTheDatabaseIsTakenBackOnlyWithABackup(): void

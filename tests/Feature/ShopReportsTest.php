@@ -281,6 +281,16 @@ final class ShopReportsTest extends BotTestCase
         ]), $this->reported(Topic::Users), 'reported once, when they first came');
     }
 
+    public function testADirectionOverrideInACustomersNameIsDroppedSoTheRestOfTheLineStaysAsWritten(): void
+    {
+        // Left there, U+202E would turn the handle and the Telegram id after the name around; U+2066 is an isolate never closed.
+        $sara = $this->customer(['telegram_id' => 8080, 'first_name' => "\u{202E}Sara\u{2066}"]);
+
+        $this->service(ShopReports::class)->newCustomer($sara, null);
+
+        self::assertSame("👤 <b>کاربر جدید</b>\n" . '<a href="tg://user?id=8080">Sara</a> · بدون نام کاربری · <code>8080</code>', $this->reported(Topic::Users));
+    }
+
     public function testAPanelThatStopsAnsweringAndAnswersAgainIsReportedOnceEach(): void
     {
         $health = $this->service(ServerHealth::class);

@@ -102,9 +102,16 @@ the agency stands. An admin there has that whole seat, with no grants: the role 
 owner trusts, and taking it away or a ban ends it at once. The guards that stay are their own account's — in any shop
 they work, no decision about it, no prices of their own, no change of their own agency — and the owner's own: the
 linked Telegram accounts, their ban and their role are refused to an admin, who reads the owner's login as «پشتیبانی»;
-so are the Bot API's address and the main bot's webhook secret (whoever knows it could send updates in anyone's name);
-the panel's login changes in the panel alone; and an agent's own account in their bot is banned by the agent or the
-owner alone. The owner's account is linked by a link that works once, for ten minutes, from the main bot alone, whose
+so are the Bot API's address, any change of it, its path too (every bot's token goes there), and the main bot's webhook
+secret (whoever knows it could send updates in anyone's name), and what would hand an admin the main bot or the owner's
+seat — the site's address, any change (every bot's webhook is under it, its secret in the path), the main bot's token
+and username (the owner's one-time link opens in that bot), and the database, saved or even tested (whoever picks it
+picks who the owner is) —; the panels' session settings are the owner's alone too, being their own sign-in, and so is
+rolling an update back, since the version before lacks the guards that came since; a backup made before 0.11.0, which
+holds the bots' webhook secrets, is neither listed, sent nor restored to an admin of the main bot or of an agent's bot;
+the bot shows these fields to an admin locked («🔒»), leaves the database's card out and tells them none of its
+settings; the panel's login changes in the panel alone; and an agent's own
+account in their bot is banned by the agent or the owner alone. The owner's account is linked by a link that works once, for ten minutes, from the main bot alone, whose
 code the shop keeps only as a hash; the panel asks its password before it makes one — a wrong one counts as a failed
 sign-in —, so a session alone links no account, and a new panel login (changed, or recovered with the key) lets every
 linked account go, with its admin role — one given by hand too, since it would keep the owner's seat —, and ends a link
@@ -114,8 +121,12 @@ logged with who asked it.
 
 ### Secrets
 
-- Secrets at rest — the servers' panel credentials and their SOCKS5 proxies' passwords, the agents' bots' tokens, the
-  payment methods' tokens and keys, the websites' secrets, customers' two-factor secrets — are encrypted with `APP_KEY`.
+- Secrets at rest — the servers' panel credentials and their SOCKS5 proxies' passwords, the agents' bots' tokens and
+  webhook secrets, the payment methods' tokens and keys, the websites' secrets, customers' two-factor secrets — are
+  encrypted with `APP_KEY`. A bot's webhook address is kept in its shop's settings without its secret
+  (`…/webhooks/telegram/***`), so a backup holds no webhook secret in the clear; a backup made before 0.11.0 still does,
+  and a new secret is the way out ([Releases](Releases.md)). A restore masks the addresses it brings back, and a whole
+  installation's keeps each bot's secret as it is now, so it never brings an old one back.
   Short codes are kept as keyed hashes, passwords as bcrypt hashes, customers' session tokens and the mini app's
   fingerprint secrets as their sha256.
 - A kept panel secret goes only to the panel's own origin, through the same proxy and with the same TLS check; a kept

@@ -52,7 +52,7 @@ every shop whose group is connected and whose switch is on — on by default.
 
 The card «ارسال خودکار به گروه گزارش‌ها» has the switch, «ارسال خودکار» — the same as the «پشتیبان‌گیری» topic's in
 «بخش‌های گزارش» of «تنظیمات ربات › گروه گزارش‌ها». Its hint says how often the file goes («فایل پشتیبان هر ۲۴ ساعت یک بار
-فرستاده می‌شود.» by default). How often is the owner's to set, for every shop: «ارسال پشتیبان به گروه» in «زمان‌بندی
+فرستاده می‌شود.» by default). How often, and from what time (00:00 by default), is the owner's to set, for every shop: «ارسال پشتیبان به گروه» in «زمان‌بندی
 کارها» ([the task schedule](Running-In-Production.md#the-task-schedule)) — the owner's card links «تنظیمات پنل ›
 زمان‌بندی کارها», an agent's says «فاصله ارسال را مالک فروشگاه اصلی تعیین می‌کند.». The card then says when the last
 one went («آخرین ارسال: …»), or what kept it — a warning, «آخرین ارسال (…) انجام نشد: …», with Telegram's words. With no
@@ -91,6 +91,11 @@ The card «پیش از بازگردانی‌ها» lists the last three states k
 should a restore be the wrong one, pick that file in «بازگردانی» and restore it the same way. The oldest goes only once
 a restore went through: one that failed leaves them all, and the state it kept besides.
 
+**A file made before 0.11.0** holds each bot's webhook address with its secret, so it is yours, or an agent's for their
+own shop: an admin working a bot's «⚙️ مدیریت» — with your seat or an agent's — neither downloads nor restores one
+(«این فایل پشتیبان پیش از نسخه 0.11.0 ساخته شده و رمز Webhook ربات‌ها در آن است؛ دریافت و بازگردانی‌اش فقط با خود
+مالک یا خود نماینده است.»), and the states kept before 0.11.0 are not listed to them, as the bot's screen says.
+
 **A file of an older version** is restored when this version still takes it — any made with AmoBot 0.8.0 or later —,
 then brought along by the database upgrades since, as after an update. Those upgrades run once the rows are in, apart
 from the restore's own transaction: should one fail, the rows stay restored, and restoring the same file again runs it
@@ -102,7 +107,10 @@ update the shop first ([Upgrading](Upgrading.md)).
 **A whole installation's backup** restores only in the owner's panel, in the main shop, and replaces everything a backup
 holds, in every shop. What is never in a backup goes with it: everyone signed in to a website or the mini app signs in
 again, a chat with a bot half-way starts over, and the reports waiting for a group are dropped. An import from another
-bot under way stops at its next step — its copy of the other bot's data is gone —: start it again.
+bot under way stops at its next step — its copy of the other bot's data is gone —: start it again. Each bot's webhook
+secret stays as it is now — a bot deleted since comes back with none: register the webhooks again («ثبت Webhook» in
+«دریافت پیام‌ها») and it gets a new one —, so a restore never undoes new secrets made since; and every restore, a
+shop's too, keeps the webhook addresses it brings back without their secret.
 
 **No restore signs anyone out of the panels** — yours or an agent's: the panels' sign-ins are not in the database.
 
@@ -212,6 +220,7 @@ The files you put back must belong to the user PHP runs as: the app makes its fi
 | «این پشتیبان فروشگاه دیگری است (…)؛ …» | Another shop's backup |
 | «این پشتیبان ردیف‌هایی دارد که از آن این فروشگاه نیستند؛ بازگردانده نمی‌شود.» | It holds a table or rows outside what its kind of backup holds — another shop's in a shop's backup. A file this installation wrote never does, short of a bug: report it ([Contributing](Contributing.md)) |
 | «این پشتیبان … سرویس روی سرورهایی دارد که دیگر نیستند (…)؛ …» | Services on servers deleted since ([a shop's restore](#a-shops-restore)) |
+| «این فایل پشتیبان پیش از نسخه 0.11.0 ساخته شده و رمز Webhook ربات‌ها در آن است؛ …» | Made before 0.11.0, sent from a bot's «⚙️ مدیریت» by an admin: only you, or the agent in their own shop, restore it ([restoring](#restoring)) |
 | «این فایل دیگر آماده بازگردانی نیست؛ آن را دوباره بارگذاری کنید.» | Uploaded more than 30 minutes ago, or restored already |
 | «حجم این فایل … است؛ هاست فایل بزرگ‌تر از … را نمی‌پذیرد.» | Larger than the host takes in one upload: the page did not send it ([limits](#limits)) |
 | «فایل بزرگ‌تر از چیزی است که هاست می‌پذیرد (…)؛ …» | Larger than the host takes in one upload ([limits](#limits)) |
@@ -224,6 +233,9 @@ The files you put back must belong to the user PHP runs as: the app makes its fi
   secrets in the database cannot be read.
 - **Keep `storage/uploads/` too**: a backup has no picture in it.
 - **Everyone in the report group gets the shop's data**: keep the group to your team.
+- **A backup made before 0.11.0 holds the bots' webhook secrets**, in the webhook addresses the shops kept; one made
+  since holds none in the clear — the address is written without its secret even while the database still holds it
+  whole. If anyone else could reach an older one, make new secrets ([Releases](Releases.md)).
 - **Customers' passwords and two-factor sign-ins come back as the file has them**: one who changed a leaked password
   since has the old one again, and a site admin removed since is one again. The panels' own logins are in no backup —
   the owner's is `config.php`'s —, and an agent's «خروج از مرورگرهای دیگر» since the backup stands. So does who is the

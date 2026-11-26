@@ -368,9 +368,10 @@ final class AdminConfigSettingsApiTest extends HttpTestCase
     }
 
     /**
-     * Moving the Bot API's address asks the panel's password, which one of the main shop's admins working the bot's
-     * management never types: refused before it is judged — no failed sign-in counted against the owner's login, which
-     * moves it still —, the same origin saved for them as for the owner, and the owner's own linked account asked it.
+     * The Bot API's address is the owner's themselves alone — every bot's token goes there —, and moving it asks the
+     * panel's password, which one of the main shop's admins working the bot's management never types: refused before it
+     * is judged — no failed sign-in counted against the owner's login, which moves it still —, another path on the same
+     * server refused them too, and the owner's own linked account asked the password.
      */
     public function testAnAdminMovesNoBotApiAddressAndSpendsNoneOfTheOwnersSignIns(): void
     {
@@ -387,13 +388,15 @@ final class AdminConfigSettingsApiTest extends HttpTestCase
 
         foreach (['the right password' => self::ADMIN_PASSWORD, 'a wrong one' => 'not it', 'none' => ''] as $what => $password) {
             $refused = self::refusal(static fn() => $admin->put('/settings/config/telegram', $moving + ['current_password' => $password]));
-            self::assertSame([403, ActorRefusedException::OWNERS_PASSWORD], [$refused->status, $refused->getMessage()], "{$what}: an admin on the owner's seat is not the owner");
+            self::assertSame([403, ActorRefusedException::OWNERS_API], [$refused->status, $refused->getMessage()], "{$what}: an admin on the owner's seat is not the owner");
         }
         self::assertSame('https://api.telegram.org', $this->file->get('TELEGRAM_API_URL'), 'nothing written');
         self::assertSame(0, $throttle->wait(AdminAccount::WAY, $fresh, self::ADMIN_USERNAME), 'no try counted against the owner\'s login');
 
-        $admin->put('/settings/config/telegram', ['api_url' => 'https://api.telegram.org/v2'] + $moving);
-        self::assertSame('https://api.telegram.org/v2', $this->file->get('TELEGRAM_API_URL'), 'the same origin: the group saved for them, no password asked');
+        $samePlace = self::refusal(static fn() => $admin->put('/settings/config/telegram', ['api_url' => 'https://api.telegram.org/v2'] + $moving));
+        self::assertSame([403, ActorRefusedException::OWNERS_API], [$samePlace->status, $samePlace->getMessage()], 'another path on the same server: theirs no more');
+        $admin->put('/settings/config/telegram', ['api_url' => 'https://api.telegram.org/', 'poll_timeout' => '25'] + $moving);
+        self::assertSame(['https://api.telegram.org', 25], [$this->file->get('TELEGRAM_API_URL'), $this->file->get('TELEGRAM_POLL_TIMEOUT')], 'sent as it stands: the rest saved');
 
         $linked = self::refusal(fn() => $this->bridgeOf($this->linkedOwner())->put('/settings/config/telegram', $moving));
         self::assertSame([422, ['current_password']], [$linked->status, array_keys($linked->errors)], 'the owner\'s own linked account: asked the password, as the panel asks it');

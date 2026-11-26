@@ -22,14 +22,14 @@ import { cn } from '@/lib/utils'
 export function PlanCategoriesPage() {
   const editor = useEditor<PlanCategoryRow>()
   const [removing, setRemoving] = useState<PlanCategoryRow | null>(null)
-  // The plans list and the plan form name the categories too.
+  // The plans list and the plan form name the categories too, and so do the discount codes and sales limited to some.
   const list = useRows({
     query: planCategoriesQuery,
     list: 'categories',
     reorder: (ids) => api.post('/plans/categories/reorder', { ids }),
     remove: (category) => api.delete(`/plans/categories/${category.id}`),
     patch: (category, changes: ActivationRequest) => api.patch(`/plans/categories/${category.id}`, changes).then((answer) => answer.category),
-    invalidates: [queryKeys.plans, queryKeys.planOptions],
+    invalidates: [queryKeys.plans, queryKeys.planOptions, queryKeys.discountCodes, queryKeys.sales],
   })
   const categories = list.rows
 

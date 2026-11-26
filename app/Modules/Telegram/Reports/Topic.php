@@ -24,6 +24,7 @@ enum Topic: string
     case Tickets = 'tickets';
     case Reviews = 'reviews';
     case Backups = 'backups';
+    case Daily = 'daily';
 
     /** The topic's name in the group, and its switch's label on the screen. */
     public function title(): string
@@ -41,6 +42,7 @@ enum Topic: string
             self::Tickets => 'تیکت‌ها',
             self::Reviews => 'نظرات',
             self::Backups => 'پشتیبان‌گیری',
+            self::Daily => 'گزارش روزانه',
         };
     }
 
@@ -64,7 +66,9 @@ enum Topic: string
             self::Tickets => 'هر تیکتی که مشتری باز می‌کند و پیام‌های بعدی آن، و پاسخ‌هایی که از پنل داده می‌شود؛ مدیرهای ربات با ریپلای روی پیام‌های هر تیکت همین‌جا پاسخ می‌دهند و با دکمه «بستن تیکت» آن را می‌بندند.',
             self::Reviews => 'هر نظری که در وب‌سایت فروشگاه نوشته می‌شود، با امتیاز و متنش؛ نظر در صفحه «نظرات» پنل تایید یا رد می‌شود و تا تایید نشود در وب‌سایت دیده نمی‌شود.',
             self::Backups => (CurrentBot::isMain() ? 'فایل پشتیبان کل نصب — همه فروشگاه‌ها، سرورها و نماینده‌ها —' : 'فایل پشتیبان این فروشگاه')
-                . '، هر روز یک بار (فاصله‌اش را مالک در «زمان‌بندی کارها» تعیین می‌کند)؛ برای بازگردانی، فایل را در پنل، «تنظیمات پنل › پشتیبان‌گیری»، بارگذاری کنید.',
+                . '، هر روز یک بار، به طور پیش‌فرض ساعت ۰۰:۰۰ (فاصله و ساعت شروعش را مالک در «زمان‌بندی کارها» تعیین می‌کند)؛ برای بازگردانی، فایل را در پنل، «تنظیمات پنل › پشتیبان‌گیری»، بارگذاری کنید.',
+            self::Daily => 'هر روز یک بار، از «ساعت گزارش روزانه» به بعد، آمار روزی که گذشت: درآمد و روش‌های پرداخت، فروش هر نوع سفارش، پرفروش‌ترین پلن‌ها و سرورها، کاربران تازه، خریداران و اکانت‌های تست، سرویس‌های فعال و کارهایی که منتظر شماست'
+                . (CurrentBot::isMain() ? '؛ و فروش ربات هر نماینده.' : '؛ و حجم باقی‌مانده نمایندگی.'),
         };
     }
 
@@ -76,7 +80,7 @@ enum Topic: string
     {
         return match ($this) {
             self::Receipts, self::Errors => 0,
-            self::Reviews, self::Backups => 2,
+            self::Reviews, self::Backups, self::Daily => 2,
             default => 1,
         };
     }
@@ -97,6 +101,7 @@ enum Topic: string
             self::Tickets => 0xFFD67E, // yellow
             self::Reviews => 0xCB86DB, // violet
             self::Backups => 0x8EEE98, // green
+            self::Daily => 0x6FB9F0, // blue
         };
     }
 
@@ -122,6 +127,7 @@ enum Topic: string
             self::Tickets => ['💬', '🎟', '🗣', '✉'],
             self::Reviews => ['⭐', '🌟', '👍', '❤'],
             self::Backups => ['🗄', '💾', '📦', '🔒'],
+            self::Daily => ['📊', '📈', '📅', '🗓'],
         };
     }
 }

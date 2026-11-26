@@ -182,7 +182,9 @@ function Extras({ service, offer, fresh, refresh }: ExtrasProps) {
     if (next !== null && 'option' in next) setTyped('')
   })
   const count = wholeNumberOf(typed)
-  const wrongTyped = sale.custom !== null && typed.trim() !== '' && (count === null || count < sale.custom.min || count > sale.custom.max)
+  // One of the options' amounts is sold whatever the bounds (priceOf()).
+  const offered = count !== null && sale.options.some((option) => option.quantity === count)
+  const wrongTyped = sale.custom !== null && typed.trim() !== '' && (count === null || (!offered && (count < sale.custom.min || count > sale.custom.max)))
 
   return (
     <>
@@ -278,19 +280,25 @@ interface Priced {
 }
 
 /**
- * The price of the amount picked — an option's as the shop gave it; a typed one's as the shop works it out (the unit
- * price times it, less the discount's percent of that rounded down) —; null while the typed amount is none of the offer.
+ * The price of the amount picked — an option's as the shop gave it; a typed one's as the shop works it out: one of the
+ * options' amounts at that option's price, whatever the typed bounds (the shop prices it so), any other within them at
+ * the unit price times it, less the discount's percent of that rounded down —; null while the typed amount is none of
+ * the offer.
  */
 function priceOf(sale: StoreExtraOffer, amount: NonNullable<Amount>, typed: string): Priced | null {
   const line = (before: number, after: number): DiscountLine[] =>
     sale.discount === null || before <= after ? [] : [{ source: sale.discount.source, label: sale.discount.label, amount: String(before - after), percent: sale.discount.percent }]
-  if ('option' in amount) {
-    const option = sale.options.find((candidate) => candidate.quantity === amount.option)
+  const optionOf = (quantity: number): Priced | null => {
+    const option = sale.options.find((candidate) => candidate.quantity === quantity)
     if (option === undefined) return null
     return { quantity: option.quantity, before: option.price, amount: option.offer_price, discounts: line(Number(option.price), Number(option.offer_price)), exact: true }
   }
+  if ('option' in amount) return optionOf(amount.option)
   const count = wholeNumberOf(typed)
-  if (sale.custom === null || sale.price === null || count === null || count < sale.custom.min || count > sale.custom.max) return null
+  if (count === null) return null
+  const offered = optionOf(count)
+  if (offered !== null) return offered
+  if (sale.custom === null || sale.price === null || count < sale.custom.min || count > sale.custom.max) return null
   const before = Number(sale.price) * count
   const after = before - Math.floor((before * (sale.discount?.percent ?? 0)) / 100)
 

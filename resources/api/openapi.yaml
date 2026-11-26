@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: AmoBot API
-  version: 0.10.4
+  version: 0.11.0
   description: |
     AmoBot's HTTP API. Every answer is JSON; the panels are static files that render their own pages.
 
@@ -394,7 +394,7 @@ paths:
               schema: { $ref: '#/components/schemas/WebhooksResponse' }
         default: { $ref: '#/components/responses/Error' }
     delete:
-      summary: "Delete the webhook of every bot. The bots go back to polling, so `bot:poll` must run. Same as `bot:webhook:delete`."
+      summary: "Delete the webhook of every bot. The bots go back to polling, so `bot:poll` must run. Same as `bot:webhook:delete`. Every agent's bot forgets its webhook secret — one Telegram took off, and every one switched off or without a token —, so its next registration (`POST`) gives it a new one; a running bot whose take-down Telegram refused keeps its own. The main bot's secret is config.php's and stays."
       responses:
         '200':
           description: Each bot's outcome
@@ -464,7 +464,7 @@ paths:
   /api/admin/system/update/rollback:
     parameters: [{ $ref: '#/components/parameters/Shop' }]
     post:
-      summary: "Roll back the last update (`run.rollback`). Puts the replaced version back. Refused once the update changed the database: only a backup can undo that."
+      summary: "Roll back the last update (`run.rollback`). Puts the replaced version back. Refused (422) once the update changed the database — only a backup can undo that — and when the app's files in place are no longer the version it installed (put in place by hand since): `run.rollback` is then false. The owner's themselves alone: one of the main bot's admins, working its management with the owner's seat, is refused it (403 `برگشت به نسخه قبلی برنامه فقط با خود مالک است.`), since the version before lacks the guards that came since."
       x-no-body: true
       responses:
         '200':
@@ -2166,7 +2166,7 @@ paths:
   /api/{panel}/backups:
     parameters: [{ $ref: '#/components/parameters/Panel' }, { $ref: '#/components/parameters/Shop' }]
     get:
-      summary: "«پشتیبان‌گیری»: what this panel's backups hold — the whole installation for the owner in the main shop, the shop alone in any other panel —, their sending to the report group, and the states kept from before a restore."
+      summary: "«پشتیبان‌گیری»: what this panel's backups hold — the whole installation for the owner in the main shop, the shop alone in any other panel —, their sending to the report group, and the states kept from before a restore. To an admin working a bot's management with its owner's or agent's seat (not the owner or the agent themselves), the states kept before 0.11.0 are left out: a file made before 0.11.0 holds each bot's webhook address with its secret."
       responses:
         '200':
           description: OK
@@ -2197,7 +2197,7 @@ paths:
   /api/{panel}/backups/inspect:
     parameters: [{ $ref: '#/components/parameters/Panel' }, { $ref: '#/components/parameters/Shop' }]
     post:
-      summary: "Check a backup file to restore and describe it, before anything moves: made by this installation and unchanged, by this version or an older one, of this panel's scope (and shop). A 422 under `file` says why one is refused. The file waits under the token for 30 minutes."
+      summary: "Check a backup file to restore and describe it, before anything moves: made by this installation and unchanged, by this version or an older one, of this panel's scope (and shop). A 422 under `file` says why one is refused. The file waits under the token for 30 minutes. A file made before 0.11.0 (it holds each bot's webhook address with its secret) is the owner's and the agent's themselves alone: an admin working a bot's management with their seat is refused it (403 `این فایل پشتیبان پیش از نسخه 0.11.0 ساخته شده و رمز Webhook ربات‌ها در آن است؛ دریافت و بازگردانی‌اش فقط با خود مالک یا خود نماینده است.`)."
       requestBody: { required: true, content: { multipart/form-data: { schema: { $ref: '#/components/schemas/BackupInspectRequest' } } } }
       responses:
         '200':
@@ -2209,7 +2209,7 @@ paths:
   /api/{panel}/backups/restore:
     parameters: [{ $ref: '#/components/parameters/Panel' }, { $ref: '#/components/parameters/Shop' }]
     post:
-      summary: "Restore the file an inspection kept, all of it or nothing — the state now kept first, to download (`kept`). A shop's restore touches its own rows alone and signs its customers out of its website and mini app; the whole installation's signs every shop's customers out. The panels' own sign-ins stay."
+      summary: "Restore the file an inspection kept, all of it or nothing — the state now kept first, to download (`kept`). A shop's restore touches its own rows alone and signs its customers out of its website and mini app; the whole installation's signs every shop's customers out. The panels' own sign-ins stay. The whole installation's keeps each bot's webhook secret as it is now (a bot deleted since comes back with none), and every restore keeps the webhook addresses it brings back without their secret. A file made before 0.11.0 is refused to an admin working a bot's management with its owner's or agent's seat, as at the inspection (403)."
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/BackupRestoreRequest' } } } }
       responses:
         '200':
@@ -2225,7 +2225,7 @@ paths:
       - { name: name, in: path, required: true, schema: { type: string, pattern: '^[A-Za-z0-9_.-]+$' }, description: "A kept file's `name` (BackupsStatus.kept)." }
     get:
       parameters: [{ $ref: '#/components/parameters/ShopQuery' }]
-      summary: A state kept from before a restore, to save.
+      summary: "A state kept from before a restore, to save. One kept before 0.11.0 is refused to an admin working a bot's management with its owner's or agent's seat (403 `این فایل پشتیبان پیش از نسخه 0.11.0 ساخته شده و رمز Webhook ربات‌ها در آن است؛ …`); an unknown name is a 404."
       responses:
         '200': { $ref: '#/components/responses/Backup' }
         default: { $ref: '#/components/responses/Error' }
@@ -2425,7 +2425,7 @@ paths:
   /api/admin/schedule:
     parameters: [{ $ref: '#/components/parameters/Shop' }]
     get:
-      summary: "«زمان‌بندی کارها»: every scheduled task — what it does, when it last ran and is due — with how often it runs and the times it decides by. One for the whole installation, the owner's."
+      summary: "«زمان‌بندی کارها»: every scheduled task — what it does, when it last ran and is due — with how often it runs, the time of day its runs are counted from (`start`, ScheduleStart) and the times it decides by. One for the whole installation, the owner's."
       responses:
         '200':
           description: OK
@@ -3255,7 +3255,7 @@ paths:
   /api/admin/settings/config:
     parameters: [{ $ref: '#/components/parameters/Shop' }]
     get:
-      summary: The installation's configuration, read from config.php.
+      summary: "The installation's configuration, read from config.php. To one of the main bot's admins, working its management with the owner's seat, the database's settings are not told — `groups.database.values` comes empty, with its driver and the drivers' descriptions alone — and the webhook secret's hint reads «••••••••» while one is kept; the owner sees both."
       responses:
         '200':
           description: OK
@@ -3289,7 +3289,7 @@ paths:
   /api/admin/settings/config/database/test:
     parameters: [{ $ref: '#/components/parameters/Shop' }]
     post:
-      summary: Test database settings without saving them.
+      summary: "Test database settings without saving them. The owner's themselves alone, as the save is: one of the main bot's admins, working its management with the owner's seat, is refused it before anything is tried (403 `دیتابیس فروشگاه را فقط خود مالک عوض یا تست می‌کند.`)."
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/DatabaseRequest' } } } }
       responses:
         '200':
@@ -3336,7 +3336,7 @@ paths:
   /api/admin/settings/config/{group}:
     parameters: [{ name: group, in: path, required: true, description: 'The group to save, as `ConfigSettingsResponse.groups` has it', schema: { $ref: '#/components/schemas/ConfigGroup' } }, { $ref: '#/components/parameters/Shop' }]
     put:
-      summary: "Save one group of the config.php settings. Two changes of `telegram` are the owner's themselves alone — one of the main bot's admins, working its management with the owner's seat, is refused them: the Bot API's address moved to another origin (403 `این تغییر رمز عبور پنل را می‌خواهد و فقط کار خود مالک است.`, before the password is judged), and a new webhook secret (403 `رمز Webhook ربات اصلی را فقط خود مالک عوض می‌کند.`)."
+      summary: "Save one group of the config.php settings. What would hand over the main bot or the owner's seat is the owner's themselves alone — one of the main bot's admins, working its management with the owner's seat, is refused it with a 403, the group's other fields saved by them as before: `database` saved at all (403 `دیتابیس فروشگاه را فقط خود مالک عوض یا تست می‌کند.`); in `app`, the site's address changed — any change, its path too: every bot's webhook is under it (403 `آدرس سایت را فقط خود مالک عوض می‌کند؛ پیام‌های تلگرام همه ربات‌ها به همین آدرس فرستاده می‌شود.`); in `telegram`, a new webhook secret (403 `رمز Webhook ربات اصلی را فقط خود مالک عوض می‌کند.`), the main bot's token changed or cleared, or its @username changed — the owner's one-time link opens in that bot (403 `توکن و نام کاربری ربات اصلی را فقط خود مالک عوض می‌کند.`) —, and the Bot API's address changed, its path on the same server too: every bot's token goes there (403 `آدرس API تلگرام را فقط خود مالک عوض می‌کند؛ توکن همه ربات‌ها به همین آدرس فرستاده می‌شود.`, the password never judged for them); in `advanced`, the panels' session length or secure cookie changed (403 `طول Session و کوکی Session پنل‌ها را فقط خود مالک عوض می‌کند.`), the log level, the timeout and the cron token saved by them as before. A value sent back as the screen showed it changes nothing, and the rest of the group saves. The installer's own saves, before an owner signs in, are not these."
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ConfigSettingsRequest' } } } }
       responses:
         '200':
@@ -4126,7 +4126,7 @@ paths:
   /api/store/v1/{store}/custom-services/quote:
     parameters: [{ $ref: '#/components/parameters/Store' }]
     post:
-      summary: "What a service the customer builds would cost them, nothing ordered: the GB's price and the days' price by their tiers, their sum (`base`), the customer's automatic discount and — with `discount_code` — the code's, as lines, and what is left. Only a sale of every plan reaches a built service, and a code limited to certain plans never does; a code limited to certain servers holds once `server_id` is picked. A 422 on `status` while nothing may be built (`offered` of `GET /custom-services`); on `gb` or `days` for an amount that is no whole number or outside its bounds (the message says them); on `server_id` for a server not on offer now; on `discount_code` when it does not apply. Each code that does not apply uses one of the customer's 20 tries an hour (shared with the checkout's), then a 429 with `Retry-After`. A panel's preview of the mini app may ask it, as the builder does by itself — but not with a `discount_code` (a 403: those tries are the customer's)."
+      summary: "What a service the customer builds would cost them, nothing ordered: the GB's price and the days' price by their tiers, their sum (`base`), the customer's automatic discount and — with `discount_code` — the code's, as lines, and what is left. Only a sale of every plan reaches a built service, and a code limited to certain plans or categories never does; a code limited to certain servers holds once `server_id` is picked. A 422 on `status` while nothing may be built (`offered` of `GET /custom-services`); on `gb` or `days` for an amount that is no whole number or outside its bounds (the message says them); on `server_id` for a server not on offer now; on `discount_code` when it does not apply. Each code that does not apply uses one of the customer's 20 tries an hour (shared with the checkout's), then a 429 with `Retry-After`. A panel's preview of the mini app may ask it, as the builder does by itself — but not with a `discount_code` (a 403: those tries are the customer's)."
       security: [{ customer: [] }]
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/StoreCustomQuoteRequest' } } } }
       responses:
@@ -7507,7 +7507,7 @@ components:
         token: { type: string, description: "Left out or blank: the stored token stays, as long as the Bot API address (`api_url`) stays on the same host." }
         clear_token: { type: boolean }
         username: { type: string, description: "The bot's username, with or without the @; blank for none." }
-        api_url: { type: string, description: "The Bot API's address: http(s) with a host, without credentials, ? or #. Moving it to another origin (scheme, host or port) sends every bot's token there, agents' included, so the save then needs `current_password` — and the owner themselves: an admin of the main bot is refused it (403)." }
+        api_url: { type: string, description: "The Bot API's address: http(s) with a host, without credentials, ? or #. Moving it to another origin (scheme, host or port) sends every bot's token there, agents' included, so the save then needs `current_password`. Any change of it, its path on the same server too, is the owner's themselves alone: an admin of the main bot is refused it (403), the password never judged." }
         current_password: { type: string, description: "The owner's current panel password. Read only when `api_url` moves to another origin: blank or wrong (a wrong one counts as a failed sign-in) is a 422 on it, and nothing is saved." }
         poll_timeout: { allOf: [{ $ref: '#/components/schemas/WholeNumberInput' }], description: 'Seconds, 1 to 60.' }
         webhook_secret: { type: string, description: "The secret part of the main bot's webhook address. A new one is the owner's themselves alone: an admin of the main bot is refused it (403)." }
@@ -7652,8 +7652,8 @@ components:
       required: [log_level, session_lifetime, session_secure_cookie, http_timeout]
       properties:
         log_level: { type: string, description: 'One of `meta.log_levels`; anything else is refused.' }
-        session_lifetime: { allOf: [{ $ref: '#/components/schemas/WholeNumberInput' }], description: 'Minutes, 5 to 43200.' }
-        session_secure_cookie: { type: boolean }
+        session_lifetime: { allOf: [{ $ref: '#/components/schemas/WholeNumberInput' }], description: "Minutes, 5 to 43200. A change is the owner's themselves alone: an admin of the main bot is refused it (403)." }
+        session_secure_cookie: { type: boolean, description: "A change is the owner's themselves alone: an admin of the main bot is refused it (403)." }
         http_timeout: { allOf: [{ $ref: '#/components/schemas/WholeNumberInput' }], description: 'Seconds, 5 to 120.' }
         cron_token: { type: string }
         clear_cron_token: { type: boolean }
@@ -9419,7 +9419,7 @@ components:
       description: "A discount code («کد تخفیف») a customer types at checkout, in the bot or on the website. Stored and matched in upper case."
       type: object
       additionalProperties: false
-      required: [id, code, note, type, value, max_discount, min_amount, order_types, plans, servers, first_purchase_only, starts_at, ends_at, max_uses, per_user, enabled, uses, deletable, state, created_at]
+      required: [id, code, note, type, value, max_discount, min_amount, order_types, plans, categories, servers, first_purchase_only, starts_at, ends_at, max_uses, per_user, enabled, uses, deletable, state, created_at]
       properties:
         id: { type: integer }
         code: { type: string }
@@ -9429,7 +9429,8 @@ components:
         max_discount: { type: string, nullable: true, description: 'For `percent`: the most Toman it takes off; null for no cap.' }
         min_amount: { type: string, nullable: true, description: "The minimum order amount (after the automatic discount) for the code to apply; null for none." }
         order_types: { type: array, nullable: true, items: { $ref: '#/components/schemas/OwnOrderType' }, description: 'The order types it applies to; null for every type a discount can apply to.' }
-        plans: { type: array, nullable: true, items: { $ref: '#/components/schemas/NamedRef' }, description: "The plans it applies to (for a renewal or extra, the service's plan); null for any." }
+        plans: { type: array, nullable: true, items: { $ref: '#/components/schemas/NamedRef' }, description: "The plans it names one by one (for a renewal or extra, the service's plan counts); null for none. With `categories`, it applies to these plans and to every plan in those categories; both null: any plan." }
+        categories: { type: array, nullable: true, items: { $ref: '#/components/schemas/NamedRef' }, description: "The plan categories it names: it applies to every plan filed under one as the plan is at checkout — a plan moved there later too, and one in a category switched off; null for none. Plans and categories deleted since are left out of both lists, and a code whose plans and categories are all gone applies to no plan (an empty list here, or in `plans`, is not null)." }
         servers: { type: array, nullable: true, items: { $ref: '#/components/schemas/NamedRef' }, description: "The servers it applies to (for a purchase, the chosen server; for a renewal or extra, the service's); null for any." }
         first_purchase_only: { type: boolean, description: 'Only for customers who have not bought a service yet.' }
         starts_at: { type: string, format: date-time, nullable: true }
@@ -9470,7 +9471,8 @@ components:
         max_discount: { allOf: [{ $ref: '#/components/schemas/AmountInput' }], nullable: true, description: "For `percent`: the cap, whole Toman above zero; blank or null for none. Ignored for other types." }
         min_amount: { allOf: [{ $ref: '#/components/schemas/AmountInput' }], nullable: true, description: 'Whole Toman; blank or null for none.' }
         order_types: { type: array, nullable: true, items: { $ref: '#/components/schemas/OwnOrderType' }, description: &discountOrderTypes 'At least one; null (or all of them) for every type.' }
-        plan_ids: { type: array, nullable: true, items: { type: integer }, description: "Plan ids; null or empty for any." }
+        plan_ids: { type: array, nullable: true, items: { type: integer }, description: "Plan ids named one by one; null or empty for none. With `category_ids` null or left out too, the code applies to any plan; both sent as lists and both empty is refused under `plan_ids` (a choice of nothing — say any plan with null). A row read with `plans: []` (its plans deleted since) and `categories: null`, sent back as read, is a lone empty `plan_ids`: every plan." }
+        category_ids: { type: array, nullable: true, items: { type: integer }, description: "Plan category ids: the code applies to every plan in them, as the plan is filed at checkout, besides the plans of `plan_ids`. Null or empty for none; a category deleted since is a 422 on it. A service built by the customer, with no plan, is reached only by a code of every plan (both null or left out)." }
         server_ids: { type: array, nullable: true, items: { type: integer }, description: 'Server ids; null or empty for any.' }
         first_purchase_only: { type: boolean }
         starts_at: { type: string, nullable: true, description: "A local date and time in the shop's time zone (not the browser's), such as 2026-03-20T18:00. Blank or null: from now." }
@@ -9482,16 +9484,17 @@ components:
     DiscountSwitchRequest: *switchRequest
 
     SaleRow:
-      description: "A timed sale («فروش ویژه»): a percent off the listed plans, for the listed order types, between its start and end. It is one of the automatic discounts; at checkout the largest applies."
+      description: "A timed sale («فروش ویژه»): a percent off the listed plans and the plans of the listed categories, for the listed order types, between its start and end. It is one of the automatic discounts; at checkout the largest applies."
       type: object
       additionalProperties: false
-      required: [id, name, percent, order_types, plans, starts_at, ends_at, enabled, state, created_at]
+      required: [id, name, percent, order_types, plans, categories, starts_at, ends_at, enabled, state, created_at]
       properties:
         id: { type: integer }
         name: { type: string, description: "The name customers see, such as «فروش ویژه نوروز»." }
         percent: { type: integer }
         order_types: { type: array, nullable: true, items: { $ref: '#/components/schemas/OwnOrderType' }, description: 'Null for every type a discount can apply to.' }
-        plans: { type: array, nullable: true, items: { $ref: '#/components/schemas/NamedRef' }, description: "Null for every plan (for an extra, the service's plan counts)." }
+        plans: { type: array, nullable: true, items: { $ref: '#/components/schemas/NamedRef' }, description: "The plans it names one by one (for an extra, the service's plan counts); null for none. With `categories` null too, every plan." }
+        categories: { type: array, nullable: true, items: { $ref: '#/components/schemas/NamedRef' }, description: "The plan categories it names: it takes its percent off every plan filed under one as the plan is at checkout — a plan moved there later too, and one in a category switched off; null for none. Plans and categories deleted since are left out, and a sale whose plans and categories are all gone holds for no plan (an empty list is not null)." }
         starts_at: { type: string, format: date-time, nullable: true }
         ends_at: { type: string, format: date-time, nullable: true }
         enabled: { type: boolean }
@@ -9521,7 +9524,8 @@ components:
         name: { type: string, description: 'At most 64 characters.' }
         percent: { allOf: [{ $ref: '#/components/schemas/WholeNumberInput' }], description: '1 to 100.' }
         order_types: { type: array, nullable: true, items: { $ref: '#/components/schemas/OwnOrderType' }, description: *discountOrderTypes }
-        plan_ids: { type: array, nullable: true, items: { type: integer }, description: "Plan ids; null or empty for every plan." }
+        plan_ids: { type: array, nullable: true, items: { type: integer }, description: "Plan ids named one by one; null or empty for none. With `category_ids` null or left out too, the sale is on every plan; both sent as lists and both empty is refused under `plan_ids` (a choice of nothing — say every plan with null). A row read with `plans: []` (its plans deleted since) and `categories: null`, sent back as read, is a lone empty `plan_ids`: every plan." }
+        category_ids: { type: array, nullable: true, items: { type: integer }, description: "Plan category ids: the sale is on every plan in them, as the plan is filed at checkout, besides the plans of `plan_ids`. Null or empty for none; a category deleted since is a 422 on it. A service built by the customer, with no plan, is reached only by a sale of every plan (both null or left out)." }
         starts_at: { type: string, nullable: true, description: "A local date and time in the shop's time zone, such as 2026-03-20T00:00. Blank or null: from now." }
         ends_at: { type: string, nullable: true, description: *discountEndsAt }
         enabled: { type: boolean }
@@ -9531,9 +9535,9 @@ components:
     BotSettingsData:
       type: object
       additionalProperties: false
-      required: [enabled, phone_required, phone_scope, phone_on_purchase, phone_on_renewal, phone_on_test, phone_on_card, phone_iran_only, join_required, support_contact, support_header, topup_min, topup_presets, topup_random_count, topup_random_min, topup_random_max, topup_random_round, topup_unique_max, wallet_transfer_enabled, wallet_transfer_min, wallet_transfer_max, wallet_transfer_daily, card_protect, card_to_support, receipt_single, qr_enabled, carry_traffic, auto_renew_days, auto_renew_default, extras_enabled, extra_traffic_price, extra_traffic_options, extra_traffic_min, extra_traffic_max, extra_time_price, extra_time_options, extra_time_min, extra_time_max, extra_devices_price, extra_devices_options, extra_devices_min, extra_devices_max, expiry_reminder, expiry_reminder_days, traffic_reminder, traffic_reminder_percent, expired_cleanup, expired_cleanup_hours, test_enabled, test_per_user, test_period_days, test_daily_limit, test_newcomers_only, test_cleanup, test_cleanup_hours, test_unused_days, renew_window_days, renew_window_percent, renew_extend, renew_reset_traffic, renew_reset_time, renew_default_method, transfer_enabled, name_pattern, test_name_pattern, name_random, name_custom, referral_enabled, referral_rate, referral_renewal_rate, referral_first_only, referral_start_referrer, referral_start_invitee, referral_start_when, referral_reward_every, referral_reward_plan_id, referral_alert_burst, referral_alert_minutes, referral_alert_idle, report_purchases, report_renewals, report_tests, report_deletions, report_wallet, report_receipts, report_users, report_errors, report_tickets, report_reviews, report_backups, gift_codes_enabled, wheel_enabled, wheel_cooldown_hours, wheel_buyers_only, wheel_cost, cashback_enabled, lottery_enabled, lottery_hour, lottery_winners, lottery_prize, lottery_wallet, lottery_traffic_gb, lottery_days, lottery_plan_id, lottery_entries, lottery_exclude_agents, hold_minutes, agents_without_perks]
+      required: [enabled, phone_required, phone_scope, phone_on_purchase, phone_on_renewal, phone_on_test, phone_on_card, phone_iran_only, join_required, support_contact, support_header, topup_min, topup_presets, topup_random_count, topup_random_min, topup_random_max, topup_random_round, topup_unique_max, wallet_transfer_enabled, wallet_transfer_min, wallet_transfer_max, wallet_transfer_daily, card_protect, card_to_support, receipt_single, qr_enabled, carry_traffic, auto_renew_days, auto_renew_default, extras_enabled, extra_traffic_price, extra_traffic_options, extra_traffic_min, extra_traffic_max, extra_time_price, extra_time_options, extra_time_min, extra_time_max, extra_devices_price, extra_devices_options, extra_devices_min, extra_devices_max, expiry_reminder, expiry_reminder_days, traffic_reminder, traffic_reminder_percent, expired_cleanup, expired_cleanup_hours, test_enabled, test_per_user, test_period_days, test_daily_limit, test_newcomers_only, test_cleanup, test_cleanup_hours, test_unused_days, renew_window_days, renew_window_percent, renew_extend, renew_reset_traffic, renew_reset_time, renew_default_method, transfer_enabled, name_pattern, test_name_pattern, name_random, name_custom, referral_enabled, referral_rate, referral_renewal_rate, referral_first_only, referral_start_referrer, referral_start_invitee, referral_start_when, referral_reward_every, referral_reward_plan_id, referral_alert_burst, referral_alert_minutes, referral_alert_idle, report_purchases, report_renewals, report_tests, report_deletions, report_wallet, report_receipts, report_users, report_errors, report_tickets, report_reviews, report_backups, report_daily, daily_report_hour, gift_codes_enabled, wheel_enabled, wheel_cooldown_hours, wheel_buyers_only, wheel_cost, cashback_enabled, lottery_enabled, lottery_hour, lottery_winners, lottery_prize, lottery_wallet, lottery_traffic_gb, lottery_days, lottery_plan_id, lottery_entries, lottery_exclude_agents, hold_minutes, agents_without_perks]
       properties:
-        hold_minutes: { type: integer, description: "«کدهای تخفیف»: how many minutes an order made with a discount code may stay unpaid. After that, if untouched and no receipt is with support, it is cancelled and the code's use is freed. 0: as long as any unpaid order (two days by default)." }
+        hold_minutes: { type: integer, description: "«کدهای تخفیف»: how many minutes an order made with a discount code may stay unpaid. After that, if untouched, no receipt is with support and no money is in at its online gateway unsettled (a part paid, a receipt in the gateway's review, confirmations awaited), it is cancelled and the code's use is freed. 0: as long as any unpaid order (two days by default)." }
         agents_without_perks: { type: boolean, description: "«همکارها فقط با قیمت همکاری»: whoever pays agent prices (an agent, or in a «همکار» group) goes without the customers' perks, whatever they buy — no sale, loyalty tier, discount code, first-purchase price, cashback, lucky wheel or nightly draw; a plan's agent price where it has one, the regular price elsewhere (a plan without one, extras, a built service); their own discount stays." }
         enabled: { type: boolean }
         phone_required: { type: boolean }
@@ -9638,6 +9642,8 @@ components:
         report_tickets: { type: boolean, description: "Support tickets and their messages (in every shop)." }
         report_reviews: { type: boolean, description: "Reviews written on the website (in every shop)." }
         report_backups: { type: boolean, description: "The shop's backup file, sent once a day by default (the owner's «زمان‌بندی کارها»): the main shop's group gets the whole installation's, an agent's group its own shop's." }
+        report_daily: { type: boolean, description: "«گزارش روزانه»: once a day, the shop's day before in figures — its income (money that came in, as the dashboard counts it) by payment method and against the day before, its sales by kind of order (wallet-paid ones too; a service given free — a prize, a referral's gift, support's free order — is no sale), the plans and servers sold most, new customers, buyers and free tests, the services running and what waits on support; in the main shop's group, what each agent's bot sold, in an agent's its traffic left. A day with no sale says so, its income still shown." }
+        daily_report_hour: { type: integer, description: "The hour (0 to 23, in the shop's time zone) from which the daily report of the day before is sent; 0, just after midnight, by default. The `daily_report` task looks every 10 minutes by default: an interval over an hour may let the day pass with no look after this hour, and that report is not sent." }
         gift_codes_enabled: { type: boolean, description: "«کد هدیه»: customers can redeem gift codes, with the bot's «🎁 کد هدیه» button or on the website. Codes can be created either way." }
         wheel_enabled: { type: boolean, description: "«گردونه شانس»: customers can spin the lucky wheel with the bot's «🎡 گردونه شانس» button." }
         wheel_cooldown_hours: { type: integer, description: 'Hours a customer waits between two spins that gave a prize.' }
@@ -9773,7 +9779,7 @@ components:
             every_minutes: { type: integer, description: "How often it goes: the owner's «زمان‌بندی کارها» (`send_backups_minutes`), a day by default." }
             last_sent_at: { type: string, format: date-time, nullable: true, description: When it last tried; null when it never did. }
             last_problem: { type: string, nullable: true, description: What kept that one from going (Telegram's words); null when it went. }
-        kept: { type: array, items: { $ref: '#/components/schemas/BackupKept' }, description: Newest first. }
+        kept: { type: array, items: { $ref: '#/components/schemas/BackupKept' }, description: "Newest first — without those kept before 0.11.0 to an admin working a bot's management with its owner's or agent's seat." }
         upload_max_bytes: { type: integer, description: "The largest file this host takes in one upload (PHP's smaller limit); 0 when it does not say." }
 
     BackupsResponse:
@@ -10231,7 +10237,7 @@ components:
     BotReportsSettingsRequest:
       type: object
       additionalProperties: false
-      required: [report_purchases, report_renewals, report_tests, report_deletions, report_wallet, report_receipts, report_users, report_errors, report_tickets, report_reviews, report_backups]
+      required: [report_purchases, report_renewals, report_tests, report_deletions, report_wallet, report_receipts, report_users, report_errors, report_tickets, report_reviews, report_backups, report_daily, daily_report_hour]
       properties:
         report_purchases: { type: boolean }
         report_renewals: { type: boolean }
@@ -10245,6 +10251,8 @@ components:
         report_tickets: { type: boolean }
         report_reviews: { type: boolean }
         report_backups: { type: boolean }
+        report_daily: { type: boolean }
+        daily_report_hour: { allOf: [{ $ref: '#/components/schemas/WholeNumberInput' }], description: '0 to 23.' }
 
     BotQrSettingsRequest:
       type: object
@@ -10295,7 +10303,7 @@ components:
 
     ReportTopicKey:
       type: string
-      enum: [purchases, renewals, tests, deletions, wallet, receipts, users, errors, agency, tickets, reviews, backups]
+      enum: [purchases, renewals, tests, deletions, wallet, receipts, users, errors, agency, tickets, reviews, backups, daily]
 
     ReportTopicInfo:
       description: "A topic of the report group, in the group's order."
@@ -10564,15 +10572,28 @@ components:
       description: "One scheduled task, in the order a run takes them."
       type: object
       additionalProperties: false
-      required: [key, title, description, each_shop, last_ran_at, next_run_at, fields]
+      required: [key, title, description, each_shop, last_ran_at, next_run_at, start, fields]
       properties:
         key: { type: string, description: "Its name, which its fields' names begin with." }
         title: { type: string }
         description: { type: string, description: "What it does, in a sentence." }
         each_shop: { type: boolean, description: "It runs in every shop in turn — the main one's and each agent's —; otherwise once across all of them." }
         last_ran_at: { type: string, format: date-time, nullable: true, description: "When it last ran; null when it never did." }
-        next_run_at: { type: string, format: date-time, nullable: true, description: "When it is due again: its last run and its interval. A moment past means at the scheduler's next tick (every minute); null when it never ran, which is due at once." }
+        next_run_at: { type: string, format: date-time, nullable: true, description: "When it is due again: the next moment of its grid — its start on the shop's clock and every interval after it — or, while it has not run since the grid's latest moment, that one. A moment past means at the scheduler's next tick (every minute); null when it never ran, which is due at once." }
+        start: { $ref: '#/components/schemas/ScheduleStart' }
         fields: { type: array, items: { $ref: '#/components/schemas/ScheduleField' }, description: "Its interval first, then the times it decides by." }
+
+    ScheduleStart:
+      description: "The time of day a task's runs are counted from (`<task>_start`), on the shop's clock: a run at it every day, and then every interval after it — every 10 minutes from 00:03 is 00:03, 00:13, 00:23… A grid of a day or less starts again at it every day; a longer one counts from it on a Saturday. A run held up a little does not move the next; a task that has not run since the grid's latest moment (the start moved to a time already past, Cron stopped) runs once at the next tick. A server clock put back stalls no task: each waits for its next moment. At a daylight-saving change the schedule follows the shop's clock: a moment the clock jumps over in spring runs once, at the first minute after the jump (a daily 02:30 runs at 03:00 that day); in the hour a fall-back repeats, a minute of the clock runs again only once a whole interval of real time has passed since the run it repeats — a task every hour or more often keeps running through that hour (an hourly one keeps its hour), and a daily 02:30 runs once, at the first 02:30. Of no effect on a task that runs every minute."
+      type: object
+      additionalProperties: false
+      required: [name, label, hint, value, default]
+      properties:
+        name: { type: string, description: "What ScheduleRequest calls it: `<task>_start`." }
+        label: { type: string }
+        hint: { type: string, nullable: true }
+        value: { type: string, description: '"HH:MM": what the shop runs with — the owner''s, or the default.' }
+        default: { type: string, description: '"HH:MM" while the owner set nothing; saving it keeps nothing.' }
 
     Schedule:
       description: "«زمان‌بندی کارها»: the owner's, for the whole installation — one scheduler runs every shop's work."
@@ -10591,10 +10612,10 @@ components:
         schedule: { $ref: '#/components/schemas/Schedule' }
 
     ScheduleRequest:
-      description: "Every task's fields, saved whole (a missing one is refused), each by its ScheduleField `name`. A value equal to its default is kept as none."
+      description: "Every task's fields, saved whole (a missing one is refused), each by its ScheduleField `name`, and its start by its ScheduleStart `name`. A value equal to its default is kept as none."
       type: object
       additionalProperties: false
-      required: [auto_approve_receipts_minutes, online_payments_minutes, resume_deliveries_minutes, expire_orders_minutes, send_broadcasts_minutes, auto_renew_minutes, next_period_minutes, grants_minutes, migrations_minutes, sync_subscriptions_minutes, send_reminders_minutes, cleanup_services_minutes, agency_standing_minutes, prune_updates_minutes, prune_accounts_minutes, prune_tickets_minutes, nightly_draw_minutes, send_backups_minutes, prune_imports_minutes, check_releases_minutes, send_reports_minutes, expire_orders_hours, online_payments_check_minutes, online_payments_late_hours, online_payments_late_check_minutes, online_payments_review_hours, notices_keep_days, ticket_pictures_keep_days, reports_keep_days, reports_wait_hours]
+      required: [auto_approve_receipts_minutes, online_payments_minutes, resume_deliveries_minutes, expire_orders_minutes, send_broadcasts_minutes, auto_renew_minutes, next_period_minutes, grants_minutes, migrations_minutes, sync_subscriptions_minutes, send_reminders_minutes, cleanup_services_minutes, agency_standing_minutes, prune_updates_minutes, prune_accounts_minutes, prune_tickets_minutes, nightly_draw_minutes, send_backups_minutes, prune_imports_minutes, daily_report_minutes, check_releases_minutes, send_reports_minutes, auto_approve_receipts_start, online_payments_start, resume_deliveries_start, expire_orders_start, send_broadcasts_start, auto_renew_start, next_period_start, grants_start, migrations_start, sync_subscriptions_start, send_reminders_start, cleanup_services_start, agency_standing_start, prune_updates_start, prune_accounts_start, prune_tickets_start, nightly_draw_start, send_backups_start, prune_imports_start, daily_report_start, check_releases_start, send_reports_start, expire_orders_hours, online_payments_check_minutes, online_payments_late_hours, online_payments_late_check_minutes, online_payments_review_hours, notices_keep_days, ticket_pictures_keep_days, reports_keep_days, reports_wait_hours]
       properties:
         auto_approve_receipts_minutes: { allOf: [{ $ref: '#/components/schemas/WholeNumberInput' }], description: 'Minutes between two runs of `auto_approve_receipts`, 1 to 10080; 1 by default.' }
         online_payments_minutes: { allOf: [{ $ref: '#/components/schemas/WholeNumberInput' }], description: 'Minutes between two runs of `online_payments`, 1 to 10080; 1 by default.' }
@@ -10615,8 +10636,31 @@ components:
         nightly_draw_minutes: { allOf: [{ $ref: '#/components/schemas/WholeNumberInput' }], description: 'Minutes between two runs of `nightly_draw`, 1 to 10080; 10 by default.' }
         send_backups_minutes: { allOf: [{ $ref: '#/components/schemas/WholeNumberInput' }], description: 'Minutes between two runs of `send_backups`, 1 to 10080; 1440 by default.' }
         prune_imports_minutes: { allOf: [{ $ref: '#/components/schemas/WholeNumberInput' }], description: 'Minutes between two runs of `prune_imports`, 1 to 10080; 1440 by default.' }
+        daily_report_minutes: { allOf: [{ $ref: '#/components/schemas/WholeNumberInput' }], description: 'Minutes between two runs of `daily_report`, 1 to 10080; 10 by default.' }
         check_releases_minutes: { allOf: [{ $ref: '#/components/schemas/WholeNumberInput' }], description: 'Minutes between two runs of `check_releases`, 1 to 10080; 1440 by default.' }
         send_reports_minutes: { allOf: [{ $ref: '#/components/schemas/WholeNumberInput' }], description: 'Minutes between two runs of `send_reports`, 1 to 10080; 1 by default.' }
+        auto_approve_receipts_start: { type: string, description: '"HH:MM" on the shop''s clock from 00:00 to 23:59 (Persian digits, one digit for the hour or the minute — "3:5" is 03:05 —, a bare hour — "9" is 09:00 —, and «٫», ".", "：", "," or «،» for the colon taken too, any space — a tab, a non-breaking one — left out; blank is refused): the time `auto_approve_receipts`''s runs are counted from (ScheduleStart); 00:00 by default.' }
+        online_payments_start: { type: string, description: '"HH:MM" on the shop''s clock from 00:00 to 23:59 (Persian digits, one digit for the hour or the minute — "3:5" is 03:05 —, a bare hour — "9" is 09:00 —, and «٫», ".", "：", "," or «،» for the colon taken too, any space — a tab, a non-breaking one — left out; blank is refused): the time `online_payments`''s runs are counted from (ScheduleStart); 00:00 by default.' }
+        resume_deliveries_start: { type: string, description: '"HH:MM" on the shop''s clock from 00:00 to 23:59 (Persian digits, one digit for the hour or the minute — "3:5" is 03:05 —, a bare hour — "9" is 09:00 —, and «٫», ".", "：", "," or «،» for the colon taken too, any space — a tab, a non-breaking one — left out; blank is refused): the time `resume_deliveries`''s runs are counted from (ScheduleStart); 00:00 by default.' }
+        expire_orders_start: { type: string, description: '"HH:MM" on the shop''s clock from 00:00 to 23:59 (Persian digits, one digit for the hour or the minute — "3:5" is 03:05 —, a bare hour — "9" is 09:00 —, and «٫», ".", "：", "," or «،» for the colon taken too, any space — a tab, a non-breaking one — left out; blank is refused): the time `expire_orders`''s runs are counted from (ScheduleStart); 00:00 by default.' }
+        send_broadcasts_start: { type: string, description: '"HH:MM" on the shop''s clock from 00:00 to 23:59 (Persian digits, one digit for the hour or the minute — "3:5" is 03:05 —, a bare hour — "9" is 09:00 —, and «٫», ".", "：", "," or «،» for the colon taken too, any space — a tab, a non-breaking one — left out; blank is refused): the time `send_broadcasts`''s runs are counted from (ScheduleStart); 00:00 by default.' }
+        auto_renew_start: { type: string, description: '"HH:MM" on the shop''s clock from 00:00 to 23:59 (Persian digits, one digit for the hour or the minute — "3:5" is 03:05 —, a bare hour — "9" is 09:00 —, and «٫», ".", "：", "," or «،» for the colon taken too, any space — a tab, a non-breaking one — left out; blank is refused): the time `auto_renew`''s runs are counted from (ScheduleStart); 00:00 by default.' }
+        next_period_start: { type: string, description: '"HH:MM" on the shop''s clock from 00:00 to 23:59 (Persian digits, one digit for the hour or the minute — "3:5" is 03:05 —, a bare hour — "9" is 09:00 —, and «٫», ".", "：", "," or «،» for the colon taken too, any space — a tab, a non-breaking one — left out; blank is refused): the time `next_period`''s runs are counted from (ScheduleStart); 00:00 by default.' }
+        grants_start: { type: string, description: '"HH:MM" on the shop''s clock from 00:00 to 23:59 (Persian digits, one digit for the hour or the minute — "3:5" is 03:05 —, a bare hour — "9" is 09:00 —, and «٫», ".", "：", "," or «،» for the colon taken too, any space — a tab, a non-breaking one — left out; blank is refused): the time `grants`''s runs are counted from (ScheduleStart); 00:00 by default.' }
+        migrations_start: { type: string, description: '"HH:MM" on the shop''s clock from 00:00 to 23:59 (Persian digits, one digit for the hour or the minute — "3:5" is 03:05 —, a bare hour — "9" is 09:00 —, and «٫», ".", "：", "," or «،» for the colon taken too, any space — a tab, a non-breaking one — left out; blank is refused): the time `migrations`''s runs are counted from (ScheduleStart); 00:00 by default.' }
+        sync_subscriptions_start: { type: string, description: '"HH:MM" on the shop''s clock from 00:00 to 23:59 (Persian digits, one digit for the hour or the minute — "3:5" is 03:05 —, a bare hour — "9" is 09:00 —, and «٫», ".", "：", "," or «،» for the colon taken too, any space — a tab, a non-breaking one — left out; blank is refused): the time `sync_subscriptions`''s runs are counted from (ScheduleStart); 00:05 by default.' }
+        send_reminders_start: { type: string, description: '"HH:MM" on the shop''s clock from 00:00 to 23:59 (Persian digits, one digit for the hour or the minute — "3:5" is 03:05 —, a bare hour — "9" is 09:00 —, and «٫», ".", "：", "," or «،» for the colon taken too, any space — a tab, a non-breaking one — left out; blank is refused): the time `send_reminders`''s runs are counted from (ScheduleStart); 00:05 by default.' }
+        cleanup_services_start: { type: string, description: '"HH:MM" on the shop''s clock from 00:00 to 23:59 (Persian digits, one digit for the hour or the minute — "3:5" is 03:05 —, a bare hour — "9" is 09:00 —, and «٫», ".", "：", "," or «،» for the colon taken too, any space — a tab, a non-breaking one — left out; blank is refused): the time `cleanup_services`''s runs are counted from (ScheduleStart); 00:05 by default.' }
+        agency_standing_start: { type: string, description: '"HH:MM" on the shop''s clock from 00:00 to 23:59 (Persian digits, one digit for the hour or the minute — "3:5" is 03:05 —, a bare hour — "9" is 09:00 —, and «٫», ".", "：", "," or «،» for the colon taken too, any space — a tab, a non-breaking one — left out; blank is refused): the time `agency_standing`''s runs are counted from (ScheduleStart); 00:10 by default.' }
+        prune_updates_start: { type: string, description: '"HH:MM" on the shop''s clock from 00:00 to 23:59 (Persian digits, one digit for the hour or the minute — "3:5" is 03:05 —, a bare hour — "9" is 09:00 —, and «٫», ".", "：", "," or «،» for the colon taken too, any space — a tab, a non-breaking one — left out; blank is refused): the time `prune_updates`''s runs are counted from (ScheduleStart); 00:25 by default.' }
+        prune_accounts_start: { type: string, description: '"HH:MM" on the shop''s clock from 00:00 to 23:59 (Persian digits, one digit for the hour or the minute — "3:5" is 03:05 —, a bare hour — "9" is 09:00 —, and «٫», ".", "：", "," or «،» for the colon taken too, any space — a tab, a non-breaking one — left out; blank is refused): the time `prune_accounts`''s runs are counted from (ScheduleStart); 00:40 by default.' }
+        prune_tickets_start: { type: string, description: '"HH:MM" on the shop''s clock from 00:00 to 23:59 (Persian digits, one digit for the hour or the minute — "3:5" is 03:05 —, a bare hour — "9" is 09:00 —, and «٫», ".", "：", "," or «،» for the colon taken too, any space — a tab, a non-breaking one — left out; blank is refused): the time `prune_tickets`''s runs are counted from (ScheduleStart); 00:55 by default.' }
+        nightly_draw_start: { type: string, description: '"HH:MM" on the shop''s clock from 00:00 to 23:59 (Persian digits, one digit for the hour or the minute — "3:5" is 03:05 —, a bare hour — "9" is 09:00 —, and «٫», ".", "：", "," or «،» for the colon taken too, any space — a tab, a non-breaking one — left out; blank is refused): the time `nightly_draw`''s runs are counted from (ScheduleStart); 00:00 by default.' }
+        send_backups_start: { type: string, description: '"HH:MM" on the shop''s clock from 00:00 to 23:59 (Persian digits, one digit for the hour or the minute — "3:5" is 03:05 —, a bare hour — "9" is 09:00 —, and «٫», ".", "：", "," or «،» for the colon taken too, any space — a tab, a non-breaking one — left out; blank is refused): the time `send_backups`''s runs are counted from (ScheduleStart); 00:00 by default.' }
+        prune_imports_start: { type: string, description: '"HH:MM" on the shop''s clock from 00:00 to 23:59 (Persian digits, one digit for the hour or the minute — "3:5" is 03:05 —, a bare hour — "9" is 09:00 —, and «٫», ".", "：", "," or «،» for the colon taken too, any space — a tab, a non-breaking one — left out; blank is refused): the time `prune_imports`''s runs are counted from (ScheduleStart); 03:00 by default.' }
+        daily_report_start: { type: string, description: '"HH:MM" on the shop''s clock from 00:00 to 23:59 (Persian digits, one digit for the hour or the minute — "3:5" is 03:05 —, a bare hour — "9" is 09:00 —, and «٫», ".", "：", "," or «،» for the colon taken too, any space — a tab, a non-breaking one — left out; blank is refused): the time `daily_report`''s runs are counted from (ScheduleStart); 00:00 by default.' }
+        check_releases_start: { type: string, description: '"HH:MM" on the shop''s clock from 00:00 to 23:59 (Persian digits, one digit for the hour or the minute — "3:5" is 03:05 —, a bare hour — "9" is 09:00 —, and «٫», ".", "：", "," or «،» for the colon taken too, any space — a tab, a non-breaking one — left out; blank is refused): the time `check_releases`''s runs are counted from (ScheduleStart); 03:30 by default.' }
+        send_reports_start: { type: string, description: '"HH:MM" on the shop''s clock from 00:00 to 23:59 (Persian digits, one digit for the hour or the minute — "3:5" is 03:05 —, a bare hour — "9" is 09:00 —, and «٫», ".", "：", "," or «،» for the colon taken too, any space — a tab, a non-breaking one — left out; blank is refused): the time `send_reports`''s runs are counted from (ScheduleStart); 00:00 by default.' }
         expire_orders_hours: { allOf: [{ $ref: '#/components/schemas/WholeNumberInput' }], description: "Hours an unpaid order nobody touched waits before it is dropped (one whose money may be with support never is). 1 to 720; 48 by default." }
         online_payments_check_minutes: { allOf: [{ $ref: '#/components/schemas/WholeNumberInput' }], description: "Minutes between two asks to its gateway about an online payment whose page still takes money. 1 to 60; 3 by default." }
         online_payments_late_hours: { allOf: [{ $ref: '#/components/schemas/WholeNumberInput' }], description: "Hours after its page closed that an online payment is still asked about (a gateway may take money late). 0 to 72; 2 by default." }
@@ -12272,16 +12316,17 @@ components:
       enum: [bestseller, recommended, vip]
 
     StoreSale:
-      description: "A timed sale running now («فروش ویژه»): its name, its percent off, when it ends (null: until support stops it), and what it holds for — the plans named (null: every plan) and the kinds of order (null: every kind)."
+      description: "A timed sale running now («فروش ویژه»): its name, its percent off, when it ends (null: until support stops it), and what it holds for — its plans (null: every plan) and the kinds of order (null: every kind)."
       type: object
       additionalProperties: false
-      required: [id, name, percent, ends_at, plan_ids, order_types]
+      required: [id, name, percent, ends_at, plan_ids, category_ids, order_types]
       properties:
         id: { type: integer }
         name: { type: string, description: 'What the customer reads: «فروش ویژه نوروز».' }
         percent: { type: integer }
         ends_at: { type: string, format: date-time, nullable: true }
-        plan_ids: { type: array, nullable: true, items: { type: integer } }
+        plan_ids: { type: array, nullable: true, items: { type: integer }, description: "The plans on sale now (switched on, not hidden by the owner) that it holds for: those it names and those filed under the categories it names; null for every plan; empty when none of them is on sale now (it may still reach a renewal or an extra of a service on one of its plans)." }
+        category_ids: { type: array, nullable: true, items: { type: integer }, description: "The plan categories it names, as stored — a category deleted since may stay —, whose plans on sale `plan_ids` already lists; null for none." }
         order_types: { type: array, nullable: true, items: { $ref: '#/components/schemas/OwnOrderType' } }
 
     StoreSalesResponse:
@@ -13039,7 +13084,7 @@ components:
             devices: { type: integer, description: "Devices at once it gives; 0 — unlimited. From when, as a plan's `devices`." }
             traffic_price: { type: string, description: "Toman: the GB at their tier's rate." }
             days_price: { type: string, description: "Toman: the days at their tier's rate." }
-        price: { type: string, description: "What the renewal costs the customer, in Toman: the plan's agent price for an agent or a «همکار» group member, else its price — or the package's two prices added (only a sale of every plan reaches it, and a code limited to certain plans never does) —, minus their largest automatic discount (`discounts`). A discount code is applied on top of this when paying (`discount_code`)." }
+        price: { type: string, description: "What the renewal costs the customer, in Toman: the plan's agent price for an agent or a «همکار» group member, else its price — or the package's two prices added (only a sale of every plan reaches it, and a code limited to certain plans or categories never does) —, minus their largest automatic discount (`discounts`). A discount code is applied on top of this when paying (`discount_code`)." }
         discounts: { type: array, items: { $ref: '#/components/schemas/DiscountLine' }, description: 'The automatic discount in `price`: none, or one.' }
         after:
           type: object

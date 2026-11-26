@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace Tests\Feature\BotAdmin;
 
+use App\Core\Scheduling\Scheduler;
 use App\Modules\Admin\Services\ScheduleScreen;
+use App\Modules\Backups\Tasks\SendBackupsTask;
 use App\Modules\Telegram\Admin\Ui\Nav;
 use App\Modules\Telegram\Admin\Ui\Words;
 use App\Modules\Users\Models\User;
@@ -55,6 +57,35 @@ final class PanelOperationsTest extends BotTestCase
         self::assertContains(Nav::to('ppj', 'defaults'), $this->callbacks(0), 'asked first');
         $this->tapAs(Nav::to('ppj', 'defaults'));
         self::assertSame($field['default'], $this->field(0, 0)['value']);
+    }
+
+    public function testATasksStartIsTypedAsATimeOfDayOrPutBack(): void
+    {
+        $backups = array_search(SendBackupsTask::class, array_keys($this->service(Scheduler::class)->tasks()), true);
+        self::assertIsInt($backups);
+
+        $this->tapAs(Nav::to('ppjt', 'show', $backups));
+        self::assertStringContainsString('ساعت شروع', $this->said()[0]);
+        self::assertStringContainsString('۰۰:۰۰', $this->said()[0], 'the backup at midnight by default');
+        $this->tapAs(Nav::to('ppjt', 'es', $backups));
+        $this->send($this->message('۲:۳۰', chat: self::OWNER));
+        self::assertSame(150, $this->service(Scheduler::class)->start(SendBackupsTask::class), 'Persian digits, one for the hour');
+        self::assertStringContainsString('۰۲:۳۰ ✏️', $this->said()[0], 'its default said beside it');
+
+        $this->tapAs(Nav::to('ppjt', 'es', $backups));
+        $this->send($this->message('25:00', chat: self::OWNER));
+        self::assertStringContainsString('ساعت شروع را به شکل', (string) $this->popup() . implode("\n", $this->said()), 'no time of day: refused, in the server\'s words');
+        self::assertSame(150, $this->service(Scheduler::class)->start(SendBackupsTask::class));
+
+        $this->tapAs(Nav::to('ppjt', 'es', $backups));
+        self::assertContains(Nav::to('ppjt', 'ds', $backups), $this->callbacks(0), 'its default a tap away');
+        $this->tapAs(Nav::to('ppjt', 'ds', $backups));
+        self::assertSame(0, $this->service(Scheduler::class)->start(SendBackupsTask::class));
+
+        $this->tapAs(Nav::to('ppj'));
+        $list = array_column(array_merge(...$this->inlineKeyboard($this->buttonsCall())), 'text');
+        self::assertContains('⚙️ پاک‌سازی انتقال‌ها · هر ۱٬۴۴۰ دقیقه از ۰۳:۰۰', $list, 'the list says when each runs');
+        self::assertContains('🏪 ارسال گزارش‌ها · هر ۱ دقیقه', $list, 'every minute: its start makes no difference, so it is left out');
     }
 
     public function testABackupIsSentHereAndTheInstallationRestoredFromItOnAYes(): void

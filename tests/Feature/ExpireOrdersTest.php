@@ -47,7 +47,7 @@ final class ExpireOrdersTest extends DatabaseTestCase
     public function testTheTaskLooksEveryTenMinutesInEveryShop(): void
     {
         self::assertSame(
-            ['task' => ExpireOrdersTask::class, 'key' => 'expire_orders', 'interval' => 10 * 60, 'eachBot' => true],
+            ['task' => ExpireOrdersTask::class, 'key' => 'expire_orders', 'interval' => 10 * 60, 'start' => 0, 'eachBot' => true],
             $this->service(Scheduler::class)->tasks()[ExpireOrdersTask::class],
         );
     }

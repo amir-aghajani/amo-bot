@@ -10,6 +10,7 @@ use App\Modules\Payments\Models\Payment;
 use App\Modules\Settings\Models\Setting;
 use App\Modules\Settings\Services\Settings;
 use App\Support\Money;
+use Psr\Log\LoggerInterface;
 
 /**
  * «تایید خودکار واریز», each shop its own: whether the bank SMS a phone app forwards approve card payments (and every
@@ -31,6 +32,7 @@ final class DepositSettings
     public function __construct(
         private readonly Settings $settings,
         private readonly Encrypter $encrypter,
+        private readonly LoggerInterface $logger,
     ) {}
 
     /** Whether the current shop listens to its deposits. */
@@ -56,15 +58,19 @@ final class DepositSettings
         }
     }
 
-    /** The current shop's key — made now when it has none. */
+    /** The current shop's key — made now when it has none, or when the one kept no longer decrypts (logged). */
     public function key(): string
     {
         $kept = $this->settings->get(self::KEY);
         if (is_string($kept) && $kept !== '') {
             try {
                 return $this->encrypter->decrypt($kept);
-            } catch (\Throwable) {
-                // Kept under another APP_KEY: no app can know it any more — a new one, below.
+            } catch (\Throwable $e) {
+                // Kept under another APP_KEY: no app can know it any more — a new one, below, which the app must be given.
+                $this->logger->warning('The deposits key of shop {shop} cannot be decrypted (was APP_KEY changed?), so a new one is made: the phone app must be given it, or its SMS are refused: {message}', [
+                    'shop' => CurrentBot::id(),
+                    'message' => $e->getMessage(),
+                ]);
             }
         }
 

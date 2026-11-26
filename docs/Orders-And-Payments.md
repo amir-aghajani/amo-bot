@@ -403,7 +403,9 @@ How often each of these runs, and the hours below, are the defaults: you set the
   ([Discounts](Discounts.md#uses-and-giving-them-back)). It goes quietly: its rows are kept, a rejected receipt's reason
   is kept, and the receipts uploaded for it on the website are deleted. **These orders never expire:** one whose
   receipt is with you, one whose card payment went to support's private chat
-  ([Bot settings](Bot-Settings.md#card-to-card-payments)), one whose online gateway's page still takes money, and one
+  ([Bot settings](Bot-Settings.md#card-to-card-payments)), one whose online gateway's page still takes money, one whose
+  online payment has money in at its gateway, not settled yet — a part paid, a receipt in the gateway's own review,
+  confirmations awaited ([Payment methods](Payment-Methods.md#every-online-gateway)): settled, it is delivered —, and one
   whose online payment is [held for you](#a-payment-held-for-support) and still waits.
 - **Receipts approved by themselves** — a card's review window
   ([Payment methods](Payment-Methods.md#approving-receipts-by-themselves)).

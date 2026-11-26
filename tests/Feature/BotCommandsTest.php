@@ -41,7 +41,7 @@ final class BotCommandsTest extends BotTestCase
             FakeTelegram::AGENT_TOKEN => "https://shop.example/shop/webhooks/telegram/bot/{$agentBot->id}/{$agentBot->refresh()->webhook_secret}",
         ], $set, 'each bot at its own address, the sub-folder APP_URL\'s alone');
         self::assertStringContainsString('Generated TELEGRAM_WEBHOOK_SECRET', $tester->getDisplay());
-        self::assertSame($set[FakeTelegram::AGENT_TOKEN], CurrentBot::run($agentBot, fn() => $this->service(BotState::class)->webhookUrl()), 'the dashboard reads the mode');
+        self::assertSame("https://shop.example/shop/webhooks/telegram/bot/{$agentBot->id}/***", CurrentBot::run($agentBot, fn() => $this->service(BotState::class)->webhookUrl()), 'the dashboard reads the mode; the secret is kept nowhere but on the bot\'s row');
     }
 
     public function testAnAgentsBotTelegramRefusesKeepsTheReasonAndTheOthersAreSet(): void

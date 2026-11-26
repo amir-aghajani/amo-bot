@@ -20,10 +20,12 @@ use App\Modules\Payments\Models\PaymentMethod;
 use App\Modules\Payments\Services\PaymentCards;
 use App\Modules\Payments\Services\PaymentService;
 use App\Modules\Providers\Models\Server;
+use App\Modules\Settings\Services\Settings;
 use App\Modules\Telegram\Models\ReportMessage;
 use App\Modules\Telegram\Reports\Topic;
 use App\Modules\Users\Models\User;
 use Illuminate\Support\Carbon;
+use Monolog\LogRecord;
 use Psr\Http\Message\ResponseInterface;
 use Slim\Psr7\Factory\ServerRequestFactory;
 use Slim\Psr7\Factory\StreamFactory;
@@ -197,6 +199,25 @@ final class DepositWebhookTest extends HttpTestCase
         self::assertSame(401, $this->forward(['id' => 'sms-10', 'amount' => 1500000], key: 'wrong')->getStatusCode(), 'off is told only to the right key');
         self::assertSame(403, $this->forward(['id' => 'sms-10', 'amount' => 1500000])->getStatusCode());
         self::assertSame(0, Deposit::query()->where('external_id', 'sms-10')->count());
+    }
+
+    public function testAKeyThatNoLongerDecryptsIsMadeAnewAndSaidSoInTheLog(): void
+    {
+        $logs = $this->logs();
+        // Kept under another APP_KEY: it no longer decrypts.
+        $this->service(Settings::class)->set('deposits.key', 'kept-under-another-app-key');
+
+        $key = $this->service(DepositSettings::class)->key();
+
+        self::assertNotSame($this->key, $key);
+        self::assertSame(64, strlen($key));
+        self::assertTrue($logs->hasWarningThatContains('The deposits key of shop ' . Bot::MAIN . ' cannot be decrypted'), 'support is told the app must be given the new one');
+        $said = static fn(): array => array_values(array_filter($logs->getRecords(), static fn(LogRecord $record): bool => str_contains($record->message, 'deposits key')));
+        self::assertStringNotContainsString('kept-under-another-app-key', $said()[0]->formatted, 'never what was kept');
+        self::assertSame($key, $this->service(DepositSettings::class)->key(), 'kept: the same one asked again');
+        self::assertCount(1, $said(), 'logged once');
+        $this->key = $key;
+        self::assertSame(200, $this->forward(['id' => 'sms-12', 'amount' => 1500000, 'is_deposit' => true])->getStatusCode(), 'the new key opens the webhook');
     }
 
     public function testThePanelShowsWhereToSendThemAndWhatCame(): void

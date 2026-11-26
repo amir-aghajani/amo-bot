@@ -39,7 +39,7 @@ use Tests\Support\FakeZarinpal;
  * ask (inquiry, then verify for the amount asked) and answers it a page of what came of it, with the way back to the
  * bot; IN_BANK waits, FAILED or REVERSED (or an authority it cannot find) closes, 101 is paid as 100 is, another amount
  * is held for support, a verify that says not paid is asked again; the sandbox is another address, and a payment is
- * asked of the one it was opened on; Zarinpal's fee, when the customer pays it, is in the sum the page asks.
+ * asked of the one it was opened on — its page never shown again once the method is switched to the other; Zarinpal's fee, when the customer pays it, is in the sum the page asks.
  */
 final class ZarinpalPaymentsTest extends HttpTestCase
 {
@@ -186,6 +186,24 @@ final class ZarinpalPaymentsTest extends HttpTestCase
         $this->switchSandbox(false);
         self::assertSame(OnlineState::Waiting, $online->check($tried->refresh()->load('method')), 'never "no such authority" from the live host');
         self::assertSame(PaymentStatus::Pending, $tried->refresh()->status);
+    }
+
+    public function testAPageOpenedInTheSandboxIsNotShownAgainOnceTheMethodIsLive(): void
+    {
+        $this->switchSandbox(true);
+        $tried = $this->topUp('50000')->payment();
+        self::assertSame($tried->id, $this->topUp('50000')->payment()->id, 'the sandbox still on: its page shown again');
+        self::assertCount(1, $this->zarinpal->callsTo(ZarinpalGateway::REQUEST));
+
+        // The owner turns the sandbox off: its page, where any "payment" goes through, is not shown for the order again.
+        $this->switchSandbox(false);
+        $live = $this->topUp('50000');
+        self::assertNotSame($tried->id, $live->payment()->id);
+        self::assertSame($tried->order_id, $live->payment()->order_id, 'the same order, on a new page');
+        self::assertStringStartsWith(ZarinpalGateway::LIVE . ZarinpalGateway::START, $live->payLink()->url);
+        self::assertSame(PaymentStatus::Pending, $tried->refresh()->status, 'left to close as any page does');
+        self::assertSame($live->payment()->id, $this->topUp('50000')->payment()->id, 'the live page is the one shown from now on');
+        self::assertCount(2, $this->zarinpal->callsTo(ZarinpalGateway::REQUEST));
     }
 
     public function testAReversedPaymentClosesItsPage(): void

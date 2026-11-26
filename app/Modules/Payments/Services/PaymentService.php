@@ -13,6 +13,7 @@ use App\Modules\Orders\Enums\OrderType;
 use App\Modules\Orders\Exceptions\OrderNotPayableException;
 use App\Modules\Orders\Models\Order;
 use App\Modules\Orders\Services\OrderService;
+use App\Modules\Payments\Contracts\GatewayDriver;
 use App\Modules\Payments\Contracts\GatewayInterface;
 use App\Modules\Payments\Contracts\OnlineGateway;
 use App\Modules\Payments\DTO\PaymentInitiation;
@@ -352,7 +353,9 @@ final class PaymentService
      * its unpaid payments (ExpireOrdersTask; a service's previous owner at once, ServiceTransfers); never while money of it
      * may be with support (Payment::isWithSupport(): a receipt in review, a card transfer taken in support's private chat,
      * an online payment held for support and still waiting), nor while an online gateway's page of it still takes money
-     * (Payment::hasOpenPage()).
+     * (Payment::hasOpenPage()) or holds money, not settled yet, on one still pending or failed with its page (a late
+     * receipt: OnlinePayments::hasMoneyIn()): settled, it pays this order; still unsettled past the shop's review hours, it
+     * is held for support (OnlinePaymentsTask).
      * Under locks on the order and its payments, so a receipt arriving at the same moment either comes first or finds it
      * cancelled. Uploaded receipts of those payments are deleted after the commit. `$note` says why (an expired code hold,
      * unpaid in time, the service handed on). True when this call cancelled it.
@@ -368,6 +371,7 @@ final class PaymentService
             $payments = $row->payments()->with('method')->lockForUpdate()->get();
             $kept = $payments->contains(static fn(Payment $payment): bool => $payment->isWithSupport()
                 || $payment->hasOpenPage()
+                || (in_array($payment->status, [PaymentStatus::Pending, PaymentStatus::Failed], true) && OnlinePayments::hasMoneyIn($payment))
                 || ($payment->status->isOpen() && $payment->updated_at > $idleSince));
             if ($kept) {
                 return false;
@@ -546,7 +550,9 @@ final class PaymentService
      * The order's online payment with that method whose page takes money a while yet (LINK_SPARE_MINUTES) — or is being
      * opened right now —, touched; else a new one. Under a lock on the order: two taps make one payment (and its page one,
      * OnlineInvoices::open()). One whose page closes sooner stays as it is, for the gateway to say what came of it
-     * (OnlinePayments), and the customer gets a new one; one held for support is never shown again.
+     * (OnlinePayments), and the customer gets a new one; so does one opened in the gateway's test mode while the method is
+     * live now, or the other way round (openedInTest(), against the method's GatewayDriver::TEST_MODE); one held for
+     * support is never shown again.
      *
      * @throws OrderNotPayableException
      */
@@ -557,6 +563,7 @@ final class PaymentService
                 throw new OrderNotPayableException($order);
             }
 
+            $testing = $this->gateways->summary($method) === GatewayDriver::TEST_MODE;
             $open = $order->payments()
                 ->where('payment_method_id', $method->id)
                 ->where('status', PaymentStatus::Pending->value)
@@ -565,7 +572,9 @@ final class PaymentService
                     ->whereNull('link')
                     ->orWhere('link_expires_at', '>', now()->addMinutes(self::LINK_SPARE_MINUTES)))
                 ->latest('id')
-                ->first();
+                ->get()
+                // A gateway that keeps no mode (most) is shown again as before.
+                ->first(static fn(Payment $page): bool => (self::openedInTest($page) ?? $testing) === $testing);
             if ($open !== null) {
                 $open->touch();
 
@@ -574,6 +583,17 @@ final class PaymentService
 
             return $this->newPayment($order, $method);
         });
+    }
+
+    /**
+     * Whether an online page was opened in its gateway's test mode, as its gateway keeps it on the invoice: Zarinpal's and
+     * AqayePardakht's `sandbox`, AbanGateway's `test` (a test key's invoice). Null for a gateway that keeps no mode.
+     */
+    private static function openedInTest(Payment $page): ?bool
+    {
+        $mode = $page->invoice['sandbox'] ?? $page->invoice['test'] ?? null;
+
+        return is_bool($mode) ? $mode : null;
     }
 
     /**

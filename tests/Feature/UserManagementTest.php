@@ -93,6 +93,66 @@ final class UserManagementTest extends BotTestCase
         ], $this->callbacks(0), 'the sections, the groups and the role, a message and the phone rule\'s excuse, then refresh and the ban — each row\'s first on the right');
     }
 
+    public function testTheCardOpensTheCustomersPrivateChatAndGoesWithoutItWhenTheirPrivacyRefusesTheLink(): void
+    {
+        $chat = static fn(array $rows): array => array_values(array_filter(array_merge(...$rows), static fn(array $button): bool => ($button['text'] ?? '') === '💬 باز کردن پیوی'));
+
+        $this->send($this->groupText('/manage 7070'));
+        self::assertSame([['text' => '💬 باز کردن پیوی', 'url' => 'https://t.me/ali']], $chat($this->inlineKeyboard(0)), 'by his @username');
+
+        $this->customer(['telegram_id' => 8080, 'username' => null, 'first_name' => 'Sara']);
+        $this->send($this->groupText('/manage 8080'));
+        self::assertSame([['text' => '💬 باز کردن پیوی', 'url' => 'tg://user?id=8080']], $chat($this->inlineKeyboard(0)), 'no @username: by her Telegram id');
+
+        // Her privacy forbids that link: Telegram refuses the card, which goes again without it, once.
+        $this->telegram()->fail(400, 'Bad Request: BUTTON_USER_PRIVACY_RESTRICTED');
+        $this->send($this->groupText('/manage 8080'));
+        self::assertSame(['sendMessage', 'sendMessage'], $this->calls());
+        self::assertSame([], $chat($this->inlineKeyboard(1)));
+        self::assertNotSame([], array_merge(...$this->inlineKeyboard(1)), 'every other button kept');
+        $sara = User::query()->where('telegram_id', 8080)->sole();
+        $this->telegram()->fail(400, 'Bad Request: BUTTON_USER_PRIVACY_RESTRICTED');
+        $this->send($this->press("um:o:{$sara->id}"));
+        self::assertSame(['editMessageText', 'editMessageText', 'answerCallbackQuery'], $this->calls(), 'a card rewritten too');
+        self::assertSame([], $chat($this->inlineKeyboard(1)));
+
+        $this->send($this->groupText('/manage @boss'));
+        self::assertSame([], $chat($this->inlineKeyboard(0)), "not on the admin's own card");
+    }
+
+    public function testTheChatButtonGoesOnlyForABadRequestAndIsOnEveryCardWithATelegramAccount(): void
+    {
+        $chat = static fn(array $rows): array => array_values(array_filter(array_merge(...$rows), static fn(array $button): bool => ($button['text'] ?? '') === '💬 باز کردن پیوی'));
+        $byId = [['text' => '💬 باز کردن پیوی', 'url' => 'tg://user?id=8080']];
+        $sara = $this->customer(['telegram_id' => 8080, 'username' => null, 'first_name' => 'Sara']);
+
+        // An id Telegram does not know for the link: refused as a bad request too — the card goes again without it, once.
+        $this->telegram()->fail(400, 'Bad Request: BUTTON_USER_INVALID');
+        $this->send($this->groupText('/manage 8080'));
+        self::assertSame(['sendMessage', 'sendMessage'], $this->calls());
+        self::assertSame($byId, $chat($this->inlineKeyboard(0)), 'asked with it first');
+        self::assertSame([], $chat($this->inlineKeyboard(1)));
+
+        // Nothing to change is no reason to take it off: one rewrite, the button in it.
+        $this->telegram()->fail(400, 'Bad Request: message is not modified: specified new message content and reply markup are exactly the same as a current content and reply markup of the message');
+        $this->send($this->press("um:o:{$sara->id}"));
+        self::assertSame(['editMessageText', 'answerCallbackQuery'], $this->calls(), 'not asked again');
+        self::assertSame($byId, $chat($this->inlineKeyboard(0)));
+
+        // A customer without Telegram (a website sign-up): no private chat to open, the card itself all there.
+        $web = $this->webCustomer();
+        $this->send($this->groupText("/manage #{$web->id}"));
+        self::assertSame(['sendMessage'], $this->calls());
+        self::assertSame([], $chat($this->inlineKeyboard(0)));
+        self::assertContains("um:o:{$web->id}", $this->callbacks(0));
+
+        // An agent's card, locked to reading: the button stays — opening a chat changes nothing of the account.
+        $this->agent(overrides: ['telegram_id' => 9292, 'username' => 'agent_reza']);
+        $this->send($this->groupText('/manage @agent_reza'));
+        self::assertStringEndsWith('🔒 حساب نماینده است؛ فقط از پنل یا «⚙️ مدیریت» ربات تغییر می‌کند.', $this->params(0)['text']);
+        self::assertSame([['text' => '💬 باز کردن پیوی', 'url' => 'https://t.me/agent_reza']], $chat($this->inlineKeyboard(0)));
+    }
+
     public function testManageFindsTheCustomerByTelegramIdUsernameOrNumberInAnyDigits(): void
     {
         foreach (['/manage 7070', '/manage @ALI', '/manage ali', "/manage #{$this->ali->id}", '/manage ۷۰۷۰', '/manage@' . self::BOT . ' 7070'] as $command) {
@@ -164,7 +224,7 @@ final class UserManagementTest extends BotTestCase
         $this->send($this->press("um:bs:{$this->ali->id}:banned"));
         self::assertSame(UserStatus::Banned, $this->ali->refresh()->status);
         self::assertStringContainsString("\n🚦 وضعیت: ⛔️ مسدود\n", $this->params(0)['text']);
-        self::assertSame('✅ رفع مسدودی', $this->inlineKeyboard(0)[5][1]['text'], 'the last row, beside «🔄 تازه‌سازی»');
+        self::assertSame('✅ رفع مسدودی', $this->inlineKeyboard(0)[6][1]['text'], 'the last row, beside «🔄 تازه‌سازی»');
         self::assertSame('⛔️ مسدود شد.', $this->popup());
 
         $this->send($this->press("um:bs:{$this->ali->id}:active"));

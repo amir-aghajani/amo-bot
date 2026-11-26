@@ -9,7 +9,10 @@ use App\Modules\Admin\Services\ScheduleScreen;
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 
-/** «زمان‌بندی کارها», the owner's: how often each scheduled task runs, and the times the tasks decide by. */
+/**
+ * «زمان‌بندی کارها», the owner's: how often each scheduled task runs, the time of day its runs are counted from (its
+ * start, "HH:MM"), and the times the tasks decide by.
+ */
 final class ScheduleController extends ApiController
 {
     public function __construct(private readonly ScheduleScreen $screen) {}

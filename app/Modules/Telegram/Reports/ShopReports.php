@@ -60,7 +60,7 @@ use Psr\Log\LoggerInterface;
  * tests taken, services deleted (by support, by a refund, by the clean-up of ended ones), top-ups and wallet transfers,
  * receipts and their verdicts, newcomers, agency requests and agents' selling suspended
  * or resumed, failed deliveries, online payments held for support, panels down and up, servers' services moved, ticket
- * conversations and reviews. Each goes to the group of the bot it happened in (servers and the agency to the main
+ * conversations and reviews — and the shop's day in figures, once a day (daily()). Each goes to the group of the bot it happened in (servers and the agency to the main
  * bot's), only while a group is connected and the admin wants the topic. Who of support did something is named as
  * anyone but the owner reads it (bySupport()). Every report about a customer carries «⚙️ مدیریت کاربر», their card
  * (managing()). Nothing here talks to Telegram.
@@ -77,6 +77,25 @@ final class ShopReports
 
     /** A name in a report — a customer's, a plan's, a server's. */
     private const NAME_MAX = 64;
+
+    /** A name in the daily report's lists (DailyReport caps how many), so the whole stays inside one message. */
+    private const DAILY_NAME_MAX = 40;
+
+    /**
+     * The embeddings, overrides and isolates (U+202A–U+202E, U+2066–U+2069), dropped from a name: in one a customer
+     * chose (theirs, an agent's bot's), one left open turns the rest of its line around, numbers and all. The marks
+     * (U+200E, U+200F) the reports set themselves stay.
+     */
+    private const DIRECTION_CONTROLS = '/[\x{202A}-\x{202E}\x{2066}-\x{2069}]/u';
+
+    /** The daily report's sales lines (DailyReport::LINES), in words. */
+    private const DAILY_LINES = [
+        'purchase' => '🛒 خرید سرویس',
+        'renewal' => '🔄 تمدید',
+        'extras' => '➕ حجم، زمان و کاربر اضافه',
+        'topup' => '💰 شارژ کیف پول',
+        'traffic' => '💾 حجم نمایندگی',
+    ];
 
     /** What `ref` a receipt's report carries, so its verdict replies to it. */
     private const RECEIPT_REF = 'receipt:';
@@ -689,6 +708,12 @@ final class ShopReports
         });
     }
 
+    /** The shop's day before in figures (DailyReport), its row carrying `$ref` — the day — so it goes once. */
+    public function daily(DailyFigures $figures, string $ref): void
+    {
+        $this->report(CurrentBot::get(), Topic::Daily, static fn(): array => ['text' => self::dailyText($figures), 'ref' => $ref]);
+    }
+
     /** A server's panel that answered stopped answering. */
     public function serverDown(Server $server, string $reason): void
     {
@@ -868,6 +893,133 @@ final class ShopReports
         }
 
         return ReportMessage::waiting()->whereKey($last->id)->whereNull(Lease::TOKEN)->where('text', $last->text)->update(['text' => $text]) === 1;
+    }
+
+    /**
+     * The daily report's words (dailyLines()), its lists shortened (DailyFigures::shorter()) while they would pass what
+     * Telegram takes in a message, less ROOM: many agents with long names of emoji (two of its units each) can, and a
+     * report it refused would be lost — its row marks the day as reported.
+     */
+    private static function dailyText(DailyFigures $figures): string
+    {
+        $text = self::dailyLines($figures);
+        while (TelegramHtml::visibleLength($text) > Limits::MESSAGE - self::ROOM && ($shorter = $figures->shorter()) !== null) {
+            $figures = $shorter;
+            $text = self::dailyLines($figures);
+        }
+
+        return $text;
+    }
+
+    /**
+     * The daily report: the day, its income (against the day before, and by method) — said apart from its sales, which
+     * count wallet-paid orders too —, its sales by line (none: «💤», whatever money came in), the plans and servers sold
+     * most, its customers, the services running and what waits on support; the agents' bots' sales in the main shop's,
+     * the traffic left in an agent's.
+     * Beside a number, things are set apart by «،», never «·»: in Persian the zero is a dot, so «۱۲ · ۴۰» reads «۱۲۰۴۰».
+     * A list's line starts with a right-to-left mark, and each name ends with one (short()), so a Latin name («VIP 30GB»,
+     * «Plisio», a bot's @username) neither turns its line left to right nor takes the numbers after it with it.
+     */
+    private static function dailyLines(DailyFigures $figures): string
+    {
+        $lines = ['📊 <b>گزارش روزانه</b> — ' . Persian::date($figures->day), ''];
+
+        $lines[] = '💰 <b>درآمد: ' . Money::format($figures->income) . '</b>';
+        $change = self::change($figures->income, $figures->incomeBefore);
+        if ($change !== null) {
+            $lines[] = $change;
+        }
+        if ($figures->methods !== []) {
+            $lines[] = '💳 به تفکیک روش: ' . implode('، ', array_map(static fn(array $method): string => self::short($method['name']) . ': ' . Money::format($method['total']), $figures->methods));
+        }
+        $lines[] = '<i>پولی که واریز شد، شارژ کیف پول هم؛ خرید با موجودی کیف پول در فروش آمده است، نه اینجا.</i>';
+        $lines[] = '';
+
+        if ($figures->quiet()) {
+            $lines[] = '💤 در این روز فروشی ثبت نشد.';
+        } else {
+            $lines[] = '🛍 <b>فروش</b> (سفارش‌های پرداخت‌شده)';
+            foreach ($figures->sales as $line => $sold) {
+                $lines[] = sprintf(
+                    '%s: %s سفارش%s، %s',
+                    self::DAILY_LINES[$line] ?? $line,
+                    Persian::number($sold['count']),
+                    $line === 'traffic' && $sold['bytes'] > 0 ? '، ' . Messages::bytes($sold['bytes']) : '',
+                    Money::format($sold['amount']),
+                );
+            }
+            if ($figures->plans !== []) {
+                $lines[] = '';
+                $lines[] = '🏆 <b>پرفروش‌ترین پلن‌ها</b>';
+                foreach ($figures->plans as $rank => $plan) {
+                    $lines[] = sprintf("\u{200F}%s. %s — %s فروش، %s", Persian::number($rank + 1), self::short($plan['name']), Persian::number($plan['count']), Money::format($plan['amount']));
+                }
+            }
+            if ($figures->servers !== []) {
+                $lines[] = '🌍 سرورهای پرفروش: ' . implode('، ', array_map(static fn(array $server): string => self::short($server['name']) . ' (' . Persian::number($server['count']) . ')', $figures->servers));
+            }
+        }
+
+        $lines[] = '';
+        $lines[] = sprintf('👥 کاربران تازه: %s، خریداران: %s، اکانت تست: %s', Persian::number($figures->newUsers), Persian::number($figures->buyers), Persian::number($figures->tests));
+        $lines[] = '📦 سرویس‌های فعال: ' . Persian::number($figures->activeServices);
+        if ($figures->trafficLeft !== null) {
+            $lines[] = '🗄 حجم باقی‌مانده نمایندگی: ' . Messages::bytes($figures->trafficLeft);
+        }
+
+        if ($figures->agents !== null) {
+            $lines[] = '';
+            $lines[] = sprintf('🤝 <b>فروش نماینده‌ها</b>: %s سفارش، %s', Persian::number($figures->agents['count']), Money::format($figures->agents['amount']));
+            foreach ($figures->agents['rows'] as $agent) {
+                $lines[] = sprintf("\u{200F}• \u{200E}%s\u{200F} (%s): %s سفارش، %s", self::name($agent['bot']), self::short($agent['agent']), Persian::number($agent['count']), Money::format($agent['amount']));
+            }
+            if ($figures->agents['more'] > 0) {
+                $lines[] = '• و ' . Persian::number($figures->agents['more']) . ' نماینده دیگر';
+            }
+        }
+
+        $waiting = array_filter([
+            'payments_to_review' => 'رسید برای بررسی',
+            'stuck_orders' => 'سفارش گیرکرده',
+            'open_tickets' => 'تیکت باز',
+            'pending_reviews' => 'نظر برای بررسی',
+        ], static fn(string $words, string $key): bool => ($figures->waiting[$key] ?? 0) > 0, ARRAY_FILTER_USE_BOTH);
+        if ($waiting !== []) {
+            $lines[] = '';
+            $lines[] = '⏳ منتظر شما: ' . implode('، ', array_map(static fn(string $key, string $words): string => Persian::number($figures->waiting[$key]) . ' ' . $words, array_keys($waiting), $waiting));
+        }
+
+        return implode("\n", $lines);
+    }
+
+    /**
+     * The day's income against the day before's: «📈 ۱۸٪ بیشتر از روز قبل (…)» — «کمتر از ۱٪» for a change that rounds to
+     * none, «➖ هم‌اندازه» for the same amount alone —; null when neither had any.
+     */
+    private static function change(string $now, string $before): ?string
+    {
+        if (!Money::isPositive($before)) {
+            return Money::isPositive($now) ? '↗️ روز قبل: ' . Money::format('0') : null;
+        }
+        $direction = Money::compare($now, $before);
+        $percent = abs((int) round(((float) $now - (float) $before) / (float) $before * 100));
+        $much = $percent === 0 ? 'کمتر از ۱٪' : Persian::number($percent) . '٪';
+        $said = match (true) {
+            $direction > 0 => '📈 ' . $much . ' بیشتر از روز قبل',
+            $direction < 0 => '📉 ' . $much . ' کمتر از روز قبل',
+            default => '➖ هم‌اندازه روز قبل',
+        };
+
+        return $said . ' (' . Money::format($before) . ')';
+    }
+
+    /**
+     * A name in the daily report (name()), shorter than elsewhere so its lists stay inside one message, and ended by a
+     * right-to-left mark (dailyLines()).
+     */
+    private static function short(string $name): string
+    {
+        return self::name($name, self::DAILY_NAME_MAX) . "\u{200F}";
     }
 
     private function purchaseText(Order $order): string
@@ -1148,9 +1300,10 @@ final class ShopReports
         return $order->load('payments')->paidBy();
     }
 
-    private static function name(string $name): string
+    /** A name in a report, at most `$max` characters, without the direction controls (DIRECTION_CONTROLS) it may carry. */
+    private static function name(string $name, int $max = self::NAME_MAX): string
     {
-        return htmlspecialchars(mb_substr(trim($name), 0, self::NAME_MAX));
+        return htmlspecialchars(mb_substr(trim(preg_replace(self::DIRECTION_CONTROLS, '', $name) ?? $name), 0, $max));
     }
 
     private static function field(string $text): string

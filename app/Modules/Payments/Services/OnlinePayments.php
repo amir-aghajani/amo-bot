@@ -28,10 +28,10 @@ use Psr\Log\LoggerInterface;
  * while (Tasks\OnlinePaymentsTask). Paid: settled — its order delivered, or its money to the wallet once the order had
  * closed (PaymentService::settleOnline()) — and the customer told, by whichever call settled it; closed: failed, for the
  * customer to pay again — and settled all the same, should the gateway take money on it later. Waiting with money in at
- * the gateway: marked so (hasMoneyIn()), never given up on by the shop alone — closed by the gateway after that, it is
- * held for support at once. The asks about one payment take turns (one of TURNS lock files under `$turns`, picked by the
- * payment's id — shared hosting having no lock server): the gateway's answer and what the shop does with it are one
- * step, read afresh — two at once could otherwise settle what the other holds.
+ * the gateway: marked so (hasMoneyIn()), never given up on by the shop alone, its order kept — closed by the gateway
+ * after that, it is held for support at once. The asks about one payment take turns (one of TURNS lock files under
+ * `$turns`, picked by the payment's id — shared hosting having no lock server): the gateway's answer and what the shop
+ * does with it are one step, read afresh — two at once could otherwise settle what the other holds.
  */
 final class OnlinePayments
 {
@@ -70,8 +70,8 @@ final class OnlinePayments
 
     /**
      * Whether its gateway said money came in on it that it has not settled yet — a part of the sum, a receipt in the
-     * gateway's own review (OnlineVerdict::$moneyIn): asked on long after its page closed (Tasks\OnlinePaymentsTask), and
-     * held for support should the gateway close it.
+     * gateway's own review (OnlineVerdict::$moneyIn): asked on long after its page closed (Tasks\OnlinePaymentsTask), its
+     * order kept from expiring meanwhile (PaymentService::expire()), and held for support should the gateway close it.
      */
     public static function hasMoneyIn(Payment $payment): bool
     {

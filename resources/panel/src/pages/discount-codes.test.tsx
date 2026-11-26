@@ -66,6 +66,17 @@ describe('the codes', () => {
     expect(within(fixed).getByText('غیرفعال')).toBeTruthy()
   })
 
+  it('say the categories a code holds for beside its plans, and a code whose plans and categories are all gone as holding for none', async () => {
+    const categorised = discountCodeRow({ id: 23, code: 'MONTHLY', categories: [{ id: 7, name: 'ماهانه' }], plans: [{ id: 3, name: 'یک‌ماهه' }] })
+    const gone = discountCodeRow({ id: 24, code: 'GONE', categories: [], plans: null })
+    open('/discounts', codes([categorised, gone]))
+
+    const [, monthly, nothing] = within(await table()).getAllByRole('row')
+    if (!monthly || !nothing) throw new Error('Two codes are listed.')
+    expect(within(monthly).getByText('همه سفارش‌ها · دسته «ماهانه» و پلن «یک‌ماهه»')).toBeTruthy()
+    expect(within(nothing).getByText('همه سفارش‌ها · هیچ پلنی')).toBeTruthy()
+  })
+
   it('say there is none yet, with the screen’s own empty text', async () => {
     open('/discounts', codes([]))
 
@@ -108,6 +119,7 @@ describe('a code', () => {
       min_amount: '',
       order_types: ['renewal'],
       plan_ids: null,
+      category_ids: null,
       server_ids: null,
       first_purchase_only: false,
       starts_at: null,

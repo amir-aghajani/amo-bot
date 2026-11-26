@@ -24,7 +24,7 @@ use Tests\Support\FakeTelegram;
  */
 final class AdminReportGroupApiTest extends HttpTestCase
 {
-    private const SWITCHES = ['report_purchases' => true, 'report_renewals' => true, 'report_tests' => true, 'report_deletions' => true, 'report_wallet' => true, 'report_receipts' => true, 'report_users' => true, 'report_errors' => true, 'report_agency' => true, 'report_tickets' => true, 'report_reviews' => true, 'report_backups' => true];
+    private const SWITCHES = ['report_purchases' => true, 'report_renewals' => true, 'report_tests' => true, 'report_deletions' => true, 'report_wallet' => true, 'report_receipts' => true, 'report_users' => true, 'report_errors' => true, 'report_agency' => true, 'report_tickets' => true, 'report_reviews' => true, 'report_backups' => true, 'report_daily' => true, 'daily_report_hour' => 0];
 
     protected function setUp(): void
     {
@@ -41,7 +41,7 @@ final class AdminReportGroupApiTest extends HttpTestCase
         self::assertFalse($group['connected']);
         self::assertSame([null, null, null, null, 0], [$group['chat_id'], $group['title'], $group['problem'], $group['link'], $group['waiting']]);
         self::assertNull($group['bot_username']);
-        self::assertSame(['purchases', 'renewals', 'tests', 'deletions', 'wallet', 'receipts', 'users', 'errors', 'agency', 'tickets', 'reviews', 'backups'], array_column($group['topics'], 'key'));
+        self::assertSame(['purchases', 'renewals', 'tests', 'deletions', 'wallet', 'receipts', 'users', 'errors', 'agency', 'tickets', 'reviews', 'backups', 'daily'], array_column($group['topics'], 'key'));
         self::assertSame(['key' => 'purchases', 'title' => 'خریدها', 'about' => Topic::Purchases->about(), 'ready' => false, 'enabled' => true], $group['topics'][0]);
         self::assertStringContainsString('سرورهایی که پنلشان جواب نمی‌دهد', $group['topics'][7]['about'], "the servers are the main bot's news");
     }
@@ -52,7 +52,8 @@ final class AdminReportGroupApiTest extends HttpTestCase
 
         $topics = array_column($this->group($this->get('/api/agent/bot/report-group'))['topics'], 'about', 'key');
 
-        self::assertSame(['purchases', 'renewals', 'tests', 'deletions', 'wallet', 'receipts', 'users', 'errors', 'tickets', 'reviews', 'backups'], array_keys($topics), 'no agency of its own; its tickets, its reviews and its backup its own');
+        self::assertSame(['purchases', 'renewals', 'tests', 'deletions', 'wallet', 'receipts', 'users', 'errors', 'tickets', 'reviews', 'backups', 'daily'], array_keys($topics), 'no agency of its own; its tickets, its reviews, its backup and its daily report its own');
+        self::assertStringEndsWith('؛ و حجم باقی‌مانده نمایندگی.', $topics['daily'], 'its own shop\'s day, with its traffic left — no agents\' sales');
         self::assertStringStartsWith('فایل پشتیبان این فروشگاه', $topics['backups'], 'its own shop\'s file, not the whole installation\'s');
         self::assertSame('سفارش‌های پرداخت‌شده‌ای که تحویلشان ناموفق بود، با دکمه تلاش دوباره برای مدیرهای ربات؛ و پرداخت‌های آنلاینی که برای بررسی پشتیبانی نگه داشته می‌شوند، چون درگاه آن‌ها را با سفارش یا مبلغ دیگری تایید کرد یا پولشان را تسویه نکرد.', $topics['errors'], 'its own deliveries and held payments, not the servers');
     }
@@ -176,7 +177,9 @@ final class AdminReportGroupApiTest extends HttpTestCase
 
         $refused = $this->unchecked()->putJson('/api/admin/bot/settings/reports', ['report_purchases' => 'maybe']);
         self::assertSame(422, $refused->getStatusCode());
-        self::assertSame(['report_purchases', 'report_renewals', 'report_tests', 'report_deletions', 'report_wallet', 'report_receipts', 'report_users', 'report_errors', 'report_agency', 'report_tickets', 'report_reviews', 'report_backups'], array_keys($this->decode($refused)['errors']), 'every switch must be sent');
+        self::assertSame(['report_purchases', 'report_renewals', 'report_tests', 'report_deletions', 'report_wallet', 'report_receipts', 'report_users', 'report_errors', 'report_agency', 'report_tickets', 'report_reviews', 'report_backups', 'report_daily', 'daily_report_hour'], array_keys($this->decode($refused)['errors']), 'every switch must be sent, and the hour');
+        $late = $this->putJson('/api/admin/bot/settings/reports', ['daily_report_hour' => 24] + self::SWITCHES);
+        self::assertSame(['daily_report_hour'], array_keys($this->decode($late)['errors']), 'an hour of the day: 0 to 23');
         self::assertFalse($this->service(ReportSettings::class)->enabled(Topic::Users), 'nothing stored');
     }
 

@@ -85,7 +85,7 @@ final class NewcomersTest extends ImportTestCase
 
         $this->discountCode('FIRST', 20, ['first_purchase_only' => true]);
         $codes = $this->service(DiscountCodes::class);
-        $target = new CodeTarget(OrderType::Purchase, $plan->id, $server->id);
+        $target = new CodeTarget(OrderType::Purchase, $plan->id, $plan->category_id, $server->id);
         try {
             $codes->apply($bought, 'FIRST', $target, '120000');
             self::fail('A first-purchase code held for one who bought there.');

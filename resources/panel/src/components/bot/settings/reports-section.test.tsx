@@ -10,7 +10,8 @@ import { json, refusal, server } from '@/test/server'
 /*
  * The «گروه گزارش‌ها» section of the bot settings (components/bot/settings/reports-section): the topics' switches are
  * labelled by the group's read — which, failing, the switches' card says too, with a way to ask again; never a skeleton
- * that pulses for ever. The group's card says what the group gets — the agency's requests in the main bot's shop alone
+ * that pulses for ever; the daily report's hour stays under its switch, held while it is off, the switch keeping the
+ * focus. The group's card says what the group gets — the agency's requests in the main bot's shop alone
  * —, where a bot not known yet gets its name — an agent's with its token, never the owner's settings —, sends a «پیام
  * تست» (every operation held meanwhile, the focus kept), and a refused action is shown once, as the panel's toast, with
  * the server's message.
@@ -76,7 +77,44 @@ describe('the report topics', () => {
       report_tickets: true,
       report_reviews: true,
       report_backups: false,
+      report_daily: true,
+      daily_report_hour: '0',
     })
+  })
+
+  it('give the daily report its hour while it is on', async () => {
+    const topics: ReportTopicInfo[] = [{ key: 'daily', title: 'گزارش روزانه', about: 'هر روز یک بار، آمار روزی که گذشت.', ready: true, enabled: true }]
+    server()
+      .on('GET', '/api/admin/bot/report-group', json({ group: { ...GROUP, topics } } satisfies ReportGroupResponse))
+      .on('PUT', '/api/admin/bot/settings/reports', json({ settings: { ...SETTINGS, daily_report_hour: 9 } } satisfies BotSettingsSaved))
+    showSection()
+
+    fireEvent.keyDown(await screen.findByRole('combobox', { name: 'ساعت گزارش روزانه' }), { key: 'Enter' })
+    fireEvent.click(await screen.findByRole('option', { name: '۰۹:۰۰' }))
+    fireEvent.click(screen.getByRole('button', { name: 'ذخیره' }))
+    await until(() => expect(server().sent('PUT', '/api/admin/bot/settings/reports')).toHaveLength(1))
+    expect(server().sent('PUT', '/api/admin/bot/settings/reports')[0]?.body).toMatchObject({ report_daily: true, daily_report_hour: '9' })
+  })
+
+  it('hold the daily report’s hour under its switch while it is off — the switch keeping the focus', async () => {
+    const topics: ReportTopicInfo[] = [{ key: 'daily', title: 'گزارش روزانه', about: 'هر روز یک بار، آمار روزی که گذشت.', ready: true, enabled: true }]
+    server().on('GET', '/api/admin/bot/report-group', json({ group: { ...GROUP, topics } } satisfies ReportGroupResponse))
+    showSection()
+    const hour = () => screen.getByRole('combobox', { name: 'ساعت گزارش روزانه' }) as HTMLButtonElement
+    const daily = await screen.findByRole('switch', { name: 'گزارش روزانه' })
+    expect(hour().disabled).toBe(false)
+
+    daily.focus()
+    fireEvent.click(daily)
+    expect(daily.getAttribute('aria-checked')).toBe('false')
+    expect(document.activeElement).toBe(daily)
+    expect(daily.isConnected).toBe(true)
+    expect(hour().disabled).toBe(true)
+
+    fireEvent.click(daily)
+    expect(daily.getAttribute('aria-checked')).toBe('true')
+    expect(document.activeElement).toBe(daily)
+    expect(hour().disabled).toBe(false)
   })
 
   it('keep saying it while it is asked again — both cards’ buttons spinning, asking once —, until the answer', async () => {
@@ -107,13 +145,13 @@ describe('the report group', () => {
   it('gets the agency’s requests in the main bot’s shop alone', async () => {
     server().on('GET', '/api/admin/bot/report-group', json({ group: GROUP } satisfies ReportGroupResponse))
     showSection()
-    expect(await screen.findByText(/حذف سرویس‌ها، شارژ کیف پول، رسیدها، کاربران جدید، خطاها، تیکت‌ها، نظرات، پشتیبان‌ها و درخواست‌های نمایندگی در یک گروه تلگرام/)).toBeTruthy()
+    expect(await screen.findByText(/حذف سرویس‌ها، شارژ کیف پول، رسیدها، کاربران جدید، خطاها، تیکت‌ها، نظرات، پشتیبان‌ها، آمار روزانه و درخواست‌های نمایندگی در یک گروه تلگرام/)).toBeTruthy()
   })
 
   it('in an agent’s shop says nothing of the agency', async () => {
     server().on('GET', '/api/admin/bot/report-group', json({ group: GROUP } satisfies ReportGroupResponse))
     showSection(AGENT_SHOP)
-    expect(await screen.findByText(/کاربران جدید، خطاها، تیکت‌ها، نظرات و پشتیبان‌ها در یک گروه تلگرام/)).toBeTruthy()
+    expect(await screen.findByText(/کاربران جدید، خطاها، تیکت‌ها، نظرات، پشتیبان‌ها و آمار روزانه در یک گروه تلگرام/)).toBeTruthy()
     expect(screen.queryByText(/درخواست‌های نمایندگی/)).toBeNull()
   })
 

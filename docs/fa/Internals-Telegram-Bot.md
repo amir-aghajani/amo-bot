@@ -495,6 +495,15 @@ Subscriptions، Support…)، هرگز در خود هندلر: ربات فقط �
 - **پشتیبان** — تاپیک <code dir="ltr">Topic::Backups</code> گزارش صف‌شده ندارد: `Backups\Tasks\SendBackupsTask`
   فایل فروشگاه را خودش، سر وقت خودش، جدا از صف و سرعت آن به رشته این تاپیک می‌فرستد
   ([معماری](Architecture.md#پشتیبان‌گیری)).
+- **گزارش روزانه** — <code dir="ltr">Telegram\Tasks\DailyReportTask</code> (هر ۱۰ دقیقه، در هر فروشگاه) از
+  <code dir="ltr">Reports\DailyReport::sendIfDue()</code> می‌پرسد: تا فروشگاه گروه ندارد یا
+  <code dir="ltr">Topic::Daily</code> خاموش است چیزی خوانده نمی‌شود؛ از <code dir="ltr">ReportSettings::dailyHour()</code>
+  به بعد، روز قبل فروشگاه — کل روز تقویمی‌اش، نیمه‌شب‌های `LocalTime` به UTC — یکجا در `DailyFigures` خوانده می‌شود
+  (درآمد با <code dir="ltr">Payment::moneyIn()</code> مثل داشبورد؛ فروش با پرداخت‌هایی که آن روز پذیرفته شدند، کنار
+  سفارش‌های <code dir="ltr">Order::KEPT</code>شان، بدون پرداخت دیرهنگامی که به کیف پول رفت؛ نماینده‌های فروشگاه اصلی
+  با یک خواندن گروه‌بندی‌شده در همه فروشگاه‌ها)، بعد با <code dir="ltr">ShopReports::daily()</code> و `ref` برابر
+  <code dir="ltr">daily:&lt;Y-m-d&gt;</code> در صف گذاشته می‌شود — همین ردیف است که آن را یک‌باره می‌کند. متنش چیزهای
+  کنار عدد را با «،» جدا می‌کند (صفر فارسی نقطه است) و هر نام و هر سطر فهرست را راست‌به‌چپ علامت می‌زند.
 
 ### کارت کاربر
 
@@ -513,7 +522,13 @@ Subscriptions، Support…)، هرگز در خود هندلر: ربات فقط �
 پنل: `ManualOrders`، و دکمه تایید یک nonce به‌عنوان کلید سفارش دارد)، `CustomerDiscount`، `CustomerHistory` (سفارش‌ها،
 پرداخت‌ها، تیکت‌ها، زیرمجموعه‌ها — فقط خواندنی)، `CustomerAccount` (ورود به وب‌سایت: خاموش کردن ورود دومرحله‌ای، خروج از
 همه دستگاه‌ها) و `CustomerMessage` (پیامی از طرف پشتیبانی، مثل «ارسال پیام» پنل، روی کارت هر کسی جز خود مدیر)؛ گروه‌ها،
-معافیت از شماره، نقش و مسدودی مال خود روی کارت‌اند.
+معافیت از شماره، نقش و مسدودی مال خود روی کارت‌اند، و «💬 باز کردن پیوی» هم
+(<code dir="ltr">UserManagement::privateChat()</code>: لینک t.me با نام کاربری کاربر، وگرنه
+<code dir="ltr">tg://user?id=</code>؛ برای کاربر بدون تلگرام و روی کارت خود مدیر نیست، و روی کارت فقط‌خواندنی یک نماینده
+می‌ماند). تلگرام پیامی را که دکمه <code dir="ltr">tg://user</code> آن را پیوند نمی‌دهد رد می‌کند (حریم خصوصی کاربر،
+BUTTON_USER_PRIVACY_RESTRICTED، یا کاربری که نمی‌شناسد، BUTTON_USER_INVALID، هر دو همان درخواست نادرست ساده‌اش،
+<code dir="ltr">Refusal::BadRequest</code>)، پس فرستادن و بازنویسی کارت یک بار دیگر بدون چنین دکمه‌هایی انجام می‌شود
+(<code dir="ltr">GroupButtons::withoutUserLinks()</code>، که برای هر رد دیگر یا ردیف‌های بدون چنین دکمه‌ای null است).
 
 - **آنچه همه بخش‌ها با هم دارند** <code dir="ltr">Customers\CustomerCards</code> است: <code dir="ltr">press()</code> هر فشار دکمه را یک بار برای همه می‌سنجد — در گروه گزارش‌های وصل فروشگاه، از طرف یکی از مدیران رباتش (<code dir="ltr">GroupButtons::admin()</code>، هرگز داده دکمه)، درباره کاربری از همین فروشگاه — و یک `CardPress` به بخش می‌دهد؛ <code dir="ltr">header()</code>، <code dir="ltr">back()</code>، <code dir="ltr">show()</code> و <code dir="ltr">refused()</code> ظاهر کارت‌اند؛ <code dir="ltr">mayChange()</code> و <code dir="ltr">lockOf()</code> قاعده خود گروه گزارش‌ها: هرگز حساب خود مدیر یا یک نماینده (که مال پنل است)، که کارت فقط آن را می‌خواند.
 - **چیزهای تایپی** — یک مبلغ، یک درصد، یک قیمت — یک سوال‌اند: <code dir="ltr">ask()</code> آن را به‌شکل ForceReply زیر کارت می‌گذارد و به‌شکل یک ردیف `report_messages` ثبت می‌کند که `ref` آن بخش، نوع، مدیر، کارت و آرگومان‌هایش را نام می‌برد. `ReportGroupUpdates` پاسخ به آن را از راه <code dir="ltr">reply()</code> — از روی شناسه پیامی که به آن جواب می‌دهد، و فقط وقتی یکی از مدیران ربات نوشته باشد — به‌شکل یک `CardReply` به همان بخش برمی‌گرداند (<code dir="ltr">AnswersPrompts::answer()</code>)، که آن را با <code dir="ltr">done()</code> (کارت بازنویسی‌شده، سوال پاک‌شده) یا <code dir="ltr">retry()</code> (یک پیام زیر پاسخ، سوال سر جایش) تمام می‌کند.
@@ -553,9 +568,13 @@ Subscriptions، Support…)، هرگز در خود هندلر: ربات فقط �
 <code dir="ltr">ActorRefusedException::own…()</code>)، <code dir="ltr">Reviewers::present()</code> نام ورود مالک را برایش
 «پشتیبانی» نشان می‌دهد، و آنچه فقط مال خود مالک است، یعنی حساب‌های وصل‌شده (`OwnerAccountsScreen`، مسیرهای
 <code dir="ltr">/settings/owner-telegram</code>، <code dir="ltr">ActorRefusedException::ownerOnly()</code>)، مسدود کردن و نقش
-یک حساب وصل‌شده (<code dir="ltr">ownerBanned()</code>، <code dir="ltr">ownerRole()</code>)، و آدرس Bot API و رمز Webhook
-ربات اصلی (`ConfigSettings`: <code dir="ltr">ownersPassword()</code>، <code dir="ltr">ownersSecret()</code>)،
-<code dir="ltr">Principal::isTheOwner()</code> (<code dir="ltr">Actor::isTheOwner()</code>) را می‌پرسد؛ حساب خود نماینده
+یک حساب وصل‌شده (<code dir="ltr">ownerBanned()</code>، <code dir="ltr">ownerRole()</code>)، آنچه ربات اصلی یا جایگاه مالک
+را به دست دیگری بدهد (<code dir="ltr">ConfigSettings::refuseOwnersOnly()</code>: آدرس سایت، رمز Webhook، توکن و نام کاربری
+ربات اصلی، آدرس Bot API، تنظیمات Session پنل‌ها؛ ذخیره و تست دیتابیس؛ <code dir="ltr">GET /settings/config</code> بدون
+مقدارهای دیتابیس) و برگرداندن به‌روزرسانی (<code dir="ltr">ownersRollback()</code>)،
+<code dir="ltr">Principal::isTheOwner()</code> (<code dir="ltr">Actor::isTheOwner()</code>) را می‌پرسد؛ فایل پشتیبان پیش از
+0.11.0 (<code dir="ltr">Backups::MASKED_SINCE</code>) به هر جایگاهی که `customer` دارد رد می‌شود، مدیران ربات یک نماینده هم
+(<code dir="ltr">BackupsController::oldFiles()</code>، <code dir="ltr">ownersBackup()</code>)؛ حساب خود نماینده
 در رباتش فقط به دست <code dir="ltr">Actor::isTheAgent()</code> یا مالک مسدود می‌شود (<code dir="ltr">agentBanned()</code>).
 <code dir="ltr">AdminSeat::in()</code> حساب مدیر را در فروشگاه انتخاب‌شده می‌آورد، پس <code dir="ltr">Actor::is()</code>
 آنجا هم برقرار است. هر کدام از این principalها `inBot` را دارد، که به `Actor::$inBot` می‌رسد: پاسخ تیکتی که از اینجا

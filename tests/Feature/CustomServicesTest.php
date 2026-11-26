@@ -182,6 +182,9 @@ final class CustomServicesTest extends DatabaseTestCase
         $plan = $this->plan(on: $this->germany);
         $this->sale('فروش پلن', 30, ['plan_ids' => [$plan->id]]);
         self::assertNull($this->pricing()->custom($this->ali, $price)->automatic, 'a sale of certain plans does not reach it');
+        $plan->forceFill(['category_id' => $this->category()->id])->save();
+        $this->sale('فروش دسته', 30, ['category_ids' => [$plan->category_id]]);
+        self::assertNull($this->pricing()->custom($this->ali, $price)->automatic, 'nor one of certain categories');
         $this->sale('فروش همه', 20);
         self::assertSame('136000.00', $this->pricing()->custom($this->ali, $price)->amount(), 'a sale of every plan does');
         self::assertSame('136000.00', $this->pricing()->custom(null, $price)->amount(), 'a visitor too: a sale is for everyone');
@@ -194,13 +197,15 @@ final class CustomServicesTest extends DatabaseTestCase
         $plan = $this->plan(on: $this->germany);
         $this->discountCode('ALL', 10);
         $this->discountCode('PLANONLY', 10, ['plan_ids' => [$plan->id]]);
+        $plan->forceFill(['category_id' => $this->category()->id])->save();
+        $this->discountCode('CATEGORY', 10, ['category_ids' => [$plan->category_id]]);
         $this->discountCode('GERMANY', 50, ['server_ids' => [$this->germany->id]]);
         $this->discountCode('RENEWALS', 10, ['order_types' => [OrderType::Renewal->value]]);
 
         $quote = $this->pricing()->custom($this->ali, $price, $this->germany, 'all');
         self::assertSame([DiscountSource::Code, '153000.00'], [$quote->code?->source, $quote->amount()]);
         self::assertSame('85000.00', $this->pricing()->custom($this->ali, $price, $this->germany, 'GERMANY')->amount(), 'on the server it names');
-        foreach ([['PLANONLY', $this->germany], ['GERMANY', $this->france], ['RENEWALS', $this->germany]] as [$code, $server]) {
+        foreach ([['PLANONLY', $this->germany], ['CATEGORY', $this->germany], ['GERMANY', $this->france], ['RENEWALS', $this->germany]] as [$code, $server]) {
             try {
                 $this->pricing()->custom($this->ali, $price, $server, $code);
                 self::fail("{$code} held on {$server->name}");

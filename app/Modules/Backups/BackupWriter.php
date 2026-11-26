@@ -6,6 +6,7 @@ namespace App\Modules\Backups;
 
 use App\Core\Application;
 use App\Core\Database\Schema;
+use App\Core\Logging\Redact;
 use App\Core\Security\Encrypter;
 use App\Modules\Auth\Services\Reviewers;
 use App\Modules\Bots\Models\Bot;
@@ -19,12 +20,16 @@ use Illuminate\Database\Query\Builder;
  * installation's key signs a file its restore takes, so a file nobody changed is the one thing restored — an agent
  * cannot write themselves rows of another shop, or of the owner's, into one. Rows are read a batch at a time, in one
  * read transaction (atOnce()), and written as they come: a large shop never sits in memory whole. A shop's file holds
- * nothing only the owner reads (BackupTables::OWNER_ONLY_COLUMNS, REVIEWER_COLUMNS): its agent downloads it.
+ * nothing only the owner reads (BackupTables::OWNER_ONLY_COLUMNS, REVIEWER_COLUMNS): its agent downloads it. No file
+ * holds a bot's webhook secret, whatever the database still holds (withoutSecret()).
  */
 final class BackupWriter
 {
     public const FORMAT = 'amobot-backup';
     public const FORMAT_VERSION = 1;
+
+    /** Telegram\BotState's setting of each bot's webhook address, kept without its secret since 0.11.0. */
+    public const WEBHOOK_URL = 'telegram.webhook_url';
 
     /** The signature key's purpose (Encrypter::macKey()). */
     public const PURPOSE = 'amobot-backup';
@@ -171,8 +176,23 @@ final class BackupWriter
     }
 
     /**
+     * A setting's stored value of a bot's webhook address (WEBHOOK_URL, as JSON) without its secret, as BotState::
+     * webhookSet() keeps it since 0.11.0 (Core\Logging\Redact); any other value as it is.
+     */
+    public static function withoutSecret(mixed $stored): mixed
+    {
+        $url = is_string($stored) ? json_decode($stored, true) : null;
+        if (!is_string($url) || ($masked = Redact::text($url)) === $url) {
+            return $stored;
+        }
+
+        return json_encode($masked, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+    }
+
+    /**
      * A row of `$table` as the file holds it: for a shop, without what only the owner reads — its own columns empty, the
-     * owner's login as «پشتیبانی».
+     * owner's login as «پشتیبانی»; for both scopes, a bot's webhook address without its secret — a database brought to
+     * this version by hand, or not yet upgraded, may still hold it whole, and the file's header names this version.
      *
      * @return \Closure(array<string, mixed>): array<string, mixed>
      */
@@ -180,16 +200,20 @@ final class BackupWriter
     {
         $hidden = $scope->isShop() ? BackupTables::OWNER_ONLY_COLUMNS[$table] ?? [] : [];
         $shared = $scope->isShop() ? BackupTables::REVIEWER_COLUMNS[$table] ?? [] : [];
-        if ($hidden === [] && $shared === []) {
+        $addresses = $table === 'settings';
+        if ($hidden === [] && $shared === [] && !$addresses) {
             return static fn(array $values): array => $values;
         }
 
-        return function (array $values) use ($hidden, $shared): array {
+        return function (array $values) use ($hidden, $shared, $addresses): array {
             foreach ($hidden as $column) {
                 $values[$column] = null;
             }
             foreach ($shared as $column) {
                 $values[$column] = $this->reviewers->shared(is_string($values[$column] ?? null) ? $values[$column] : null);
+            }
+            if ($addresses && ($values['key'] ?? null) === self::WEBHOOK_URL) {
+                $values['value'] = self::withoutSecret($values['value'] ?? null);
             }
 
             return $values;

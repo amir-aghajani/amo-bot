@@ -290,8 +290,8 @@ discount and — once they type one — a code, is a quote, nothing ordered:
 ```
 
 `server_id` and `discount_code` are optional there. A built service is a purchase of no plan: only a sale of every plan
-reaches it, and a code limited to certain plans never does (one limited to servers holds once `server_id` names one of
-them). Then buy it — `server_id` may be left out while `servers` holds one:
+reaches it, and a code limited to certain plans or categories never does (one limited to servers holds once `server_id`
+names one of them). Then buy it — `server_id` may be left out while `servers` holds one:
 
 `POST /custom-services/orders` request
 ```json
@@ -457,8 +457,8 @@ a renewal) carry them too:
 ```
 
 It is priced by the builder's tiers, discounted as a renewal of no plan — a sale for renewals of every plan, the
-customer's own percent or tier, and a code not limited to certain plans (one limited to servers holds on the service's
-own server) —, by any of the shop's `methods`, inside its window. It adds the package and gives the builder's `devices`
+customer's own percent or tier, and a code not limited to certain plans or categories (one limited to servers holds on
+the service's own server) —, by any of the shop's `methods`, inside its window. It adds the package and gives the builder's `devices`
 (from when, as a plan's: [a renewal](#a-renewal)). Its order has `plan` null and carries `traffic_bytes`, `days` and
 `devices`. The service it renews **keeps having no plan**, so `picks_plan` stays true, its next renewal is picked
 again, and `auto_renew.offered` stays false ([automatic renewal](Store-API-After-Buying.md#automatic-renewal)). The
